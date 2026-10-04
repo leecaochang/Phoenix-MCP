@@ -333,7 +333,7 @@ async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, 
     dispatch.assert_not_called()
 
 
-@pytest.mark.parametrize('change', ['token', 'exposure', 'trigger', 'custom'])
+@pytest.mark.parametrize('change', ['access_key', 'exposure', 'trigger', 'custom'])
 async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, change):
     from custom_components.phoenix_mcp import command_routing
     from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
@@ -345,7 +345,7 @@ async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, ch
         nonlocal calls
         calls += 1
         if calls == 2:
-            if change == 'token': home.access_key.revoked = True
+            if change == 'access_key': home.access_key.revoked = True
             if change == 'exposure':
                 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
                 async_expose_entity(hass, 'conversation', home.entity_id, False)

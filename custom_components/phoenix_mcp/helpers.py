@@ -394,7 +394,7 @@ async def async_archive_expired_access_key(
 
     cancel_expiry_timer(data, access_key.id)
     # Expiry removes the same live access key references as explicit revocation, so it
-    # follows the same settings-lock then access key-store-lock order.
+    # follows the same settings-lock then access-key-store-lock order.
     async with data.settings_update_lock:
         async with data.store.async_lock:
             # The timer, request-path expiry check, and periodic sweep may all arrive
@@ -745,7 +745,7 @@ _PHOENIX_LOGGER_PREFIXES = ("homeassistant.components.phoenix_mcp", "custom_comp
 
 def _scrub_log_text(text: str) -> str:
     """Redact Phoenix MCP access keys, JWTs/LLATs, and URL-embedded credentials from a log line."""
-    text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-token>", text)
+    text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-access-key>", text)
     text = _JWT_SCRUB_RE.sub("<token>", text)
     text = _URL_CRED_QUERY_RE.sub(r"\1=<redacted>", text)
     text = _URL_CRED_USERINFO_RE.sub("://<redacted>@", text)

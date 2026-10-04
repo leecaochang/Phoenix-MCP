@@ -13,7 +13,7 @@ from custom_components.phoenix_mcp.repairs import AgentRecoveryFlow
 async def test_repair_requires_checked_outcome_and_never_clears_running_dispatch(hass):
     recovery = AgentRecovery()
     hass.data[DOMAIN] = SimpleNamespace(agent_recovery=recovery)
-    await recovery.begin("token", "call_service", "request")
+    await recovery.begin("access_key", "call_service", "request")
     flow = AgentRecoveryFlow()
     flow.hass = hass
     flow.handler = DOMAIN
@@ -26,4 +26,4 @@ async def test_repair_requires_checked_outcome_and_never_clears_running_dispatch
     recovery.interrupted("request")
     result = await flow.async_step_confirm({"checked_home_assistant": True})
     assert result["type"] == "create_entry"
-    assert recovery.records("token") == []
+    assert recovery.records("access_key") == []

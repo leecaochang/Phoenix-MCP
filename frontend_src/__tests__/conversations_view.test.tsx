@@ -82,12 +82,12 @@ describe("ConversationsView", () => {
       metadata: { access_key_id: "access-key-id", access_key_name: "Kitchen client", provider: "openai", model: "selected-model" },
       events: [...detail.events,
         { kind: "approval_requested", timestamp: summary.started_at, tool_id: "review", payload: { status: "pending" } },
-        { kind: "error", timestamp: summary.updated_at, tool_id: null, payload: { code: "unauthorized", message: "This token is no longer authorized." } },
+        { kind: "error", timestamp: summary.updated_at, tool_id: null, payload: { code: "unauthorized", message: "This access key is no longer authorized." } },
       ],
     });
     const view = render(<ConversationsView />);
     fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
-    const message = await view.findByText("This token is no longer authorized.");
+    const message = await view.findByText("This access key is no longer authorized.");
     expect(message.closest("details")?.className).toBe("conversation-entry");
     expect(message.closest("li")?.className).toContain("conversation-event-error");
     expect(view.container.querySelectorAll(".conversation-event > svg[aria-hidden='true']")).toHaveLength(4);

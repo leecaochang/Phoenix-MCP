@@ -54,7 +54,7 @@ from custom_components.phoenix_mcp.access_key_store import (
 )
 
 
-def _make_active_token(name: str = "test-token", pass_through: bool = False) -> AccessKeyRecord:
+def _make_active_access_key(name: str = "test-access-key", pass_through: bool = False) -> AccessKeyRecord:
     from homeassistant.util.dt import utcnow
 
     raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
@@ -125,8 +125,8 @@ def _make_hass(data: PhoenixData) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_unauthenticated_rejected_from_tokens_list():
-    access_key = _make_active_token()
+async def test_unauthenticated_rejected_from_access_keys_list():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     hass = _make_hass(data)
 
@@ -142,8 +142,8 @@ async def test_unauthenticated_rejected_from_tokens_list():
 
 
 @pytest.mark.asyncio
-async def test_non_admin_rejected_from_tokens_list():
-    access_key = _make_active_token()
+async def test_non_admin_rejected_from_access_keys_list():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     hass = _make_hass(data)
 
@@ -159,8 +159,8 @@ async def test_non_admin_rejected_from_tokens_list():
 
 
 @pytest.mark.asyncio
-async def test_admin_can_list_tokens():
-    access_key = _make_active_token()
+async def test_admin_can_list_access_keys():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     hass = _make_hass(data)
 
@@ -175,33 +175,33 @@ async def test_admin_can_list_tokens():
     assert len(body) == 1
     assert body[0]["id"] == access_key.id
     assert "access_key_hash" not in body[0]
-    assert "token" not in body[0]
+    assert "access_key" not in body[0]
 
 
 @pytest.mark.asyncio
-async def test_create_token_returns_raw_token_once():
+async def test_create_access_key_returns_raw_access_key_once():
     data = _make_data()
     hass = _make_hass(data)
 
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawaccesskey123"))
 
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "my-token"}).encode()
+    body = json.dumps({"name": "my-access-key"}).encode()
     request = _make_admin_request(body=body)
     resp = await view.post(request)
 
     assert resp.status == 201
     result = json.loads(resp.text)
-    assert result["access_key"] == "phx_rawtoken123"
+    assert result["access_key"] == "phx_rawaccesskey123"
     assert result["id"] == access_key.id
 
 
 @pytest.mark.asyncio
-async def test_create_token_naive_expires_at_normalized_to_aware():
+async def test_create_access_key_naive_expires_at_normalized_to_aware():
     """A timezone-less expires_at must never be persisted naive.
 
     A naive datetime poisons the stored record: every later comparison against
@@ -211,14 +211,14 @@ async def test_create_token_naive_expires_at_normalized_to_aware():
     data = _make_data()
     hass = _make_hass(data)
 
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawaccesskey123"))
 
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "my-token", "expires_at": "2030-01-01T12:00:00"}).encode()
+    body = json.dumps({"name": "my-access-key", "expires_at": "2030-01-01T12:00:00"}).encode()
     resp = await view.post(_make_admin_request(body=body))
 
     assert resp.status == 201
@@ -228,7 +228,7 @@ async def test_create_token_naive_expires_at_normalized_to_aware():
 
     # An offset-aware value is normalized to UTC, preserving the instant.
     data.store.async_create_access_key.reset_mock()
-    body = json.dumps({"name": "my-token", "expires_at": "2030-01-01T12:00:00+02:00"}).encode()
+    body = json.dumps({"name": "my-access-key", "expires_at": "2030-01-01T12:00:00+02:00"}).encode()
     resp = await view.post(_make_admin_request(body=body))
     assert resp.status == 201
     stored = data.store.async_create_access_key.call_args.kwargs["expires_at"]
@@ -236,7 +236,7 @@ async def test_create_token_naive_expires_at_normalized_to_aware():
 
 
 @pytest.mark.asyncio
-async def test_create_token_non_string_expires_at_rejected():
+async def test_create_access_key_non_string_expires_at_rejected():
     data = _make_data()
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = False
@@ -246,7 +246,7 @@ async def test_create_token_non_string_expires_at_rejected():
     view.hass = hass
 
     for garbage in (12345, ["2030-01-01T12:00:00Z"], {"at": "2030"}, None):
-        body = json.dumps({"name": "my-token", "expires_at": garbage}).encode()
+        body = json.dumps({"name": "my-access-key", "expires_at": garbage}).encode()
         resp = await view.post(_make_admin_request(body=body))
         assert resp.status == 400
         assert json.loads(resp.text)["error"] == "invalid_request"
@@ -254,7 +254,7 @@ async def test_create_token_non_string_expires_at_rejected():
 
 
 @pytest.mark.asyncio
-async def test_create_token_invalid_name_rejected():
+async def test_create_access_key_invalid_name_rejected():
     data = _make_data()
     hass = _make_hass(data)
 
@@ -271,7 +271,7 @@ async def test_create_token_invalid_name_rejected():
 
 
 @pytest.mark.asyncio
-async def test_create_token_slug_collision_rejected():
+async def test_create_access_key_slug_collision_rejected():
     data = _make_data()
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = True
@@ -279,7 +279,7 @@ async def test_create_token_slug_collision_rejected():
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "my-token"}).encode()
+    body = json.dumps({"name": "my-access-key"}).encode()
     request = _make_admin_request(body=body)
     resp = await view.post(request)
 
@@ -295,7 +295,7 @@ async def test_create_pass_through_requires_confirmation():
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "pt-token", "pass_through": True}).encode()
+    body = json.dumps({"name": "pt-access-key", "pass_through": True}).encode()
     request = _make_admin_request(body=body)
     resp = await view.post(request)
 
@@ -309,14 +309,14 @@ async def test_create_pass_through_with_confirmation_succeeds():
     data = _make_data()
     hass = _make_hass(data)
 
-    access_key = _make_active_token(pass_through=True)
+    access_key = _make_active_access_key(pass_through=True)
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawaccesskey"))
 
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "pt-token", "pass_through": True, "confirm_pass_through": True}).encode()
+    body = json.dumps({"name": "pt-access-key", "pass_through": True, "confirm_pass_through": True}).encode()
     request = _make_admin_request(body=body)
     resp = await view.post(request)
 
@@ -349,7 +349,7 @@ async def test_create_non_boolean_pass_through_rejected():
 
 @pytest.mark.asyncio
 async def test_patch_non_boolean_pass_through_rejected():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock()
@@ -370,12 +370,12 @@ async def test_patch_non_boolean_pass_through_rejected():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_rename_succeeds():
-    access_key = _make_active_token(name="old-name")
+async def test_patch_access_key_rename_succeeds():
+    access_key = _make_active_access_key(name="old-name")
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
-    renamed = _make_active_token(name="new-name")
+    renamed = _make_active_access_key(name="new-name")
     renamed.id = access_key.id
     data.store.async_patch_access_key = AsyncMock(return_value=renamed)
     hass = _make_hass(data)
@@ -393,11 +393,11 @@ async def test_patch_token_rename_succeeds():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_rename_clash_rejected():
-    access_key = _make_active_token(name="old-name")
+async def test_patch_access_key_rename_clash_rejected():
+    access_key = _make_active_access_key(name="old-name")
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
-    data.store.name_slug_exists.return_value = True  # another token already uses it
+    data.store.name_slug_exists.return_value = True  # another access key already uses it
     hass = _make_hass(data)
 
     view = PhoenixAdminAccessKeyView()
@@ -411,8 +411,8 @@ async def test_patch_token_rename_clash_rejected():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_rename_invalid_name_rejected():
-    access_key = _make_active_token(name="old-name")
+async def test_patch_access_key_rename_invalid_name_rejected():
+    access_key = _make_active_access_key(name="old-name")
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
@@ -429,8 +429,8 @@ async def test_patch_token_rename_invalid_name_rejected():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_rejects_expires_at_field():
-    access_key = _make_active_token()
+async def test_patch_access_key_rejects_expires_at_field():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -446,8 +446,8 @@ async def test_patch_token_rejects_expires_at_field():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_pass_through_requires_confirm():
-    access_key = _make_active_token(pass_through=False)
+async def test_patch_access_key_pass_through_requires_confirm():
+    access_key = _make_active_access_key(pass_through=False)
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -465,8 +465,8 @@ async def test_patch_token_pass_through_requires_confirm():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_pass_through_already_enabled_no_confirm_needed():
-    access_key = _make_active_token(pass_through=True)
+async def test_patch_access_key_pass_through_already_enabled_no_confirm_needed():
+    access_key = _make_active_access_key(pass_through=True)
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -481,7 +481,7 @@ async def test_patch_token_pass_through_already_enabled_no_confirm_needed():
 
     assert resp.status == 200
     # Assert the actual patch payload, not just the status: re-affirming pass_through
-    # on an already-enabled token must patch exactly {"pass_through": True} and must
+    # on an already-enabled access key must patch exactly {"pass_through": True} and must
     # NOT smuggle in a confirm_pass_through escape hatch or any other field.
     data.store.async_patch_access_key.assert_awaited_once()
     assert data.store.async_patch_access_key.await_args.args[0] == access_key.id
@@ -489,8 +489,8 @@ async def test_patch_token_pass_through_already_enabled_no_confirm_needed():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_announce_all_tools_accepted():
-    access_key = _make_active_token()
+async def test_patch_access_key_announce_all_tools_accepted():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -507,8 +507,8 @@ async def test_patch_token_announce_all_tools_accepted():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_announce_all_tools_rejects_non_bool():
-    access_key = _make_active_token()
+async def test_patch_access_key_announce_all_tools_rejects_non_bool():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -524,8 +524,8 @@ async def test_patch_token_announce_all_tools_rejects_non_bool():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_inline_wait_accepted():
-    access_key = _make_active_token()
+async def test_patch_access_key_inline_wait_accepted():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -543,8 +543,8 @@ async def test_patch_token_inline_wait_accepted():
 
 
 @pytest.mark.asyncio
-async def test_patch_token_inline_wait_rejects_out_of_range():
-    access_key = _make_active_token()
+async def test_patch_access_key_inline_wait_rejects_out_of_range():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -562,7 +562,7 @@ async def test_patch_token_inline_wait_rejects_out_of_range():
 
 @pytest.mark.asyncio
 async def test_patch_uses_async_lock():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -588,8 +588,8 @@ async def test_patch_uses_async_lock():
 
 
 @pytest.mark.asyncio
-async def test_delete_token_fires_revoked_event():
-    access_key = _make_active_token()
+async def test_delete_access_key_fires_revoked_event():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
@@ -610,13 +610,13 @@ async def test_delete_token_fires_revoked_event():
 
 
 @pytest.mark.asyncio
-async def test_delete_token_cancels_pending_approvals():
-    """Revoking a token cancels its queued approvals, dismisses their
-    notifications, and fires phoenix_mcp_approval_resolved; other tokens' approvals
+async def test_delete_access_key_cancels_pending_approvals():
+    """Revoking an access key cancels its queued approvals, dismisses their
+    notifications, and fires phoenix_mcp_approval_resolved; other access keys' approvals
     and mid-execution approvals are untouched."""
     from homeassistant.util.dt import utcnow as _utcnow
 
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     now_iso = _utcnow().isoformat()
 
@@ -630,7 +630,7 @@ async def test_delete_token_cancels_pending_approvals():
 
     pending = [
         _entry("appr_mine", access_key.id),
-        _entry("appr_other", "other-token"),
+        _entry("appr_other", "other-access-key"),
         _entry("appr_running", access_key.id),
     ]
     data.store.get_pending_approvals.return_value = pending
@@ -663,8 +663,8 @@ async def test_delete_token_cancels_pending_approvals():
 
 
 @pytest.mark.asyncio
-async def test_delete_token_destroys_rate_limiter_state():
-    access_key = _make_active_token()
+async def test_delete_access_key_destroys_rate_limiter_state():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
@@ -680,8 +680,8 @@ async def test_delete_token_destroys_rate_limiter_state():
 
 
 @pytest.mark.asyncio
-async def test_delete_token_cleans_token_counters():
-    access_key = _make_active_token()
+async def test_delete_access_key_cleans_access_key_counters():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
@@ -698,7 +698,7 @@ async def test_delete_token_cleans_token_counters():
 
 
 @pytest.mark.asyncio
-async def test_delete_nonexistent_token_returns_404():
+async def test_delete_nonexistent_access_key_returns_404():
     data = _make_data()
     data.store.get_access_key_by_id = MagicMock(return_value=None)
     hass = _make_hass(data)
@@ -714,7 +714,7 @@ async def test_delete_nonexistent_token_returns_404():
 
 @pytest.mark.asyncio
 async def test_permission_domain_patch_valid_state():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
@@ -735,7 +735,7 @@ async def test_permission_domain_patch_valid_state():
 
 @pytest.mark.asyncio
 async def test_permission_patch_invalid_state_rejected():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -752,7 +752,7 @@ async def test_permission_patch_invalid_state_rejected():
 
 @pytest.mark.asyncio
 async def test_permission_patch_grey_removes_node():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
@@ -773,7 +773,7 @@ async def test_permission_patch_grey_removes_node():
 
 @pytest.mark.asyncio
 async def test_permission_patch_with_hint():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
@@ -796,7 +796,7 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id.return_value = access_key
     hass.data[DOMAIN] = data
@@ -853,7 +853,7 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     access_key.permissions.entities["light.preserved_child"] = PermissionNode(state="RED")
     data = _make_data([access_key])
     data.store.get_access_key_by_id.return_value = access_key
@@ -1011,8 +1011,8 @@ async def test_settings_patch_serializes_persistence_with_live_reconciliation():
 
 
 @pytest.mark.asyncio
-async def test_token_revoke_before_settings_validation_rejects_dead_reference():
-    access_key = _make_active_token()
+async def test_access_key_revoke_before_settings_validation_rejects_dead_reference():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     active = {access_key.id: access_key}
     current = GlobalSettings()
@@ -1030,12 +1030,12 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
 
     data.store.async_archive_access_key = AsyncMock(side_effect=archive)
     hass = _make_hass(data)
-    token_view = PhoenixAdminAccessKeyView()
-    token_view.hass = hass
+    access_key_view = PhoenixAdminAccessKeyView()
+    access_key_view.hass = hass
     settings_view = PhoenixAdminSettingsView()
     settings_view.hass = hass
 
-    revoke = asyncio.create_task(token_view.delete(
+    revoke = asyncio.create_task(access_key_view.delete(
         _make_admin_request(), access_key_id=access_key.id
     ))
     await archive_started.wait()
@@ -1054,8 +1054,8 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
 
 
 @pytest.mark.asyncio
-async def test_settings_bind_before_token_revoke_finishes_cleared():
-    access_key = _make_active_token()
+async def test_settings_bind_before_access_key_revoke_finishes_cleared():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     active = {access_key.id: access_key}
     current = GlobalSettings()
@@ -1078,8 +1078,8 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
     data.store.async_patch_settings = AsyncMock(side_effect=patch_settings)
     data.store.async_archive_access_key = AsyncMock(side_effect=archive)
     hass = _make_hass(data)
-    token_view = PhoenixAdminAccessKeyView()
-    token_view.hass = hass
+    access_key_view = PhoenixAdminAccessKeyView()
+    access_key_view.hass = hass
     settings_view = PhoenixAdminSettingsView()
     settings_view.hass = hass
 
@@ -1087,7 +1087,7 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
         body=json.dumps({"voice_agent_access_key_id": access_key.id}).encode()
     )))
     await binding_persisted.wait()
-    revoke = asyncio.create_task(token_view.delete(
+    revoke = asyncio.create_task(access_key_view.delete(
         _make_admin_request(), access_key_id=access_key.id
     ))
     await asyncio.sleep(0)
@@ -1232,8 +1232,8 @@ async def test_settings_patch_rejects_unknown_fields_atomically():
 
 
 @pytest.mark.asyncio
-async def test_token_patch_rejects_unknown_fields_atomically():
-    access_key = _make_active_token()
+async def test_access_key_patch_rejects_unknown_fields_atomically():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
@@ -1425,8 +1425,8 @@ async def test_settings_patch_mesa_inject_non_bool_rejected():
 
 
 @pytest.mark.asyncio
-async def test_token_stats_returns_zero_counters_for_new_token():
-    access_key = _make_active_token()
+async def test_access_key_stats_returns_zero_counters_for_new_access_key():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -1447,8 +1447,8 @@ async def test_token_stats_returns_zero_counters_for_new_token():
 
 
 @pytest.mark.asyncio
-async def test_token_stats_reflects_live_counters():
-    access_key = _make_active_token()
+async def test_access_key_stats_reflects_live_counters():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.access_key_counters[access_key.id] = {"request_count": 42, "denied_count": 5, "rate_limit_hits": 2}
@@ -1473,8 +1473,8 @@ def _connection_view():
 
 
 @pytest.mark.asyncio
-async def test_token_connection_no_session_zero_counters():
-    access_key = _make_active_token()
+async def test_access_key_connection_no_session_zero_counters():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -1488,9 +1488,9 @@ async def test_token_connection_no_session_zero_counters():
 
 
 @pytest.mark.asyncio
-async def test_token_connection_reports_request_count():
+async def test_access_key_connection_reports_request_count():
     # Streamable HTTP clients are stateless; request_count is the "connected" signal.
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.access_key_counters[access_key.id] = {"request_count": 3, "denied_count": 0, "rate_limit_hits": 0}
@@ -1504,9 +1504,9 @@ async def test_token_connection_reports_request_count():
 
 
 @pytest.mark.asyncio
-async def test_token_connection_reports_last_used_iso():
+async def test_access_key_connection_reports_last_used_iso():
     from homeassistant.util.dt import utcnow
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     access_key.last_used_at = utcnow()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
@@ -1520,7 +1520,7 @@ async def test_token_connection_reports_last_used_iso():
 
 
 @pytest.mark.asyncio
-async def test_token_connection_404_for_unknown_token():
+async def test_access_key_connection_404_for_unknown_access_key():
     data = _make_data([])
     data.store.get_access_key_by_id = MagicMock(return_value=None)
     hass = _make_hass(data)
@@ -1532,8 +1532,8 @@ async def test_token_connection_404_for_unknown_token():
 
 
 @pytest.mark.asyncio
-async def test_token_connection_requires_admin():
-    access_key = _make_active_token()
+async def test_access_key_connection_requires_admin():
+    access_key = _make_active_access_key()
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
@@ -1547,7 +1547,7 @@ async def test_token_connection_requires_admin():
 @pytest.mark.asyncio
 async def test_audit_log_query_paginates():
     data = _make_data()
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
@@ -1568,7 +1568,7 @@ async def test_audit_log_query_paginates():
 
 
 @pytest.mark.asyncio
-async def test_global_audit_query_all_tokens():
+async def test_global_audit_query_all_access_keys():
     data = _make_data()
     hass = _make_hass(data)
 
@@ -1748,7 +1748,7 @@ def test_all_admin_views_exported():
     assert len(ALL_ADMIN_VIEWS) == 66
 
 
-def test_archived_views_before_token_view():
+def test_archived_views_before_access_key_view():
     from custom_components.phoenix_mcp.admin_view import (
         PhoenixAdminArchivedAccessKeysView,
         PhoenixAdminArchivedAccessKeyView,
@@ -1756,9 +1756,9 @@ def test_archived_views_before_token_view():
     )
     archived_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeysView)
     archived_single_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeyView)
-    token_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminAccessKeyView)
-    assert archived_idx < token_idx
-    assert archived_single_idx < token_idx
+    access_key_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminAccessKeyView)
+    assert archived_idx < access_key_idx
+    assert archived_single_idx < access_key_idx
 
 
 # --- global entity hints ---
@@ -1910,7 +1910,7 @@ def test_wipe_flag_coercion():
 
 
 @pytest.mark.asyncio
-async def test_wipe_requires_confirm_token():
+async def test_wipe_requires_confirm_access_key():
     data = _make_wipe_data()
     hass = _make_hass(data)
     view = PhoenixAdminWipeView()
@@ -2206,8 +2206,8 @@ async def test_settings_get_includes_esphome_availability_flags():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_binds_active_token():
-    access_key = _make_active_token()
+async def test_settings_patch_binds_active_access_key():
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2219,7 +2219,7 @@ async def test_settings_patch_binds_active_token():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_rejects_unknown_token():
+async def test_settings_patch_rejects_unknown_access_key():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2231,7 +2231,7 @@ async def test_settings_patch_rejects_unknown_token():
 
 @pytest.mark.asyncio
 async def test_settings_patch_null_unbinds():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(assist_bound_access_key_id=access_key.id)
     view = PhoenixAdminSettingsView()
@@ -2244,7 +2244,7 @@ async def test_settings_patch_null_unbinds():
 
 @pytest.mark.asyncio
 async def test_revoke_clears_assist_binding():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(assist_bound_access_key_id=access_key.id)
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
@@ -2256,8 +2256,8 @@ async def test_revoke_clears_assist_binding():
 
 
 @pytest.mark.asyncio
-async def test_revoke_clears_voice_agent_token_and_resyncs():
-    access_key = _make_active_token()
+async def test_revoke_clears_voice_agent_access_key_and_resyncs():
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
                                  voice_agent_provider_id="p", voice_agent_model="m")
@@ -2277,7 +2277,7 @@ async def test_revoke_clears_voice_agent_token_and_resyncs():
 
 @pytest.mark.asyncio
 async def test_settings_patch_voice_agent_config_resyncs():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     data.async_sync_voice_agent = MagicMock()
     view = PhoenixAdminSettingsView()
@@ -2299,7 +2299,7 @@ async def test_settings_patch_voice_agent_config_resyncs():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_voice_agent_rejects_inactive_token():
+async def test_settings_patch_voice_agent_rejects_inactive_access_key():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2379,7 +2379,7 @@ async def test_voice_pipeline_delete_removes():
 
 @pytest.mark.asyncio
 async def test_voice_pipeline_create_serializes_with_disable_cleanup():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
         voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
@@ -2449,7 +2449,7 @@ async def test_voice_pipeline_create_serializes_with_disable_cleanup():
     ids=["core", "providers"],
 )
 async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data = _make_wipe_data([access_key])
     holder = {"s": GlobalSettings(
         voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
@@ -2530,7 +2530,7 @@ async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
 
 @pytest.mark.asyncio
 async def test_concurrent_voice_pipeline_posts_create_once():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
         voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
@@ -2568,7 +2568,7 @@ async def test_concurrent_voice_pipeline_posts_create_once():
 
 @pytest.mark.asyncio
 async def test_disabling_voice_agent_removes_tracked_pipeline():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
         voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
@@ -2600,7 +2600,7 @@ async def test_settings_get_includes_ai_task_supported():
 
 @pytest.mark.asyncio
 async def test_settings_patch_ai_task_config():
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2618,7 +2618,7 @@ async def test_settings_patch_ai_task_config():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_ai_task_rejects_inactive_token():
+async def test_settings_patch_ai_task_rejects_inactive_access_key():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2642,8 +2642,8 @@ async def test_settings_patch_ai_task_rejects_unknown_provider():
 
 
 @pytest.mark.asyncio
-async def test_revoke_clears_ai_task_token():
-    access_key = _make_active_token()
+async def test_revoke_clears_ai_task_access_key():
+    access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
         ai_task_enabled=True, ai_task_access_key_id=access_key.id,
@@ -2864,7 +2864,7 @@ async def test_settings_patch_ai_task_sync_fires_on_config_and_kill_switch(setti
 
 
 # ---------------------------------------------------------------------------
-# Token PATCH validation: the whole per-token surface (name, pass-through
+# Access key PATCH validation: the whole per-access-key surface (name, pass-through
 # acknowledgment, every capability, the persona, the rate limits, the
 # inline-confirm wait), message included.
 #
@@ -2874,7 +2874,7 @@ async def test_settings_patch_ai_task_sync_fires_on_config_and_kill_switch(setti
 # ---------------------------------------------------------------------------
 
 
-def _token_patch_data(access_key):
+def _access_key_patch_data(access_key):
     data = _make_data([access_key])
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
@@ -2882,7 +2882,7 @@ def _token_patch_data(access_key):
     return data
 
 
-async def _token_patch(data, access_key_id, body: dict):
+async def _access_key_patch(data, access_key_id, body: dict):
     view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
     # require_admin's wrapper forwards extras as keyword-only.
@@ -2913,45 +2913,45 @@ async def _token_patch(data, access_key_id, body: dict):
         ({"rate_limit_burst": 100_001}, 400, "must not exceed 100000"),
     ],
 )
-async def test_token_patch_rejects_invalid_values(payload, status, fragment):
-    access_key = _make_active_token(name="tok-a")
-    data = _token_patch_data(access_key)
-    resp = await _token_patch(data, access_key.id, payload)
+async def test_access_key_patch_rejects_invalid_values(payload, status, fragment):
+    access_key = _make_active_access_key(name="tok-a")
+    data = _access_key_patch_data(access_key)
+    resp = await _access_key_patch(data, access_key.id, payload)
     assert resp.status == status, payload
     assert fragment in json.loads(resp.text)["message"], payload
     data.store.async_patch_access_key.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_token_patch_unknown_token_is_404():
-    access_key = _make_active_token()
-    data = _token_patch_data(access_key)
+async def test_access_key_patch_unknown_access_key_is_404():
+    access_key = _make_active_access_key()
+    data = _access_key_patch_data(access_key)
     data.store.get_access_key_by_id = MagicMock(return_value=None)
-    resp = await _token_patch(data, "ghost", {"name": "whatever"})
+    resp = await _access_key_patch(data, "ghost", {"name": "whatever"})
     assert resp.status == 404
     assert "Access key not found" in json.loads(resp.text)["message"]
 
 
 @pytest.mark.asyncio
-async def test_token_patch_confirm_mode_refused_for_a_cap_that_cannot_confirm():
+async def test_access_key_patch_confirm_mode_refused_for_a_cap_that_cannot_confirm():
     """CONFIRM_AVAILABLE_CAPS is the allowlist; a cap outside it must refuse."""
     from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, CONFIRM_AVAILABLE_CAPS
 
     non_confirmable = sorted(set(CAPABILITY_NAMES) - set(CONFIRM_AVAILABLE_CAPS))
     assert non_confirmable, "expected at least one non-confirmable capability"
-    access_key = _make_active_token()
-    data = _token_patch_data(access_key)
-    resp = await _token_patch(data, access_key.id, {non_confirmable[0]: "confirm"})
+    access_key = _make_active_access_key()
+    data = _access_key_patch_data(access_key)
+    resp = await _access_key_patch(data, access_key.id, {non_confirmable[0]: "confirm"})
     assert resp.status == 400
     assert "does not support 'confirm' mode" in json.loads(resp.text)["message"]
 
 
 @pytest.mark.asyncio
-async def test_token_patch_use_assist_exposure_allowed_when_enabling_pass_through_together():
+async def test_access_key_patch_use_assist_exposure_allowed_when_enabling_pass_through_together():
     """The check reads the RESULTING pass_through, not just the stored one."""
-    access_key = _make_active_token(pass_through=False)
-    data = _token_patch_data(access_key)
-    resp = await _token_patch(data, access_key.id, {
+    access_key = _make_active_access_key(pass_through=False)
+    data = _access_key_patch_data(access_key)
+    resp = await _access_key_patch(data, access_key.id, {
         "pass_through": True, "confirm_pass_through": True, "use_assist_exposure": True,
     })
     assert resp.status == 200
@@ -2960,26 +2960,26 @@ async def test_token_patch_use_assist_exposure_allowed_when_enabling_pass_throug
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wait", [0, MIN_CONFIRM_INLINE_WAIT_SECONDS, MAX_CONFIRM_INLINE_WAIT_SECONDS])
-async def test_token_patch_accepts_valid_inline_wait(wait):
-    access_key = _make_active_token()
-    data = _token_patch_data(access_key)
-    resp = await _token_patch(data, access_key.id, {"confirm_inline_wait_seconds": wait})
+async def test_access_key_patch_accepts_valid_inline_wait(wait):
+    access_key = _make_active_access_key()
+    data = _access_key_patch_data(access_key)
+    resp = await _access_key_patch(data, access_key.id, {"confirm_inline_wait_seconds": wait})
     assert resp.status == 200
     assert data.store.async_patch_access_key.call_args.kwargs["confirm_inline_wait_seconds"] == wait
 
 
 @pytest.mark.asyncio
-async def test_token_patch_rename_sensor_rebuild_failure_never_fails_the_patch():
+async def test_access_key_patch_rename_sensor_rebuild_failure_never_fails_the_patch():
     """Following a rename onto the sensors is best-effort; it must not 500 the rename.
 
     It must also not go through the archive/create callbacks, which destroy the
-    token's entities and build new ones, changing every entity_id out from under
-    whatever referred to them. The sensors are keyed on the token id and updated in
+    access key's entities and build new ones, changing every entity_id out from under
+    whatever referred to them. The sensors are keyed on the access key id and updated in
     place.
     """
-    access_key = _make_active_token(name="old-name")
-    data = _token_patch_data(access_key)
-    renamed = _make_active_token(name="new-name")
+    access_key = _make_active_access_key(name="old-name")
+    data = _access_key_patch_data(access_key)
+    renamed = _make_active_access_key(name="new-name")
     renamed.id = access_key.id
     data.store.async_patch_access_key = AsyncMock(return_value=renamed)
     data.async_on_access_key_archived = AsyncMock()
@@ -2989,7 +2989,7 @@ async def test_token_patch_rename_sensor_rebuild_failure_never_fails_the_patch()
         "custom_components.phoenix_mcp.sensor.async_rename_access_key_sensors",
         AsyncMock(side_effect=RuntimeError("registry boom")),
     ) as rename:
-        resp = await _token_patch(data, access_key.id, {"name": "new-name"})
+        resp = await _access_key_patch(data, access_key.id, {"name": "new-name"})
 
     assert resp.status == 200
     rename.assert_awaited_once()

@@ -62,7 +62,7 @@ def _done(stop_reason):
             "assistant_msg": {"role": "assistant", "content": []}}
 
 
-def _make_token():
+def _make_access_key():
     return SimpleNamespace(id="tok-1", announce_all_tools=True, confirm_inline_wait_seconds=0)
 
 
@@ -426,7 +426,7 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
     HomeAssistantError. Shares AGENTCLI_MAX_TURN_OUTPUT_BYTES with the interactive
     loop.
     """
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -453,7 +453,7 @@ async def test_ai_task_raises_when_it_runs_out_of_steps():
     operator at the prompt instead of Steps before check-in); without one it must not
     return an empty string to the automation.
     """
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
@@ -476,7 +476,7 @@ async def test_ai_task_raises_on_a_truncated_result():
     must not surface as a JSON parse error (the wrong cause), and without one it
     must not return a half-written answer that looks complete.
     """
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([
@@ -494,8 +494,8 @@ async def test_ai_task_raises_on_a_truncated_result():
 
 @pytest.mark.asyncio
 async def test_ai_task_stops_after_one_round_when_authority_is_lost():
-    """A dead token buys one closing round here too, not max_iterations of them."""
-    access_key = _make_token()
+    """A dead access key buys one closing round here too, not max_iterations of them."""
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
@@ -519,7 +519,7 @@ async def test_generate_free_text_happy_path():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value="A plain summary.")):
@@ -533,7 +533,7 @@ async def test_generate_structured_parses_json():
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
     schema = vol.Schema({vol.Required("summary"): str})
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value='{"summary": "ok"}')) as rt:
@@ -558,7 +558,7 @@ async def test_generate_kill_switch_raises_unavailable():
 
 
 @pytest.mark.asyncio
-async def test_generate_token_gone_raises():
+async def test_generate_access_key_gone_raises():
     data = _make_data(**_FULL)
     with patch.object(agentcli, "_current_dispatch_access_key", return_value=None):
         with pytest.raises(HomeAssistantError, match="access key"):
@@ -570,7 +570,7 @@ async def test_generate_wraps_loop_error():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(side_effect=AiTaskError("model down"))):
@@ -592,7 +592,7 @@ def _dispatch_ok(text):
 
 @pytest.mark.asyncio
 async def test_run_ai_task_tool_then_answer_uses_ai_task_sentinel():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok('{"state": "on"}')
@@ -612,7 +612,7 @@ async def test_run_ai_task_tool_then_answer_uses_ai_task_sentinel():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_includes_structure_directive_in_system_prompt():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     capture: dict = {}
     stream = _staged_stream(
@@ -635,7 +635,7 @@ async def test_run_ai_task_includes_structure_directive_in_system_prompt():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_free_text_uses_selected_style_and_detail():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data(
         ai_task_conversation_style="technical", ai_task_detail_level="detailed",
     )
@@ -660,7 +660,7 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_pending_becomes_queued_without_blocking():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     record = SimpleNamespace(
@@ -690,7 +690,7 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_error_raises_aitaskerror():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     stream = _staged_stream([{"type": agentcli.EV_ERROR, "message": "boom"}])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \

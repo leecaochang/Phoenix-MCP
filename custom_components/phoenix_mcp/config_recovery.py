@@ -48,7 +48,7 @@ def safe_snapshot(value: dict | None) -> dict | None:
         snapshot = json.loads(encoded)
         if redact_structure(snapshot) != snapshot:
             raise ValueError
-        if "<redacted>" in encoded or "<phoenix-token>" in encoded:
+        if any(marker in encoded for marker in ("<redacted>", "<phoenix-access-key>", "<phoenix-token>")):
             raise ValueError
     except Exception:
         raise ConfigurationRecoveryError(

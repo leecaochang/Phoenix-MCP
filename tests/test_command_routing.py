@@ -308,7 +308,7 @@ async def test_routing_settings_persist_and_invalid_modes_fail_closed(access_key
 async def test_strict_recognition_uses_exposed_exact_aliases(
     hass, routing, english_home, exposed, sentence, expected,
 ):
-    """Separate recognition vocabulary from the token's unchanged write scope."""
+    """Separate recognition vocabulary from the access key's unchanged write scope."""
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 
     data, access_key = routing

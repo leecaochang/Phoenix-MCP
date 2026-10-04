@@ -36,7 +36,7 @@ def _write_sidecar(hass: HomeAssistant, domain: str, body: dict) -> None:
 def _access_key(persona: str = "voice_assistant") -> AccessKeyRecord:
     return AccessKeyRecord(
         id="tok-1",
-        name="my_token",
+        name="my_access_key",
         access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
@@ -424,10 +424,10 @@ async def test_async_wipe_clears_all_profiles_and_caches(hass: HomeAssistant):
     assert runtime.orphans == [] and runtime.suggestions == []
 
 
-def test_build_caller_context_maps_token():
+def test_build_caller_context_maps_access_key():
     ctx = build_caller_context(_access_key("automation_builder"), session_id="sess-9")
     assert ctx.caller_id == "tok-1"
-    assert ctx.display_name == "my_token"
+    assert ctx.display_name == "my_access_key"
     assert ctx.roles == ["automation_builder"]
     assert ctx.is_authenticated is True
     assert ctx.session_id == "sess-9"
@@ -609,7 +609,7 @@ async def test_device_layer_tightens_and_scope_only_breaks_ties(hass: HomeAssist
 
 @pytest.mark.asyncio
 async def test_the_enforcer_resolves_over_the_unfiltered_store(hass: HomeAssistant):
-    """Enforcement must never see a per-token view of the profile store.
+    """Enforcement must never see a per-access-key view of the profile store.
 
     Every inheritance layer only tightens, so a store that hides layers yields a
     MORE permissive effective profile than the operator authored, and nothing in

@@ -34,13 +34,13 @@ async def test_dedup_and_phase_writes_do_not_rewrite_snapshots(hass):
     storage = RecoveryStorage(hass)
     recovery = ConfigurationRecovery(storage, hass=hass)
     snapshot = {"content": "x" * 480_000}
-    rid = await recovery.begin("file:a", "write", "token", {"content": "old"}, source=snapshot, expected=snapshot)
+    rid = await recovery.begin("file:a", "write", "access_key", {"content": "old"}, source=snapshot, expected=snapshot)
     assert len(blobs(storage)) == 2
     originals = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in blobs(storage)}
     await recovery.mark(rid, "dispatching")
     await recovery.mark(rid, "verified")
     recovery.leave(rid)
-    await recovery.begin("file:b", "write", "token", None, expected=snapshot)
+    await recovery.begin("file:b", "write", "access_key", None, expected=snapshot)
     assert len(blobs(storage)) == 2
     assert originals == {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in blobs(storage)}
     index = json.loads(Path(storage.index.path).read_text())["data"]
@@ -59,7 +59,7 @@ async def test_dedup_and_phase_writes_do_not_rewrite_snapshots(hass):
 async def test_legacy_migration_commits_snapshots_before_replacing_index(hass, boundary):
     legacy_store = DurableStore(hass, 1, CONFIG_RECOVERY_STORAGE_KEY, atomic_writes=True)
     legacy = ConfigurationRecovery(legacy_store, hass=hass)
-    rid = await legacy.begin("file:a", "write", "token", {"content": "before"}, expected={"content": "after"})
+    rid = await legacy.begin("file:a", "write", "access_key", {"content": "before"}, expected={"content": "after"})
     old_bytes = Path(legacy_store.path).read_bytes()
     recovery = ConfigurationRecovery(RecoveryStorage(hass), hass=hass)
     await recovery.async_load()
@@ -84,14 +84,14 @@ async def test_legacy_migration_commits_snapshots_before_replacing_index(hass, b
     assert fresh.get(rid)["before"] == {"content": "before"}
     assert fresh.get(rid)["expected"] == {"content": "after"}
     with pytest.raises(ConfigurationRecoveryError, match="Resolve"):
-        await fresh.begin("file:a", "write", "token", {})
+        await fresh.begin("file:a", "write", "access_key", {})
 
 
 @pytest.mark.parametrize("damage", ["missing", "mismatch", "malformed_reference", "unsupported", "corrupt_index"])
 async def test_unavailable_snapshots_fail_closed_after_restart(hass, damage):
     storage = RecoveryStorage(hass)
     recovery = ConfigurationRecovery(storage, hass=hass)
-    rid = await recovery.begin("file:a", "write", "token", {"content": "before"})
+    rid = await recovery.begin("file:a", "write", "access_key", {"content": "before"})
     if damage == "missing":
         blobs(storage)[0].unlink()
     elif damage == "mismatch":
@@ -114,7 +114,7 @@ async def test_unavailable_snapshots_fail_closed_after_restart(hass, damage):
     with pytest.raises(ConfigurationRecoveryError):
         fresh.records()
     with pytest.raises(ConfigurationRecoveryError):
-        await fresh.begin("file:other", "write", "token", {})
+        await fresh.begin("file:other", "write", "access_key", {})
 
 
 async def test_cleanup_preserves_shared_snapshots_and_retries_orphans(hass):
@@ -122,7 +122,7 @@ async def test_cleanup_preserves_shared_snapshots_and_retries_orphans(hass):
     recovery = ConfigurationRecovery(storage, hass=hass)
     ids = []
     for resource in ("file:a", "file:b"):
-        rid = await recovery.begin(resource, "write", "token", {"content": "shared"})
+        rid = await recovery.begin(resource, "write", "access_key", {"content": "shared"})
         await recovery.mark(rid, "verified")
         recovery.leave(rid)
         ids.append(rid)
@@ -137,7 +137,7 @@ async def test_cleanup_preserves_shared_snapshots_and_retries_orphans(hass):
     fresh = ConfigurationRecovery(fresh_storage, hass=hass)
     await fresh.async_load()
     assert fresh.records() == []
-    await fresh.begin("file:c", "write", "token", {"content": "new"})
+    await fresh.begin("file:c", "write", "access_key", {"content": "new"})
     assert len(blobs(fresh_storage)) == 1
     assert json.loads(blobs(fresh_storage)[0].read_text())["data"] == {"content": "new"}
 
@@ -156,13 +156,13 @@ async def test_cancelled_writer_finishes_before_next_record_can_publish(hass):
         real_writer(store, *args)
 
     with patch.object(Store, "_write_prepared_data", write):
-        first = asyncio.create_task(recovery.begin("file:a", "write", "token", {"content": "a"}))
+        first = asyncio.create_task(recovery.begin("file:a", "write", "access_key", {"content": "a"}))
         try:
             assert await asyncio.to_thread(entered.wait, 5)
             first.cancel()
             await asyncio.sleep(0)
             first.cancel()
-            second = asyncio.create_task(recovery.begin("file:b", "write", "token", {"content": "b"}))
+            second = asyncio.create_task(recovery.begin("file:b", "write", "access_key", {"content": "b"}))
             await asyncio.sleep(0)
             assert not first.done()
             assert not second.done()
@@ -177,13 +177,13 @@ async def test_cancelled_writer_finishes_before_next_record_can_publish(hass):
     assert all(row["phase"] == "prepared" for row in fresh.records())
     assert all(not row["active"] for row in fresh.records())
     with pytest.raises(ConfigurationRecoveryError, match="Resolve"):
-        await fresh.begin("file:a", "write", "token", {})
+        await fresh.begin("file:a", "write", "access_key", {})
 
 
 async def test_failed_phase_commit_preserves_previous_index_and_snapshots(hass):
     storage = RecoveryStorage(hass)
     recovery = ConfigurationRecovery(storage, hass=hass)
-    rid = await recovery.begin("file:a", "write", "token", {"content": "before"}, expected={"content": "after"})
+    rid = await recovery.begin("file:a", "write", "access_key", {"content": "before"}, expected={"content": "after"})
     old = Path(storage.index.path).read_bytes()
     original_blobs = {p.name: p.read_bytes() for p in blobs(storage)}
     real_writer = Store._write_prepared_data

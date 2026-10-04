@@ -4355,7 +4355,7 @@ async def async_run_ai_task(
     """Run one AI Task (ai_task.generate_data) to completion; return the final text.
 
     A headless sibling of async_run_voice_turn for HA's AI Task platform: same gated tool
-    loop (per-access key scope, MESA, approvals, audit via _dispatch_mcp with sentinel
+    loop (per-access-key scope, MESA, approvals, audit via _dispatch_mcp with sentinel
     client_ip "ai_task"), no SSE, no interactive wait. A confirm gate returns pending,
     fed back as a "queued_for_approval" tool result so a task never blocks. The access key
     is re-resolved before every dispatch, so a mid-task revoke/kill-switch is honored.

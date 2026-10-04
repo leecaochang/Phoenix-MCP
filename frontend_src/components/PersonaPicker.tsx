@@ -6,7 +6,7 @@ import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EsphomeAvailability } from "./CapabilityMatrix";
 import { t } from "../i18n";
 
-// Patch mode: applies the persona to an existing access key (Access key Detail).
+// Patch mode: applies the persona to an existing access key (Access key detail).
 // Select mode: no access key yet (onboarding wizard); reports the chosen persona to
 // the parent, which applies it after the access key is created.
 interface PatchProps {
@@ -14,7 +14,7 @@ interface PatchProps {
   onUpdate: (updated: AccessKeyRecord) => void;
   selected?: undefined;
   onSelect?: undefined;
-  // Only the Access key Detail view has settings in hand. The wizard leaves this
+  // Only the Access key detail view has settings in hand. The wizard leaves this
   // undefined, so no note renders there.
   esphome?: EsphomeAvailability | null;
 }

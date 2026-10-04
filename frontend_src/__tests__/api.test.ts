@@ -131,7 +131,7 @@ describe("api.resolve", () => {
 });
 
 describe("api.getAccessKeyConnection", () => {
-  it("GETs the connection endpoint for the token", async () => {
+  it("GETs the connection endpoint for the access key", async () => {
     globalThis.fetch = mockFetchResponse(200, { last_used_at: null, request_count: 0 });
     await api.getAccessKeyConnection("tok-1");
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -281,7 +281,7 @@ describe("api.patchSettings", () => {
     expect(JSON.parse(opts.body)).toEqual({ kill_switch: true });
   });
 
-  it("binds and unbinds the Assist token", async () => {
+  it("binds and unbinds the Assist access key", async () => {
     globalThis.fetch = mockFetchResponse(200, { assist_bound_access_key_id: "tok-1" });
     await api.patchSettings({ assist_bound_access_key_id: "tok-1" });
     let [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -559,13 +559,13 @@ describe("complete MESA profile catalog", () => {
   });
 });
 
-it("serializes permission edits per token and continues after a failed edit", async () => {
+it("serializes permission edits per access key and continues after a failed edit", async () => {
   let first!: (response: unknown) => void;
   const requests = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { first = resolve; }))
     .mockResolvedValue({ ok: true, status: 200, json: async () => ({ entities: { "light.second": {} } }) });
   setHass({ user: { id: "admin" }, fetchWithAuth: requests });
-  const a = api.patchEntityPermission("queue-token", "light.first", { state: "GREEN" });
-  const b = api.patchEntityPermission("queue-token", "light.second", { state: "YELLOW" });
+  const a = api.patchEntityPermission("queue-access-key", "light.first", { state: "GREEN" });
+  const b = api.patchEntityPermission("queue-access-key", "light.second", { state: "YELLOW" });
   await vi.waitFor(() => expect(requests).toHaveBeenCalledOnce());
   first({ ok: false, status: 409, json: async () => ({ error: "conflict", message: "Conflict" }) });
   await expect(a).rejects.toThrow("Conflict");
@@ -577,8 +577,8 @@ it("does not dispatch a queued permission edit under a different HA user", async
   let first!: (response: unknown) => void;
   const requests = vi.fn(() => new Promise((resolve) => { first = resolve; }));
   setHass({ user: { id: "first" }, fetchWithAuth: requests });
-  const a = api.patchDomainPermission("identity-token", "light", { state: "GREEN" });
-  const b = api.patchDomainPermission("identity-token", "sensor", { state: "YELLOW" });
+  const a = api.patchDomainPermission("identity-access-key", "light", { state: "GREEN" });
+  const b = api.patchDomainPermission("identity-access-key", "sensor", { state: "YELLOW" });
   const refusal = expect(b).rejects.toMatchObject({ status: 401 });
   await vi.waitFor(() => expect(requests).toHaveBeenCalledOnce());
   setHass({ user: { id: "second" }, fetchWithAuth: requests });
@@ -607,9 +607,9 @@ it.each([401, 404, 413, 504])("preserves HTTP %s for a non-JSON error", async st
   await expect(api.listAccessKeys()).rejects.toMatchObject({ status, code: "parse_error", message: "Gateway failure" });
 });
 
-it("accepts the token audit endpoint's list envelope", async () => {
+it("accepts the access key audit endpoint's list envelope", async () => {
   globalThis.fetch = mockFetchResponse(200, [{ request_id: "request" }]);
-  expect(await api.getAccessKeyAudit("token")).toEqual([{ request_id: "request" }]);
+  expect(await api.getAccessKeyAudit("access_key")).toEqual([{ request_id: "request" }]);
 });
 
 it.each([false, true])("restarts an invalidated full MESA load at most once (repeat=%s)", async repeat => {

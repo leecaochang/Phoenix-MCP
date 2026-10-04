@@ -146,11 +146,11 @@ async def test_entity_privacy_preserves_permitted_ids_and_punctuation(hass, cont
         f'{entity}. {entity}! <redacted-entity>. <redacted-entity>... host.example.com')
 
 
-@pytest.mark.parametrize('change,reason', [('token', 'authority_changed'), ('target', 'context_changed')])
+@pytest.mark.parametrize('change,reason', [('access_key', 'authority_changed'), ('target', 'context_changed')])
 async def test_secret_store_wait_rechecks_before_sending(hass, context_home, change, reason):
     _, access_key, store, _, entity, _ = context_home
     async def load(*args):
-        if change == 'token':
+        if change == 'access_key':
             access_key.revoked = True
         else:
             er.async_get(hass).async_update_entity(entity, name='Changed target')
@@ -197,13 +197,13 @@ async def test_primary_state_candidate_does_not_send_state(hass, context_home):
     assert 'service' not in state and 'never-send-state' not in json.dumps(state)
 
 
-@pytest.mark.parametrize('change,reason', [('token', 'authority_changed'), ('settings', 'authority_changed'),
+@pytest.mark.parametrize('change,reason', [('access_key', 'authority_changed'), ('settings', 'authority_changed'),
     ('account', 'authority_changed'), ('change_back', 'authority_changed'), ('deleted', 'authority_changed'),
     ('runtime', 'authority_changed'), ('target', 'context_changed'), ('scope', 'context_changed')])
 async def test_wait_rechecks_relevant_authority_and_context(hass, context_home, change, reason):
     data, access_key, store, account, entity, _ = context_home
     async def respond(*args):
-        if change == 'token': access_key.revoked = True
+        if change == 'access_key': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
         if change in ('account', 'change_back'):
             await store.set_model(account, 'changed-model')

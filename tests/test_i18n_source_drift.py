@@ -50,9 +50,9 @@ def test_every_shipped_locale_is_stamped() -> None:
 def test_audit_reports_a_reworded_english_string() -> None:
     stamp = _stamper()
     problems = stamp.audit(
-        english={"a": "Revoking a token also clears the Assist binding."},
+        english={"a": "Revoking an access key also clears the Assist binding."},
         locale={"a": "撤销令牌还会清除 Assist 绑定。"},
-        stamped={"a": stamp.digest("Revoking a token cancels its pending approvals.")},
+        stamped={"a": stamp.digest("Revoking an access key cancels its pending approvals.")},
     )
     assert problems["stale"] == ["a"]
 

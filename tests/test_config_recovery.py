@@ -54,7 +54,14 @@ async def test_cancellation_and_reload_keep_snapshot():
     assert fresh.records() == []
 
 
-@pytest.mark.parametrize("payload", [{"password": "secret"}, {"x": "https://user:pass@host"}, {"x": "<redacted>"}, {"x": float("nan")}])
+@pytest.mark.parametrize("payload", [
+    {"password": "secret"},
+    {"x": "https://user:pass@host"},
+    {"x": "<redacted>"},
+    {"x": "<phoenix-token>"},
+    {"x": "<phoenix-access-key>"},
+    {"x": float("nan")},
+])
 async def test_secret_or_unrestorable_snapshot_never_persists(payload):
     store = MagicMock(async_save=AsyncMock())
     with pytest.raises(ConfigurationRecoveryError):

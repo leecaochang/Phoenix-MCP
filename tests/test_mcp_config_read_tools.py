@@ -286,11 +286,11 @@ class TestApprovalDiffCompleteness:
         # created with content that a display cap would have clipped.
         read = _json((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         edit_cfg = dict(big_cfg, alias="Replaced")
-        confirm_token = _access_key(cap_automation_write="confirm")
-        confirm_token.id = access_key.id
+        confirm_access_key = _access_key(cap_automation_write="confirm")
+        confirm_access_key.id = access_key.id
         _r, outcome, _res = await _call_tool(
             "edit_automation", {"automation_id": aid, "config": edit_cfg, "expected_hash": read["content_hash"]},
-            confirm_token, hass, data,
+            confirm_access_key, hass, data,
         )
         assert outcome == "pending_approval"
         appr = store._p[0]
@@ -362,7 +362,7 @@ class TestListTools:
         body = _json((await _call_tool("list_scripts", {}, access_key, hass, data))[0])
         assert body["scripts"][0]["script_id"] == "morning"
 
-    async def test_lists_are_scoped_to_the_token(self, hass):
+    async def test_lists_are_scoped_to_the_access_key(self, hass):
         data = _data()
         access_key = _access_key(
             PermissionTree(entities={"automation.visible": PermissionNode(state="GREEN")}),

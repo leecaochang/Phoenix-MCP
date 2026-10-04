@@ -1695,7 +1695,7 @@ _MAX_REPAIR_ISSUES = 50
 
 
 def _repair_ref(access_key: AccessKeyRecord, domain: str, issue_id: str) -> str:
-    """Return a stable per-access key reference without disclosing HA's raw issue id."""
+    """Return a stable per-access-key reference without disclosing HA's raw issue id."""
     digest = hmac.new(
         access_key.access_key_hash.encode(),
         f"{domain}\0{issue_id}".encode(),
@@ -2023,7 +2023,7 @@ async def _registry_relationship_preview(
 ) -> dict[str, Any]:
     """Full known-consumer preview for a registry rename or deletion.
 
-    Unlike the access key-facing get_relationships response, an admin approval card is
+    Unlike the access-key-facing get_relationships response, an admin approval card is
     not capability-narrowed: it always attempts dashboards and config entries as
     well as YAML automations, scripts, scenes and groups. Only matching entity IDs
     reach the preview; config-entry credentials stay in the snapshot.

@@ -32,15 +32,15 @@ class Disk:
 async def test_claim_survives_restart_and_only_explicit_review_unlocks():
     disk = Disk()
     first = AgentRecovery(disk)
-    await first.begin("token", "call_service", "request")
+    await first.begin("access_key", "call_service", "request")
     restored = AgentRecovery(disk)
     await restored.async_load()
-    assert restored.records("token")[0]["status"] == "outcome_unknown"
+    assert restored.records("access_key")[0]["status"] == "outcome_unknown"
     assert restored.records("other") == []
     with pytest.raises(RecoveryRequired):
-        await restored.begin("token", "call_service", "duplicate")
+        await restored.begin("access_key", "call_service", "duplicate")
     assert await restored.reviewed("request")
-    await restored.begin("token", "call_service", "new")
+    await restored.begin("access_key", "call_service", "new")
     assert not await restored.reviewed("new")  # cannot clear an active executor
 
 
@@ -48,11 +48,11 @@ async def test_claim_survives_restart_and_only_explicit_review_unlocks():
 async def test_failed_finish_keeps_barrier_in_memory_and_on_disk():
     disk = Disk()
     recovery = AgentRecovery(disk)
-    await recovery.begin("token", "call_service", "request")
+    await recovery.begin("access_key", "call_service", "request")
     disk.fail = True
     with pytest.raises(OSError):
         await recovery.finish("request")
-    assert recovery.records("token")[0]["status"] == "outcome_unknown"
+    assert recovery.records("access_key")[0]["status"] == "outcome_unknown"
     assert "request" in disk.saved["records"]
 
 
@@ -60,11 +60,11 @@ async def test_failed_finish_keeps_barrier_in_memory_and_on_disk():
 async def test_concurrent_claims_admit_one_dispatch():
     recovery = AgentRecovery()
     claims = await asyncio.gather(
-        recovery.begin("token", "call_service", "a"),
-        recovery.begin("token", "call_service", "b"), return_exceptions=True,
+        recovery.begin("access_key", "call_service", "a"),
+        recovery.begin("access_key", "call_service", "b"), return_exceptions=True,
     )
     assert sum(isinstance(r, RecoveryRequired) for r in claims) == 1
-    assert len(recovery.records("token")) == 1
+    assert len(recovery.records("access_key")) == 1
 
 
 @pytest.mark.asyncio
@@ -74,18 +74,18 @@ async def test_concurrent_claims_admit_one_dispatch():
 ])
 async def test_reconciliation_requires_attributed_approval_receipt(status, marker, cleared):
     recovery = AgentRecovery()
-    await recovery.begin("token", "call_service", "request")
+    await recovery.begin("access_key", "call_service", "request")
     recovery.interrupted("request")
     approval = {"request_id": "request", "access_key_id": "other", "status": status}
     if marker:
         approval["execution_started_at"] = "started"
     store = SimpleNamespace(get_pending_approvals=lambda: [approval])
-    await recovery.reconcile(store, "token")
-    assert recovery.records("token")
-    approval["access_key_id"] = "token"
-    await recovery.reconcile(store, "token")
-    assert recovery.records("token")  # reconciliation reports evidence, never replays
-    received = recovery.records("token")[0]["dispatch_result"]
+    await recovery.reconcile(store, "access_key")
+    assert recovery.records("access_key")
+    approval["access_key_id"] = "access_key"
+    await recovery.reconcile(store, "access_key")
+    assert recovery.records("access_key")  # reconciliation reports evidence, never replays
+    received = recovery.records("access_key")[0]["dispatch_result"]
     assert (received != "unknown") is cleared
 
 
@@ -108,7 +108,7 @@ async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(has
         result = {"content": [], "isError": failure == "error"}
         return {"result": result}, "call_service", "call_service", "allowed"
 
-    args = dict(hass=hass, data=data, access_key=SimpleNamespace(id="token"), name="call_service",
+    args = dict(hass=hass, data=data, access_key=SimpleNamespace(id="access_key"), name="call_service",
                 arguments={"credential": "never persist this"}, tool_id="t", request_id="r",
                 client_ip="agentcli", base_url="http://example")
     with pytest.raises((asyncio.CancelledError, RecoveryRequired)):
@@ -118,7 +118,7 @@ async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(has
         await dispatch_agent_tool(dispatch, **{**args, "request_id": "duplicate"})
     assert len(calls) == 1
     assert "never persist" not in str(disk.saved)
-    assert recovery.records("token")[0]["status"] == "outcome_unknown"
+    assert recovery.records("access_key")[0]["status"] == "outcome_unknown"
 
 
 @pytest.mark.asyncio
@@ -261,7 +261,7 @@ async def test_received_receipt_stays_protected_until_provider_turn_finishes(has
 
     @recovery_turn
     async def run(*, hass, data):
-        await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="token"),
+        await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="access_key"),
             name="call_service", arguments={}, tool_id="t", request_id="r", client_ip="voice", base_url="http://example")
         received.set()
         await finish.wait()
@@ -269,15 +269,15 @@ async def test_received_receipt_stays_protected_until_provider_turn_finishes(has
 
     task = asyncio.create_task(run(hass=hass, data=data))
     await received.wait()
-    assert recovery.records("token")[0]["status"] == "in_progress"
+    assert recovery.records("access_key")[0]["status"] == "in_progress"
     assert not await recovery.reviewed("r")
     finish.set()
     await task
     restored = AgentRecovery(disk)
     await restored.async_load()
-    assert restored.blocks("token")
-    assert restored.records("token")[0]["dispatch_result"] == "received"
-    assert restored.records("token")[0]["status"] == "outcome_unknown"
+    assert restored.blocks("access_key")
+    assert restored.records("access_key")[0]["dispatch_result"] == "received"
+    assert restored.records("access_key")[0]["status"] == "outcome_unknown"
 
 
 @pytest.mark.asyncio
@@ -291,13 +291,13 @@ async def test_successful_turn_clears_receipts_after_multiple_writes(hass):
     @recovery_turn
     async def run(*, hass, data):
         for rid in ("first", "second"):
-            await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="token"),
+            await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="access_key"),
                 name="call_service", arguments={}, tool_id="t", request_id=rid, client_ip="voice", base_url="http://example")
         return SimpleNamespace(outcome="ok")
 
     await run(hass=hass, data=data)
     assert dispatch.await_count == 2
-    assert recovery.records("token") == []
+    assert recovery.records("access_key") == []
 
 
 @pytest.mark.asyncio
@@ -307,7 +307,7 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
     disk = Disk()
     recovery = AgentRecovery(disk)
     data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
-    access_key = SimpleNamespace(id='token')
+    access_key = SimpleNamespace(id='access_key')
     dispatch = AsyncMock(side_effect=[
         ({'result': {'content': []}}, 'call_service', 'call_service', 'allowed'),
         OSError('Connection interrupted after dispatch'),
@@ -330,9 +330,9 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
             await recovery.complete_received_turn(hass, result.recovery_turn_id)
     else:
         await recovery.complete_received_turn(hass, result.recovery_turn_id)
-    assert {r['request_id'] for r in recovery.records('token')} == (
+    assert {r['request_id'] for r in recovery.records('access_key')} == (
         {'received', 'unknown'} if save_fails else {'unknown'})
-    assert recovery.blocks('token')
+    assert recovery.blocks('access_key')
     assert {r['request_id'] for r in recovery.records('other')} == {'unrelated'}
     assert dispatch.await_count == 2
 
@@ -341,6 +341,6 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
 async def test_begin_persists_only_bounded_catalog_tool_names(tool, expected):
     disk = Disk()
     recovery = AgentRecovery(disk)
-    await recovery.begin("token", tool, "request")
-    assert recovery.records("token")[0]["tool"] == expected
+    await recovery.begin("access_key", tool, "request")
+    assert recovery.records("access_key")[0]["tool"] == expected
     assert disk.saved["records"]["request"]["tool"] == expected

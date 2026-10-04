@@ -116,7 +116,7 @@ async def test_wait_rechecks(hass, home, change):
 
 
 @pytest.mark.parametrize('bad', [
-    'api_key=private-test-token', '{"api_key":"hidden"}', 'light.hidden', 'private-test-key', 'x' * 17000])
+    'api_key=private-test-access-key', '{"api_key":"hidden"}', 'light.hidden', 'private-test-key', 'x' * 17000])
 async def test_private_or_oversized_context_is_not_shortened(hass, home, bad):
     messages = history()
     messages[0]['content'] = bad

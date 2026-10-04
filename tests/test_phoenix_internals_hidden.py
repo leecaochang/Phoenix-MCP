@@ -5,7 +5,7 @@ are `sensor.*` entities registered to the phoenix_mcp PLATFORM, so the blocklist
 never sees them and a separate `entry.platform == DOMAIN` check does the real
 work. That check lives in policy_engine.resolve and again in each pass-through
 FAST PATH that skips resolve() for speed (the admin permission tree, the admin
-token-scope endpoint, the MCP context endpoint). A re-implementation of a policy
+access-key-scope endpoint, the MCP context endpoint). A re-implementation of a policy
 drifts, so each copy is pinned here rather than only the canonical one.
 
 Every test asserts the DROP: a check that the ordinary entity is present passes
@@ -34,7 +34,7 @@ from custom_components.phoenix_mcp.access_key_store import (
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PKG = REPO / "custom_components" / "phoenix_mcp"
 
-PHOENIX_SENSOR = "sensor.phoenix_mcp_my_token_requests"
+PHOENIX_SENSOR = "sensor.phoenix_mcp_my_access_key_requests"
 ORDINARY = "sensor.living_room_temperature"
 
 
@@ -47,7 +47,7 @@ def registry_with_a_phoenix_sensor(hass: HomeAssistant):
     """
     reg = er.async_get(hass)
     reg.async_get_or_create(
-        "sensor", DOMAIN, "my_token_requests", suggested_object_id="phoenix_mcp_my_token_requests")
+        "sensor", DOMAIN, "my_access_key_requests", suggested_object_id="phoenix_mcp_my_access_key_requests")
     reg.async_get_or_create(
         "sensor", "demo", "living_room_temp", suggested_object_id="living_room_temperature")
     hass.states.async_set(PHOENIX_SENSOR, "12")

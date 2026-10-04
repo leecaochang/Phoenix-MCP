@@ -149,7 +149,7 @@
           <summary>Use MESA tools and advisory leases</summary>
           <div class="advanced-content">
         <h2 id="mesa-tools">The MESA tools</h2>
-        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Configuration read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are access key-scoped: the handlers and resolver only ever see entities the access key can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
+        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Configuration read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are access-key-scoped: the handlers and resolver only ever see entities the access key can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Tool</th><th scope="col">Returns</th></tr></thead>

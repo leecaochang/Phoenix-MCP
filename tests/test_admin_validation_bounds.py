@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.admin_view import (
 )
 
 from tests.test_admin_view import (  # reuse the established harness
-    _make_active_token,
+    _make_active_access_key,
     _make_admin_request,
     _make_data,
     _make_hass,
@@ -69,7 +69,7 @@ def test_valid_permission_sections_still_pass():
 async def test_permissions_put_returns_400_not_500_for_bad_section():
     """End-to-end: the handler reports a client error, not an internal one."""
     data = _make_data()
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
@@ -176,14 +176,14 @@ async def test_approvals_endpoint_rejects_negative_limit():
 async def test_create_rejects_non_integer_rate_limits(payload):
     data = _make_data()
     hass = _make_hass(data)
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawaccesskey123"))
 
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "my-token", **payload}).encode()
+    body = json.dumps({"name": "my-access-key", **payload}).encode()
     resp = await view.post(_make_admin_request(body=body))
 
     assert resp.status == 400, f"{payload!r} should be refused"
@@ -194,14 +194,14 @@ async def test_create_rejects_non_integer_rate_limits(payload):
 async def test_create_accepts_real_integer_rate_limits():
     data = _make_data()
     hass = _make_hass(data)
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawaccesskey123"))
 
     view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
-    body = json.dumps({"name": "my-token", "rate_limit_requests": 30, "rate_limit_burst": 5}).encode()
+    body = json.dumps({"name": "my-access-key", "rate_limit_requests": 30, "rate_limit_burst": 5}).encode()
     resp = await view.post(_make_admin_request(body=body))
 
     assert resp.status == 201
@@ -222,7 +222,7 @@ async def test_create_accepts_real_integer_rate_limits():
 async def test_patch_rejects_non_integer_rate_limits(payload):
     data = _make_data()
     hass = _make_hass(data)
-    access_key = _make_active_token()
+    access_key = _make_active_access_key()
     data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.async_patch_access_key = AsyncMock(return_value=access_key)
 

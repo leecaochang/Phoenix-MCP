@@ -156,7 +156,7 @@ async def test_released_storage_loads_through_real_ha_store(hass, hass_storage, 
     assert hass_storage[STORAGE_KEY]["version"] == STORAGE_VERSION
 
 
-def test_invalid_expiry_never_loads_as_an_unlimited_token():
+def test_invalid_expiry_never_loads_as_an_unlimited_access_key():
     data = _access_key().to_storage_dict()
     data["expires_at"] = "corrupt"
     with pytest.raises(ValueError, match="expires_at"):

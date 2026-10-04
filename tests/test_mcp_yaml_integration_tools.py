@@ -412,7 +412,7 @@ class TestYamlProtectedSubtrees:
 
     async def test_unrelated_powerful_keys_still_writable(self, hass):
         # The floor is not a "powerful keys" list: shell_command is already
-        # accepted surface for a token holding cap_yaml_edit.
+        # accepted surface for an access key holding cap_yaml_edit.
         self._write(hass, "default_config:\n")
         _, outcome, _ = await _call(
             "set_yaml_config",
@@ -465,8 +465,8 @@ class TestYamlProtectedSubtrees:
         # create_approval persists through set_pending_approvals + async_save.
         data.store.set_pending_approvals.assert_not_called()
 
-    async def test_denied_token_learns_nothing_about_its_payload(self, hass):
-        """The cap-deny check runs first, so a denied token gets the uniform
+    async def test_denied_access_key_learns_nothing_about_its_payload(self, hass):
+        """The cap-deny check runs first, so a denied access key gets the uniform
         Forbidden message and never the protected-key detail."""
         self._write(hass, "default_config:\n")
         content, outcome, _ = await _call(
@@ -607,8 +607,8 @@ class TestYamlTopLevelKeyRemoval:
         assert outcome == "invalid_request"
         assert "recorder" in self._read(hass)
 
-    async def test_denied_token_learns_nothing_about_its_payload(self, hass):
-        """The cap-deny check runs first, so a denied token gets the uniform
+    async def test_denied_access_key_learns_nothing_about_its_payload(self, hass):
+        """The cap-deny check runs first, so a denied access key gets the uniform
         Forbidden message and never the removal detail.
         """
         self._write(hass, "default_config:\nrecorder:\n")
@@ -1090,7 +1090,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         assert outcome == "invalid_request"
         assert "can be written" in content["content"][0]["text"]
 
-    async def test_denied_token_learns_nothing_about_its_payload(self, hass, tmp_path):
+    async def test_denied_access_key_learns_nothing_about_its_payload(self, hass, tmp_path):
         """The cap check runs before every path and mount refusal."""
         self._seed(tmp_path)
         content, outcome, _ = await _call(
@@ -1204,7 +1204,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
         assert outcome == "allowed"
         assert data.versions.record.await_args.kwargs["resource_id"] == "templates.yaml"
 
-    async def test_denied_token_learns_nothing_about_its_payload(self, hass, tmp_path):
+    async def test_denied_access_key_learns_nothing_about_its_payload(self, hass, tmp_path):
         content, outcome, _ = await _call(
             "patch_yaml_config", {"file": "../escape.yaml", "key": "x", "content": "1"},
             _access_key(cap_yaml_edit="deny"), hass)

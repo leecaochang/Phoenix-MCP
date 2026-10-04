@@ -29,7 +29,7 @@ def real_storage(hass):
 
 
 @pytest.mark.parametrize("failure", [WriteError("disk unavailable"), SerializationError("unsupported value")])
-@pytest.mark.parametrize("owner", ["configuration", "agent", "calendar", "token"])
+@pytest.mark.parametrize("owner", ["configuration", "agent", "calendar", "access_key"])
 async def test_critical_storage_raises_when_real_ha_writer_fails(hass, failure, owner):
     """Patch only HA's final writer, preserving the swallowing handler under test."""
     store = DurableStore(hass, 1, "critical-test", atomic_writes=True)
@@ -41,14 +41,14 @@ async def test_critical_storage_raises_when_real_ha_writer_fails(hass, failure, 
         if owner == "configuration":
             recovery = ConfigurationRecovery(store)
             with pytest.raises(DurableStorageError):
-                await recovery.begin("resource", "delete", "token", {})
+                await recovery.begin("resource", "delete", "access_key", {})
             assert recovery.records()[0]["phase"] == "prepared"
             assert not recovery.records()[0]["active"]
         elif owner == "agent":
             recovery = AgentRecovery(store)
             with pytest.raises(RecoveryRequired, match="nothing was dispatched"):
-                await recovery.begin("token", "call_service", "request")
-            assert recovery.blocks("token")
+                await recovery.begin("access_key", "call_service", "request")
+            assert recovery.blocks("access_key")
         elif owner == "calendar":
             journal = CalendarWriteJournal(hass)
             journal.records = [{"receipt_id": "pending", "status": "outcome_unknown"}]

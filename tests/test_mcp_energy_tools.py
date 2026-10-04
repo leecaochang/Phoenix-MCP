@@ -5,7 +5,7 @@ a ROLE (grid / solar / battery / gas / water / individual device), in
 .storage/energy where no other Phoenix MCP read reaches. Removing an integration
 therefore orphans an Energy source silently.
 
-The READ tests pin what makes it safe: it is scoped to the token (energy/get_prefs
+The READ tests pin what makes it safe: it is scoped to the access key (energy/get_prefs
 runs as admin, so an unscoped passthrough would leak every statistic on the
 instance), and a never-configured instance is an answer rather than an error.
 
@@ -13,7 +13,7 @@ The WRITE tests pin the property the design rests on: energy/save_prefs
 FULL-REPLACES each top-level key it receives, so only a key the operation changed
 may be sent. Sending any other would put every entry under it at the mercy of
 whatever the tool reconstructed. The other load-bearing pair is the addressing
-asymmetry: a statistic being WRITTEN must resolve for the token, while one used
+asymmetry: a statistic being WRITTEN must resolve for the access key, while one used
 to ADDRESS an existing entry must not have to, because a dead entry is addressed
 by the very id that stopped resolving, and refusing it would make the broken
 entries the only ones unfixable.
@@ -162,7 +162,7 @@ async def test_out_of_scope_entities_are_redacted_and_not_rolled_up(hass: HomeAs
     prefs = {
         "energy_sources": [
             {"type": "solar", "stat_energy_from": "sensor.solar_production"},
-            # A switch: the token's tree grants sensor only, so this resolves to
+            # A switch: the access key's tree grants sensor only, so this resolves to
             # NO_ACCESS. sensor.ghost_meter is absent from states and registry,
             # so it is NOT_FOUND. Both redact identically, so the redaction is not
             # an existence oracle.
@@ -226,7 +226,7 @@ async def test_unexpected_shape_degrades_instead_of_returning_a_bare_value(
 
 
 async def test_denied_capability_is_forbidden_and_echoes_nothing(hass: HomeAssistant) -> None:
-    """A denied token gets the uniform message and no detail about the instance."""
+    """A denied access key gets the uniform message and no detail about the instance."""
     called = AsyncMock(return_value=PREFS)
     with patch(_WS, called):
         content, outcome, _ = await _call(hass, _access_key(cap_config_read="deny"))
@@ -556,7 +556,7 @@ async def test_unknown_address_is_refused(hass: HomeAssistant) -> None:
 
 
 async def test_denied_capability_forbids_and_never_dispatches(hass: HomeAssistant) -> None:
-    """A denied token learns nothing about its own payload's validity."""
+    """A denied access key learns nothing about its own payload's validity."""
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
@@ -743,7 +743,7 @@ async def test_health_check_normalises_sets_and_tuples_before_redacting(
 
     json.dumps cannot serialize a set at all, and filter_service_response walks
     dicts, lists and strings only, so a tuple falls straight through its recursion
-    and would hand back an entity id the token cannot resolve. Normalising first is
+    and would hand back an entity id the access key cannot resolve. Normalising first is
     what puts those ids somewhere the redactor actually looks.
     """
     hass.states.async_set("switch.secret_meter", "on")
@@ -1131,10 +1131,10 @@ async def test_the_approval_diff_carries_structured_preview_rows(hass: HomeAssis
 
 
 async def test_preview_rows_are_scoped_like_every_other_read(hass: HomeAssistant) -> None:
-    """An approval is opened by an admin, but the rows are built from a TOKEN read.
+    """An approval is opened by an admin, but the rows are built from an ACCESS_KEY read.
 
-    Leaving them unscoped would disclose a statistic the token cannot resolve
-    through a surface that exists only to describe that token's own request.
+    Leaving them unscoped would disclose a statistic the access key cannot resolve
+    through a surface that exists only to describe that access key's own request.
     """
     from custom_components.phoenix_mcp.tools.energy import _preview_rows
 

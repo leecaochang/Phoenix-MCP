@@ -17,7 +17,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   return {
     id: "appr_summary",
     access_key_id: "t1",
-    access_key_name: "foxy_token",
+    access_key_name: "foxy_access_key",
     tool_name: "restart_ha",
     cap_name: "cap_restart",
     args: { technical: true },

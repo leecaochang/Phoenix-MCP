@@ -45,7 +45,7 @@ def location_env(hass):
     hass.states.async_set(entity.entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("first", "second")]
     access_key = AccessKeyRecord(
-        id="location-token", name="Location test", access_key_hash="hash", created_at=utcnow(),
+        id="location-access-key", name="Location test", access_key_hash="hash", created_at=utcnow(),
         created_by="test", cap_registry_write="allow", cap_registry_read="allow",
         permissions=PermissionTree(devices={device.id: PermissionNode(state="GREEN")}),
     )

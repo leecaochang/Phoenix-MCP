@@ -47,7 +47,7 @@ export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { 
   );
 }
 
-// The raw-access key reveal block (amber warning + monospace access key). Shared by the
+// The raw-access-key reveal block (amber warning + monospace access key). Shared by the
 // post-create modal and the onboarding wizard so both look identical. The
 // warning text is overridable because the wizard shows the access key again on its
 // Connect step, so the default "will not be shown again" copy is inaccurate there.

@@ -24,12 +24,12 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.policy_engine import Permission
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
-from tests.test_mcp_view import _make_data, _make_hass, _make_token
+from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
 
 async def _call(tool: str, args: dict, *, access_key=None, hass=None, data=None):
     if access_key is None:
-        access_key, _ = _make_token(cap_log_read="allow")
+        access_key, _ = _make_access_key(cap_log_read="allow")
     if data is None:
         data = _make_data(access_key)
     if hass is None:
@@ -86,7 +86,7 @@ async def test_empty_real_store_is_available_and_truthfully_empty():
 
 @pytest.mark.asyncio
 async def test_absent_and_unreadable_sources_are_structured_tool_errors():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     data = _make_data(access_key)
     hass = _make_hass(data)
     body, result, outcome = await _call(
@@ -116,7 +116,7 @@ async def test_absent_and_unreadable_sources_are_structured_tool_errors():
 
 @pytest.mark.asyncio
 async def test_partial_shape_drift_skips_only_bad_buckets_and_reports_coverage():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     good = make_log_entry(created=1_700_000_010)
     good.first_occurred = 1_700_000_000
     store = make_log_store([good], capacity=77)
@@ -143,7 +143,7 @@ async def test_bucket_with_unreadable_messages_is_skipped_not_raised():
         def __iter__(self):
             raise RuntimeError("bad bucket")
 
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     good = make_log_entry()
     broken = SimpleNamespace(
         level="ERROR",
@@ -168,7 +168,7 @@ async def test_bucket_with_unreadable_messages_is_skipped_not_raised():
 
 @pytest.mark.asyncio
 async def test_real_dedup_store_preserves_all_five_retained_message_variants():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entries = [
         make_log_entry(message=f"variant {index}", created=1_700_000_000 + index)
         for index in range(7)
@@ -193,7 +193,7 @@ async def test_real_dedup_store_preserves_all_five_retained_message_variants():
 
 @pytest.mark.asyncio
 async def test_source_and_root_cause_paths_are_normalized_without_host_disclosure():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     safe = make_log_entry(
         pathname="/usr/lib/homeassistant/components/light/__init__.py",
         lineno=44,
@@ -227,7 +227,7 @@ async def test_source_and_root_cause_paths_are_normalized_without_host_disclosur
 
 @pytest.mark.asyncio
 async def test_filters_use_latest_occurrence_and_complete_logger_namespaces():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entries = [
         make_log_entry(
             name="homeassistant.components.light",
@@ -282,7 +282,7 @@ async def test_filters_use_latest_occurrence_and_complete_logger_namespaces():
 @pytest.mark.asyncio
 async def test_search_runs_after_scrubbing_and_cannot_probe_raw_credentials():
     raw_access_key = ACCESS_KEY_PREFIX + "a" * 64
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry(message="request rejected")
     entry.exception = f"authentication failed for {raw_access_key}"
     hass, data = _hass_with_entries(access_key, [entry])
@@ -290,7 +290,7 @@ async def test_search_runs_after_scrubbing_and_cannot_probe_raw_credentials():
         "get_logs", {"search": raw_access_key}, access_key=access_key, hass=hass, data=data
     )
     safe_body, _result, _outcome = await _call(
-        "get_logs", {"search": "<phoenix-token>"}, access_key=access_key, hass=hass, data=data
+        "get_logs", {"search": "<phoenix-access-key>"}, access_key=access_key, hass=hass, data=data
     )
     assert raw_body["matched_buckets"] == 0
     assert safe_body["matched_buckets"] == 1
@@ -299,7 +299,7 @@ async def test_search_runs_after_scrubbing_and_cannot_probe_raw_credentials():
 
 @pytest.mark.asyncio
 async def test_naive_and_timezone_aware_iso_bounds_share_utc_semantics():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry(created=1_700_000_000)
     hass, data = _hass_with_entries(access_key, [entry])
     body, _result, outcome = await _call(
@@ -319,7 +319,7 @@ async def test_naive_and_timezone_aware_iso_bounds_share_utc_semantics():
 
 @pytest.mark.asyncio
 async def test_pagination_is_filter_bound_deterministic_and_reports_live_semantics():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entries = [
         make_log_entry(
             message=f"row {index}",
@@ -362,7 +362,7 @@ async def test_pagination_is_filter_bound_deterministic_and_reports_live_semanti
 
 @pytest.mark.asyncio
 async def test_relative_time_cursor_reuses_the_original_resolved_window():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     now = utcnow().timestamp()
     entries = [
         make_log_entry(
@@ -399,7 +399,7 @@ async def test_relative_time_cursor_reuses_the_original_resolved_window():
     ],
 )
 async def test_invalid_log_filters_fail_before_reading_the_source(args):
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     data = _make_data(access_key)
     hass = _make_hass(data)
     body, result, outcome = await _call(
@@ -413,7 +413,7 @@ async def test_invalid_log_filters_fail_before_reading_the_source(args):
 @pytest.mark.asyncio
 async def test_phoenix_diagnostics_requires_both_capabilities_before_validation():
     for log_mode, diagnostics_mode in (("deny", "allow"), ("allow", "deny")):
-        access_key, _ = _make_token(cap_log_read=log_mode)
+        access_key, _ = _make_access_key(cap_log_read=log_mode)
         access_key.cap_diagnostics = diagnostics_mode
         body, _result, outcome = await _call(
             "get_phoenix_diagnostics", {"level": "INFO"}, access_key=access_key
@@ -424,7 +424,7 @@ async def test_phoenix_diagnostics_requires_both_capabilities_before_validation(
 
 @pytest.mark.asyncio
 async def test_phoenix_diagnostics_is_separate_and_strongly_redacted():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     phoenix = make_log_entry(
         name="custom_components.phoenix_mcp.mcp_view",
@@ -499,7 +499,7 @@ async def test_phoenix_diagnostics_is_separate_and_strongly_redacted():
 
 @pytest.mark.asyncio
 async def test_phoenix_search_cannot_probe_pre_redaction_topology():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     entry = make_log_entry(
         name="custom_components.phoenix_mcp",
@@ -535,7 +535,7 @@ async def test_dual_cap_tool_announcement_and_gate_map_require_both_caps():
         ("deny", "allow", False),
         ("allow", "allow", True),
     ):
-        access_key, _ = _make_token(cap_log_read=log_mode)
+        access_key, _ = _make_access_key(cap_log_read=log_mode)
         access_key.cap_diagnostics = diagnostics_mode
         data = _make_data(access_key)
         hass = _make_hass(data)
@@ -584,7 +584,7 @@ def _long_traceback():
 
 @pytest.mark.asyncio
 async def test_binary_warning_and_traceback_have_bounded_useful_ends_and_metadata():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry(message=_binary_warning())
     entry.exception = _long_traceback()
     hass, data = _hass_with_entries(access_key, [entry])
@@ -611,7 +611,7 @@ async def test_binary_warning_and_traceback_have_bounded_useful_ends_and_metadat
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["message", "exception"])
 async def test_search_matches_text_omitted_from_previews(field):
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     text = "begin " + "x" * 10000 + "needle-in-cut" + "y" * 10000 + " end"
     entry = make_log_entry(message=text if field == "message" else "failure")
     entry.exception = text if field == "exception" else ""
@@ -624,7 +624,7 @@ async def test_search_matches_text_omitted_from_previews(field):
 
 @pytest.mark.asyncio
 async def test_phoenix_compaction_and_search_use_the_full_scrubbed_text():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     entry = make_log_entry(name="custom_components.phoenix_mcp", message=_binary_warning() + "retained end")
     entry.exception = "traceback start\n" + "x " * 10000 + "needle-in-cut 192.168.1.55 " + "y " * 10000 + "innermost end"
@@ -644,7 +644,7 @@ async def test_phoenix_compaction_and_search_use_the_full_scrubbed_text():
 
 @pytest.mark.asyncio
 async def test_unexpected_variant_count_is_explicit_and_omitted_variants_remain_retrievable():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry()
     entry.message = [f"variant {index}" for index in range(8)]
     hass, data = _hass_with_entries(access_key, [entry])
@@ -658,7 +658,7 @@ async def test_unexpected_variant_count_is_explicit_and_omitted_variants_remain_
 
 @pytest.mark.asyncio
 async def test_detail_boundaries_reject_missing_variants_and_out_of_range_offsets():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry(message="short")
     hass, data = _hass_with_entries(access_key, [entry])
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
@@ -674,7 +674,7 @@ async def test_detail_boundaries_reject_missing_variants_and_out_of_range_offset
 
 @pytest.mark.asyncio
 async def test_large_escaped_metadata_and_payload_still_allow_pagination_progress():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entry = make_log_entry(name="homeassistant.components." + "x" * 20000,
                            message='"' * 50000,
                            pathname="/config/custom_components/" + "x" * 20000 + "/file.py")
@@ -690,7 +690,7 @@ async def test_large_escaped_metadata_and_payload_still_allow_pagination_progres
 
 @pytest.mark.asyncio
 async def test_all_retained_variants_and_exception_can_be_reassembled_in_bounded_chunks():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entries = [make_log_entry(message=f"variant {index}: " + '\u4e2d"\\\n' * 3000,
                               created=1_700_000_000 + index) for index in range(7)]
     hass, data = _hass_with_entries(access_key, entries)
@@ -732,7 +732,7 @@ async def test_all_retained_variants_and_exception_can_be_reassembled_in_bounded
 @pytest.mark.asyncio
 @pytest.mark.parametrize("unit", ["x", "\u4e2d", chr(0x10000), '"\\\n', "\ud800"])
 async def test_byte_limited_pagination_visits_every_bucket_without_losing_coverage(unit):
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     entries = []
     for bucket in range(12):
         for variant in range(5):
@@ -765,14 +765,14 @@ async def test_byte_limited_pagination_visits_every_bucket_without_losing_covera
 
 
 @pytest.mark.asyncio
-async def test_detail_references_are_bound_to_token_namespace_and_current_bucket():
-    access_key, _ = _make_token(cap_log_read="allow")
+async def test_detail_references_are_bound_to_access_key_namespace_and_current_bucket():
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     entry = make_log_entry(message="must-not-disclose " + "x" * 10000)
     hass, data = _hass_with_entries(access_key, [entry])
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
     args = {"detail_ref": body["entries"][0]["detail_ref"]}
-    other, _ = _make_token(cap_log_read="allow")
+    other, _ = _make_access_key(cap_log_read="allow")
     data.store.get_access_key_by_hash.side_effect = lambda value: access_key if value == access_key.access_key_hash else other if value == other.access_key_hash else None
     for tool, caller in (("get_logs", other), ("get_phoenix_diagnostics", access_key)):
         error, result, outcome = await _call(tool, args, access_key=caller, hass=hass, data=data)
@@ -785,7 +785,7 @@ async def test_detail_references_are_bound_to_token_namespace_and_current_bucket
 
 @pytest.mark.asyncio
 async def test_phoenix_detail_uses_current_strong_scrubbing_and_scope():
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     message = "diagnosis sensor.allowed sensor.hidden http://nas.local/test 192.168.1.55 /config/secrets " + ACCESS_KEY_PREFIX + "a" * 64
     entry = make_log_entry(name="custom_components.phoenix_mcp", message=message)
@@ -807,7 +807,7 @@ async def test_phoenix_detail_uses_current_strong_scrubbing_and_scope():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tool", ["get_logs", "get_phoenix_diagnostics"])
 async def test_detail_capability_denial_precedes_argument_validation_even_in_pass_through(tool):
-    access_key, _ = _make_token(cap_log_read="deny")
+    access_key, _ = _make_access_key(cap_log_read="deny")
     access_key.pass_through = True
     access_key.cap_diagnostics = "allow"
     body, result, outcome = await _call(tool, {"detail_ref": []}, access_key=access_key)
@@ -826,7 +826,7 @@ async def test_detail_capability_denial_precedes_argument_validation_even_in_pas
     {"source": "fault_log", "detail_ref": "a" * 64},
 ])
 async def test_invalid_detail_arguments_fail_before_source_access(args):
-    access_key, _ = _make_token(cap_log_read="allow")
+    access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     data = _make_data(access_key)
     hass = _make_hass(data)

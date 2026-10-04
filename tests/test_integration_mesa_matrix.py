@@ -290,23 +290,23 @@ async def test_all_scope_pending_approval_revalidates_every_race(
     data = await _data(hass, "enforced")
     for scope in SCOPES:
         _set_scope(data, env, scope, "confirm")
-    approving_token = _access_key(env, cap="confirm")
+    approving_access_key = _access_key(env, cap="confirm")
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
     with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
         _content, outcome, _ = await _call_tool(
             "reload_integration",
             {"entry_id": env["entry_id"]},
-            approving_token,
+            approving_access_key,
             hass,
             data,
         )
     assert outcome == "pending_approval"
     approved_args = gate.await_args.kwargs["args"]
 
-    execution_token = _access_key(env)
+    execution_access_key = _access_key(env)
     expected = "denied"
     if race == "permission":
-        execution_token.permissions.devices[env["device_id"]] = PermissionNode(
+        execution_access_key.permissions.devices[env["device_id"]] = PermissionNode(
             state="RED"
         )
         expected = "not_found"
@@ -328,7 +328,7 @@ async def test_all_scope_pending_approval_revalidates_every_race(
         hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
     ) as reload_mock:
         content, outcome, _ = await async_execute_approved_tool(
-            "reload_integration", approved_args, execution_token, hass, data
+            "reload_integration", approved_args, execution_access_key, hass, data
         )
     assert outcome == expected
     reload_mock.assert_not_awaited()

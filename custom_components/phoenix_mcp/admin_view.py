@@ -784,7 +784,7 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         return _ok(response_body, status=201, request_id=rid)
 
 
-# The per-access key settings a PATCH may write. Capabilities are folded in from
+# The per-access-key settings a PATCH may write. Capabilities are folded in from
 # const, so adding one needs no change here.
 _PATCHABLE_ACCESS_KEY_FIELDS = {
     "name", "pass_through", "use_assist_exposure", "announce_all_tools",
@@ -1027,7 +1027,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         data: PhoenixData = hass.data[DOMAIN]
         user = request[KEY_HASS_USER]
 
-        # Settings reference validation uses this lock before the access key-store
+        # Settings reference validation uses this lock before the access-key-store
         # lock. Revoke follows the same order and clears dependent references in
         # the archival transaction, so a settings PATCH cannot bind an access key in
         # the gap between validation and persistence.
@@ -1750,7 +1750,7 @@ class PhoenixAdminEntityHintView(PhoenixView):
     """PUT /api/phoenix-mcp/admin/entity-hints/{entity_id} - set or clear one global entity hint.
 
     A global hint applies to every access key that can see the entity. It is distinct
-    from a per-access key permission-node hint, which always takes precedence.
+    from a per-access-key permission-node hint, which always takes precedence.
     """
 
     url = "/api/phoenix-mcp/admin/entity-hints/{entity_id}"
@@ -4752,7 +4752,7 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             # ("'wifi.ap.password' is a masked credential and cannot be changed to
             # a new value"), which a fixed string would hide. This is an
             # admin-only surface authenticated by an HA session, so there is no
-            # caller to keep in the dark, unlike the access key-facing tools where
+            # caller to keep in the dark, unlike the access-key-facing tools where
             # uniform messages are what prevent an oracle.
             detail = " ".join(
                 item.get("text", "")

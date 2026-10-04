@@ -5,7 +5,7 @@ removed, the helper keeps existing and quietly produces nothing, and nothing
 else on the surface can repoint it.
 
 The boundary being defended is HELPER vs INTEGRATION. A helper's settings are
-entity references and numbers, every one of which is checked against the token's
+entity references and numbers, every one of which is checked against the access key's
 tree; an integration's settings can carry a hostname and credentials, and
 repointing one at a server the operator does not control is an exfiltration
 route no scope check catches. So "is this a helper" is load-bearing, and it is
@@ -238,7 +238,7 @@ class TestWrite:
         assert _json(content)["settings"]["entity_id"] == "sensor.other"
 
     async def test_deny_returns_forbidden_without_echoing_the_payload(self, hass, helper_entry, as_helper):
-        """The cap check runs before anything reads the arguments, so a denied token learns nothing."""
+        """The cap check runs before anything reads the arguments, so a denied access key learns nothing."""
         content, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1", "settings": {"entity_id": "sensor.nonsense"}},
@@ -330,7 +330,7 @@ class TestWrite:
 
     async def test_the_executor_revalidates_at_apply_time(self, hass, helper_entry, as_helper):
         """The approve path re-runs the executor directly, and the entry, the
-        token's tree and the entities named can all move while it waits."""
+        access key's tree and the entities named can all move while it waits."""
         from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
 
         args = {"entry_id": "helper1", "settings": {"entity_id": "lock.secret"}}

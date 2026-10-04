@@ -2,7 +2,7 @@
 
 Scene writes mirror the automation/script YAML pattern: Confirm-gated on
 cap_scene_write, with every referenced member entity required to be WRITE-
-accessible to the token. list_scenes is a cap_registry_read read.
+accessible to the access key. list_scenes is a cap_registry_read read.
 """
 
 from __future__ import annotations

@@ -200,7 +200,7 @@ class TestMatchesPersona:
 class TestDetectPersona:
     def test_round_trip_each_persona(self):
         # Every named preset must be recognized from its own caps, otherwise
-        # applying it would silently flip the token to "custom".
+        # applying it would silently flip the access key to "custom".
         for name in PERSONA_DEFINITIONS:
             if name == "home_companion":
                 continue  # Delegation requires an explicit persona selection.
@@ -228,7 +228,7 @@ class TestEsphome:
         writable = {c for c, m in caps.items() if m != CAP_DENY and c.endswith("_write")}
         assert writable == set()
         assert caps["cap_esphome_yaml"] == CAP_CONFIRM
-        # No device control and no HA config authoring: this token edits device
+        # No device control and no HA config authoring: this access key edits device
         # files, it does not operate the house.
         assert caps["cap_physical_control"] == CAP_DENY
         assert caps["cap_yaml_edit"] == CAP_DENY

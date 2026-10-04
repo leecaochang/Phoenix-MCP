@@ -112,7 +112,7 @@ async def test_real_external_dispatch_keeps_full_result_and_denials(hass, conver
 
 
 @pytest.mark.asyncio
-async def test_concurrent_owned_turns_never_mix_same_token(hass, conversation_data):
+async def test_concurrent_owned_turns_never_mix_same_access_key(hass, conversation_data):
     data, access_key = conversation_data
     hass.states.async_set("sensor.conversation_test", "on")
 

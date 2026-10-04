@@ -1631,7 +1631,7 @@ def _done(stop_reason: str) -> dict:
 
 def _loop_data():
     """A MagicMock PhoenixData that passes _current_dispatch_access_key: not shutting down,
-    kill switch off, and a live valid token, so dispatches proceed."""
+    kill switch off, and a live valid access key, so dispatches proceed."""
     data = MagicMock()
     data.agent_recovery = AgentRecovery()
     data.shutting_down = False
@@ -2310,7 +2310,7 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
 
 
 @pytest.mark.asyncio
-async def test_chat_view_refuses_revoked_or_missing_token():
+async def test_chat_view_refuses_revoked_or_missing_access_key():
     from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
 
     view = PhoenixAgentCliChatView()
@@ -2322,13 +2322,13 @@ async def test_chat_view_refuses_revoked_or_missing_token():
         d.store.get_access_key_by_id.return_value = access_key
         return d
 
-    # Missing token: 404.
+    # Missing access key: 404.
     view.hass = MagicMock()
     view.hass.data = {agentcli.DOMAIN: _data(None)}
     resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 404
 
-    # Revoked/expired token: 400 (never opens the stream).
+    # Revoked/expired access key: 400 (never opens the stream).
     revoked = MagicMock()
     revoked.is_valid.return_value = False
     view.hass = MagicMock()
@@ -2577,7 +2577,7 @@ async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
     assert len(blob) <= 100 + 200  # budget + slack, never budget + a full message
 
 
-def test_current_dispatch_token_gating():
+def test_current_dispatch_access_key_gating():
     from custom_components.phoenix_mcp.agentcli import _current_dispatch_access_key
 
     def _data(*, kill=False, down=False, access_key=None):
@@ -2596,13 +2596,13 @@ def test_current_dispatch_token_gating():
     assert _current_dispatch_access_key(_data(down=True, access_key=valid), "t") is None
     assert _current_dispatch_access_key(_data(access_key=None), "t") is None
     assert _current_dispatch_access_key(_data(access_key=revoked), "t") is None
-    # Valid, live, kill switch off: a usable token comes back.
+    # Valid, live, kill switch off: a usable access key comes back.
     assert _current_dispatch_access_key(_data(access_key=valid), "t") is not None
 
 
 @pytest.mark.asyncio
-async def test_run_agent_turn_stops_when_token_revoked_midturn(hass):
-    # The token is revoked while the turn is running: no remaining call may
+async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
+    # The access key is revoked while the turn is running: no remaining call may
     # dispatch a side effect, every tool_use id still gets a synthetic result
     # (batch stays complete), and the turn ends with an unauthorized error.
     provider = _ScriptedProvider([
@@ -3136,7 +3136,7 @@ class TestHeadlessSurfacesShareOneLoop:
 
     async_run_voice_turn and async_run_ai_task differ only in the provider-error
     policy, the audit sentinel, and collecting review URLs. Everything else,
-    including the token re-resolution before each dispatch and the shape of every
+    including the access key re-resolution before each dispatch and the shape of every
     tool result, lives once, so a fix cannot land on one surface and miss the other.
 
     These read the AST rather than the behaviour because the failure mode is
@@ -3176,7 +3176,7 @@ class TestHeadlessSurfacesShareOneLoop:
         """The tool loop lives in one place; a surface only decides how to report."""
         for name in self.HEADLESS:
             assert "_dispatch_mcp" not in self._calls(name), (
-                f"{name} dispatches tools directly again. Token re-resolution, the "
+                f"{name} dispatches tools directly again. Access key re-resolution, the "
                 "queued_for_approval degradation and the output ceiling all live in "
                 "_run_headless_turn; a private loop silently opts out of every one."
             )

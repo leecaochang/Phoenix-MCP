@@ -243,7 +243,7 @@ class TestSceneSplitLayout:
         hass.states.async_set(e.entity_id, "on", {})
         return env
 
-    def _scene_token(self) -> AccessKeyRecord:
+    def _scene_access_key(self) -> AccessKeyRecord:
         tree = PermissionTree(domains={
             "light": PermissionNode(state="GREEN"),
             "scene": PermissionNode(state="GREEN"),
@@ -263,7 +263,7 @@ class TestSceneSplitLayout:
               entities:
                 light.kitchen: on
         """)
-        access_key = self._scene_token()
+        access_key = self._scene_access_key()
         cfg = {"name": "Movie v2", "entities": {"light.kitchen": "on"}}
         _, outcome, _ = await _call_tool(
             "edit_scene", {"scene_id": "movie", "config": cfg}, access_key, hass, MagicMock())
@@ -281,7 +281,7 @@ class TestSceneSplitLayout:
         env = scene_env
         write(env, "configuration.yaml", "scene: !include_dir_merge_list scenes\n")
         (env / "scenes").mkdir()
-        access_key = self._scene_token()
+        access_key = self._scene_access_key()
         content, outcome, _ = await _call_tool(
             "delete_scene", {"scene_id": "ghost"}, access_key, hass, MagicMock())
         assert outcome == "denied"
@@ -299,7 +299,7 @@ class TestSceneSplitLayout:
         """)
         registry = er.async_get(hass)
         scene_entity = registry.async_get_or_create("scene", "homeassistant", "movie")
-        access_key = self._scene_token()
+        access_key = self._scene_access_key()
         _, outcome, _ = await _call_tool(
             "delete_scene", {"scene_id": "movie"}, access_key, hass, MagicMock())
         assert outcome == "allowed"

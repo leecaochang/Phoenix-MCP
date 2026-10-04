@@ -1,4 +1,4 @@
-"""Token store: permissions, token and settings records, hardened load, patching and presets."""
+"""Access key store: permissions, access key and settings records, hardened load, patching and presets."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ class TestPermissionTree:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenRecord:
+class TestAccessKeyRecord:
     def _make(self, **kwargs):
         defaults = {
             "id": "test-uuid",
@@ -251,7 +251,7 @@ class TestTokenRecord:
 # ---------------------------------------------------------------------------
 
 
-class TestArchivedTokenRecord:
+class TestArchivedAccessKeyRecord:
     def test_round_trip(self):
         now = utcnow()
         record = ArchivedAccessKeyRecord(
@@ -405,7 +405,7 @@ class TestGlobalSettings:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenStoreLoad:
+class TestAccessKeyStoreLoad:
     async def test_empty_load(self, access_key_store):
         assert access_key_store.list_access_keys() == []
         assert access_key_store.list_archived() == []
@@ -416,7 +416,7 @@ class TestTokenStoreLoad:
             "version": STORAGE_VERSION,
             "access_keys": [{
                 "id": "tok1",
-                "name": "mytoken",
+                "name": "myaccesskey",
                 "access_key_hash": "hash1",
                 "created_at": now.isoformat(),
                 "created_by": "admin",
@@ -433,7 +433,7 @@ class TestTokenStoreLoad:
 
         access_keys = store.list_access_keys()
         assert len(access_keys) == 1
-        assert access_keys[0].name == "mytoken"
+        assert access_keys[0].name == "myaccesskey"
         assert store.get_settings().kill_switch is True
 
     async def test_load_skips_unparseable_records_and_keeps_siblings(self, hass):
@@ -534,7 +534,7 @@ class TestTokenStoreLoad:
 
     async def test_load_wrong_typed_collections_reset(self, hass):
         # Each top-level collection of the wrong type is reset to an empty
-        # container instead of crashing (an int `tokens` raises TypeError during
+        # container instead of crashing (an int `access keys` raises TypeError during
         # loading; `settings` or `entity_hints` of the wrong type raise
         # AttributeError; a string `pending_approvals` would silently become a
         # list of characters).
@@ -564,7 +564,7 @@ class TestTokenStoreLoad:
         existing = {
             "version": STORAGE_VERSION,
             "access_keys": [{
-                "id": "tok1", "name": "mytoken", "access_key_hash": "h",
+                "id": "tok1", "name": "myaccesskey", "access_key_hash": "h",
                 "created_at": now.isoformat(), "created_by": "admin",
                 "persona": "custom",
             }],
@@ -650,19 +650,19 @@ class TestTokenStoreLoad:
 
 
 # ---------------------------------------------------------------------------
-# AccessKeyStore - token creation
+# AccessKeyStore - access key creation
 # ---------------------------------------------------------------------------
 
 
-class TestTokenCreation:
-    async def test_create_returns_raw_token_and_record(self, access_key_store):
-        record, raw = await access_key_store.async_create_access_key("mytoken", "user1")
+class TestAccessKeyCreation:
+    async def test_create_returns_raw_access_key_and_record(self, access_key_store):
+        record, raw = await access_key_store.async_create_access_key("myaccesskey", "user1")
         assert raw.startswith(ACCESS_KEY_PREFIX)
         assert len(raw) == ACCESS_KEY_LENGTH
-        assert record.name == "mytoken"
+        assert record.name == "myaccesskey"
         assert record.created_by == "user1"
 
-    async def test_raw_token_not_stored(self, access_key_store):
+    async def test_raw_access_key_not_stored(self, access_key_store):
         record, raw = await access_key_store.async_create_access_key("t1", "u")
         expected_hash = _sha256(raw)
         assert record.access_key_hash == expected_hash
@@ -706,12 +706,12 @@ class TestTokenCreation:
         assert record.cap_restart == "deny"
         assert record.persona == "custom"
 
-    async def test_multiple_tokens_have_unique_ids(self, access_key_store):
+    async def test_multiple_access_keys_have_unique_ids(self, access_key_store):
         r1, _ = await access_key_store.async_create_access_key("t1", "u")
         r2, _ = await access_key_store.async_create_access_key("t2", "u")
         assert r1.id != r2.id
 
-    async def test_multiple_tokens_have_unique_hashes(self, access_key_store):
+    async def test_multiple_access_keys_have_unique_hashes(self, access_key_store):
         r1, _ = await access_key_store.async_create_access_key("t1", "u")
         r2, _ = await access_key_store.async_create_access_key("t2", "u")
         assert r1.access_key_hash != r2.access_key_hash
@@ -722,7 +722,7 @@ class TestTokenCreation:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenLookup:
+class TestAccessKeyLookup:
     async def test_get_by_id(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         found = access_key_store.get_access_key_by_id(record.id)
@@ -757,18 +757,18 @@ class TestTokenLookup:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenListing:
-    async def test_list_tokens_empty(self, access_key_store):
+class TestAccessKeyListing:
+    async def test_list_access_keys_empty(self, access_key_store):
         assert access_key_store.list_access_keys() == []
 
-    async def test_list_tokens_contains_created(self, access_key_store):
+    async def test_list_access_keys_contains_created(self, access_key_store):
         r1, _ = await access_key_store.async_create_access_key("t1", "u")
         r2, _ = await access_key_store.async_create_access_key("t2", "u")
         ids = {t.id for t in access_key_store.list_access_keys()}
         assert r1.id in ids
         assert r2.id in ids
 
-    async def test_active_token_count(self, access_key_store):
+    async def test_active_access_key_count(self, access_key_store):
         assert access_key_store.active_access_key_count() == 0
         await access_key_store.async_create_access_key("t1", "u")
         assert access_key_store.active_access_key_count() == 1
@@ -784,7 +784,7 @@ class TestTokenListing:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenArchival:
+class TestAccessKeyArchival:
     async def test_revoke_moves_to_archived(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         await access_key_store.async_archive_access_key(record.id, revoked=True)
@@ -832,7 +832,7 @@ class TestTokenArchival:
 # ---------------------------------------------------------------------------
 
 
-class TestTokenPatch:
+class TestAccessKeyPatch:
     async def test_patch_pass_through(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         updated = await access_key_store.async_patch_access_key(record.id, pass_through=True)
@@ -948,7 +948,7 @@ class TestTokenPatch:
         a, _ = await access_key_store.async_create_access_key("alpha", "u")
         await access_key_store.async_create_access_key("beta", "u")
         assert access_key_store.name_slug_exists("beta") is True
-        assert access_key_store.name_slug_exists("beta", exclude_access_key_id=a.id) is True   # beta is a different token
+        assert access_key_store.name_slug_exists("beta", exclude_access_key_id=a.id) is True   # beta is a different access key
         assert access_key_store.name_slug_exists("alpha", exclude_access_key_id=a.id) is False  # only match is self
 
 
@@ -1173,18 +1173,18 @@ class TestWipe:
 
 class TestSlugUniqueness:
     async def test_same_name_slug_detected(self, access_key_store):
-        await access_key_store.async_create_access_key("my-token", "u")
-        assert access_key_store.name_slug_exists("my-token") is True
-        assert access_key_store.name_slug_exists("my_token") is True
+        await access_key_store.async_create_access_key("my-access-key", "u")
+        assert access_key_store.name_slug_exists("my-access-key") is True
+        assert access_key_store.name_slug_exists("my_access_key") is True
 
     async def test_different_name_not_collision(self, access_key_store):
-        await access_key_store.async_create_access_key("my-token", "u")
-        assert access_key_store.name_slug_exists("other-token") is False
+        await access_key_store.async_create_access_key("my-access-key", "u")
+        assert access_key_store.name_slug_exists("other-access-key") is False
 
     async def test_slugify(self):
-        assert _slugify("my-token") == "my_token"
-        assert _slugify("MyToken") == "mytoken"
-        assert _slugify("my_token") == "my_token"
+        assert _slugify("my-access-key") == "my_access_key"
+        assert _slugify("MyAccessKey") == "myaccesskey"
+        assert _slugify("my_access_key") == "my_access_key"
 
 
 # ---------------------------------------------------------------------------
@@ -1236,7 +1236,7 @@ class TestConcurrentPatch:
 
 
 # ---------------------------------------------------------------------------
-# Token settings presets (workspace model)
+# Access key settings presets (workspace model)
 # ---------------------------------------------------------------------------
 
 
@@ -1276,7 +1276,7 @@ class TestPresets:
         assert AccessKeyRecord.from_dict(
             access_key.to_storage_dict()).tools_catalog_fingerprint == "abc123abc123abc1"
 
-    async def test_corrupt_preset_dropped_token_survives(self, access_key_store):
+    async def test_corrupt_preset_dropped_access_key_survives(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         await access_key_store.async_add_preset(record.id, "Baseline")
         raw = access_key_store.get_access_key_by_id(record.id).to_storage_dict()
@@ -1296,7 +1296,7 @@ class TestPresets:
         assert loaded.settings_version == 1
         assert loaded.tools_list_version == 1
         # tools_list_version defaults to the LOADED settings_version so an
-        # upgrade never makes an existing token look stale.
+        # upgrade never makes an existing access key look stale.
         loaded = AccessKeyRecord.from_dict({**base, "settings_version": 5})
         assert loaded.tools_list_version == 5
         # The catalog fingerprint has NO such fallback: access_key_store cannot import
@@ -1415,7 +1415,7 @@ class TestPresets:
         assert [p.name for p in owner.presets] == ["Mine"]
         assert await access_key_store.async_seed_default_presets() == 0
 
-    async def test_create_token_seeds_when_enabled(self, access_key_store):
+    async def test_create_access_key_seeds_when_enabled(self, access_key_store):
         from custom_components.phoenix_mcp.const import DEFAULT_PRESET_NAME
 
         await access_key_store.async_patch_settings(access_key_presets_enabled=True)

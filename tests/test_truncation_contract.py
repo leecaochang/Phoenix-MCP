@@ -24,7 +24,7 @@ import pytest
 from custom_components.phoenix_mcp.helpers import collect_log_entries
 from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
-from tests.test_mcp_view import _make_data, _make_hass, _make_token
+from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "phoenix_mcp"
 
@@ -79,7 +79,7 @@ async def _call_get_logs(hass, access_key, data, args: dict) -> dict:
 class TestGetLogsReportsTruncation:
     @pytest.mark.asyncio
     async def test_clipped_page_is_flagged_and_counts_the_rest(self):
-        access_key, _ = _make_token(cap_log_read="allow")
+        access_key, _ = _make_access_key(cap_log_read="allow")
         data = _make_data(access_key)
         hass = _hass_with_logs(data, 10)
         body = await _call_get_logs(hass, access_key, data, {"limit": 3})
@@ -90,7 +90,7 @@ class TestGetLogsReportsTruncation:
 
     @pytest.mark.asyncio
     async def test_complete_page_is_not_flagged(self):
-        access_key, _ = _make_token(cap_log_read="allow")
+        access_key, _ = _make_access_key(cap_log_read="allow")
         data = _make_data(access_key)
         hass = _hass_with_logs(data, 3)
         body = await _call_get_logs(hass, access_key, data, {"limit": 10})
@@ -106,7 +106,7 @@ class TestGetLogsReportsTruncation:
         Otherwise an agent that narrowed by integration would read the instance-wide
         count as its own result set and conclude it was missing rows.
         """
-        access_key, _ = _make_token(cap_log_read="allow")
+        access_key, _ = _make_access_key(cap_log_read="allow")
         data = _make_data(access_key)
         hass = _make_hass(data)
         entries = [

@@ -25,7 +25,7 @@ NATIVE = "custom_components.phoenix_mcp.tools.native"
 
 def _access_key() -> AccessKeyRecord:
     return AccessKeyRecord(
-        id="token",
+        id="access_key",
         name="test",
         access_key_hash="x",
         created_at=utcnow(),

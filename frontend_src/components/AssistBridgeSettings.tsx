@@ -10,7 +10,7 @@ import { tRich } from "../i18n/rich";
 // Phoenix MCP hands to a conversation agent supplied by another integration (OpenAI,
 // Anthropic, Ollama, and so on). Distinct from the Voice Agent card, which runs
 // Phoenix MCP's own model. Install-wide singleton, so it is a Settings-level control (a
-// bound-access key dropdown), not a per-access key toggle.
+// bound-access-key dropdown), not a per-access-key toggle.
 export function AssistBridgeSettings({
   settings,
   onChange,

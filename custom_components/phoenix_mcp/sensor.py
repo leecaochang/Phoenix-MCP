@@ -1,4 +1,4 @@
-"""Sensor platform for Phoenix MCP per-access key telemetry."""
+"""Sensor platform for Phoenix MCP per-access-key telemetry."""
 
 from __future__ import annotations
 
@@ -82,8 +82,8 @@ class PhoenixAccessKeySensor(SensorEntity):
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = ["active", "expired", "revoked"]
         self._attr_unique_id = _unique_id(access_key.id, sensor_type)
-        # Keep published entity IDs independent of credential display terminology.
-        self.entity_id = f"sensor.phoenix_mcp_token_{access_key_name_slug(access_key.name)}_{sensor_type}"
+        # Suggest access-key IDs for new sensors; HA retains registered IDs by UUID.
+        self.entity_id = f"sensor.phoenix_mcp_access_key_{access_key_name_slug(access_key.name)}_{sensor_type}"
         # HA resolves the display name from translations/<lang>.json's entity
         # section; the English entries are the title-cased sensor type names.
         self._attr_translation_key = sensor_type
@@ -94,7 +94,7 @@ class PhoenixAccessKeySensor(SensorEntity):
             identifiers={(DOMAIN, self._access_key.id)},
             name=_device_name(self._access_key.name),
             manufacturer="Phoenix MCP",
-            model="Access key Telemetry",
+            model="Access key telemetry",
         )
 
     @callback
@@ -102,7 +102,7 @@ class PhoenixAccessKeySensor(SensorEntity):
         """Point this sensor at the access key's current record, in place.
 
         A rename produces a NEW AccessKeyRecord, and every reading is taken off the
-        one held in _token, so without this the status and expiry sensors would
+        one held in _access_key, so without this the status and expiry sensors would
         keep reporting the pre-rename record. Updating in place, rather than
         rebuilding the sensor, preserves entity identity.
         """
@@ -179,7 +179,7 @@ class PhoenixAccessKeySensor(SensorEntity):
 
 @callback
 def _async_migrate_unique_ids(hass: HomeAssistant, access_keys: list[AccessKeyRecord]) -> None:
-    """Move name-based sensor unique IDs to access key-ID-based ones, keeping entity IDs."""
+    """Move name-based sensor unique IDs to access-key-ID-based ones, keeping entity IDs."""
     from homeassistant.helpers import entity_registry as er
 
     registry = er.async_get(hass)

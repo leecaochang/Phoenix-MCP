@@ -279,7 +279,7 @@ async def test_energy_partial_readback_returns_observed_state(hass):
     assert not d.versions.list_recent()
 
 
-async def test_admin_restore_button_restores_another_tokens_file(hass, hass_admin_user):
+async def test_admin_restore_button_restores_another_access_keys_file(hass, hass_admin_user):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
     from custom_components.phoenix_mcp.const import DOMAIN
@@ -412,7 +412,7 @@ async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, fa
             row = await async_ws_command(hass, "lovelace/dashboards/create", {"url_path": "admin-restore", "title": "Restored"})
             snapshot = await _dashboard_registry_snapshot(hass, row["id"])
             await async_ws_command(hass, "lovelace/dashboards/update", {"dashboard_id": row["id"], "title": "Current"})
-    rid = await d.config_recovery.begin("fixture", "write", "another-token", snapshot)
+    rid = await d.config_recovery.begin("fixture", "write", "another-access-key", snapshot)
     await d.config_recovery.mark(rid, "verified")
     d.config_recovery.leave(rid)
     values = {KEY_HASS_USER: hass_admin_user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "test"}

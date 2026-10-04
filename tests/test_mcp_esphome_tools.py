@@ -344,7 +344,7 @@ class TestUserServiceDispatch:
         assert "entity_id" not in calls[0].data
         assert calls[0].data == {"timings": [1, 2, 3], "repeats": 2}
 
-    async def test_read_only_token_refused(self, hass, esphome_entries):
+    async def test_read_only_access_key_refused(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
         calls = await self._register(hass)
         access_key = _access_key(permissions=PermissionTree(
@@ -441,7 +441,7 @@ class TestUserServiceDryRun:
         assert body["unknown_args"] == ["bogus"]
         assert body["missing_args"] == ["repeats"]
 
-    async def test_read_only_token_predicts_denied(self, hass, esphome_entries):
+    async def test_read_only_access_key_predicts_denied(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
         access_key = _access_key(cap_search="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
@@ -518,7 +518,7 @@ SECRETS_YAML = 'wifi_ssid: MyHomeNetwork\nwifi_password: housepassword1\n'
 
 
 
-def _yaml_token(**caps) -> AccessKeyRecord:
+def _yaml_access_key(**caps) -> AccessKeyRecord:
     base = {"cap_esphome_yaml": "allow"}
     base.update(caps)
     return _access_key(**base)
@@ -528,14 +528,14 @@ class TestDeviceYamlRead:
     async def test_cap_denied(self, hass, esphome_dir):
         content, outcome, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"},
-            _yaml_token(cap_esphome_yaml="deny"), hass)
+            _yaml_access_key(cap_esphome_yaml="deny"), hass)
         assert outcome == "denied"
-        # A fully denied token must learn nothing about the file or its payload.
+        # A fully denied access key must learn nothing about the file or its payload.
         assert "rf-blaster1" not in content["content"][0]["text"]
 
     async def test_credentials_masked_and_hash_is_of_raw_bytes(self, hass, esphome_dir):
         content, outcome, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert "REALAPIKEY123456=" not in content["content"][0]["text"]
@@ -549,14 +549,14 @@ class TestDeviceYamlRead:
 
     async def test_defined_secrets_exposes_names_never_values(self, hass, esphome_dir):
         content, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         raw = content["content"][0]["text"]
         assert _json(content)["defined_secrets"] == ["wifi_password", "wifi_ssid"]
         assert "housepassword1" not in raw
         assert "MyHomeNetwork" not in raw
 
     async def test_listing_omits_excluded_entries(self, hass, esphome_dir):
-        content, outcome, _ = await _call("get_esphome_yaml", {}, _yaml_token(), hass)
+        content, outcome, _ = await _call("get_esphome_yaml", {}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         names = [row["file"] for row in body["files"]]
@@ -573,14 +573,14 @@ class TestDeviceYamlRead:
     ])
     async def test_jail_refuses(self, hass, esphome_dir, bad):
         content, outcome, _ = await _call(
-            "get_esphome_yaml", {"file": bad}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": bad}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "housepassword1" not in content["content"][0]["text"]
 
     async def test_symlink_to_secrets_refused(self, hass, esphome_dir):
         (esphome_dir / "sneaky.yaml").symlink_to(esphome_dir / "secrets.yaml")
         content, outcome, _ = await _call(
-            "get_esphome_yaml", {"file": "sneaky.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "sneaky.yaml"}, _yaml_access_key(), hass)
         # The rules re-run on the RESOLVED path, so renaming cannot launder it.
         assert outcome == "invalid_request"
         assert "housepassword1" not in content["content"][0]["text"]
@@ -590,24 +590,24 @@ class TestDeviceYamlRead:
         outside.write_text("homeassistant:\n")
         (esphome_dir / "escape.yaml").symlink_to(outside)
         _, outcome, _ = await _call(
-            "get_esphome_yaml", {"file": "escape.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "escape.yaml"}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_unparseable_file_fails_closed(self, hass, esphome_dir):
         (esphome_dir / "broken.yaml").write_text('api:\n  key: "unclosed\n  x: [1,\n')
         content, outcome, _ = await _call(
-            "get_esphome_yaml", {"file": "broken.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "broken.yaml"}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "could not be parsed" in content["content"][0]["text"]
 
     async def test_missing_file_and_out_of_scope_are_identical(self, hass, esphome_dir, esphome_entries):
         missing, _, _ = await _call(
-            "get_esphome_yaml", {"file": "nope.yaml"}, _yaml_token(), hass)
-        # A device the token cannot see must be indistinguishable from absent.
+            "get_esphome_yaml", {"file": "nope.yaml"}, _yaml_access_key(), hass)
+        # A device the access key cannot see must be indistinguishable from absent.
         _esphome_entry(hass, esphome_entries, entity_ids=("light.not_mine",),
                        runtime=_runtime(_device_info(name="rf-blaster1")))
         scoped, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert missing["content"][0]["text"] == scoped["content"][0]["text"]
 
 
@@ -621,12 +621,12 @@ async def test_unloaded_yaml_owner_preserves_entity_scope(hass, esphome_entries,
     entry.data = {"device_name": "private-device"}
     dash = _dashboard({"private-device": {"configuration": "other-filename.yaml"}})
     with patch(_DASHBOARD_PATCH, return_value=dash):
-        assert not _esphome_file_in_scope(hass, _yaml_token(), "other-filename.yaml", write=write)
-        permitted = _yaml_token(permissions=PermissionTree(
+        assert not _esphome_file_in_scope(hass, _yaml_access_key(), "other-filename.yaml", write=write)
+        permitted = _yaml_access_key(permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")}))
         assert _esphome_file_in_scope(hass, permitted, "other-filename.yaml", write=write)
     with patch(_DASHBOARD_PATCH, return_value=None):
-        assert not _esphome_file_in_scope(hass, _yaml_token(), "private-device.yaml", write=write)
+        assert not _esphome_file_in_scope(hass, _yaml_access_key(), "private-device.yaml", write=write)
 
 
 async def test_ambiguous_yaml_owners_require_all_scopes(hass, esphome_entries):
@@ -636,8 +636,8 @@ async def test_ambiguous_yaml_owners_require_all_scopes(hass, esphome_entries):
     entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private_device",),
                            state=ConfigEntryState.NOT_LOADED, runtime=None)
     entry.data = {"device_name": "same"}
-    assert not _esphome_file_in_scope(hass, _yaml_token(), "same.yaml", write=False)
-    assert not _esphome_file_in_scope(hass, _yaml_token(), "same.yaml", write=True)
+    assert not _esphome_file_in_scope(hass, _yaml_access_key(), "same.yaml", write=False)
+    assert not _esphome_file_in_scope(hass, _yaml_access_key(), "same.yaml", write=True)
 
 
 class TestDeviceYamlDelete:
@@ -651,18 +651,18 @@ class TestDeviceYamlDelete:
     async def test_cap_denied_touches_nothing_and_reveals_nothing(self, hass, esphome_dir):
         content, outcome, _ = await _call(
             "delete_esphome_yaml", {"file": "rf-blaster1.yaml"},
-            _yaml_token(cap_esphome_yaml="deny"), hass)
+            _yaml_access_key(cap_esphome_yaml="deny"), hass)
         assert outcome == "denied"
         assert "rf-blaster1" not in content["content"][0]["text"]
         assert (esphome_dir / "rf-blaster1.yaml").exists()
 
     async def test_missing_and_out_of_jail_are_byte_identical(self, hass, esphome_dir):
         missing, out_missing, _ = await _call(
-            "delete_esphome_yaml", {"file": "no-such-device.yaml"}, _yaml_token(), hass)
+            "delete_esphome_yaml", {"file": "no-such-device.yaml"}, _yaml_access_key(), hass)
         # An archived file is outside the jail; both must read the same to the
         # caller while the audit distinguishes them.
         secrets, out_secrets, _ = await _call(
-            "delete_esphome_yaml", {"file": "secrets.yaml"}, _yaml_token(), hass)
+            "delete_esphome_yaml", {"file": "secrets.yaml"}, _yaml_access_key(), hass)
 
         assert out_missing == "not_found"
         assert out_secrets == "invalid_request"
@@ -670,7 +670,7 @@ class TestDeviceYamlDelete:
 
     async def test_secrets_yaml_can_never_be_deleted(self, hass, esphome_dir):
         for name in ("secrets.yaml", "./secrets.yaml", "archive/old-device.yaml"):
-            _c, outcome, _ = await _call("delete_esphome_yaml", {"file": name}, _yaml_token(), hass)
+            _c, outcome, _ = await _call("delete_esphome_yaml", {"file": name}, _yaml_access_key(), hass)
             assert outcome == "invalid_request", name
         assert (esphome_dir / "secrets.yaml").exists()
         assert (esphome_dir / "archive" / "old-device.yaml").exists()
@@ -681,7 +681,7 @@ class TestDeviceYamlDelete:
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
 
         content, outcome, _ = await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass, data)
+            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
 
         assert outcome == "allowed"
         assert _json(content)["deleted"] is True
@@ -699,7 +699,7 @@ class TestDeviceYamlDelete:
         data = PhoenixData(
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
         await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass, data)
+            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
         assert not (esphome_dir / "rf-blaster1.yaml").exists()
 
         ver = versions.list_for("esphome_yaml", "rf-blaster1.yaml")[0]
@@ -714,7 +714,7 @@ class TestDeviceYamlDelete:
         data = PhoenixData(
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
         content, _o, _r = await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass, data)
+            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
         note = _json(content)["note"]
         assert "keeps running" in note
         assert "entities" in note
@@ -727,7 +727,7 @@ class TestDeviceYamlDelete:
         data.store.get_pending_approvals.return_value = []
         _c, outcome, _ = await _call_tool(
             "delete_esphome_yaml", {"file": "no-such-device.yaml"},
-            _yaml_token(cap_esphome_yaml="confirm"), hass, data)
+            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
 
         assert outcome == "not_found"
         data.store.set_pending_approvals.assert_not_called()
@@ -737,7 +737,7 @@ class TestDeviceYamlDelete:
         data.store.get_pending_approvals.return_value = []
         _c, outcome, _ = await _call_tool(
             "delete_esphome_yaml", {"file": "secrets.yaml"},
-            _yaml_token(cap_esphome_yaml="confirm"), hass, data)
+            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
 
         assert outcome == "invalid_request"
         data.store.set_pending_approvals.assert_not_called()
@@ -747,7 +747,7 @@ class TestDeviceYamlDelete:
         self, hass, esphome_dir
     ):
         diff = esphome._build_diff_delete_esphome_yaml(
-            {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert diff["kind"] == "esphome_yaml"
         assert "REALAPIKEY123456=" not in diff["before"]
         assert "__PHOENIX_REDACTED__" in diff["before"]
@@ -770,7 +770,7 @@ class TestDeviceYamlRestore:
         versions = VersionStore()
         data = PhoenixData(
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-        access_key = _yaml_token()
+        access_key = _yaml_access_key()
 
         read, _, _ = await _call_tool("get_esphome_yaml", {"file": "rf-blaster1.yaml"}, access_key, hass, data)
         masked = _json(read)
@@ -794,7 +794,7 @@ class TestDeviceYamlRestore:
         data = MagicMock()
         content, outcome, _ = await _call_tool(
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": DEVICE_YAML},
-            _yaml_token(), hass, data)
+            _yaml_access_key(), hass, data)
         assert outcome == "invalid_request"
         assert "masked credential" in content["content"][0]["text"]
 
@@ -802,14 +802,14 @@ class TestDeviceYamlRestore:
 class TestDeviceYamlWrite:
     async def test_non_secret_edit_preserves_credentials_on_disk(self, hass, esphome_dir):
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         masked = _json(read)
         edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
         content, outcome, _ = await _call(
             "set_esphome_yaml",
             {"file": "rf-blaster1.yaml", "content": edited,
              "expected_hash": masked["content_hash"]},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "allowed"
         on_disk = (esphome_dir / "rf-blaster1.yaml").read_text()
         assert 'key: "REALAPIKEY123456="' in on_disk
@@ -820,14 +820,14 @@ class TestDeviceYamlWrite:
 
     async def test_changing_a_credential_refused_before_any_approval(self, hass, esphome_dir):
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         bad = _json(read)["content"].replace(
             "__PHOENIX_REDACTED__api.encryption.key__", '"ATTACKERKEY123="')
         data = MagicMock()
         data.store.get_pending_approvals.return_value = []
         content, outcome, _ = await _call_tool(
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": bad},
-            _yaml_token(cap_esphome_yaml="confirm"), hass, data)
+            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
         assert outcome == "invalid_request"
         # A doomed write must not become a pending approval.
         data.store.set_pending_approvals.assert_not_called()
@@ -839,12 +839,12 @@ class TestDeviceYamlWrite:
         (esphome_dir / "secrets.yaml").write_text(
             SECRETS_YAML + "rf_api_key: REALAPIKEY123456=\n")
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         migrated = _json(read)["content"].replace(
             "__PHOENIX_REDACTED__api.encryption.key__", "!secret rf_api_key")
         _, outcome, _ = await _call(
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": migrated},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "allowed"
         on_disk = (esphome_dir / "rf-blaster1.yaml").read_text()
         assert "key: !secret rf_api_key" in on_disk
@@ -852,12 +852,12 @@ class TestDeviceYamlWrite:
 
     async def test_migration_to_undefined_secret_refused(self, hass, esphome_dir):
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         migrated = _json(read)["content"].replace(
             "__PHOENIX_REDACTED__api.encryption.key__", "!secret rf_api_key")
         content, outcome, _ = await _call(
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": migrated},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "rf_api_key" in content["content"][0]["text"]
 
@@ -866,14 +866,14 @@ class TestDeviceYamlWrite:
             "set_esphome_yaml",
             {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: x\n",
              "expected_hash": "0" * 64},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_invalid_yaml_refused(self, hass, esphome_dir):
         content, outcome, _ = await _call(
             "set_esphome_yaml",
             {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: [unclosed\n"},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "not valid YAML" in content["content"][0]["text"]
 
@@ -881,14 +881,14 @@ class TestDeviceYamlWrite:
         _, outcome, _ = await _call(
             "set_esphome_yaml",
             {"file": "new-device.yaml", "content": "esphome:\n  name: new-device\n"},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "allowed"
         assert (esphome_dir / "new-device.yaml").exists()
 
     async def test_write_to_secrets_refused(self, hass, esphome_dir):
         _, outcome, _ = await _call(
             "set_esphome_yaml", {"file": "secrets.yaml", "content": "wifi_password: pwned\n"},
-            _yaml_token(), hass)
+            _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert (esphome_dir / "secrets.yaml").read_text() == SECRETS_YAML
 
@@ -896,14 +896,14 @@ class TestDeviceYamlWrite:
 class TestDeviceYamlApprovalFlow:
     async def test_diff_and_stored_args_carry_no_credentials(self, hass, esphome_dir):
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         edited = _json(read)["content"].replace("baud_rate: 9600", "baud_rate: 115200")
 
         store = _ApprStore()
         data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
         content, outcome, _ = await _call_tool(
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": edited},
-            _yaml_token(cap_esphome_yaml="confirm"), hass, data)
+            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
 
         assert outcome == "pending_approval"
         assert len(store._p) == 1
@@ -921,7 +921,7 @@ class TestDeviceYamlApprovalFlow:
 
     async def test_executor_recheck_catches_drift(self, hass, esphome_dir):
         read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         masked = _json(read)
         edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
         # An admin edits the file during the approval window.
@@ -929,7 +929,7 @@ class TestDeviceYamlApprovalFlow:
         content, outcome, _ = await _execute_set_esphome_yaml(
             {"file": "rf-blaster1.yaml", "content": edited,
              "expected_hash": masked["content_hash"]},
-            _yaml_token(), hass, MagicMock())
+            _yaml_access_key(), hass, MagicMock())
         assert outcome == "invalid_request"
 
 
@@ -941,7 +941,7 @@ async def _inventory_call(hass, name, args, result, access_key=None):
     with patch(_DASHBOARD_PATCH, return_value=dashboard), patch(
         "custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder
     ):
-        reply = await _call(name, args, access_key or _yaml_token(), hass)
+        reply = await _call(name, args, access_key or _yaml_access_key(), hass)
     return reply, builder
 
 
@@ -961,7 +961,7 @@ class TestScopedEsphomeInventory:
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
                                state=ConfigEntryState.NOT_LOADED, runtime=None)
         entry.data = {"device_name": "private"}
-        access_key = _yaml_token(permissions=PermissionTree(
+        access_key = _yaml_access_key(permissions=PermissionTree(
             entities={"light.private": PermissionNode(state="GREEN")}))
         assert not esphome._esphome_file_in_scope(hass, access_key, "private.yaml", write=True)
         assert not esphome._esphome_file_in_scope(hass, access_key, "private.yaml", write=False)
@@ -969,9 +969,9 @@ class TestScopedEsphomeInventory:
     @pytest.mark.parametrize("name", ["search_esphome_yaml", "list_esphome_jobs", "list_esphome_devices"])
     async def test_denied_capability_precedes_bad_arguments_and_io(self, hass, name):
         with patch("custom_components.phoenix_mcp.tools.esphome.async_builder_command",
-                   side_effect=AssertionError("no network for denied tokens")):
+                   side_effect=AssertionError("no network for denied access keys")):
             content, outcome, _ = await _call(name, {"query": [], "status": []},
-                                             _yaml_token(cap_esphome_yaml="deny"), hass)
+                                             _yaml_access_key(cap_esphome_yaml="deny"), hass)
         assert outcome == "denied"
         assert content["isError"] is True
 
@@ -979,15 +979,15 @@ class TestScopedEsphomeInventory:
         nested = esphome_dir / "nested"
         nested.mkdir()
         (nested / "visible.yaml").write_text("esphome:\n  name: visible\n# Needle\n# context\n")
-        content, outcome, _ = await _call("search_esphome_yaml", {"query": "needle"}, _yaml_token(), hass)
+        content, outcome, _ = await _call("search_esphome_yaml", {"query": "needle"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         row = _json(content)["matches"][0]
         assert row["file"] == "nested/visible.yaml"
         assert row["line"] == 3
         assert "context" in row["text"]
-        content, _, _ = await _call("search_esphome_yaml", {"query": "REALAPIKEY123456="}, _yaml_token(), hass)
+        content, _, _ = await _call("search_esphome_yaml", {"query": "REALAPIKEY123456="}, _yaml_access_key(), hass)
         assert _json(content)["count"] == 0
-        content, _, _ = await _call("get_esphome_yaml", {}, _yaml_token(), hass)
+        content, _, _ = await _call("get_esphome_yaml", {}, _yaml_access_key(), hass)
         assert "nested/visible.yaml" in [row["file"] for row in _json(content)["files"]]
 
     async def test_search_case_paging_and_hidden_unloaded_owner(self, hass, esphome_dir, esphome_entries):
@@ -996,12 +996,12 @@ class TestScopedEsphomeInventory:
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
                                state=ConfigEntryState.NOT_LOADED, runtime=None)
         entry.data = {"device_name": "private"}
-        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "limit": 1}, _yaml_token(), hass)
+        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "limit": 1}, _yaml_access_key(), hass)
         body = _json(content)
         assert body["count"] == 2
         assert body["next_offset"] == 1
         assert body["matches"][0]["file"] == "a.yaml"
-        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "case_sensitive": True}, _yaml_token(), hass)
+        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "case_sensitive": True}, _yaml_access_key(), hass)
         assert _json(content)["count"] == 1
 
     async def test_search_scope_text_and_jail_before_matching(self, hass, esphome_dir, tmp_path):
@@ -1011,22 +1011,22 @@ class TestScopedEsphomeInventory:
         (esphome_dir / "alias.yaml").symlink_to(outside)
         (esphome_dir / "secret-alias.yaml").symlink_to(esphome_dir / "secrets.yaml")
         for query in ("secret_hidden", "hiddenneedle", "housepassword1"):
-            content, _, _ = await _call("search_esphome_yaml", {"query": query}, _yaml_token(), hass)
+            content, _, _ = await _call("search_esphome_yaml", {"query": query}, _yaml_access_key(), hass)
             assert _json(content)["count"] == 0
 
     async def test_search_bad_yaml_fails_closed_and_budget_reports_incomplete(self, hass, esphome_dir):
         (esphome_dir / "broken.yaml").write_text("api: [unclosed\n")
-        content, _, _ = await _call("search_esphome_yaml", {"query": "unclosed"}, _yaml_token(), hass)
+        content, _, _ = await _call("search_esphome_yaml", {"query": "unclosed"}, _yaml_access_key(), hass)
         assert _json(content)["count"] == 0
         assert _json(content)["incomplete"] is True
         with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_YAML_SEARCH_MAX_BYTES", 1):
-            content, _, _ = await _call("search_esphome_yaml", {"query": "api"}, _yaml_token(), hass)
+            content, _, _ = await _call("search_esphome_yaml", {"query": "api"}, _yaml_access_key(), hass)
         assert _json(content)["incomplete"] is True
 
     @pytest.mark.parametrize("args", [{"query": []}, {"query": "x", "context_lines": True},
                                       {"query": "x", "case_sensitive": "false"}, {"query": "x" * 201}])
     async def test_search_rejects_malformed_arguments(self, hass, args):
-        _, outcome, _ = await _call("search_esphome_yaml", args, _yaml_token(), hass)
+        _, outcome, _ = await _call("search_esphome_yaml", args, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_jobs_scope_before_count_filter_and_page(self, hass, esphome_dir, esphome_entries):

@@ -1,4 +1,4 @@
-"""RateLimiter: sliding window, burst ceiling, per-token isolation and batch charging."""
+"""RateLimiter: sliding window, burst ceiling, per-access-key isolation and batch charging."""
 
 from __future__ import annotations
 
@@ -344,7 +344,7 @@ class TestBurstLimit:
 
 
 class TestDestroy:
-    def test_destroy_clears_single_token_state(self):
+    def test_destroy_clears_single_access_key_state(self):
         rl = _rl()
         _check(rl, "tok1", requests=5, burst=10)
         _check(rl, "tok2", requests=5, burst=10)
@@ -352,7 +352,7 @@ class TestDestroy:
         assert "tok1" not in rl._windows
         assert "tok2" in rl._windows
 
-    def test_destroy_resets_counter_for_that_token(self):
+    def test_destroy_resets_counter_for_that_access_key(self):
         t0 = 1_000_000.0
         rl = _rl()
         with patch("custom_components.phoenix_mcp.rate_limiter.time.time", return_value=t0), \
@@ -367,11 +367,11 @@ class TestDestroy:
             result = _check(rl, requests=5, burst=10)
             assert result.allowed is True
 
-    def test_destroy_nonexistent_token_no_error(self):
+    def test_destroy_nonexistent_access_key_no_error(self):
         rl = _rl()
-        rl.destroy("no-such-token")
+        rl.destroy("no-such-access-key")
 
-    def test_destroy_all_clears_all_tokens(self):
+    def test_destroy_all_clears_all_access_keys(self):
         rl = _rl()
         for name in ["t1", "t2", "t3"]:
             _check(rl, name, requests=5, burst=10)
@@ -394,12 +394,12 @@ class TestDestroy:
 
 
 # ---------------------------------------------------------------------------
-# Multiple tokens are independent
+# Multiple access keys are independent
 # ---------------------------------------------------------------------------
 
 
-class TestTokenIsolation:
-    def test_exhausting_one_token_does_not_affect_another(self):
+class TestAccessKeyIsolation:
+    def test_exhausting_one_access_key_does_not_affect_another(self):
         t0 = 1_000_000.0
         rl = _rl()
         with patch("custom_components.phoenix_mcp.rate_limiter.time.time", return_value=t0), \
@@ -411,7 +411,7 @@ class TestTokenIsolation:
         assert denied.allowed is False
         assert allowed.allowed is True
 
-    def test_different_limits_per_token(self):
+    def test_different_limits_per_access_key(self):
         t0 = 1_000_000.0
         rl = _rl()
         with patch("custom_components.phoenix_mcp.rate_limiter.time.time", return_value=t0), \
@@ -423,7 +423,7 @@ class TestTokenIsolation:
         assert denied.allowed is False
         assert allowed.allowed is True
 
-    def test_active_token_count_tracks_correctly(self):
+    def test_active_access_key_count_tracks_correctly(self):
         rl = _rl()
         assert rl.active_access_key_count() == 0
         _check(rl, "tok1", requests=5, burst=10)
@@ -478,7 +478,7 @@ class TestRateLimitResult:
 class TestChargeBatch:
     """A JSON-RPC batch is one HTTP request carrying up to MAX_BATCH_ITEMS calls.
 
-    check() charges it once, so a token on a 60/min limit could issue thousands of
+    check() charges it once, so an access key on a 60/min limit could issue thousands of
     tool calls a minute by batching. The items are the work, so charge_batch must
     count the items AND refuse when the ceiling would be exceeded: charging without
     refusing lets every item run before throttling begins.
@@ -565,7 +565,7 @@ class TestChargeBatch:
     def test_the_returned_result_describes_the_batch_not_the_request(self):
         # The caller puts this in its response headers. The result from check() was
         # computed before the items were charged, so it would report a budget the
-        # token no longer has (59 of 60 remaining after spending 50).
+        # access key no longer has (59 of 60 remaining after spending 50).
         limiter = RateLimiter()
         limiter.check("t1", 60, 0)
         result = limiter.charge_batch("t1", 60, 0, 49)

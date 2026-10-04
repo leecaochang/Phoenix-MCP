@@ -537,7 +537,7 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     )
     store.attach_resolver(resolver)
     # The enforcer resolves through whatever store it is handed, so it takes the
-    # UNFILTERED one. Backing it with a per-access key scoped view would turn reduced
+    # UNFILTERED one. Backing it with a per-access-key scoped view would turn reduced
     # visibility into reduced policy: every inheritance layer only ever tightens,
     # so a hidden layer yields a MORE permissive effective profile than the
     # operator authored, and nothing in a resolution marks a layer as missing.

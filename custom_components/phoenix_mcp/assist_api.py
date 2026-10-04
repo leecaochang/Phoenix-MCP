@@ -2,7 +2,7 @@
 
 Registers a Home Assistant ``llm.API`` whose tools are the Phoenix MCP tool surface of a
 single admin-chosen (bound) access key. Every tool call flows through the same
-``_dispatch_mcp`` path an external MCP client uses, so per-access key scoping, MESA, the
+``_dispatch_mcp`` path an external MCP client uses, so per-access-key scoping, MESA, the
 approval gate, and the audit log apply identically. A voice turn cannot show inline
 Approve/Reject buttons, so confirm-gated actions degrade to "queued, approve in the
 Phoenix MCP panel" (the per-call access key copy forces ``confirm_inline_wait_seconds`` to 0

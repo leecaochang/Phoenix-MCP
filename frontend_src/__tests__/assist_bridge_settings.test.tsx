@@ -17,18 +17,18 @@ function settings(over: Partial<GlobalSettings> = {}): GlobalSettings {
 describe("AssistBridgeSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-access-key" }]);
   });
 
-  it("lists tokens and binds the selected one", async () => {
+  it("lists access keys and binds the selected one", async () => {
     const onChange = vi.fn();
     render(<AssistBridgeSettings settings={settings()} onChange={onChange} saving={false} />);
-    await waitFor(() => expect(screen.getByRole("option", { name: "voice-token" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: "voice-access-key" })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Assist bound access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("assist_bound_access_key_id", "tok-1");
   });
 
-  it("places its help above the token dropdown", () => {
+  it("places its help above the access key dropdown", () => {
     render(<AssistBridgeSettings settings={settings()} onChange={vi.fn()} saving={false} />);
     expect(screen.getByLabelText("Assist bound access key").closest(".toggle-row"))
       .toHaveClass("toggle-row-stacked-control");
@@ -42,7 +42,7 @@ describe("AssistBridgeSettings", () => {
     expect(onChange).toHaveBeenCalledWith("assist_bound_access_key_id", "");
   });
 
-  it("reflects the currently bound token", async () => {
+  it("reflects the currently bound access key", async () => {
     render(<AssistBridgeSettings settings={settings({ assist_bound_access_key_id: "tok-1" })} onChange={vi.fn()} saving={false} />);
     await waitFor(() => expect((screen.getByLabelText("Assist bound access key") as HTMLSelectElement).value).toBe("tok-1"));
   });

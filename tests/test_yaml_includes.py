@@ -781,7 +781,7 @@ def test_create_append_plain_include(tmp_path):
 def test_create_append_into_bare_empty_list(tmp_path):
     """HA's default empty automations.yaml is a bare inline '[]'.
 
-    A text append after it would produce invalid YAML, so the entry replaces the token.
+    A text append after it would produce invalid YAML, so the entry replaces the access key.
     """
     write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
     write(tmp_path, "automations.yaml", "[]\n")
@@ -804,7 +804,7 @@ def test_create_append_into_bare_empty_dict_scripts(tmp_path):
 
 
 def test_create_append_bare_list_preserves_comments(tmp_path):
-    """A comments-only-plus-'[]' file keeps its comments; only the token is dropped."""
+    """A comments-only-plus-'[]' file keeps its comments; only the access key is dropped."""
     write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
     write(tmp_path, "automations.yaml", "# my automations\n[]\n")
     res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})

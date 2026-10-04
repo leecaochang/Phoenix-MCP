@@ -40,7 +40,7 @@ from custom_components.phoenix_mcp.access_key_store import PermissionNode, Permi
 # ---------------------------------------------------------------------------
 
 
-def _make_token(
+def _make_access_key(
     pass_through: bool = False,
     domains: dict | None = None,
     devices: dict | None = None,
@@ -72,7 +72,7 @@ def _node(state: str, hint: str | None = None) -> PermissionNode:
 ))
 async def test_companion_uses_ordinary_light_tree_precedence(hass, device_env, domain_state, device_state, entity_state):
     entity = device_env['light_main']
-    access_key = _make_token(
+    access_key = _make_access_key(
         domains={'light':domain_state} if domain_state else {},
         devices={device_env['device'].id:device_state} if device_state else {},
         entities={entity.entity_id:entity_state} if entity_state else {},
@@ -196,7 +196,7 @@ class TestConfigEntryRegistryPolicy:
             device_env["light_accent"].entity_id,
             device_env["sensor"].entity_id,
         }
-        access_key = _make_token(devices={device_env["device"].id: "YELLOW"})
+        access_key = _make_access_key(devices={device_env["device"].id: "YELLOW"})
         assert resolve_config_entry_registry_access(
             config_entry.entry_id, access_key, hass
         ) == Permission.READ
@@ -209,7 +209,7 @@ class TestConfigEntryRegistryPolicy:
             config_entry=config_entry,
             disabled_by=er.RegistryEntryDisabler.USER,
         )
-        access_key = _make_token(entities={entity.entity_id: "GREEN"})
+        access_key = _make_access_key(entities={entity.entity_id: "GREEN"})
         assert resolve_config_entry_registry_access(
             config_entry.entry_id, access_key, hass
         ) == Permission.NO_ACCESS
@@ -218,7 +218,7 @@ class TestConfigEntryRegistryPolicy:
         self, hass, config_entry, device_env
     ):
         device_id = device_env["device"].id
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN", "sensor": "GREEN"},
             devices={device_id: "GREEN"},
         )
@@ -238,7 +238,7 @@ class TestConfigEntryRegistryPolicy:
             for group in registered_env.values()
             for item in group.values()
         ]
-        access_key = _make_token(entities={entity_id: "GREEN" for entity_id in entity_ids})
+        access_key = _make_access_key(entities={entity_id: "GREEN" for entity_id in entity_ids})
         assert resolve_config_entry_registry_write(
             config_entry.entry_id, access_key, hass
         ) == Permission.WRITE
@@ -247,7 +247,7 @@ class TestConfigEntryRegistryPolicy:
         ) == Permission.NO_ACCESS
 
     def test_resource_less_scoped_entry_fails_closed(self, hass, config_entry):
-        access_key = _make_token(domains={"test_integration": "GREEN"})
+        access_key = _make_access_key(domains={"test_integration": "GREEN"})
         assert resolve_config_entry_registry_access(
             config_entry.entry_id, access_key, hass
         ) == Permission.NO_ACCESS
@@ -258,7 +258,7 @@ class TestConfigEntryRegistryPolicy:
     def test_pass_through_entry_visibility_preserves_assist_exposure(
         self, hass, config_entry, registered_env
     ):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         access_key.use_assist_exposure = True
         with patch(
             "custom_components.phoenix_mcp.policy_engine.assist_expose_check",
@@ -350,26 +350,26 @@ def category_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg,
 
 class TestResolveBasicInheritance:
     async def test_grey_entity_under_yellow_domain_is_read(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "YELLOW"})
+        access_key = _make_access_key(domains={"light": "YELLOW"})
         assert resolve("light.kitchen", access_key, hass) == Permission.READ
 
     async def test_grey_entity_under_green_domain_is_write(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         assert resolve("light.kitchen", access_key, hass) == Permission.WRITE
 
     async def test_grey_entity_under_grey_domain_is_no_access(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert resolve("light.kitchen", access_key, hass) == Permission.NO_ACCESS
 
     async def test_green_entity_under_yellow_domain_is_write(self, hass, basic_env):
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "YELLOW"},
             entities={"light.kitchen": "GREEN"},
         )
         assert resolve("light.kitchen", access_key, hass) == Permission.WRITE
 
     async def test_yellow_entity_under_green_domain_is_read(self, hass, basic_env):
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={"light.kitchen": "YELLOW"},
         )
@@ -377,7 +377,7 @@ class TestResolveBasicInheritance:
 
     async def test_red_entity_under_green_domain_is_deny(self, hass, basic_env):
         """Pass 1 must catch RED even when a more specific GREEN exists above it."""
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={"light.kitchen": "RED"},
         )
@@ -385,23 +385,23 @@ class TestResolveBasicInheritance:
 
     async def test_green_entity_under_red_domain_is_deny(self, hass, basic_env):
         """RED on domain wins over GREEN on entity - two-pass is critical here."""
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "RED"},
             entities={"light.kitchen": "GREEN"},
         )
         assert resolve("light.kitchen", access_key, hass) == Permission.DENY
 
     async def test_red_domain_denies_grey_entity(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "RED"})
+        access_key = _make_access_key(domains={"light": "RED"})
         assert resolve("light.kitchen", access_key, hass) == Permission.DENY
 
     async def test_all_grey_chain_is_no_access(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert resolve("sensor.temp", access_key, hass) == Permission.NO_ACCESS
 
     async def test_entity_level_overrides_domain_read_with_write(self, hass, basic_env):
         """Escalation: child GREEN beats parent YELLOW."""
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"sensor": "YELLOW"},
             entities={"sensor.temp": "GREEN"},
         )
@@ -409,7 +409,7 @@ class TestResolveBasicInheritance:
 
     async def test_entity_level_restricts_domain_write_to_read(self, hass, basic_env):
         """Restriction: child YELLOW beats parent GREEN."""
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"sensor": "GREEN"},
             entities={"sensor.temp": "YELLOW"},
         )
@@ -420,19 +420,19 @@ class TestResolveDeviceLevel:
     async def test_grey_entity_under_green_device_is_write(self, hass, device_env):
         env = device_env
         device_id = env["device"].id
-        access_key = _make_token(devices={device_id: "GREEN"})
+        access_key = _make_access_key(devices={device_id: "GREEN"})
         assert resolve(env["light_main"].entity_id, access_key, hass) == Permission.WRITE
 
     async def test_grey_entity_under_yellow_device_is_read(self, hass, device_env):
         env = device_env
-        access_key = _make_token(devices={env["device"].id: "YELLOW"})
+        access_key = _make_access_key(devices={env["device"].id: "YELLOW"})
         assert resolve(env["light_main"].entity_id, access_key, hass) == Permission.READ
 
     async def test_red_device_denies_green_entity(self, hass, device_env):
         env = device_env
         device_id = env["device"].id
         entity_id = env["light_main"].entity_id
-        access_key = _make_token(
+        access_key = _make_access_key(
             devices={device_id: "RED"},
             entities={entity_id: "GREEN"},
         )
@@ -442,7 +442,7 @@ class TestResolveDeviceLevel:
         env = device_env
         device_id = env["device"].id
         entity_id = env["light_main"].entity_id
-        access_key = _make_token(
+        access_key = _make_access_key(
             devices={device_id: "GREEN"},
             entities={entity_id: "RED"},
         )
@@ -451,7 +451,7 @@ class TestResolveDeviceLevel:
     async def test_device_overrides_domain(self, hass, device_env):
         """Device GREEN with domain YELLOW gives WRITE: the device is more specific."""
         env = device_env
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "YELLOW"},
             devices={env["device"].id: "GREEN"},
         )
@@ -460,7 +460,7 @@ class TestResolveDeviceLevel:
     async def test_domain_red_beats_device_green(self, hass, device_env):
         """Domain RED with device GREEN gives DENY: Pass 1 catches domain RED."""
         env = device_env
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "RED"},
             devices={env["device"].id: "GREEN"},
         )
@@ -470,7 +470,7 @@ class TestResolveDeviceLevel:
 class TestResolveRegistryAccess:
     async def test_live_entity_keeps_entity_level_write(self, hass, registered_env):
         entity_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(entities={entity_id: "GREEN"})
+        access_key = _make_access_key(entities={entity_id: "GREEN"})
         assert resolve_registry_access(entity_id, access_key, hass) == Permission.WRITE
 
     async def test_registry_only_entity_grant_cannot_create_access(
@@ -478,7 +478,7 @@ class TestResolveRegistryAccess:
     ):
         entity_id = registered_env["lights"]["kitchen"].entity_id
         hass.states.async_remove(entity_id)
-        access_key = _make_token(entities={entity_id: "GREEN"})
+        access_key = _make_access_key(entities={entity_id: "GREEN"})
         assert resolve_registry_access(entity_id, access_key, hass) == Permission.NO_ACCESS
 
     async def test_registry_only_deviceless_entity_inherits_domain_write(
@@ -486,7 +486,7 @@ class TestResolveRegistryAccess:
     ):
         entity_id = registered_env["lights"]["kitchen"].entity_id
         hass.states.async_remove(entity_id)
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         assert resolve_registry_access(entity_id, access_key, hass) == Permission.WRITE
 
     async def test_registry_only_entity_inherits_device_before_domain(
@@ -494,7 +494,7 @@ class TestResolveRegistryAccess:
     ):
         entity_id = device_env["light_main"].entity_id
         hass.states.async_remove(entity_id)
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             devices={device_env["device"].id: "YELLOW"},
         )
@@ -505,7 +505,7 @@ class TestResolveRegistryAccess:
     ):
         entity_id = registered_env["lights"]["kitchen"].entity_id
         hass.states.async_remove(entity_id)
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"}, entities={entity_id: "YELLOW"}
         )
         assert resolve_registry_access(entity_id, access_key, hass) == Permission.READ
@@ -513,7 +513,7 @@ class TestResolveRegistryAccess:
     async def test_red_still_denies_inherited_device_write(self, hass, device_env):
         entity_id = device_env["light_main"].entity_id
         hass.states.async_remove(entity_id)
-        access_key = _make_token(
+        access_key = _make_access_key(
             devices={device_env["device"].id: "GREEN"},
             entities={entity_id: "RED"},
         )
@@ -526,15 +526,15 @@ class TestResolveRegistryAccess:
         entity_reg.async_update_entity(
             entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        access_key = _make_token(entities={entity_id: "GREEN"})
+        access_key = _make_access_key(entities={entity_id: "GREEN"})
         assert resolve_registry_access(entity_id, access_key, hass) == Permission.NO_ACCESS
 
     async def test_forced_registry_scope_predicts_disable_self_lockout(
         self, hass, registered_env
     ):
         entity_id = registered_env["lights"]["kitchen"].entity_id
-        entity_only = _make_token(entities={entity_id: "GREEN"})
-        domain_write = _make_token(domains={"light": "GREEN"})
+        entity_only = _make_access_key(entities={entity_id: "GREEN"})
+        domain_write = _make_access_key(domains={"light": "GREEN"})
         assert (
             resolve_registry_access(
                 entity_id, entity_only, hass, force_registry_only=True
@@ -552,7 +552,7 @@ class TestResolveRegistryAccess:
         entity_id = registered_env["lights"]["kitchen"].entity_id
         hass.states.async_remove(entity_id)
         assert (
-            resolve_registry_access(entity_id, _make_token(pass_through=True), hass)
+            resolve_registry_access(entity_id, _make_access_key(pass_through=True), hass)
             == Permission.WRITE
         )
 
@@ -563,20 +563,20 @@ class TestResolveRegistryAccess:
 
         entity_id = registered_env["lights"]["kitchen"].entity_id
         hass.states.async_remove(entity_id)
-        entity_only = _make_token(entities={entity_id: "GREEN"})
-        domain_read = _make_token(domains={"light": "YELLOW"})
+        entity_only = _make_access_key(entities={entity_id: "GREEN"})
+        domain_read = _make_access_key(domains={"light": "YELLOW"})
         assert entity_id not in build_permitted_entity_ids(entity_only, hass)
         assert entity_id in build_permitted_entity_ids(domain_read, hass)
 
 
 class TestResolveGhostAndBlocklist:
     async def test_ghost_entity_returns_not_found(self, hass):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result = resolve("light.ghost_entity", access_key, hass)
         assert result == Permission.NOT_FOUND
 
     async def test_ghost_entity_with_no_grants_returns_not_found(self, hass):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert resolve("sensor.does_not_exist", access_key, hass) == Permission.NOT_FOUND
 
     @pytest.mark.parametrize("bad", [True, 0, 1.5, ["light.a", "light.b"], {"id": "light.a"}, None])
@@ -590,36 +590,36 @@ class TestResolveGhostAndBlocklist:
         the MCP, Assist and Agent Chat paths, pinned directly because a guard that
         nothing tests is a guard someone deletes.
         """
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         assert resolve(bad, access_key, hass) == Permission.NOT_FOUND
 
     async def test_phoenix_domain_is_blocked_regardless_of_grant(self, hass, basic_env):
-        access_key = _make_token(domains={"phoenix_mcp": "GREEN"})
+        access_key = _make_access_key(domains={"phoenix_mcp": "GREEN"})
         assert resolve("phoenix_mcp.internal_sensor", access_key, hass) == Permission.NO_ACCESS
 
     async def test_phoenix_domain_blocked_with_no_grant(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert resolve("phoenix_mcp.internal_sensor", access_key, hass) == Permission.NO_ACCESS
 
     async def test_phoenix_domain_blocked_even_in_pass_through(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         assert resolve("phoenix_mcp.internal_sensor", access_key, hass) == Permission.NO_ACCESS
 
 
 class TestResolvePassThrough:
     async def test_pass_through_returns_write_for_all_entities(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         assert resolve("light.kitchen", access_key, hass) == Permission.WRITE
         assert resolve("sensor.temp", access_key, hass) == Permission.WRITE
         assert resolve("lock.front_door", access_key, hass) == Permission.WRITE
 
     async def test_pass_through_still_blocks_ghosts(self, hass):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         assert resolve("light.ghost", access_key, hass) == Permission.NOT_FOUND
 
     async def test_pass_through_ignores_permission_tree(self, hass, basic_env):
         """Even RED grants are ignored in pass-through mode."""
-        access_key = _make_token(
+        access_key = _make_access_key(
             pass_through=True,
             domains={"light": "RED"},
             entities={"sensor.temp": "RED"},
@@ -638,7 +638,7 @@ class TestResolveAliasCanonical:
         canonical_id = entry.entity_id
         hass.states.async_set(canonical_id, "on", {})
 
-        access_key = _make_token(entities={canonical_id: "GREEN"})
+        access_key = _make_access_key(entities={canonical_id: "GREEN"})
         assert resolve(canonical_id, access_key, hass) == Permission.WRITE
 
     async def test_permission_on_canonical_not_presented_id(self, hass, config_entry, entity_reg):
@@ -650,8 +650,8 @@ class TestResolveAliasCanonical:
         canonical_id = entry.entity_id
         hass.states.async_set(canonical_id, "on", {})
 
-        token_with_canonical = _make_token(entities={canonical_id: "YELLOW"})
-        assert resolve(canonical_id, token_with_canonical, hass) == Permission.READ
+        access_key_with_canonical = _make_access_key(entities={canonical_id: "YELLOW"})
+        assert resolve(canonical_id, access_key_with_canonical, hass) == Permission.READ
 
 
 # ---------------------------------------------------------------------------
@@ -727,30 +727,30 @@ class TestScrubSensitiveAttributes:
 # ---------------------------------------------------------------------------
 
 
-class TestFilterEntitiesForToken:
+class TestFilterEntitiesForAccessKey:
     def _states(self, hass: HomeAssistant) -> list[State]:
         return hass.states.async_all()
 
     async def test_empty_grant_returns_empty(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         assert result == []
 
     async def test_domain_read_filters_to_that_domain(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "YELLOW"})
+        access_key = _make_access_key(domains={"light": "YELLOW"})
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         entity_ids = [r["entity_id"] for r in result]
         assert "light.kitchen" in entity_ids
         assert "sensor.temp" not in entity_ids
 
     async def test_domain_green_includes_entity(self, hass, basic_env):
-        access_key = _make_token(domains={"sensor": "GREEN"})
+        access_key = _make_access_key(domains={"sensor": "GREEN"})
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         entity_ids = [r["entity_id"] for r in result]
         assert "sensor.temp" in entity_ids
 
     async def test_red_entity_excluded(self, hass, basic_env):
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={"light.kitchen": "RED"},
         )
@@ -759,13 +759,13 @@ class TestFilterEntitiesForToken:
         assert "light.kitchen" not in entity_ids
 
     async def test_phoenix_domain_always_excluded(self, hass, basic_env):
-        access_key = _make_token(domains={"phoenix_mcp": "GREEN"})
+        access_key = _make_access_key(domains={"phoenix_mcp": "GREEN"})
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         entity_ids = [r["entity_id"] for r in result]
         assert not any(eid.startswith("phoenix_mcp.") for eid in entity_ids)
 
     async def test_pass_through_returns_all_except_phoenix(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         entity_ids = [r["entity_id"] for r in result]
         assert "light.kitchen" in entity_ids
@@ -779,7 +779,7 @@ class TestFilterEntitiesForToken:
             "access_token": "abc123",
             "name": "Test Cam",
         })
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         states = [hass.states.get("camera.test")]
         result = filter_entities_for_access_key(states, access_key, hass)
         assert len(result) == 1
@@ -788,7 +788,7 @@ class TestFilterEntitiesForToken:
         assert result[0]["attributes"]["name"] == "Test Cam"
 
     async def test_results_are_dicts_not_state_objects(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result = filter_entities_for_access_key(self._states(hass), access_key, hass)
         for item in result:
             assert isinstance(item, dict)
@@ -802,7 +802,7 @@ class TestFilterEntitiesForToken:
 class TestResolveServiceTargetsEntityId:
     async def test_single_entity_with_write(self, hass, registered_env):
         light_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             entity_id=light_id,
             service_domain="light",
@@ -813,7 +813,7 @@ class TestResolveServiceTargetsEntityId:
 
     async def test_single_entity_with_read_excluded(self, hass, registered_env):
         light_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(domains={"light": "YELLOW"})
+        access_key = _make_access_key(domains={"light": "YELLOW"})
         result, _ = resolve_service_targets(
             entity_id=light_id,
             service_domain="light",
@@ -824,7 +824,7 @@ class TestResolveServiceTargetsEntityId:
 
     async def test_red_entity_excluded_from_results(self, hass, registered_env):
         light_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={light_id: "RED"},
         )
@@ -837,7 +837,7 @@ class TestResolveServiceTargetsEntityId:
         assert result == []
 
     async def test_nonexistent_entity_raises_entity_creation_not_permitted(self, hass):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         with pytest.raises(EntityCreationNotPermitted) as exc_info:
             resolve_service_targets(
                 entity_id="light.does_not_exist",
@@ -851,7 +851,7 @@ class TestResolveServiceTargetsEntityId:
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
         hallway_id = registered_env["lights"]["hallway"].entity_id
         sensor_id = registered_env["sensors"]["temp"].entity_id
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             entity_id="all",
             service_domain="light",
@@ -865,7 +865,7 @@ class TestResolveServiceTargetsEntityId:
     async def test_all_filters_by_write(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
         hallway_id = registered_env["lights"]["hallway"].entity_id
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={hallway_id: "RED"},
         )
@@ -880,7 +880,7 @@ class TestResolveServiceTargetsEntityId:
 
     async def test_result_is_list_of_entity_ids_not_device_or_area(self, hass, registered_env):
         light_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             entity_id=light_id,
             service_domain="light",
@@ -895,7 +895,7 @@ class TestResolveServiceTargetsEntityId:
     async def test_list_of_entity_ids(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
         hallway_id = registered_env["lights"]["hallway"].entity_id
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             entity_id=[kitchen_id, hallway_id],
             service_domain="light",
@@ -907,7 +907,7 @@ class TestResolveServiceTargetsEntityId:
 
     async def test_empty_result_when_no_entities_have_write(self, hass, registered_env):
         light_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token()
+        access_key = _make_access_key()
         result, _ = resolve_service_targets(
             entity_id=light_id,
             service_domain="light",
@@ -921,7 +921,7 @@ class TestResolveServiceTargetsDeviceId:
     async def test_device_id_expands_to_service_domain_entities_only(self, hass, device_env):
         """Only light.* entities for the device should be returned, not sensor.*."""
         env = device_env
-        access_key = _make_token(devices={env["device"].id: "GREEN"})
+        access_key = _make_access_key(devices={env["device"].id: "GREEN"})
         result, _ = resolve_service_targets(
             device_id=env["device"].id,
             service_domain="light",
@@ -935,7 +935,7 @@ class TestResolveServiceTargetsDeviceId:
 
     async def test_device_id_red_entity_silently_skipped(self, hass, device_env):
         env = device_env
-        access_key = _make_token(
+        access_key = _make_access_key(
             devices={env["device"].id: "GREEN"},
             entities={env["light_accent"].entity_id: "RED"},
         )
@@ -950,7 +950,7 @@ class TestResolveServiceTargetsDeviceId:
 
     async def test_device_id_result_never_contains_device_id(self, hass, device_env):
         env = device_env
-        access_key = _make_token(devices={env["device"].id: "GREEN"})
+        access_key = _make_access_key(devices={env["device"].id: "GREEN"})
         result, _ = resolve_service_targets(
             device_id=env["device"].id,
             service_domain="light",
@@ -961,7 +961,7 @@ class TestResolveServiceTargetsDeviceId:
 
     async def test_device_id_empty_when_all_read(self, hass, device_env):
         env = device_env
-        access_key = _make_token(devices={env["device"].id: "YELLOW"})
+        access_key = _make_access_key(devices={env["device"].id: "YELLOW"})
         result, _ = resolve_service_targets(
             device_id=env["device"].id,
             service_domain="light",
@@ -974,7 +974,7 @@ class TestResolveServiceTargetsDeviceId:
 class TestResolveServiceTargetsAreaId:
     async def test_area_id_expands_to_service_domain_entities(self, hass, device_env):
         env = device_env
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             area_id=env["area"].id,
             service_domain="light",
@@ -1008,7 +1008,7 @@ class TestResolveServiceTargetsAreaId:
         result, _ = resolve_service_targets(
             area_id=device_env["area"].id,
             service_domain="light",
-            access_key=_make_token(domains={"light": "GREEN"}),
+            access_key=_make_access_key(domains={"light": "GREEN"}),
             hass=hass,
         )
 
@@ -1016,7 +1016,7 @@ class TestResolveServiceTargetsAreaId:
 
     async def test_area_id_red_entity_silently_skipped(self, hass, device_env):
         env = device_env
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={env["light_accent"].entity_id: "RED"},
         )
@@ -1031,7 +1031,7 @@ class TestResolveServiceTargetsAreaId:
 
     async def test_area_id_result_never_contains_area_id(self, hass, device_env):
         env = device_env
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             area_id=env["area"].id,
             service_domain="light",
@@ -1042,7 +1042,7 @@ class TestResolveServiceTargetsAreaId:
 
     async def test_area_empty_after_permission_filter_returns_empty(self, hass, device_env):
         env = device_env
-        access_key = _make_token()
+        access_key = _make_access_key()
         result, _ = resolve_service_targets(
             area_id=env["area"].id,
             service_domain="light",
@@ -1056,7 +1056,7 @@ class TestResolveServiceTargetsUntargeted:
     async def test_untargeted_call_expands_to_all_writable_domain_entities(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
         sensor_id = registered_env["sensors"]["temp"].entity_id
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result, _ = resolve_service_targets(
             service_domain="light",
             access_key=access_key,
@@ -1066,7 +1066,7 @@ class TestResolveServiceTargetsUntargeted:
         assert sensor_id not in result
 
     async def test_untargeted_excludes_read_only_entities(self, hass, registered_env):
-        access_key = _make_token(domains={"light": "YELLOW"})
+        access_key = _make_access_key(domains={"light": "YELLOW"})
         result, _ = resolve_service_targets(
             service_domain="light",
             access_key=access_key,
@@ -1076,7 +1076,7 @@ class TestResolveServiceTargetsUntargeted:
 
     async def test_untargeted_excludes_red_entities(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(
+        access_key = _make_access_key(
             domains={"light": "GREEN"},
             entities={kitchen_id: "RED"},
         )
@@ -1091,7 +1091,7 @@ class TestResolveServiceTargetsUntargeted:
 class TestResolveServiceTargetsPassThrough:
     async def test_pass_through_returns_all_domain_entities_with_write(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result, _ = resolve_service_targets(
             entity_id="all",
             service_domain="light",
@@ -1101,7 +1101,7 @@ class TestResolveServiceTargetsPassThrough:
         assert kitchen_id in result
 
     async def test_pass_through_entity_creation_still_blocked(self, hass):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         with pytest.raises(EntityCreationNotPermitted):
             resolve_service_targets(
                 entity_id="light.ghost_entity",
@@ -1111,7 +1111,7 @@ class TestResolveServiceTargetsPassThrough:
             )
 
     async def test_pass_through_still_blocks_phoenix_domain(self, hass, registered_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result, _ = resolve_service_targets(
             entity_id="all",
             service_domain="phoenix_mcp",
@@ -1129,7 +1129,7 @@ class TestResolveServiceTargetsEntityCategory:
 
     async def test_area_expansion_excludes_config_diagnostic_hidden(self, hass, category_env):
         env = category_env
-        access_key = _make_token(domains={"switch": "GREEN"})
+        access_key = _make_access_key(domains={"switch": "GREEN"})
         result, _ = resolve_service_targets(
             area_id=env["area"].id,
             service_domain="switch",
@@ -1144,7 +1144,7 @@ class TestResolveServiceTargetsEntityCategory:
 
     async def test_device_expansion_excludes_config_diagnostic_hidden(self, hass, category_env):
         env = category_env
-        access_key = _make_token(devices={env["device"].id: "GREEN"})
+        access_key = _make_access_key(devices={env["device"].id: "GREEN"})
         result, _ = resolve_service_targets(
             device_id=env["device"].id,
             service_domain="switch",
@@ -1161,7 +1161,7 @@ class TestResolveServiceTargetsEntityCategory:
         # The deliberate escape hatch: a direct entity_id is never filtered, so an
         # operator can still actuate a granted child-lock switch on purpose.
         env = category_env
-        access_key = _make_token(entities={env["config"].entity_id: "GREEN"})
+        access_key = _make_access_key(entities={env["config"].entity_id: "GREEN"})
         result, _ = resolve_service_targets(
             entity_id=env["config"].entity_id,
             service_domain="switch",
@@ -1175,7 +1175,7 @@ class TestResolveServiceTargetsEntityCategory:
         # entity_category filter; hidden is also kept (it is not a direct-target
         # filter, only an indirect one).
         env = category_env
-        access_key = _make_token(domains={"switch": "GREEN"})
+        access_key = _make_access_key(domains={"switch": "GREEN"})
         result, _ = resolve_service_targets(
             entity_id="all",
             service_domain="switch",
@@ -1190,7 +1190,7 @@ class TestResolveServiceTargetsEntityCategory:
     async def test_untargeted_whole_domain_keeps_config_and_diagnostic(self, hass, category_env):
         # No target means whole-domain expansion, same semantics as "all": unfiltered.
         env = category_env
-        access_key = _make_token(domains={"switch": "GREEN"})
+        access_key = _make_access_key(domains={"switch": "GREEN"})
         result, _ = resolve_service_targets(
             service_domain="switch",
             access_key=access_key,
@@ -1208,41 +1208,41 @@ class TestResolveServiceTargetsEntityCategory:
 
 class TestFilterServiceResponse:
     async def test_accessible_entity_id_preserved(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result = filter_service_response("light.kitchen", access_key, hass)
         assert result == "light.kitchen"
 
     async def test_inaccessible_entity_id_redacted(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         result = filter_service_response("light.kitchen", access_key, hass)
         assert result == "<redacted>"
 
     async def test_ghost_entity_id_redacted(self, hass):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         result = filter_service_response("light.ghost", access_key, hass)
         assert result == "<redacted>"
 
     async def test_non_entity_string_preserved(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert filter_service_response("some plain string", access_key, hass) == "some plain string"
         assert filter_service_response("not_an_entity", access_key, hass) == "not_an_entity"
 
     async def test_dict_with_entity_id_values_redacted(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         response = {"entity_id": "light.kitchen", "message": "ok"}
         result = filter_service_response(response, access_key, hass)
         assert result["entity_id"] == "<redacted>"
         assert result["message"] == "ok"
 
     async def test_nested_dict_entity_ids_redacted(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         response = {"data": {"entity": "light.kitchen", "value": 42}}
         result = filter_service_response(response, access_key, hass)
         assert result["data"]["entity"] == "<redacted>"
         assert result["data"]["value"] == 42
 
     async def test_list_with_entity_ids_redacted(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         hass.states.async_set("sensor.secret", "on", {})
         response = ["light.kitchen", "sensor.secret", "not_an_entity"]
         result = filter_service_response(response, access_key, hass)
@@ -1251,14 +1251,14 @@ class TestFilterServiceResponse:
         assert result[2] == "not_an_entity"
 
     async def test_non_string_values_preserved(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert filter_service_response(42, access_key, hass) == 42
         assert filter_service_response(3.14, access_key, hass) == 3.14
         assert filter_service_response(None, access_key, hass) is None
         assert filter_service_response(True, access_key, hass) is True
 
     async def test_sensitive_keyed_values_redacted(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         response = {
             "access_token": "abc123",
             "url": "https://example.com",
@@ -1277,7 +1277,7 @@ class TestFilterServiceResponse:
         weather.get_forecasts and calendar.get_events key their response by
         entity_id, so the value under a denied key is that entity's own data.
         """
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         response = {
             "light.kitchen": {"state": "on"},
             "lock.front_door": {"state": "locked"},
@@ -1287,14 +1287,14 @@ class TestFilterServiceResponse:
         assert result == {"light.kitchen": {"state": "on"}}
 
     async def test_ghost_entity_id_key_dropped(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         response = {"light.ghost": {"state": "on"}, "light.kitchen": {"state": "on"}}
         result = filter_service_response(response, access_key, hass)
         assert list(result) == ["light.kitchen"]
 
     async def test_multiple_denied_keys_all_dropped_without_collision(self, hass, basic_env):
         """Dropping avoids the collision a shared "<redacted>" key would cause."""
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         hass.states.async_set("sensor.secret_a", "1", {})
         hass.states.async_set("sensor.secret_b", "2", {})
         response = {
@@ -1306,27 +1306,27 @@ class TestFilterServiceResponse:
         assert result == {"light.kitchen": {"v": 3}}
 
     async def test_nested_denied_key_dropped(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         response = {"response": {"lock.front_door": {"state": "locked"}, "ok": True}}
         result = filter_service_response(response, access_key, hass)
         assert result["response"] == {"ok": True}
 
     async def test_accessible_entity_id_key_kept_and_value_filtered(self, hass, basic_env):
-        access_key = _make_token(domains={"light": "GREEN"})
+        access_key = _make_access_key(domains={"light": "GREEN"})
         response = {"light.kitchen": {"related": "lock.front_door", "state": "on"}}
         result = filter_service_response(response, access_key, hass)
         assert result["light.kitchen"]["state"] == "on"
         assert result["light.kitchen"]["related"] == "<redacted>"
 
     async def test_non_entity_and_non_string_keys_untouched(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         response = {"count": 2, 5: "five", "not_an_entity": "x"}
         result = filter_service_response(response, access_key, hass)
         assert result == {"count": 2, 5: "five", "not_an_entity": "x"}
 
     async def test_depth_limit_truncates_containers(self, hass, basic_env):
         """Past the depth limit containers truncate to empty, never pass through raw."""
-        access_key = _make_token()
+        access_key = _make_access_key()
         deep: Any = {"entity": "light.kitchen"}
         for _ in range(12):
             deep = {"nested": deep}
@@ -1337,7 +1337,7 @@ class TestFilterServiceResponse:
         assert node == {}
 
     async def test_depth_limit_still_redacts_entity_strings(self, hass, basic_env):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert filter_service_response("light.kitchen", access_key, hass, _depth=11) == "<redacted>"
         assert filter_service_response([], access_key, hass, _depth=11) == []
 
@@ -1415,22 +1415,22 @@ class TestPermissionEnum:
 
 
 class TestEffectiveHint:
-    """get_effective_hint: per-token node hint wins, global entity_hints is the fallback."""
+    """get_effective_hint: per-access-key node hint wins, global entity_hints is the fallback."""
 
     def test_global_fallback_when_no_node_hint(self, hass):
         from custom_components.phoenix_mcp.policy_engine import get_effective_hint
-        access_key = _make_token(entities={"light.x": "GREEN"})
+        access_key = _make_access_key(entities={"light.x": "GREEN"})
         assert get_effective_hint(access_key, "light.x", hass, {"light.x": "global note"}) == "global note"
 
     def test_node_hint_wins_over_global(self, hass):
         from custom_components.phoenix_mcp.policy_engine import get_effective_hint
-        access_key = _make_token()
+        access_key = _make_access_key()
         access_key.permissions.entities["light.x"] = _node("GREEN", "node note")
         assert get_effective_hint(access_key, "light.x", hass, {"light.x": "global note"}) == "node note"
 
     def test_none_when_unset(self, hass):
         from custom_components.phoenix_mcp.policy_engine import get_effective_hint
-        access_key = _make_token(entities={"light.x": "GREEN"})
+        access_key = _make_access_key(entities={"light.x": "GREEN"})
         assert get_effective_hint(access_key, "light.x", hass, {}) is None
         assert get_effective_hint(access_key, "light.x", hass) is None
 
@@ -1440,24 +1440,24 @@ class TestResolveIntentEntities:
 
     A native intent action (HassTurnOn, etc.) with no recognized selector (no
     name/area/floor/domain/device_class) must match NOTHING, not fan out to the
-    token's entire writable scope. The typical trigger is an unrecognized argument
+    access key's entire writable scope. The typical trigger is an unrecognized argument
     such as entity_id, which these tools do not accept; without the guard the call
-    would actuate every entity the token can write.
+    would actuate every entity the access key can write.
     """
 
     def test_no_selectors_returns_empty(self, hass, basic_env):
-        # Pass-through token: resolve() is WRITE for every non-phoenix_mcp entity,
+        # Pass-through access key: resolve() is WRITE for every non-phoenix_mcp entity,
         # so an unguarded call would return the whole writable scope here.
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         assert resolve_intent_entities(hass, access_key) == []
 
     def test_domain_only_still_filters(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(hass, access_key, domains=["light"])
         assert result == ["light.kitchen"]
 
     def test_domain_only_scopes_to_that_domain(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(hass, access_key, domains=["lock"])
         assert result == ["lock.front_door"]
 
@@ -1467,7 +1467,7 @@ class TestResolveIntentEntities:
         hass.states.async_set(
             "cover.garage", "closed", {"device_class": "garage"}
         )
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(hass, access_key, device_classes=["garage"])
         assert result == ["cover.garage"]
 
@@ -1477,7 +1477,7 @@ class TestResolveIntentEntities:
         # assumes name is str | None and raises AttributeError on anything else, so
         # a list name must degrade to "not provided" rather than crash, and a real
         # domain selector given alongside it still resolves.
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(
             hass, access_key, domains=["lock"], name=["Front Door Lock", "Rear door lock"]
         )
@@ -1487,11 +1487,11 @@ class TestResolveIntentEntities:
         # No domain/device_class alongside the malformed name: degrading name to
         # None leaves zero real selectors, so the existing zero-selector
         # fail-closed guard applies (must not crash AND must not fan out).
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         assert resolve_intent_entities(hass, access_key, name=["a", "b"]) == []
 
     def test_list_typed_area_and_floor_do_not_crash(self, hass, basic_env):
-        access_key = _make_token(pass_through=True)
+        access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(
             hass, access_key, domains=["light"], area=["Kitchen"], floor=["Ground"]
         )
@@ -1502,7 +1502,7 @@ class TestResolveIntentEntities:
         # filter is what keeps a "switch" intent from sweeping in the same-domain
         # config/diagnostic/hidden switches.
         env = category_env
-        access_key = _make_token(domains={"switch": "GREEN"})
+        access_key = _make_access_key(domains={"switch": "GREEN"})
         result = resolve_intent_entities(hass, access_key, domains=["switch"])
         assert result == [env["primary"].entity_id]
 
@@ -1515,7 +1515,7 @@ class TestResolveIntentEntities:
         from homeassistant.helpers.intent import MatchTargetsResult
 
         env = category_env
-        access_key = _make_token(domains={"switch": "GREEN"})
+        access_key = _make_access_key(domains={"switch": "GREEN"})
         captured: dict = {}
 
         def _fake_match(hass_, constraints, states=None):
@@ -1534,7 +1534,7 @@ class TestResolveIntentEntities:
 class TestCallNeedsPhysicalGate:
     """The physical-control gate keys on the actuator DOMAIN, so a new or
     non-listed service (cover.toggle, the tilt family, valve.toggle,
-    alarm_arm_custom_bypass) cannot slip a cap_physical_control=deny token, and
+    alarm_arm_custom_bypass) cannot slip a cap_physical_control=deny access key, and
     the generic homeassistant.toggle redispatch is caught when it targets a
     physical entity.
     """
@@ -1553,7 +1553,7 @@ class TestCallNeedsPhysicalGate:
         ("alarm_control_panel", "alarm_disarm"),
     ])
     def test_every_actuator_domain_service_is_gated(self, domain, service):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert call_needs_physical_gate(
             domain=domain, service=service, entity_id=f"{domain}.x",
             access_key=access_key, hass=object(),
@@ -1566,14 +1566,14 @@ class TestCallNeedsPhysicalGate:
         ("media_player", "play_media"),
     ])
     def test_non_physical_domains_are_not_gated(self, domain, service):
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert call_needs_physical_gate(
             domain=domain, service=service, entity_id=f"{domain}.x",
             access_key=access_key, hass=object(),
         ) is False
 
     def test_homeassistant_toggle_targeting_a_cover_is_gated(self):
-        access_key = _make_token()
+        access_key = _make_access_key()
         with patch(
             "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
             return_value=(["cover.garage"], 1),
@@ -1584,7 +1584,7 @@ class TestCallNeedsPhysicalGate:
             ) is True
 
     def test_homeassistant_toggle_targeting_only_a_light_is_not_gated(self):
-        access_key = _make_token()
+        access_key = _make_access_key()
         with patch(
             "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
             return_value=(["light.x"], 1),
@@ -1597,7 +1597,7 @@ class TestCallNeedsPhysicalGate:
     def test_homeassistant_turn_on_is_not_gated_even_for_a_cover(self):
         # turn_on/off verifiably no-op on physical domains, so they are excluded
         # to avoid spurious approvals; only toggle redispatches to cover.toggle.
-        access_key = _make_token()
+        access_key = _make_access_key()
         assert call_needs_physical_gate(
             domain="homeassistant", service="turn_on",
             entity_id="cover.garage", access_key=access_key, hass=object(),

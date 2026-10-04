@@ -668,7 +668,7 @@ class PhoenixSkillView(PhoenixView):
         # The skill guide is unauthenticated, but the kill switch should silence
         # every client route. At startup the route is never registered; if the
         # kill switch is flipped at runtime the route already exists (HA cannot
-        # unregister it), so refuse here the way the access key-authenticated routes do.
+        # unregister it), so refuse here the way the access-key-authenticated routes do.
         data = self.hass.data.get(DOMAIN)
         if (
             data is None

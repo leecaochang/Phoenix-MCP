@@ -22,7 +22,7 @@ from custom_components.phoenix_mcp.mcp_view import (
     _progress_token,
 )
 
-from tests.test_mcp_view import _make_data, _make_hass, _make_token
+from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
 
 class _FakeStream:
@@ -104,7 +104,7 @@ def _view(hass) -> PhoenixMcpView:
 
 
 def _env():
-    access_key, raw = _make_token(cap_config_read="allow")
+    access_key, raw = _make_access_key(cap_config_read="allow")
     data = _make_data(access_key)
     hass = _make_hass(data)
     hass.loop = asyncio.get_running_loop()
@@ -291,7 +291,7 @@ class TestKeepaliveAndProgress:
         assert not [m for m in stream.messages() if m.get("method") == "notifications/progress"]
         assert stream.messages()[-1]["id"] == 9
 
-    async def test_progress_notifications_when_token_supplied(self, monkeypatch):
+    async def test_progress_notifications_when_access_key_supplied(self, monkeypatch):
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
@@ -305,7 +305,7 @@ class TestKeepaliveAndProgress:
         assert first["progressToken"] == "p1"
         assert first["total"] == 99.0
         assert "Waiting for operator approval" in first["message"]
-        # Progress must increase for a given token, per the MCP spec.
+        # Progress must increase for a given progress token, per the MCP spec.
         values = [m["params"]["progress"] for m in progress]
         assert values == sorted(values)
         # Notifications carry no id and never enter the response.

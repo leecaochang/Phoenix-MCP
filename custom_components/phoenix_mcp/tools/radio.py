@@ -1856,7 +1856,7 @@ async def _build_diff_remove_zigbee_device(
     device, ieee = resolved.device, resolved.ieee
     preview = _radio_device_diff_preview(device, ieee)
     # The approval diff is admin-only, so it lists all of the device's registry
-    # entities (not just the access key-visible ones) plus any MESA control modes:
+    # entities (not just the access-key-visible ones) plus any MESA control modes:
     # the reviewer should see the full blast radius of dropping the device.
     entries = er.async_entries_for_device(er.async_get(hass), device.id, include_disabled_entities=True)
     preview["entities"] = sorted(entry.entity_id for entry in entries)

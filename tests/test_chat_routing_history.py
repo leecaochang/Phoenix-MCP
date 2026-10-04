@@ -19,7 +19,7 @@ def history(text="turn on the desk lamp"):
 def test_exact_evidence_is_consumed_without_retaining_content():
     cache = ChatRoutingHistory()
     messages = history()
-    binding = ["token", "private-hash", 1, "en", {"mode": "local"}]
+    binding = ["access_key", "private-hash", 1, "en", {"mode": "local"}]
     cache.remember(messages, binding)
     assert "desk" not in repr(cache) + repr(cache._entries)
     assert "private-hash" not in repr(cache) + repr(cache._entries)
@@ -76,7 +76,7 @@ def test_reference_subject_is_exact_private_expiring_and_not_local_admission():
     cache = ChatRoutingHistory()
     messages = history('is it on?')
     proposal = {'intent': 'HassGetState', 'entity_ids': ['light.test']}
-    binding = [['token', 'private-hash', 1, 'en', {}], 'account-fingerprint']
+    binding = [['access_key', 'private-hash', 1, 'en', {}], 'account-fingerprint']
     with patch('custom_components.phoenix_mcp.chat_routing_history.monotonic', return_value=100):
         cache.remember_subject(messages, binding, proposal)
         assert cache.subject(messages, binding) == proposal

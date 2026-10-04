@@ -1,4 +1,4 @@
-"""Bound scrubbed system-log previews and access key-bound detail chunks."""
+"""Bound scrubbed system-log previews and access-key-bound detail chunks."""
 
 from __future__ import annotations
 

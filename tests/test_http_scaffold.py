@@ -45,7 +45,7 @@ async def client_routes(hass: HomeAssistant, hass_client_no_auth):
 
 
 def test_client_route_list_contains_no_rest_proxy() -> None:
-    """The only token-facing routes are MCP, context, skill, and Agent Chat."""
+    """The only access-key-facing routes are MCP, context, skill, and Agent Chat."""
     assert {view.url for view in _client_view_classes()} == {
         "/api/phoenix-mcp",
         "/api/phoenix-mcp/context",

@@ -366,7 +366,7 @@ AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # but a provider that stops sending data must not hang the turn forever.
 AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
 # Interactive inline-approval wait, tied to the live SSE connection (far longer
-# than the per-access key confirm_inline_wait cap, which is for unattended agents).
+# than the per-access-key confirm_inline_wait cap, which is for unattended agents).
 AGENTCLI_APPROVAL_WAIT_SECONDS = 900
 # How often Agent Chat relays a held tool's progress line to the panel. Faster
 # than the MCP keepalive because this is a local connection with no proxy in
@@ -1307,7 +1307,7 @@ MCP_DISCOVER_TTL_MS = 300_000
 # max is kept well within typical MCP client timeouts so the held response never
 # outlives one.
 #
-# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by a ACCESS KEY
+# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by an ACCESS KEY
 # SETTING, but the party that knows whether the outcome is needed right now is
 # the AGENT: firing twenty writes it needs them queued, not resolved one at a
 # time; turning off one lock it does want the answer. Holding the request removes

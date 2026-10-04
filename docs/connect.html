@@ -66,7 +66,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Create an access key</h3>
-            <p>In the Phoenix MCP panel, open the <strong>Access keys</strong> tab and click <strong>Create Access key</strong>. Give it a name like <code>claude-code</code> and create it.</p>
+            <p>In the Phoenix MCP panel, open the <strong>Access keys</strong> tab and click <strong>Create access key</strong>. Give it a name like <code>claude-code</code> and create it.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
               <div class="callout-body"><p class="callout-title">Copy it now</p><p>The access key value is shown exactly once and cannot be retrieved later. Copy it before you close the dialog.</p></div>
@@ -99,7 +99,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Adding more access keys as separate profiles</h3>
-            <p>Because each access key gets its own server name, you can keep several configured in one client at once, one entry per access key, all pointing at the same Phoenix MCP URL with a different bearer token each. To add another, create a second access key in the panel, and on the screen shown after it is created choose <strong>Connect an external agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
+            <p>Because each access key gets its own server name, you can keep several configured in one client at once, one entry per access key, all pointing at the same Phoenix MCP URL with a different access key each. To add another, create a second access key in the panel, and on the screen shown after it is created choose <strong>Connect an external agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
               <div class="callout-body"><p class="callout-title">Save each access key's command when you first see it</p><p>Phoenix MCP stores only a hash of an access key's value, so the panel cannot show an access key's config again after you close its creation (or rotation) dialog. If you lose it, rotate the access key to get a fresh value and command.</p></div>
@@ -108,7 +108,7 @@
 
           <div class="step"><div class="step-body">
             <h3>The agent skill <span class="badge badge-neutral">optional</span></h3>
-            <p>On connection, Phoenix MCP sends a short, access key-aware primer that links to the full guide. Optional skill installation makes the guide available locally. Native skill clients discover its name and description first, then load the full guidance when the skill is activated.</p>
+            <p>On connection, Phoenix MCP sends a short, access-key-aware primer that links to the full guide. Optional skill installation makes the guide available locally. Native skill clients discover its name and description first, then load the full guidance when the skill is activated.</p>
           </div></div>
 
         </div>
@@ -181,7 +181,7 @@ bearer_token_env_var = "PHOENIX_ACCESS_KEY_HOME"</code></pre>
           <div class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
             <h3>Automatic primer</h3>
-            <p>Phoenix MCP sends a short, access key-aware primer in the legacy <code>initialize</code> response and in modern <code>server/discover</code>. It names which of this access key's capabilities are approval-gated and links to the full guide. Legacy 2025-03-26 clients complete initialization and keep their session ID; modern 2026-07-28 clients carry protocol metadata on each request and use no session. No install, nothing to maintain.</p>
+            <p>Phoenix MCP sends a short, access-key-aware primer in the legacy <code>initialize</code> response and in modern <code>server/discover</code>. It names which of this access key's capabilities are approval-gated and links to the full guide. Legacy 2025-03-26 clients complete initialization and keep their session ID; modern 2026-07-28 clients carry protocol metadata on each request and use no session. No install, nothing to maintain.</p>
           </div>
           <div class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>

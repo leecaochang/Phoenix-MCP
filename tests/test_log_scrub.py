@@ -1,8 +1,8 @@
 """Log-text and diagnostics redaction behind the cap_log_read MCP tools.
 
 collect_log_entries routes every message and exception through _scrub_log_text,
-which removes Phoenix MCP tokens, JWTs/LLATs, and URL-embedded credentials so a
-token holding cap_log_read never receives another integration's secret verbatim.
+which removes Phoenix MCP access keys, JWTs/LLATs, and URL-embedded credentials so an
+access key holding cap_log_read never receives another integration's secret verbatim.
 redact_secrets_in_text and redact_diagnostics apply the same discipline to source
 text and diagnostics payloads.
 """
@@ -20,14 +20,14 @@ from custom_components.phoenix_mcp.helpers import (
 )
 
 
-def test_scrubs_phx_token():
+def test_scrubs_phx_access_key():
     raw = "auth failed for phx_" + "a" * 64
     assert "phx_" + "a" * 64 not in _scrub_log_text(raw)
-    assert "<phoenix-token>" in _scrub_log_text(raw)
+    assert "<phoenix-access-key>" in _scrub_log_text(raw)
 
 
-def test_token_scrub_pattern_tracks_the_real_token_prefix():
-    """The scrubber must match the prefix tokens are actually minted with.
+def test_access_key_scrub_pattern_tracks_the_real_access_key_prefix():
+    """The scrubber must match the prefix access keys are actually minted with.
 
     A drifted pattern fails open: live bearer tokens would flow through to a
     caller holding cap_log_read and nothing raises.

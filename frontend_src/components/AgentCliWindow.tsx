@@ -850,7 +850,7 @@ export function AgentCliWindow({
     }
   }, [instances, instanceId]);
 
-  // Same as above for the access key: a revoke elsewhere (Access key Detail fires
+  // Same as above for the access key: a revoke elsewhere (Access key detail fires
   // phx-access-keys-changed, which both window hosts turn into a fresh accessKeys prop)
   // must not leave a dead access key selected. Falls back to another available
   // access key, or "" if none remain; the conversation-reset effect above already

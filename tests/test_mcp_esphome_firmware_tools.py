@@ -32,7 +32,7 @@ from tests.test_mcp_esphome_tools import (
     _json,
     _runtime,
     _access_key,
-    _yaml_token,
+    _yaml_access_key,
 )
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
@@ -59,11 +59,11 @@ TOOLS = {
 }
 
 
-def _flash_token(**caps):
-    """A token that may both author and flash."""
+def _flash_access_key(**caps):
+    """An access key that may both author and flash."""
     base = {"cap_esphome_flash": "allow"}
     base.update(caps)
-    return _yaml_token(**base)
+    return _yaml_access_key(**base)
 
 
 def _dash():
@@ -115,7 +115,7 @@ class TestGating:
     @pytest.mark.parametrize("tool", list(TOOLS))
     async def test_cap_denied(self, hass, esphome_dir, tool):
         args, cap = TOOLS[tool]
-        access_key = _flash_token(**{cap: "deny"})
+        access_key = _flash_access_key(**{cap: "deny"})
         content, outcome, _ = await _run(tool, args, access_key, hass, FakeBuilder())
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
@@ -125,7 +125,7 @@ class TestGating:
         builder = FakeBuilder()
         content, outcome, _ = await _run(
             "install_esphome_firmware", {"file": FILE},
-            _yaml_token(cap_esphome_flash="deny"), hass, builder)
+            _yaml_access_key(cap_esphome_flash="deny"), hass, builder)
         assert outcome == "denied"
         assert builder.calls == []
 
@@ -133,7 +133,7 @@ class TestGating:
         builder = FakeBuilder()
         content, outcome, _ = await _run(
             "compile_esphome_firmware", {"file": FILE},
-            _flash_token(cap_esphome_yaml="deny"), hass, builder)
+            _flash_access_key(cap_esphome_yaml="deny"), hass, builder)
         assert outcome == "denied"
         assert builder.calls == []
 
@@ -144,7 +144,7 @@ class TestGating:
             args = {"lookup": {"kind": "job", "id": args["job_id"]}}
         builder = FakeBuilder()
         with patch(_DASHBOARD_PATCH, return_value=None), patch(_COMMAND_PATCH, builder):
-            content, outcome, _ = await _call_tool(tool, args, _flash_token(), hass, MagicMock())
+            content, outcome, _ = await _call_tool(tool, args, _flash_access_key(), hass, MagicMock())
         assert outcome == "invalid_request"
         assert "Device Builder add-on is not available" in content["content"][0]["text"]
         assert builder.calls == []
@@ -154,7 +154,7 @@ class TestCompile:
     async def test_enqueues_and_returns_a_job_id(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/compile": {"job_id": JOB, "status": "queued"}})
         content, outcome, resource = await _run(
-            "compile_esphome_firmware", {"file": FILE}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert resource == f"esphome:{FILE}"
@@ -181,7 +181,7 @@ class TestCompile:
         # what the note NAMES, so every tool that starts a job has to name the wait
         # tool, from the shared constant.
         builder = FakeBuilder(**{command: reply, "firmware/get_jobs": []})
-        content, _o, _r = await _run(tool, args, _yaml_token(), hass, builder)
+        content, _o, _r = await _run(tool, args, _yaml_access_key(), hass, builder)
         note = _json(content)["note"]
 
         assert "wait_for_esphome_job" in note
@@ -194,7 +194,7 @@ class TestCompile:
         builder = FakeBuilder(**{"firmware/compile": {"job_id": JOB, "status": "queued"}})
         _content, outcome, _ = await _run(
             "compile_esphome_firmware", {"file": FILE},
-            _yaml_token(cap_esphome_yaml="confirm"), hass, builder, data)
+            _yaml_access_key(cap_esphome_yaml="confirm"), hass, builder, data)
 
         assert outcome == "allowed"
         assert store._p == []
@@ -205,7 +205,7 @@ class TestCompile:
             "firmware/get_jobs": [_job(status="running")],
         })
         content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": FILE}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
@@ -218,7 +218,7 @@ class TestCompile:
             "firmware/compile": {"job_id": "newjob", "status": "queued"},
         })
         _content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": FILE}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, _yaml_access_key(), hass, builder)
         assert outcome == "allowed"
 
     async def test_an_unrecognized_status_does_not_wedge_the_tool(self, hass, esphome_dir):
@@ -228,7 +228,7 @@ class TestCompile:
             "firmware/compile": {"job_id": "newjob", "status": "queued"},
         })
         _content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": FILE}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, _yaml_access_key(), hass, builder)
         assert outcome == "allowed"
 
     async def test_a_failed_inflight_check_does_not_block(self, hass, esphome_dir):
@@ -237,7 +237,7 @@ class TestCompile:
             "firmware/compile": {"job_id": JOB, "status": "queued"},
         })
         _content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": FILE}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, _yaml_access_key(), hass, builder)
         assert outcome == "allowed"
 
     async def test_read_only_scope_cannot_start_a_build(self, hass, esphome_dir, esphome_entries):
@@ -255,7 +255,7 @@ class TestCompile:
     async def test_jail_refuses_secrets_yaml(self, hass, esphome_dir):
         builder = FakeBuilder()
         _content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": "secrets.yaml"}, _yaml_token(), hass, builder)
+            "compile_esphome_firmware", {"file": "secrets.yaml"}, _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert builder.calls == []
 
@@ -265,7 +265,7 @@ class TestCompile:
 @pytest.mark.parametrize("value", [True, False])
 async def test_force_local_is_forwarded_under_existing_scope(hass, esphome_dir, tool, command, value):
     builder = FakeBuilder(**{command: {"job_id": JOB, "status": "queued"}})
-    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_token(), hass, builder)
+    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_access_key(), hass, builder)
     assert outcome == "allowed"
     assert builder.args_for(command)["force_local"] is value
     if command == "firmware/install":
@@ -276,7 +276,7 @@ async def test_force_local_is_forwarded_under_existing_scope(hass, esphome_dir, 
 @pytest.mark.parametrize("value", ["true", 1, [], None])
 async def test_force_local_wrong_shapes_refuse_before_network(hass, esphome_dir, tool, value):
     builder = FakeBuilder()
-    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_token(), hass, builder)
+    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_access_key(), hass, builder)
     assert outcome == "invalid_request"
     assert builder.calls == []
 
@@ -285,7 +285,7 @@ async def test_force_local_wrong_shapes_refuse_before_network(hass, esphome_dir,
                                          ("install_esphome_firmware", "firmware/install")])
 async def test_job_start_rechecks_scope_after_inflight_lookup(hass, esphome_dir, esphome_entries, tool, command):
     _esphome_entry(hass, esphome_entries, runtime=_runtime())
-    access_key = _flash_token()
+    access_key = _flash_access_key()
 
     def revoke(_args):
         access_key.permissions.domains["sensor"].state = "RED"
@@ -304,7 +304,7 @@ class TestInstall:
         builder = FakeBuilder()
         _content, outcome, _ = await _run(
             "install_esphome_firmware", {"file": FILE, "force_local": True},
-            _flash_token(cap_esphome_flash="confirm"), hass, builder, data)
+            _flash_access_key(cap_esphome_flash="confirm"), hass, builder, data)
 
         assert outcome == "pending_approval"
         assert store._p[0]["args"]["force_local"] is True
@@ -318,7 +318,7 @@ class TestInstall:
         store = _ApprStore()
         data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
         await _run("install_esphome_firmware", {"file": FILE},
-                   _flash_token(cap_esphome_flash="confirm"), hass, FakeBuilder(), data)
+                   _flash_access_key(cap_esphome_flash="confirm"), hass, FakeBuilder(), data)
 
         diff = store._p[0]["diff"]
         assert diff["kind"] == "system_action"
@@ -328,7 +328,7 @@ class TestInstall:
     async def test_executor_sends_install_over_ota(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
         content, outcome, _ = await _run(
-            "install_esphome_firmware", {"file": FILE}, _flash_token(), hass, builder)
+            "install_esphome_firmware", {"file": FILE}, _flash_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert builder.args_for("firmware/install") == {"configuration": FILE, "port": "OTA"}
@@ -338,7 +338,7 @@ class TestInstall:
         """Phoenix MCP only ever flashes over the air; a serial path is not reachable."""
         builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
         await _run("install_esphome_firmware", {"file": FILE, "port": "/dev/ttyUSB0"},
-                   _flash_token(), hass, builder)
+                   _flash_access_key(), hass, builder)
         assert builder.args_for("firmware/install")["port"] == "OTA"
 
     async def test_executor_rechecks_for_a_build_started_during_the_window(self, hass, esphome_dir):
@@ -348,7 +348,7 @@ class TestInstall:
         builder = FakeBuilder(**{"firmware/get_jobs": [_job(status="running")]})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
             content, outcome, _ = await _execute_install_esphome_firmware(
-                {"file": FILE}, _flash_token(), hass, MagicMock())
+                {"file": FILE}, _flash_access_key(), hass, MagicMock())
 
         assert outcome == "invalid_request"
         assert "firmware/install" not in builder.commands
@@ -372,7 +372,7 @@ class TestJobScoping:
     async def test_unknown_job_id_is_not_found(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_job": None})
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": "nosuchjob"}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": "nosuchjob"}, _yaml_access_key(), hass, builder)
         assert outcome == "not_found"
         # get_esphome_job also names the file alternative, since that is the
         # recovery an agent without a job id actually needs; the wording is
@@ -402,14 +402,14 @@ class TestJobScoping:
     async def test_missing_job_id_is_invalid_request(self, hass, esphome_dir):
         builder = FakeBuilder()
         _content, outcome, _ = await _run(
-            "get_esphome_job", {}, _yaml_token(), hass, builder)
+            "get_esphome_job", {}, _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert builder.calls == []
 
     async def test_a_job_naming_a_path_outside_the_jail_is_not_found(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_job": _job(configuration="../../etc/passwd")})
         _content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert outcome == "not_found"
 
 
@@ -421,7 +421,7 @@ class TestJobStatus:
                                      output=["Compiling main.cpp", "Linking"]),
         })
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -444,7 +444,7 @@ class TestJobStatus:
             "\033[32mINFO Compiling app...\033[0m\n",
         ])})
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         out = _json(content)["output"]
         assert out == "INFO ESPHome 2026.7.3\nINFO Compiling app...\n"
@@ -465,7 +465,7 @@ class TestJobStatus:
             output=["BANNER line\n"] + [f"step {i}\n" for i in range(4000)],
         )})
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         body = _json(content)
         assert body["output_truncated"] is True
@@ -482,13 +482,13 @@ class TestJobStatus:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert len(_json(content)["output"]) > 10_000
 
     async def test_an_unrecognized_status_is_not_treated_as_finished(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_job": _job(status="reticulating")})
         _content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert "firmware/follow_job" not in builder.commands
 
     async def test_finished_job_replays_the_log_sidecar(self, hass, esphome_dir):
@@ -500,7 +500,7 @@ class TestJobStatus:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         body = _json(content)
         assert body["finished"] is True
@@ -522,7 +522,7 @@ class TestJobStatus:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert "firmware/follow_job" in builder.commands
         body = _json(content)
@@ -535,7 +535,7 @@ class TestJobStatus:
             "firmware/follow_job": BuilderUnavailable("gone"),
         })
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -550,7 +550,7 @@ class TestJobStatus:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert "flashed" not in _json(content)
 
     async def test_a_finished_compile_is_not_a_flashed_device(self, hass, esphome_dir):
@@ -565,7 +565,7 @@ class TestJobStatus:
             ],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         body = _json(content)
         assert body["flashed"] is False
@@ -583,7 +583,7 @@ class TestJobStatus:
             ],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         body = _json(content)
         assert body["flashed"] is True
@@ -598,7 +598,7 @@ class TestJobStatus:
             ],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert _json(content)["flashed"] is False
 
     async def test_a_deferred_install_says_so_instead_of_claiming_success(self, hass, esphome_dir):
@@ -609,7 +609,7 @@ class TestJobStatus:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         body = _json(content)
         assert body["flashed"] is False
@@ -622,7 +622,7 @@ class TestJobStatus:
             "firmware/follow_job": BuilderResult(output="error", success=False, exit_code=1),
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert "flashed" not in _json(content)
         assert "firmware/get_jobs" not in builder.commands
 
@@ -648,7 +648,7 @@ class TestCleanBuild:
             "firmware/clean": {"job_id": "c1", "status": "queued"},
         })
         content, outcome, _ = await _run(
-            "clean_esphome_build", {"file": FILE}, _yaml_token(), hass, builder)
+            "clean_esphome_build", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -670,7 +670,7 @@ class TestCleanBuild:
             "firmware/get_jobs": [_job(job_id="running-1", status="running")],
         })
         content, outcome, _ = await _run(
-            "clean_esphome_build", {"file": FILE}, _yaml_token(), hass, builder)
+            "clean_esphome_build", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
@@ -682,14 +682,14 @@ class TestCleanBuild:
         builder = FakeBuilder()
         with patch(_DASHBOARD_PATCH, return_value=None), patch(_COMMAND_PATCH, builder):
             _c, outcome, _ = await _call_tool(
-                "clean_esphome_build", {"file": FILE}, _yaml_token(), hass, MagicMock())
+                "clean_esphome_build", {"file": FILE}, _yaml_access_key(), hass, MagicMock())
         assert outcome == "invalid_request"
         assert builder.calls == []
 
     async def test_an_unknown_file_never_reaches_the_addon(self, hass, esphome_dir):
         builder = FakeBuilder()
         _c, outcome, _ = await _run(
-            "clean_esphome_build", {"file": "nope.yaml"}, _yaml_token(), hass, builder)
+            "clean_esphome_build", {"file": "nope.yaml"}, _yaml_access_key(), hass, builder)
         assert outcome == "not_found"
         assert builder.calls == []
 
@@ -719,7 +719,7 @@ class TestJobLookupByFile:
         builder.by_command["firmware/get_job"] = new
 
         content, outcome, _ = await _run(
-            "get_esphome_job", {"file": FILE}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert _json(content)["job_id"] == "new-1"
@@ -727,7 +727,7 @@ class TestJobLookupByFile:
     async def test_a_file_with_no_jobs_says_so_plainly(self, hass, esphome_dir):
         builder = self._jobs()
         content, outcome, _ = await _run(
-            "get_esphome_job", {"file": FILE}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "not_found"
         assert "No firmware job" in content["content"][0]["text"]
@@ -735,7 +735,7 @@ class TestJobLookupByFile:
     async def test_an_unknown_file_never_reaches_the_addon(self, hass, esphome_dir):
         builder = self._jobs()
         _c, outcome, _ = await _run(
-            "get_esphome_job", {"file": "nope.yaml"}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"file": "nope.yaml"}, _yaml_access_key(), hass, builder)
         assert outcome == "not_found"
         assert builder.calls == []
 
@@ -744,21 +744,21 @@ class TestJobLookupByFile:
         builder = self._jobs()
         for bad in ("secrets.yaml", "archive/old-device.yaml", "../configuration.yaml"):
             _c, outcome, _ = await _run(
-                "get_esphome_job", {"file": bad}, _yaml_token(), hass, builder)
+                "get_esphome_job", {"file": bad}, _yaml_access_key(), hass, builder)
             assert outcome == "invalid_request", bad
         assert builder.calls == []
 
     async def test_cap_denied_before_any_lookup(self, hass, esphome_dir):
         builder = self._jobs()
         _c, outcome, _ = await _run(
-            "get_esphome_job", {"file": FILE}, _yaml_token(cap_esphome_yaml="deny"), hass, builder)
+            "get_esphome_job", {"file": FILE}, _yaml_access_key(cap_esphome_yaml="deny"), hass, builder)
         assert outcome == "denied"
         assert builder.calls == []
 
     async def test_neither_argument_is_refused(self, hass, esphome_dir):
         builder = self._jobs()
         content, outcome, _ = await _run(
-            "get_esphome_job", {}, _yaml_token(), hass, builder)
+            "get_esphome_job", {}, _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "lookup must contain kind job or file" in content["content"][0]["text"]
 
@@ -770,7 +770,7 @@ class TestJobLookupByFile:
             "firmware/get_jobs": [],
         })
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB, "file": FILE}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB, "file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert _json(content)["job_id"] == JOB
@@ -781,7 +781,7 @@ class TestJobLookupByFile:
         # out. Same approach as the service-name hints.
         builder = FakeBuilder(**{"firmware/get_job": None})
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": "nope"}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": "nope"}, _yaml_access_key(), hass, builder)
 
         assert outcome == "not_found"
         text = content["content"][0]["text"]
@@ -793,7 +793,7 @@ class TestJobLookupByFile:
         # round another loop.
         builder = FakeBuilder(**{"firmware/get_job": None})
         content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": "nope"}, _yaml_token(), hass, builder)
+            "cancel_esphome_job", {"job_id": "nope"}, _yaml_access_key(), hass, builder)
 
         assert outcome == "not_found"
         text = content["content"][0]["text"]
@@ -805,7 +805,7 @@ class TestJobLookupByFile:
         # meant to name, so cancel keeps requiring an explicit id.
         builder = self._jobs(_job(job_id="new-1", status="running"))
         content, outcome, _ = await _run(
-            "cancel_esphome_job", {"file": FILE}, _yaml_token(), hass, builder)
+            "cancel_esphome_job", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
         assert "job_id is required" in content["content"][0]["text"]
@@ -838,7 +838,7 @@ class TestChainAcrossConfigurations:
             "firmware/get_jobs": jobs,
         })
         content, outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -860,7 +860,7 @@ class TestChainAcrossConfigurations:
             "firmware/follow_job": BuilderResult(output="done", success=True, exit_code=0),
             "firmware/get_jobs": jobs,
         })
-        await _run("get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+        await _run("get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert seen and seen[0] == {"configuration": FILE}
         # Found on the first, scoped query: no unfiltered fleet-wide call at all.
@@ -905,7 +905,7 @@ class TestHeadlessWaitClamp:
         voice = _running()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, voice):
             content, outcome, _ = await _call_tool(
-                "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass,
+                "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass,
                 MagicMock(), "", "voice")
 
         assert outcome == "allowed"
@@ -929,7 +929,7 @@ class TestHeadlessWaitClamp:
         normal = _running()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, normal):
             content2, _o, _r = await _call_tool(
-                "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass,
+                "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass,
                 MagicMock(), "", "192.168.1.50")
 
         # The ordinary caller waited materially longer, and gets no such note.
@@ -948,7 +948,7 @@ class TestHeadlessWaitClamp:
         })
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
             content, outcome, _ = await _call_tool(
-                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_token(), hass,
+                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_access_key(), hass,
                 MagicMock(), "", "voice")
 
         assert outcome == "allowed"
@@ -964,7 +964,7 @@ class TestHeadlessWaitClamp:
         })
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
             content, _o, _r = await _call_tool(
-                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_token(), hass,
+                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_access_key(), hass,
                 MagicMock(), "", "voice")
 
         body = _json(content)
@@ -978,7 +978,7 @@ class TestHeadlessWaitClamp:
         })
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
             content, _o, _r = await _call_tool(
-                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_token(), hass,
+                "get_esphome_job", {"lookup": {"kind": "job", "id": JOB}}, _yaml_access_key(), hass,
                 MagicMock(), "", "192.168.1.50")
         assert "note" not in _json(content)
 
@@ -1011,7 +1011,7 @@ class TestWaiting:
         builder = FakeBuilder()
         _c, outcome, _ = await _run(
             "wait_for_esphome_job", {"job_id": JOB},
-            _yaml_token(cap_esphome_yaml="deny"), hass, builder)
+            _yaml_access_key(cap_esphome_yaml="deny"), hass, builder)
         assert outcome == "denied"
         assert builder.calls == []
 
@@ -1022,7 +1022,7 @@ class TestWaiting:
             "firmware/get_jobs": [],
         })
         content, outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert _json(content)["finished"] is True
@@ -1041,7 +1041,7 @@ class TestWaiting:
             "firmware/get_jobs": [],
         })
         content, outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert _json(content)["finished"] is True
@@ -1068,7 +1068,7 @@ class TestWaiting:
             "firmware/follow_job": BuilderResult(output="ok", success=True, exit_code=0),
         })
         content, _outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         # The phase label switches, which is what a user reads.
         assert any(p and p.startswith("Flashing") for p in progress), progress
@@ -1080,7 +1080,7 @@ class TestWaiting:
     async def test_timeout_returns_the_unfinished_job(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_job": _job(status="running", progress=10)})
         content, outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB, "timeout": 1}, _yaml_token(), hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB, "timeout": 1}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -1113,7 +1113,7 @@ class TestWaiting:
             "firmware/get_job": _sequence(_job(status="running"), None),
         })
         _content, outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert outcome == "allowed"
 
     async def test_scoping_applies(self, hass, esphome_dir, esphome_entries):
@@ -1131,7 +1131,7 @@ class TestCancel:
     async def test_cancels_a_running_job(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_job": _job(status="running")})
         content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert _json(content)["cancelled"] is True
@@ -1143,7 +1143,7 @@ class TestCancel:
             "firmware/cancel": BuilderCommandError("not_found"),
         })
         content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -1172,7 +1172,7 @@ class TestDeviceLogs:
 
     async def test_captures_and_reports_the_window(self, hass, esphome_dir):
         content, outcome, resource, capture = await self._capture(
-            hass, _yaml_token(), {"file": FILE, "seconds": 5},
+            hass, _yaml_access_key(), {"file": FILE, "seconds": 5},
             BuilderResult(output="[I][app:100]: boot\n"))
 
         assert outcome == "allowed"
@@ -1185,17 +1185,17 @@ class TestDeviceLogs:
 
     async def test_window_is_clamped(self, hass, esphome_dir):
         _c, _o, _r, capture = await self._capture(
-            hass, _yaml_token(), {"file": FILE, "seconds": 9999}, BuilderResult(output=""))
+            hass, _yaml_access_key(), {"file": FILE, "seconds": 9999}, BuilderResult(output=""))
         assert capture.await_args.kwargs["capture_seconds"] == 60
 
     async def test_nonsense_window_falls_back_to_the_default(self, hass, esphome_dir):
         _c, _o, _r, capture = await self._capture(
-            hass, _yaml_token(), {"file": FILE, "seconds": 0}, BuilderResult(output=""))
+            hass, _yaml_access_key(), {"file": FILE, "seconds": 0}, BuilderResult(output=""))
         assert capture.await_args.kwargs["capture_seconds"] == 15
 
     async def test_a_silent_device_says_so(self, hass, esphome_dir):
         content, outcome, _r, _c = await self._capture(
-            hass, _yaml_token(), {"file": FILE}, BuilderResult(output=""))
+            hass, _yaml_access_key(), {"file": FILE}, BuilderResult(output=""))
         assert outcome == "allowed"
         assert "logged nothing" in _json(content)["message"]
 
@@ -1218,7 +1218,7 @@ class TestBacktrace:
         }})
         content, outcome, _ = await _run(
             "decode_esphome_backtrace", {"file": FILE, "lines": ["Backtrace: 0x400d"]},
-            _yaml_token(), hass, builder)
+            _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json(content)
@@ -1233,13 +1233,13 @@ class TestBacktrace:
         }})
         content, _outcome, _ = await _run(
             "decode_esphome_backtrace", {"file": FILE, "lines": ["Backtrace: 0x400d"]},
-            _yaml_token(), hass, builder)
+            _yaml_access_key(), hass, builder)
         assert _json(content)["unavailable_reason"] == "no_build"
 
     async def test_empty_lines_refused(self, hass, esphome_dir):
         builder = FakeBuilder()
         _content, outcome, _ = await _run(
-            "decode_esphome_backtrace", {"file": FILE, "lines": []}, _yaml_token(), hass, builder)
+            "decode_esphome_backtrace", {"file": FILE, "lines": []}, _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert builder.calls == []
 
@@ -1247,7 +1247,7 @@ class TestBacktrace:
         builder = FakeBuilder()
         content, outcome, _ = await _run(
             "decode_esphome_backtrace", {"file": FILE, "lines": ["x"] * 201},
-            _yaml_token(), hass, builder)
+            _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "200" in content["content"][0]["text"]
         assert builder.calls == []
@@ -1264,7 +1264,7 @@ class TestScrubbing:
             "firmware/get_jobs": [],
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         blob = json.dumps(content)
         assert REAL_API_KEY not in blob
@@ -1276,14 +1276,14 @@ class TestScrubbing:
             "firmware/get_job": _job(status="running", output=[f"key: {REAL_API_KEY}"]),
         })
         content, _outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, _yaml_token(), hass, builder)
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
         assert REAL_API_KEY not in json.dumps(content)
 
     async def test_device_logs_are_scrubbed(self, hass, esphome_dir):
         capture = AsyncMock(return_value=BuilderResult(output=f"[C][ota]: {REAL_OTA_PASSWORD}\n"))
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_CAPTURE_PATCH, capture):
             content, _outcome, _ = await _call(
-                "get_esphome_device_logs", {"file": FILE}, _yaml_token(), hass)
+                "get_esphome_device_logs", {"file": FILE}, _yaml_access_key(), hass)
         assert REAL_OTA_PASSWORD not in json.dumps(content)
 
     async def test_backtrace_output_is_scrubbed(self, hass, esphome_dir):
@@ -1293,7 +1293,7 @@ class TestScrubbing:
         }})
         content, _outcome, _ = await _run(
             "decode_esphome_backtrace", {"file": FILE, "lines": ["Backtrace: 0x400d"]},
-            _yaml_token(), hass, builder)
+            _yaml_access_key(), hass, builder)
         assert REAL_OTA_PASSWORD not in json.dumps(content)
 
 
@@ -1335,7 +1335,7 @@ class TestVersionJumpNotice:
                                data={"rf-blaster1": {"current_version": "2026.7.3"}})
         with _patch(_DASHBOARD_PATCH, return_value=dash):
             diff = esphome._build_diff_install_esphome_firmware(
-                {"file": FILE}, _flash_token(), hass, MagicMock())
+                {"file": FILE}, _flash_access_key(), hass, MagicMock())
 
         # The summary is the bold line and the History-visible marker.
         assert "ESPHome version change: 2026.6.2 to 2026.7.3" in diff["summary"]
@@ -1355,13 +1355,13 @@ class TestVersionJumpNotice:
                                data={"rf-blaster1": {"current_version": "2026.7.3"}})
         with _patch(_DASHBOARD_PATCH, return_value=dash):
             diff = esphome._build_diff_install_esphome_firmware(
-                {"file": FILE}, _flash_token(), hass, MagicMock())
+                {"file": FILE}, _flash_access_key(), hass, MagicMock())
 
         assert "version change" not in diff["summary"]
         assert "version_change" not in diff["preview"]
 
     async def test_an_unresolvable_device_still_builds_a_card(self, hass, esphome_dir):
         diff = esphome._build_diff_install_esphome_firmware(
-            {"file": FILE}, _flash_token(), hass, MagicMock())
+            {"file": FILE}, _flash_access_key(), hass, MagicMock())
         assert diff["kind"] == "system_action"
         assert "reflashed over a cable" in diff["preview"]["warning"]

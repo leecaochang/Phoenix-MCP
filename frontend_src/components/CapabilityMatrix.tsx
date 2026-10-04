@@ -247,7 +247,7 @@ const CAPS: CapDef[] = [
 ];
 
 // All capability keys, in matrix order. Exported so other views (e.g. the
-// Access key Detail summary) can tally allow/confirm/deny without re-listing caps.
+// Access key detail summary) can tally allow/confirm/deny without re-listing caps.
 export const CAP_NAMES: CapName[] = CAPS.map((c) => c.key);
 
 const TIER_LABEL_KEYS: Record<CapTier, string> = {

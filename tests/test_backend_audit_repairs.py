@@ -24,7 +24,7 @@ from custom_components.phoenix_mcp.tools.config_files import _recoverable_file_w
 
 
 def access_key(**changes):
-    return AccessKeyRecord(id="audit-token", name="audit-token", access_key_hash="hash", created_at=utcnow(), created_by="u",
+    return AccessKeyRecord(id="audit-access-key", name="audit-access-key", access_key_hash="hash", created_at=utcnow(), created_by="u",
                        permissions=PermissionTree(entities={"light.visible": PermissionNode(state="GREEN")}), **changes)
 
 

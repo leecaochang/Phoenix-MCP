@@ -1,4 +1,4 @@
-"""Tests for the token settings preset admin endpoints (workspace model).
+"""Tests for the access key settings preset admin endpoints (workspace model).
 
 Runs the views against a REAL AccessKeyStore (conftest fixture) so the switch,
 revert, and auto-save-back semantics are exercised end to end, not mocked.
@@ -209,7 +209,7 @@ async def test_apply_pass_through_preset_requires_confirm(access_key_store):
     hass = _make_hass(data)
     await _enable_presets(access_key_store)
     record, _ = await access_key_store.async_create_access_key("t1", "u")
-    # Capture a pass-through preset, then drop the token back to scoped.
+    # Capture a pass-through preset, then drop the access key back to scoped.
     await access_key_store.async_patch_access_key(record.id, pass_through=True)
     updated = await access_key_store.async_add_preset(record.id, "PT")
     pt_id = updated.active_preset_id
@@ -288,7 +288,7 @@ async def test_apply_holds_async_lock(access_key_store):
 
 
 @pytest.mark.asyncio
-async def test_settings_enable_seeds_existing_tokens(access_key_store):
+async def test_settings_enable_seeds_existing_access_keys(access_key_store):
     data = _make_data(access_key_store)
     hass = _make_hass(data)
     record, _ = await access_key_store.async_create_access_key("t1", "u")

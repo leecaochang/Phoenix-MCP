@@ -1856,7 +1856,7 @@ def _get_zha_gateway(hass: HomeAssistant) -> Any:
 async def async_scan_zha_topology(
     hass: HomeAssistant, visible_ieees: set[str]
 ) -> dict[str, Any]:
-    """Scan only access key-visible ZHA routers and return an internal raw map.
+    """Scan only access-key-visible ZHA routers and return an internal raw map.
 
     ZHA's websocket update command intentionally has no result and would always
     time out through Phoenix's synthetic dispatcher. Calling zigpy's topology

@@ -1,4 +1,4 @@
-"""Per-token sensors: construction, state, registry bookkeeping and write debouncing."""
+"""Per-access-key sensors: construction, state, registry bookkeeping and write debouncing."""
 
 from __future__ import annotations
 
@@ -30,12 +30,12 @@ from custom_components.phoenix_mcp.sensor import (
     async_remove_access_key_sensors,
     async_setup_entry,
 )
-from custom_components.phoenix_mcp.access_key_store import access_key_name_slug as _token_slug
+from custom_components.phoenix_mcp.access_key_store import access_key_name_slug as _access_key_slug
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, AccessKeyStore
 
 
-def _make_token(
-    name: str = "my-token",
+def _make_access_key(
+    name: str = "my-access-key",
     revoked: bool = False,
     expires_at=None,
     last_used_at=None,
@@ -81,34 +81,34 @@ def _make_entry() -> MagicMock:
     return entry
 
 
-# --- _token_slug ---
+# --- _access_key_slug ---
 
-def test_token_slug_lowercases_and_replaces_hyphens():
-    access_key = _make_token(name="My-Token")
-    assert _token_slug(access_key.name) == "my_token"
+def test_access_key_slug_lowercases_and_replaces_hyphens():
+    access_key = _make_access_key(name="My-Access-key")
+    assert _access_key_slug(access_key.name) == "my_access_key"
 
 
-def test_token_slug_no_hyphens_unchanged():
-    access_key = _make_token(name="mytoken")
-    assert _token_slug(access_key.name) == "mytoken"
+def test_access_key_slug_no_hyphens_unchanged():
+    access_key = _make_access_key(name="myaccesskey")
+    assert _access_key_slug(access_key.name) == "myaccesskey"
 
 
 # --- _make_sensors ---
 
 def test_make_sensors_returns_six():
-    access_key = _make_token(name="alpha")
+    access_key = _make_access_key(name="alpha")
     data = _make_data()
     sensors = _make_sensors(access_key, data)
     assert len(sensors) == 6
 
 
 def test_make_sensors_unique_ids():
-    """A sensor's unique_id is the token's id, never its name.
+    """A sensor's unique_id is the access key's id, never its name.
 
     The name is mutable: keying on it would delete and recreate every registry row
     (with new entity_ids) on each rename. The device is keyed on the id as well.
     """
-    access_key = _make_token(name="alpha")
+    access_key = _make_access_key(name="alpha")
     data = _make_data()
     sensors = _make_sensors(access_key, data)
     unique_ids = [s._attr_unique_id for s in sensors]
@@ -133,7 +133,7 @@ def test_make_sensors_names_come_from_the_translation_catalog():
     import json
     import pathlib
 
-    access_key = _make_token(name="my-token")
+    access_key = _make_access_key(name="my-access-key")
     data = _make_data()
     sensors = _make_sensors(access_key, data)
     keys = [s._attr_translation_key for s in sensors]
@@ -155,14 +155,14 @@ def test_make_sensors_names_come_from_the_translation_catalog():
 # --- status sensor ---
 
 def test_status_active():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "status", data)
     assert sensor.native_value == "active"
 
 
 def test_status_revoked():
-    access_key = _make_token(revoked=True)
+    access_key = _make_access_key(revoked=True)
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "status", data)
     assert sensor.native_value == "revoked"
@@ -171,7 +171,7 @@ def test_status_revoked():
 def test_status_expired():
     from homeassistant.util.dt import utcnow
 
-    access_key = _make_token(expires_at=utcnow() - timedelta(hours=1))
+    access_key = _make_access_key(expires_at=utcnow() - timedelta(hours=1))
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "status", data)
     assert sensor.native_value == "expired"
@@ -180,30 +180,30 @@ def test_status_expired():
 # --- counter sensors ---
 
 def test_request_count_zero_when_no_counters():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "request_count", data)
     assert sensor.native_value == 0
 
 
-def test_request_count_from_token_counters():
-    access_key = _make_token()
+def test_request_count_from_access_key_counters():
+    access_key = _make_access_key()
     data = _make_data()
     data.access_key_counters[access_key.id] = {"request_count": 42, "denied_count": 3, "rate_limit_hits": 1}
     sensor = PhoenixAccessKeySensor(access_key, "request_count", data)
     assert sensor.native_value == 42
 
 
-def test_denied_count_from_token_counters():
-    access_key = _make_token()
+def test_denied_count_from_access_key_counters():
+    access_key = _make_access_key()
     data = _make_data()
     data.access_key_counters[access_key.id] = {"request_count": 10, "denied_count": 5, "rate_limit_hits": 0}
     sensor = PhoenixAccessKeySensor(access_key, "denied_count", data)
     assert sensor.native_value == 5
 
 
-def test_rate_limit_hits_from_token_counters():
-    access_key = _make_token()
+def test_rate_limit_hits_from_access_key_counters():
+    access_key = _make_access_key()
     data = _make_data()
     data.access_key_counters[access_key.id] = {"request_count": 10, "denied_count": 0, "rate_limit_hits": 7}
     sensor = PhoenixAccessKeySensor(access_key, "rate_limit_hits", data)
@@ -211,7 +211,7 @@ def test_rate_limit_hits_from_token_counters():
 
 
 def test_denied_count_zero_when_no_counters():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "denied_count", data)
     assert sensor.native_value == 0
@@ -220,7 +220,7 @@ def test_denied_count_zero_when_no_counters():
 # --- last_access sensor ---
 
 def test_last_access_never_when_none():
-    access_key = _make_token(last_used_at=None)
+    access_key = _make_access_key(last_used_at=None)
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "last_access", data)
     assert sensor.native_value is None
@@ -230,7 +230,7 @@ def test_last_access_returns_timestamp_at_minute_resolution():
     from homeassistant.util.dt import utcnow
 
     ts = utcnow()
-    access_key = _make_token(last_used_at=ts)
+    access_key = _make_access_key(last_used_at=ts)
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "last_access", data)
     assert sensor.native_value == ts.replace(second=0, microsecond=0)
@@ -244,7 +244,7 @@ def test_expires_in_is_unknown_without_an_expiry():
     The unit and state class stay attached in both cases, so the sensor has one
     type and history and statistics work for it.
     """
-    access_key = _make_token(expires_at=None)
+    access_key = _make_access_key(expires_at=None)
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "expires_in", data)
     assert sensor.native_value is None
@@ -257,8 +257,8 @@ def test_expires_in_carries_the_same_unit_with_and_without_an_expiry():
     from homeassistant.util.dt import utcnow
 
     data = _make_data()
-    with_expiry = PhoenixAccessKeySensor(_make_token(expires_at=utcnow() + timedelta(days=5)), "expires_in", data)
-    without = PhoenixAccessKeySensor(_make_token(expires_at=None), "expires_in", data)
+    with_expiry = PhoenixAccessKeySensor(_make_access_key(expires_at=utcnow() + timedelta(days=5)), "expires_in", data)
+    without = PhoenixAccessKeySensor(_make_access_key(expires_at=None), "expires_in", data)
     assert with_expiry.native_unit_of_measurement == without.native_unit_of_measurement
     assert with_expiry.state_class is without.state_class
 
@@ -266,7 +266,7 @@ def test_expires_in_carries_the_same_unit_with_and_without_an_expiry():
 def test_expires_in_returns_days():
     from homeassistant.util.dt import utcnow
 
-    access_key = _make_token(expires_at=utcnow() + timedelta(days=5))
+    access_key = _make_access_key(expires_at=utcnow() + timedelta(days=5))
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "expires_in", data)
     assert sensor.native_value == 5
@@ -275,7 +275,7 @@ def test_expires_in_returns_days():
 def test_expires_in_partial_day_rounds_up():
     from homeassistant.util.dt import utcnow
 
-    access_key = _make_token(expires_at=utcnow() + timedelta(hours=2))
+    access_key = _make_access_key(expires_at=utcnow() + timedelta(hours=2))
     data = _make_data()
     sensor = PhoenixAccessKeySensor(access_key, "expires_in", data)
     assert sensor.native_value == 1
@@ -285,7 +285,7 @@ def test_expires_in_partial_day_rounds_up():
 
 @pytest.mark.asyncio
 async def test_setup_entry_registers_callback_and_adds_sensors(hass):
-    access_key = _make_token(name="tok-one")
+    access_key = _make_access_key(name="tok-one")
     data = _make_data(access_keys=[access_key])
     hass.data[DOMAIN] = data
     entry = _make_entry()
@@ -302,7 +302,7 @@ async def test_setup_entry_registers_callback_and_adds_sensors(hass):
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_no_tokens_does_not_call_add_entities():
+async def test_setup_entry_no_access_keys_does_not_call_add_entities():
     data = _make_data(access_keys=[])
     hass = _make_hass(data)
     entry = _make_entry()
@@ -315,8 +315,8 @@ async def test_setup_entry_no_tokens_does_not_call_add_entities():
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_multiple_tokens(hass):
-    access_keys = [_make_token(name="alpha"), _make_token(name="beta")]
+async def test_setup_entry_multiple_access_keys(hass):
+    access_keys = [_make_access_key(name="alpha"), _make_access_key(name="beta")]
     data = _make_data(access_keys=access_keys)
     hass.data[DOMAIN] = data
     entry = _make_entry()
@@ -333,8 +333,8 @@ async def test_setup_entry_multiple_tokens(hass):
 # --- async_create_access_key_sensors ---
 
 @pytest.mark.asyncio
-async def test_create_token_sensors_adds_to_platform_entities():
-    access_key = _make_token(name="new-tok")
+async def test_create_access_key_sensors_adds_to_platform_entities():
+    access_key = _make_access_key(name="new-tok")
     data = _make_data()
     data.async_add_entities_cb = MagicMock()
     hass = _make_hass(data)
@@ -348,8 +348,8 @@ async def test_create_token_sensors_adds_to_platform_entities():
 
 
 @pytest.mark.asyncio
-async def test_create_token_sensors_noop_when_no_callback():
-    access_key = _make_token(name="new-tok")
+async def test_create_access_key_sensors_noop_when_no_callback():
+    access_key = _make_access_key(name="new-tok")
     data = _make_data()
     data.async_add_entities_cb = None
     hass = _make_hass(data)
@@ -363,7 +363,7 @@ async def test_create_token_sensors_noop_when_no_callback():
 # --- async_remove_access_key_sensors ---
 
 @pytest.mark.asyncio
-async def test_remove_token_sensors_calls_async_remove_on_each():
+async def test_remove_access_key_sensors_calls_async_remove_on_each():
     data = _make_data()
     hass = _make_hass(data)
 
@@ -385,7 +385,7 @@ async def test_remove_token_sensors_calls_async_remove_on_each():
 
 
 @pytest.mark.asyncio
-async def test_remove_token_sensors_unknown_slug_is_noop():
+async def test_remove_access_key_sensors_unknown_slug_is_noop():
     data = _make_data()
     hass = _make_hass(data)
 
@@ -395,7 +395,7 @@ async def test_remove_token_sensors_unknown_slug_is_noop():
 
 
 @pytest.mark.asyncio
-async def test_remove_token_sensors_pops_from_platform_entities():
+async def test_remove_access_key_sensors_pops_from_platform_entities():
     data = _make_data()
     hass = _make_hass(data)
 
@@ -457,7 +457,7 @@ class TestCounterWriteDebounce:
         assert data.sensor_write_dirty == set()
         assert data.sensor_flush_cancel is None
 
-    async def test_flush_skips_archived_token(self, hass):
+    async def test_flush_skips_archived_access_key(self, hass):
         from pytest_homeassistant_custom_component.common import async_fire_time_changed
         from homeassistant.util.dt import utcnow
 
@@ -471,7 +471,7 @@ class TestCounterWriteDebounce:
         data.access_key_id_sensors["t1"] = [sensor]
 
         update_access_key_counter(data, "t1", "allowed")
-        # Token revoked inside the window: its sensor registry entry is removed.
+        # Access key revoked inside the window: its sensor registry entry is removed.
         del data.access_key_id_sensors["t1"]
 
         async_fire_time_changed(hass, utcnow() + timedelta(seconds=SENSOR_WRITE_DEBOUNCE_SECONDS + 1))
@@ -505,7 +505,7 @@ class TestCounterWriteDebounce:
         assert is_callback(flush_sensor_writes)
 
 
-# --- token identity survives a rename (real entity registry) ------------------
+# --- access key identity survives a rename (real entity registry) ------------------
 #
 # These use the REAL entity and device registries rather than a MagicMock hass:
 # the invariant lives in registry bookkeeping, and a MagicMock records calls
@@ -513,12 +513,12 @@ class TestCounterWriteDebounce:
 # rather than through the platform so the tests stay about identity and need no
 # full config entry.
 
-class TestTokenRenameKeepsSensorIdentity:
+class TestAccessKeyRenameKeepsSensorIdentity:
     """A rename must change what is DISPLAYED, never what is ADDRESSED."""
 
     @staticmethod
     def _register(hass, access_key):
-        """Register one token's sensors and device, keyed on the token id."""
+        """Register one access key's sensors and device, keyed on the access key id."""
         from homeassistant.helpers import device_registry as dr
         from homeassistant.helpers import entity_registry as er
         from custom_components.phoenix_mcp.sensor import (
@@ -550,7 +550,7 @@ class TestTokenRenameKeepsSensorIdentity:
             _device_name, async_rename_access_key_sensors,
         )
 
-        access_key = _make_token(name="alpha")
+        access_key = _make_access_key(name="alpha")
         data = _make_data(access_keys=[access_key])
         hass.data[DOMAIN] = data
         before, device_id = self._register(hass, access_key)
@@ -581,7 +581,7 @@ class TestTokenRenameKeepsSensorIdentity:
         # stale one.
         from custom_components.phoenix_mcp.sensor import async_rename_access_key_sensors
 
-        access_key = _make_token(name="alpha")
+        access_key = _make_access_key(name="alpha")
         data = _make_data(access_keys=[access_key])
         hass.data[DOMAIN] = data
         sensors = _make_sensors(access_key, data)
@@ -599,7 +599,7 @@ class TestTokenRenameKeepsSensorIdentity:
 
     @pytest.mark.parametrize("recorder_enabled", [True, False])
     async def test_removal_clears_actual_registered_sensor_statistics(self, hass, recorder_enabled):
-        """Delete only this token's statistics, using IDs captured before removal."""
+        """Delete only this access key's statistics, using IDs captured before removal."""
         from homeassistant.components.recorder.core import Recorder
         from homeassistant.components.recorder.tasks import ClearStatisticsTask
         from homeassistant.helpers import device_registry as dr
@@ -608,16 +608,16 @@ class TestTokenRenameKeepsSensorIdentity:
         from homeassistant.util.dt import utcnow
         from custom_components.phoenix_mcp.sensor import async_rename_access_key_sensors
 
-        access_key = _make_token(name="alpha", expires_at=utcnow() + timedelta(days=1))
-        other = _make_token(name="unrelated")
+        access_key = _make_access_key(name="alpha", expires_at=utcnow() + timedelta(days=1))
+        other = _make_access_key(name="unrelated")
         data = _make_data(access_keys=[access_key, other])
         hass.data[DOMAIN] = data
         ids, device_id = self._register(hass, access_key)
         other_ids, other_device_id = self._register(hass, other)
         registry = er.async_get(hass)
-        # The operator can change the entity ID independently of the token name.
-        registry.async_update_entity(ids["request_count"], new_entity_id="sensor.custom_token_requests")
-        ids["request_count"] = "sensor.custom_token_requests"
+        # The operator can change the entity ID independently of the access key name.
+        registry.async_update_entity(ids["request_count"], new_entity_id="sensor.custom_access_key_requests")
+        ids["request_count"] = "sensor.custom_access_key_requests"
         sensors = _make_sensors(access_key, data)
         for sensor in sensors:
             sensor.async_remove = AsyncMock()
@@ -641,7 +641,7 @@ class TestTokenRenameKeepsSensorIdentity:
             else:
                 queue_task.assert_not_called()
 
-            await async_remove_access_key_sensors(hass, "missing_token")
+            await async_remove_access_key_sensors(hass, "missing_access_key")
             assert queue_task.call_count == int(recorder_enabled)
 
         assert all(registry.async_get(entity_id) is None for entity_id in ids.values())
@@ -654,8 +654,9 @@ class TestTokenRenameKeepsSensorIdentity:
 
 
 @pytest.mark.asyncio
-async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_integrations):
-    """Entity IDs HA generates through its real naming path match the documented ones.
+@pytest.mark.parametrize("registered_prefix", [None, "phoenix_mcp_token", "operator_custom"])
+async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_integrations, registered_prefix):
+    """New IDs match the docs while registered legacy and custom IDs survive setup.
 
     docs/operations.html lists these IDs for operators to use in dashboards and
     automations. The entity platform composes the `has_entity_name` device name and
@@ -666,12 +667,27 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     from datetime import timedelta as _timedelta
 
     from homeassistant.helpers.entity_platform import EntityPlatform
+    from homeassistant.helpers import entity_registry as er
 
-    access_key = _make_token(name="my_access_key")
+    from custom_components.phoenix_mcp.sensor import _unique_id
+
+    access_key = _make_access_key(name="my_access_key")
     data = _make_data(access_keys=[access_key])
     hass.data[DOMAIN] = data
     entry = MockConfigEntry(domain=DOMAIN)
     entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    registered = {}
+    if registered_prefix is not None:
+        registered = {
+            kind: registry.async_get_or_create(
+                "sensor", DOMAIN, _unique_id(access_key.id, kind),
+                config_entry=entry,
+                suggested_object_id=f"{registered_prefix}_my_access_key_{kind}",
+            ).entity_id
+            for kind in _SENSOR_TYPES
+        }
 
     platform = EntityPlatform(
         hass=hass, logger=logging.getLogger(__name__), domain="sensor",
@@ -716,14 +732,21 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
 
     generated = {s._sensor_type: s.entity_id for s in sensors}
     documented = {
-        sensor_type: f"sensor.phoenix_mcp_token_my_access_key_{sensor_type}"
+        sensor_type: f"sensor.phoenix_mcp_access_key_my_access_key_{sensor_type}"
         for sensor_type in _SENSOR_TYPES
     }
-    assert generated == documented, (
+    expected = registered or documented
+    assert generated == expected, (
         "Home Assistant generates different entity IDs than docs/operations.html "
         "documents. Operators copy these into dashboards and automations.\n"
-        f"  generated: {generated}\n  documented: {documented}"
+        f"  generated: {generated}\n  expected: {expected}"
     )
+    for sensor in sensors:
+        assert registry.async_get_entity_id("sensor", DOMAIN, sensor.unique_id) == sensor.entity_id
+    assert len(registry.entities) == len(_SENSOR_TYPES)
+    device = sensors[0].device_entry
+    assert device is not None
+    assert device.model == "Access key telemetry"
     # And the table really contains them, so correcting the expectation above
     # without correcting the page cannot pass.
     for sensor_type, entity_id in documented.items():
@@ -737,12 +760,12 @@ async def test_released_sensor_identity_migration_preserves_entity_id(hass):
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.sensor import _async_migrate_unique_ids
 
-    access_key = _make_token(name="legacy-token")
+    access_key = _make_access_key(name="legacy-access-key")
     registry = er.async_get(hass)
-    legacy = registry.async_get_or_create("sensor", DOMAIN, "phoenix_mcp_legacy_token_status")
+    legacy = registry.async_get_or_create("sensor", DOMAIN, "phoenix_mcp_legacy_access_key_status")
     _async_migrate_unique_ids(hass, [access_key])
     assert registry.async_get_entity_id("sensor", DOMAIN, PhoenixAccessKeySensor(access_key, "status", _make_data()).unique_id) == legacy.entity_id
-    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_token_status") is None
+    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_access_key_status") is None
 
 
 @pytest.mark.parametrize("failure_stage", ["lookup", "update"])
@@ -750,19 +773,19 @@ async def test_sensor_setup_continues_after_one_identity_migration_failure(hass,
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.sensor import _unique_id
 
-    access_key = _make_token(name="legacy-token")
+    access_key = _make_access_key(name="legacy-access-key")
     data = _make_data(access_keys=[access_key])
     hass.data[DOMAIN] = data
     registry = er.async_get(hass)
     legacy = {
-        kind: registry.async_get_or_create("sensor", DOMAIN, f"phoenix_mcp_legacy_token_{kind}")
+        kind: registry.async_get_or_create("sensor", DOMAIN, f"phoenix_mcp_legacy_access_key_{kind}")
         for kind in _SENSOR_TYPES
     }
     method = "async_get_entity_id" if failure_stage == "lookup" else "async_update_entity"
     original = getattr(registry, method)
 
     def failing_row(*args, **kwargs):
-        if (failure_stage == "lookup" and args[2] == "phoenix_mcp_legacy_token_status") or (
+        if (failure_stage == "lookup" and args[2] == "phoenix_mcp_legacy_access_key_status") or (
             failure_stage == "update" and args[0] == legacy["status"].entity_id
         ):
             raise RuntimeError("simulated registry failure")
@@ -776,4 +799,4 @@ async def test_sensor_setup_continues_after_one_identity_migration_failure(hass,
     assert len(add_entities.call_args.args[0]) == len(_SENSOR_TYPES)
     for kind in _SENSOR_TYPES[1:]:
         assert registry.async_get_entity_id("sensor", DOMAIN, _unique_id(access_key.id, kind)) == legacy[kind].entity_id
-    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_token_status") == legacy["status"].entity_id
+    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_access_key_status") == legacy["status"].entity_id

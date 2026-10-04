@@ -221,7 +221,7 @@ from .tools.camera import _tool_get_camera_image
 from .tools.esphome import _ESPHOME_DOMAIN, _execute_delete_esphome_yaml, _execute_install_esphome_firmware, _execute_rename_esphome_device, _execute_set_esphome_yaml, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_delete_esphome_yaml, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_rename_esphome_device, _tool_set_esphome_yaml, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
 # in tool_defs.py; this module reads it to answer tools/list, build the
-# per-access key gate map, and compute the catalog fingerprint. The names are
+# per-access-key gate map, and compute the catalog fingerprint. The names are
 # re-exported here so mcp_view._SYSTEM_TOOL_DEFS and friends resolve.
 from .tool_defs import (
     _ENTITY_TOOL_DEFS,
@@ -276,7 +276,7 @@ def _catalog_fingerprint() -> str:
     before sending, so an argument added after that fetch is unusable to it and
     no server-side leniency helps; advising a reconnect is the only remedy.
 
-    Hashes the FULL static catalog, never the per-access key announced subset, so a
+    Hashes the FULL static catalog, never the per-access-key announced subset, so a
     permission change does not masquerade as a deploy. Descriptions are excluded:
     reworded guidance needs no refetch, and counting prose edits as staleness
     would fire the notice constantly and train operators to ignore it.
@@ -3705,7 +3705,7 @@ def _device_owner_summary(entry: Any, *, supports_removal: bool | None = None) -
 def _device_permission_references(
     data: PhoenixData, device_id: str
 ) -> list[dict[str, Any]]:
-    """Active-access key and preset permission nodes keyed to one device."""
+    """Active-access-key and preset permission nodes keyed to one device."""
     references: list[dict[str, Any]] = []
     for record in data.store.list_access_keys():
         if not record.is_valid():
@@ -5061,7 +5061,7 @@ async def _wait_for_many_approvals(
     records = {}
     for approval_id in ids:
         record = get_approval(data.store, approval_id)
-        # Unknown and belonging-to-another-access key answer identically, so a refusal
+        # Unknown and belonging-to-another-access-key answer identically, so a refusal
         # is not an existence oracle for another access key's queue.
         if record is None or record.access_key_id != access_key.id:
             return _tool_error("Approval not found."), "not_found", "wait_for_approval"
@@ -7955,7 +7955,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
 
 
 def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str) -> str:
-    """Access key-aware MCP `instructions` primer, sent at every session start.
+    """Access-key-aware MCP `instructions` primer, sent at every session start.
 
     Short: the etiquette that prevents the common failure modes (treating
     pending_approval as an error, retrying, ignoring the per-entity safety layer)
@@ -8263,7 +8263,7 @@ async def _dispatch_mcp_authorized(
         # The stateless-era replacement for initialize: identity, versions and
         # capabilities in one call, with no handshake to establish. A client
         # speaking a revision that has no initialize would otherwise never receive
-        # the access key-aware primer, which is the only place an agent is told which
+        # the access-key-aware primer, which is the only place an agent is told which
         # of its capabilities are approval-gated.
         resp = _jsonrpc_result(msg_id, {
             "resultType": "complete",

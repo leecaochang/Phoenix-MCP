@@ -25,7 +25,7 @@ from tests.test_mcp_esphome_tools import (
     _esphome_entry,
     _json,
     _runtime,
-    _yaml_token,
+    _yaml_access_key,
 )
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
@@ -62,7 +62,7 @@ class TestGating:
     async def test_cap_denied(self, hass, esphome_dir, tool):
         with patch(_DASHBOARD_PATCH, return_value=_dash()):
             content, outcome, _ = await _call(
-                tool, _args(tool), _yaml_token(cap_esphome_yaml="deny"), hass)
+                tool, _args(tool), _yaml_access_key(cap_esphome_yaml="deny"), hass)
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
 
@@ -70,7 +70,7 @@ class TestGating:
     async def test_builder_absent_refuses_before_touching_anything(self, hass, esphome_dir, tool):
         command = AsyncMock()
         with patch(_DASHBOARD_PATCH, return_value=None), patch(_COMMAND_PATCH, command):
-            content, outcome, _ = await _call(tool, _args(tool), _yaml_token(), hass)
+            content, outcome, _ = await _call(tool, _args(tool), _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "Device Builder add-on is not available" in content["content"][0]["text"]
         command.assert_not_awaited()
@@ -80,14 +80,14 @@ class TestGating:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(side_effect=BuilderUnavailable("x"))):
             down, outcome, _ = await _call(
-                "validate_esphome_yaml", _args("validate_esphome_yaml"), _yaml_token(), hass)
+                "validate_esphome_yaml", _args("validate_esphome_yaml"), _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "did not respond" in down["content"][0]["text"]
 
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(side_effect=BuilderAuthRequired("x"))):
             auth, _, _ = await _call(
-                "validate_esphome_yaml", _args("validate_esphome_yaml"), _yaml_token(), hass)
+                "validate_esphome_yaml", _args("validate_esphome_yaml"), _yaml_access_key(), hass)
         assert "requires authentication" in auth["content"][0]["text"]
         assert down["content"][0]["text"] != auth["content"][0]["text"]
 
@@ -96,7 +96,7 @@ class TestGating:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(side_effect=err)):
             content, outcome, _ = await _call(
-                "get_esphome_board", {"board_id": "ghost"}, _yaml_token(), hass)
+                "get_esphome_board", {"board_id": "ghost"}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "not_found" in content["content"][0]["text"]
 
@@ -110,7 +110,7 @@ class TestScopingAndJail:
     async def test_jail_refuses(self, hass, esphome_dir, tool, bad):
         command = AsyncMock()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            _content, outcome, _ = await _call(tool, {"file": bad}, _yaml_token(), hass)
+            _content, outcome, _ = await _call(tool, {"file": bad}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         command.assert_not_awaited()
 
@@ -118,7 +118,7 @@ class TestScopingAndJail:
     async def test_missing_and_out_of_scope_are_byte_identical(
         self, hass, esphome_dir, esphome_entries, tool
     ):
-        """A file the token may not see must look exactly like one that is absent.
+        """A file the access key may not see must look exactly like one that is absent.
 
         The Device Builder would answer differently for the two, which is why
         existence is resolved here before it is ever asked.
@@ -126,11 +126,11 @@ class TestScopingAndJail:
         command = AsyncMock(return_value=BuilderResult(result={}))
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             missing, missing_outcome, _ = await _call(
-                tool, {"file": "nope.yaml"}, _yaml_token(), hass)
+                tool, {"file": "nope.yaml"}, _yaml_access_key(), hass)
             _esphome_entry(hass, esphome_entries, entity_ids=("light.not_mine",),
                            runtime=_runtime(_device_info(name="rf-blaster1")))
             scoped, _outcome, _ = await _call(
-                tool, {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                tool, {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert missing["content"][0]["text"] == scoped["content"][0]["text"]
         assert missing_outcome == "not_found"
         command.assert_not_awaited()
@@ -142,7 +142,7 @@ class TestValidate:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(return_value=result)):
             content, outcome, resource = await _call(
-                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         body = _json(content)
         assert outcome == "allowed"
         assert resource == "esphome:rf-blaster1.yaml"
@@ -161,7 +161,7 @@ class TestValidate:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             await _call("validate_esphome_yaml",
                         {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: evil\n"},
-                        _yaml_token(), hass)
+                        _yaml_access_key(), hass)
         _hass_arg, _url, cmd, payload = command.await_args.args
         assert cmd == "devices/validate"
         assert payload == {"configuration": "rf-blaster1.yaml"}
@@ -178,7 +178,7 @@ class TestValidate:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(return_value=result)):
             content, _, _ = await _call(
-                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         text = content["content"][0]["text"]
         for secret in (REAL_API_KEY, REAL_OTA_PASSWORD, REAL_WIFI_PASSWORD):
             assert secret not in text, f"{secret} leaked through validation output"
@@ -198,7 +198,7 @@ class TestValidate:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(return_value=result)):
             content, outcome, _ = await _call(
-                "validate_esphome_yaml", {"file": "broken.yaml"}, _yaml_token(), hass)
+                "validate_esphome_yaml", {"file": "broken.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         assert REAL_WIFI_PASSWORD not in content["content"][0]["text"]
 
@@ -207,7 +207,7 @@ class TestValidate:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, AsyncMock(return_value=result)):
             content, _, _ = await _call(
-                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert _json(content)["output_truncated"] is True
 
 
@@ -216,7 +216,7 @@ class TestBoards:
         command = _builder({"id": "esp32dev", "pins": [{"gpio": 2}]})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, outcome, _ = await _call(
-                "get_esphome_board", {"board_id": "esp32dev"}, _yaml_token(), hass)
+                "get_esphome_board", {"board_id": "esp32dev"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["board"]["pins"] == [{"gpio": 2}]
         assert command.await_args.args[2] == "boards/get_board"
@@ -225,7 +225,7 @@ class TestBoards:
         command = _builder({"boards": []})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, _, _ = await _call(
-                "get_esphome_board", {"query": "esp32"}, _yaml_token(), hass)
+                "get_esphome_board", {"query": "esp32"}, _yaml_access_key(), hass)
         assert "boards" in _json(content)
         _h, _u, cmd, payload = command.await_args.args
         assert cmd == "boards/get_boards"
@@ -238,7 +238,7 @@ class TestBoards:
         command = _builder({"boards": []})
         args = {"query": "esp"} if given is None else {"query": "esp", "limit": given}
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            await _call("get_esphome_board", args, _yaml_token(), hass)
+            await _call("get_esphome_board", args, _yaml_access_key(), hass)
         assert command.await_args.args[3]["limit"] == expected
 
 
@@ -247,7 +247,7 @@ class TestComponents:
         command = _builder({"dht": {"schema": {}}})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, _, _ = await _call(
-                "get_esphome_component", {"component_ids": ["dht"]}, _yaml_token(), hass)
+                "get_esphome_component", {"component_ids": ["dht"]}, _yaml_access_key(), hass)
         _h, _u, cmd, payload = command.await_args.args
         assert cmd == "components/get_component_bodies"
         assert payload["component_ids"] == ["dht"]
@@ -258,7 +258,7 @@ class TestComponents:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, outcome, _ = await _call(
                 "get_esphome_component", {"component_ids": [f"c{i}" for i in range(11)]},
-                _yaml_token(), hass)
+                _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "at most 10" in content["content"][0]["text"]
         command.assert_not_awaited()
@@ -266,13 +266,13 @@ class TestComponents:
     async def test_query_searches(self, hass, esphome_dir):
         command = _builder({"components": []})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            await _call("get_esphome_component", {"query": "temperature"}, _yaml_token(), hass)
+            await _call("get_esphome_component", {"query": "temperature"}, _yaml_access_key(), hass)
         assert command.await_args.args[2] == "components/get_components"
 
     async def test_bare_call_lists_categories(self, hass, esphome_dir):
         command = _builder([{"id": "sensor", "name": "Sensor", "count": 90}])
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            content, _, _ = await _call("get_esphome_component", {}, _yaml_token(), hass)
+            content, _, _ = await _call("get_esphome_component", {}, _yaml_access_key(), hass)
         assert command.await_args.args[2] == "components/get_categories"
         assert _json(content)["categories"][0]["id"] == "sensor"
 
@@ -282,7 +282,7 @@ class TestAutomations:
         command = _builder({"triggers": [{"id": "binary_sensor.on_press"}], "actions": []})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, outcome, resource = await _call(
-                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
         assert resource == "esphome:rf-blaster1.yaml"
         assert _json(content)["automations"]["triggers"][0]["id"] == "binary_sensor.on_press"
@@ -293,7 +293,7 @@ class TestAutomations:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             await _call("get_esphome_automations",
                         {"file": "rf-blaster1.yaml", "yaml": "esphome:\n  name: evil\n"},
-                        _yaml_token(), hass)
+                        _yaml_access_key(), hass)
         _h, _u, cmd, payload = command.await_args.args
         assert cmd == "automations/get_available"
         assert payload == {"configuration": "rf-blaster1.yaml"}
@@ -331,7 +331,7 @@ class TestAutomations:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, _builder(raw)):
             content, _, _ = await _call(
-                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         cat = _json(content)["automations"]
 
         # Every row survives, in every section.
@@ -362,14 +362,14 @@ class TestAutomations:
         with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                 patch(_COMMAND_PATCH, _builder({"future_section": [{"id": "x"}]})):
             content, _, _ = await _call(
-                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert _json(content)["automations"]["future_section"] == [{"id": "x"}]
 
     async def test_response_is_scrubbed(self, hass, esphome_dir):
         command = _builder({"note": f"configured with {REAL_API_KEY}"})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             content, _, _ = await _call(
-                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert REAL_API_KEY not in content["content"][0]["text"]
 
 
@@ -386,7 +386,7 @@ class TestNoSecretsAnywhere:
         for tool in FILE_TOOLS:
             with patch(_DASHBOARD_PATCH, return_value=_dash()), \
                     patch(_COMMAND_PATCH, AsyncMock(return_value=results[tool])):
-                content, outcome, _ = await _call(tool, _args(tool), _yaml_token(), hass)
+                content, outcome, _ = await _call(tool, _args(tool), _yaml_access_key(), hass)
             assert outcome == "allowed"
             text = content["content"][0]["text"]
             for secret in (REAL_API_KEY, REAL_OTA_PASSWORD, REAL_WIFI_PASSWORD):
@@ -396,7 +396,7 @@ class TestNoSecretsAnywhere:
         for tool in FILE_TOOLS:
             with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, AsyncMock()):
                 content, outcome, _ = await _call(
-                    tool, {"file": "secrets.yaml"}, _yaml_token(), hass)
+                    tool, {"file": "secrets.yaml"}, _yaml_access_key(), hass)
             assert outcome == "invalid_request"
             assert REAL_WIFI_PASSWORD not in json.dumps(content)
 
@@ -429,7 +429,7 @@ class TestFullStack:
 
         with patch(_DASHBOARD_PATCH, return_value=SimpleNamespace(url=url)):
             content, outcome, resource = await _call(
-                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_token(), hass)
+                "validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
 
         body = _json(content)
         assert outcome == "allowed"

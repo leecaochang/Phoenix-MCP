@@ -81,7 +81,7 @@
     {
       "id": "capabilities_correct",
       "kind": "correct",
-      "request": "List the capabilities this Phoenix token is allowed to use.",
+      "request": "List the capabilities this Phoenix access key is allowed to use.",
       "proposed": "get_capability_summary",
       "expected": [
         "get_capability_summary"

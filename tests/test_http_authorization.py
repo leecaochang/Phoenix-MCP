@@ -83,7 +83,7 @@ async def test_unavailable_runtime_refuses_every_authenticated_ingress(http_auth
     assert response.status == 503
 
 
-async def test_session_cannot_be_used_or_deleted_by_another_token(http_authority):
+async def test_session_cannot_be_used_or_deleted_by_another_access_key(http_authority):
     client, data = http_authority
     _, raw_a = await data.store.async_create_access_key("a", "admin", rate_limit_requests=0)
     _, raw_b = await data.store.async_create_access_key("b", "admin", rate_limit_requests=0)

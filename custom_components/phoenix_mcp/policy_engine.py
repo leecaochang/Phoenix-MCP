@@ -893,9 +893,9 @@ def get_effective_hint(
 ) -> str | None:
     """Return the most specific hint for an entity.
 
-    Checks the per-access key entity, device, then domain nodes. If none is set, falls
+    Checks the per-access-key entity, device, then domain nodes. If none is set, falls
     back to the global entity_hints map (entity_id -> hint) when provided. The
-    per-access key node hint always wins over the global hint.
+    per-access-key node hint always wins over the global hint.
     """
     registry = er.async_get(hass)
     entry = registry.async_get(entity_id)

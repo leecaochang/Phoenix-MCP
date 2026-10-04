@@ -43,7 +43,7 @@ def commit_env(hass: HomeAssistant):
         hass.states.async_set(entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("one", "two")]
     access_key = AccessKeyRecord(
-        id="commit-token", name="Commit test", access_key_hash="test-hash",
+        id="commit-access-key", name="Commit test", access_key_hash="test-hash",
         created_at=utcnow(), created_by="test", cap_registry_write="allow",
         permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")},

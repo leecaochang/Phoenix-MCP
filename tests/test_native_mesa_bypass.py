@@ -258,7 +258,7 @@ def test_the_scan_would_notice_an_ungated_actuator():
     zero ungated sites exactly like a correctly gated codebase.
     """
     fake = ast.parse(
-        "async def _tool_new_thing(args, token, hass):\n"
+        "async def _tool_new_thing(args, access_key, hass):\n"
         "    await hass.services.async_call('lock', 'unlock', {})\n"
     ).body[0]
     body = ast.unparse(fake)

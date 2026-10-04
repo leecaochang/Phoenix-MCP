@@ -29,20 +29,20 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.mcp_view import _MCP_METHODS, _dispatch_mcp
 
 from tests.test_mcp_sse import _FakeStream, _make_request, _stream_patch, _view
-from tests.test_mcp_view import _make_data, _make_hass, _make_token
+from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
 _BASE_URL = "http://homeassistant.local"
 
 
-def _env(**token_kwargs):
-    access_key, raw = _make_token(**token_kwargs)
+def _env(**access_key_kwargs):
+    access_key, raw = _make_access_key(**access_key_kwargs)
     data = _make_data(access_key)
     hass = _make_hass(data)
     return access_key, raw, data, hass
 
 
-def _strict_env(**token_kwargs):
-    access_key, raw, data, hass = _env(**token_kwargs)
+def _strict_env(**access_key_kwargs):
+    access_key, raw, data, hass = _env(**access_key_kwargs)
     data.enforce_mcp_lifecycle = True
     return access_key, raw, data, hass
 
@@ -74,8 +74,8 @@ def _modern_headers(method: str, name: str | None = None) -> dict[str, str]:
     return headers
 
 
-async def _dispatch(method: str, params: dict | None = None, msg_id=1, **token_kwargs):
-    access_key, _raw, data, hass = _env(**token_kwargs)
+async def _dispatch(method: str, params: dict | None = None, msg_id=1, **access_key_kwargs):
+    access_key, _raw, data, hass = _env(**access_key_kwargs)
     return await _dispatch_mcp(
         method, msg_id, params or {}, access_key, hass, data, "127.0.0.1",
         base_url=_BASE_URL,
@@ -101,13 +101,13 @@ class TestServerDiscover:
             "server/discover", "/api/phoenix-mcp", "allowed")
 
     async def test_cache_scope_is_private_never_public(self):
-        # The instructions name THIS token's confirm-gated capabilities. A
-        # "public" scope invites a shared intermediary to hand one token's
-        # answer to the next token reaching it through the same proxy.
+        # The instructions name THIS access key's confirm-gated capabilities. A
+        # "public" scope invites a shared intermediary to hand one access key's
+        # answer to the next access key reaching it through the same proxy.
         resp, _m, _r, _o = await _dispatch("server/discover")
         assert resp["result"]["cacheScope"] == "private"
 
-    async def test_instructions_are_token_aware(self):
+    async def test_instructions_are_access_key_aware(self):
         # discover carries instructions because a client on a revision with no
         # initialize would otherwise never learn which capabilities are
         # approval-gated.
@@ -144,10 +144,10 @@ class TestServerDiscover:
         assert logged.call_args.kwargs["method"] == "server/discover"
         assert logged.call_args.kwargs["outcome"] == "allowed"
 
-    async def test_requires_a_token(self):
+    async def test_requires_a_access_key(self):
         # The spec presents discover as a pre-flight call, which makes
         # "it can be unauthenticated" an easy assumption. It carries this
-        # token's own capability primer, so it is behind the bearer token like
+        # access key's own capability primer, so it is behind the access key like
         # everything else on this endpoint.
         _access_key, raw, data, hass = _env()
         data.store.get_access_key_by_hash.return_value = None
@@ -539,7 +539,7 @@ class TestLegacyProtocolEra:
         ))
         assert resp.status == 404
 
-    async def test_delete_releases_session_and_reclaims_per_token_quota(self):
+    async def test_delete_releases_session_and_reclaims_per_access_key_quota(self):
         _access_key, raw, data, hass = _strict_env()
         session_ids = []
         for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
@@ -569,7 +569,7 @@ class TestLegacyProtocolEra:
         data.mcp_sessions[session_id] = {"access_key_id": access_key.id, "last_seen": now}
         for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
             data.mcp_sessions[f"other-{index}"] = {
-                "access_key_id": f"other-token-{index}",
+                "access_key_id": f"other-access-key-{index}",
                 "last_seen": now,
             }
 
@@ -586,11 +586,11 @@ class TestLegacyProtocolEra:
         assert retried.status == 200
         assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_LIMIT
 
-    async def test_delete_requires_auth_and_preserves_another_tokens_session(self):
+    async def test_delete_requires_auth_and_preserves_another_access_keys_session(self):
         _access_key, raw, data, hass = _strict_env()
         session_id = "foreign-session"
         data.mcp_sessions[session_id] = {
-            "access_key_id": "another-token",
+            "access_key_id": "another-access-key",
             "last_seen": mcp_view.time.monotonic(),
         }
 
@@ -706,9 +706,9 @@ def test_dispatcher_method_extraction_actually_finds_branches():
     assert len(_dispatcher_methods()) > 5
 
 
-async def test_session_quota_cannot_evict_another_token():
+async def test_session_quota_cannot_evict_another_access_key():
     victim, _, data, _ = _strict_env()
-    attacker, _ = _make_token()
+    attacker, _ = _make_access_key()
     victim_id = mcp_view._open_legacy_session(data, victim)
     allocated = [mcp_view._open_legacy_session(data, attacker) for _ in range(300)]
     assert victim_id in data.mcp_sessions

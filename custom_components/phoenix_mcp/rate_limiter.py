@@ -1,4 +1,4 @@
-"""Per-access key sliding window rate limiter for Phoenix MCP. In-memory only, no I/O."""
+"""Per-access-key sliding window rate limiter for Phoenix MCP. In-memory only, no I/O."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class RateLimiter:
     immediately on revocation or archival by calling destroy(access_key_id).
 
     Algorithm per request (when rate limiting is enabled):
-      1. Evict timestamps older than WINDOW_SECONDS from the per-access key deque.
+      1. Evict timestamps older than WINDOW_SECONDS from the per-access-key deque.
       2. If len(window) >= rate_limit_requests, return denied. Do not record.
       3. Count timestamps within the last BURST_WINDOW_SECONDS. If that count
          is >= rate_limit_burst (and burst > 0), return denied. Do not record.

@@ -1,11 +1,11 @@
-/** Creating a token must announce itself on the window.
+/** Creating an access key must announce itself on the window.
  *
- * Every host caches the token list: the panel shell gates its header "Agent
+ * Every host caches the access key list: the panel shell gates its header "Agent
  * Chat" button on a non-empty list and hands the panel-hosted chat window its
- * `tokens` prop, and the floating window (a separate bundle) refetches only on
- * `phx-access-keys-changed`. Without the event a first token stays invisible to both
+ * `accessKeys` prop, and the floating window (a separate bundle) refetches only on
+ * `phx-access-keys-changed`. Without the event a first access key stays invisible to both
  * surfaces until a page reload, and the chat window's prune-dead-selection
- * effect discards the just-created token id.
+ * effect discards the just-created access key id.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -29,11 +29,11 @@ import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
 
 const RECORD = {
   id: "t1",
-  name: "wizard-token",
+  name: "wizard-access-key",
   permissions: { domains: {}, devices: {}, entities: {} },
 };
 
-describe("token creation announces phx-access-keys-changed", () => {
+describe("access key creation announces phx-access-keys-changed", () => {
   let fired: number;
   const bump = () => { fired += 1; };
 
@@ -49,7 +49,7 @@ describe("token creation announces phx-access-keys-changed", () => {
     window.removeEventListener("phx-access-keys-changed", bump);
   });
 
-  it("dispatches once the token exists, so every host refreshes its list", async () => {
+  it("dispatches once the access key exists, so every host refreshes its list", async () => {
     render(
       <AccessKeyCreateModal
         existingNames={[]}
@@ -61,7 +61,7 @@ describe("token creation announces phx-access-keys-changed", () => {
 
     expect(screen.getByPlaceholderText("my_access_key")).toHaveValue("");
     fireEvent.change(screen.getByLabelText(/name \(required\)/i), {
-      target: { value: "wizard-token" },
+      target: { value: "wizard-access-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -74,7 +74,7 @@ describe("token creation announces phx-access-keys-changed", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     const input = screen.getByPlaceholderText("my_access_key");
     expect(input).toHaveValue("my_access_key");
-    expect(screen.queryByDisplayValue("test_token")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("test_access_key")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create access key" }));
     await waitFor(() => expect(createAccessKey).toHaveBeenCalledWith({
       name: "my_access_key", expires_at: undefined, pass_through: false,

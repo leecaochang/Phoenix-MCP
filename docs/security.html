@@ -91,7 +91,7 @@
           <div class="callout-body"><p class="callout-title">A handful of capabilities are sensitive grants by design</p><p>A few read capabilities open broad channels, and the redaction above is best-effort pattern matching on top of them, not a guarantee. Grant them only to access keys you trust:</p>
           <ul>
             <li><strong>Diagnostics</strong> (and the device tools) reveal installation topology: Home Assistant version, integration health, device manufacturer, model, and firmware. Useful for troubleshooting, broader than controlling a single entity.</li>
-            <li><strong>System log read</strong> exposes system logs. Logs are free-form text from every integration; the redactor catches access key-shaped and URL-credential patterns, but cannot recognise every possible secret.</li>
+            <li><strong>System log read</strong> exposes system logs. Logs are free-form text from every integration; the redactor catches access-key-shaped and URL-credential patterns, but cannot recognise every possible secret.</li>
             <li><strong>Service response data</strong> returns whatever a called service replies with. Phoenix MCP redacts entity IDs and secret-named fields, but a service can return sensitive data under an ordinary key name.</li>
           </ul>
           </div>
@@ -107,7 +107,7 @@
 
         <h2>Admin API isolation</h2>
         <h3 id="household-authority">Household caller authority</h3>
-        <p>Assist and Voice intersect the bound access key with the requesting Home Assistant user. Identified users retain their HA entity permissions. Non-admin users and unidentified satellites can use only the household capability set: scoped discovery, registry reads, physical control, broadcasts and service response data. They cannot obtain shared-access key audit history, approval queues, logs, configuration, templates, diagnostics or authoring through those surfaces. Administrators may use the bound access key's privileged capabilities. Pass-through does not bypass this restriction. Pending approvals retain the original requester and revalidate that identity before execution.</p>
+        <p>Assist and Voice intersect the bound access key with the requesting Home Assistant user. Identified users retain their HA entity permissions. Non-admin users and unidentified satellites can use only the household capability set: scoped discovery, registry reads, physical control, broadcasts and service response data. They cannot obtain shared-access-key audit history, approval queues, logs, configuration, templates, diagnostics or authoring through those surfaces. Administrators may use the bound access key's privileged capabilities. Pass-through does not bypass this restriction. Pending approvals retain the original requester and revalidate that identity before execution.</p>
         <p>AI Task uses the administrator-selected access key with household-only authority, even when an administrator starts the task. Logs, configuration and authoring remain unavailable. Home Assistant's shared entity context is not a reliable per-call identity for concurrent tasks, so AI Task does not infer a user or administrator privilege from it.</p>
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>

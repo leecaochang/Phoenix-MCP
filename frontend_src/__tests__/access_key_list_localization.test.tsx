@@ -1,4 +1,4 @@
-/** Localized token status filtering and sorting. */
+/** Localized access key status filtering and sorting. */
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -21,7 +21,7 @@ afterAll(() => {
 function accessKey(overrides: Partial<AccessKeyRecord>): AccessKeyRecord {
   return {
     id: "active",
-    name: "Active token",
+    name: "Active access key",
     created_at: "2026-01-01T00:00:00Z",
     created_by: "admin",
     expires_at: null,
@@ -91,7 +91,7 @@ function renderList(accessKeys: AccessKeyRecord[]) {
   );
 }
 
-describe("localized token statuses", () => {
+describe("localized access key statuses", () => {
   it("filters by the same localized label the table displays", () => {
     renderList([
       accessKey({ id: "active", name: "Daily agent" }),
@@ -122,7 +122,7 @@ describe("localized token statuses", () => {
 });
 
 
-describe("token dates", () => {
+describe("access key dates", () => {
   it("shows the selected calendar order and server zone in cells and tooltips", () => {
     setFormatLocale({
       locale: { date_format: "YMD", time_format: "24", time_zone: "server" },

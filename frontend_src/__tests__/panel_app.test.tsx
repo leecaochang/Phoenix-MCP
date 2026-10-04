@@ -3,7 +3,7 @@ import { act, waitFor } from "@testing-library/react";
 import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 
 // Lets the REAL PhoenixApp tree render (with a mocked api) so the app-level
-// effects are covered: token loading propagating into the list, the
+// effects are covered: access key loading propagating into the list, the
 // pending-approval count badge, and #approvals deep-linking. The custom-element
 // shell is covered separately, with react-dom/client stubbed.
 
@@ -19,7 +19,7 @@ const { apiMock } = vi.hoisted(() => {
     "cap_backup", "cap_filesystem", "cap_yaml_edit",
   ];
   const accessKey = {
-    id: "tok-1", name: "shell-token", created_at: new Date().toISOString(),
+    id: "tok-1", name: "shell-access-key", created_at: new Date().toISOString(),
     created_by: "admin", expires_at: null, revoked: false, last_used_at: null,
     updated_at: null, pass_through: false, announce_all_tools: false,
     confirm_inline_wait_seconds: 0,
@@ -79,10 +79,10 @@ describe("phoenix-mcp-panel full app shell", () => {
     delete (window as unknown as Record<string, unknown>).__phxAgentChat;
   });
 
-  it("loads tokens through the real tree and shows them in the list", async () => {
+  it("loads access keys through the real tree and shows them in the list", async () => {
     const el = mountPanel();
     await waitFor(() => {
-      expect(el.shadowRoot!.textContent).toContain("shell-token");
+      expect(el.shadowRoot!.textContent).toContain("shell-access-key");
     });
   });
 

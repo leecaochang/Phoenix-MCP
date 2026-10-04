@@ -40,7 +40,7 @@ def _record(
     *,
     outcome: str = "allowed",
     access_key_id: str = "tok-1",
-    access_key_name: str = "mytoken",
+    access_key_name: str = "myaccesskey",
     method: str = "GET",
     resource: str = "light.kitchen",
     client_ip: str = "192.168.1.1",
@@ -92,7 +92,7 @@ class TestAuditEntry:
             request_id="req-1",
             timestamp=utcnow(),
             access_key_id="tok-1",
-            access_key_name="mytoken",
+            access_key_name="myaccesskey",
             method="GET",
             resource="light.kitchen",
             outcome="allowed",
@@ -124,7 +124,7 @@ class TestAuditEntry:
         entry = self._entry(
             request_id="req-x",
             access_key_id="tok-x",
-            access_key_name="token_x",
+            access_key_name="access_key_x",
             method="POST",
             resource="light.living",
             outcome="denied",
@@ -228,7 +228,7 @@ class TestAuditLogRecord:
         log.record(
             request_id="req-1",
             access_key_id="tok-1",
-            access_key_name="mytoken",
+            access_key_name="myaccesskey",
             method=["resources/read"],          # non-string (poisoned)
             resource=["poison"] * 1000,          # non-string AND oversized
             outcome="denied",
@@ -248,7 +248,7 @@ class TestAuditLogRecord:
         log.record(
             request_id="req-1",
             access_key_id="tok-1",
-            access_key_name="mytoken",
+            access_key_name="myaccesskey",
             method="GET",
             resource="light.kitchen",
             outcome="allowed",
@@ -260,7 +260,7 @@ class TestAuditLogRecord:
         entry = list(log._log)[0]
         assert entry.request_id == "req-1"
         assert entry.access_key_id == "tok-1"
-        assert entry.access_key_name == "mytoken"
+        assert entry.access_key_name == "myaccesskey"
         assert entry.method == "GET"
         assert entry.resource == "light.kitchen"
         assert entry.outcome == "allowed"

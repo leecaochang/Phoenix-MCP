@@ -136,7 +136,7 @@ class TestEffectiveCaps:
         caps = effective_caps(tok)
         assert set(caps.keys()) == set(CAPABILITY_NAMES)
 
-    def test_default_token_all_deny(self):
+    def test_default_access_key_all_deny(self):
         tok = _access_key()
         for value in effective_caps(tok).values():
             assert value == CAP_DENY

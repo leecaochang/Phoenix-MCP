@@ -13,15 +13,15 @@ describe("buildMcpUrl", () => {
   });
 });
 
-// Per-token server names: one client entry per token, switch by toggling.
+// Per-access-key server names: one client entry per access key, switch by toggling.
 describe("mcpServerName", () => {
-  it("derives a lowercase hyphenated name from the token name", () => {
+  it("derives a lowercase hyphenated name from the access key name", () => {
     expect(mcpServerName("Steve_Laptop")).toBe("phx-steve-laptop");
   });
   it("preserves hyphens already in the name", () => {
     expect(mcpServerName("read-only")).toBe("phx-read-only");
   });
-  it("distinct token names give distinct server names", () => {
+  it("distinct access key names give distinct server names", () => {
     expect(mcpServerName("voice")).not.toBe(mcpServerName("admin"));
   });
 });
@@ -31,7 +31,7 @@ describe("codexAccessKeyEnv", () => {
     expect(codexAccessKeyEnv("Steve-Laptop")).toBe("PHOENIX_ACCESS_KEY_STEVE_LAPTOP");
     expect(codexAccessKeyEnv("Steve-Laptop")).toMatch(/^[A-Z_][A-Z0-9_]*$/);
   });
-  it("distinct token names give distinct env vars", () => {
+  it("distinct access key names give distinct env vars", () => {
     expect(codexAccessKeyEnv("voice")).not.toBe(codexAccessKeyEnv("admin"));
   });
 });
@@ -91,7 +91,7 @@ describe("HTTP client configuration", () => {
     }
   });
 
-  it("keeps Harness names within its schema without truncating distinct tokens", () => {
+  it("keeps Harness names within its schema without truncating distinct access keys", () => {
     const first = "a".repeat(31) + "b";
     const second = "a".repeat(31) + "c";
     expect(harnessServerName(first)).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
@@ -135,7 +135,7 @@ describe("buildAgentTabs", () => {
     expect(cursor.mcpServers["phx-voice-assist"]).toBeDefined();
   });
 
-  it("Codex tab gives the exact Authorization header key/value as fields and a per-token env var", () => {
+  it("Codex tab gives the exact Authorization header key/value as fields and a per-access-key env var", () => {
     const codex = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist").find((t) => t.key === "codex")!;
     expect(codex.blocks[0].code).toContain("codex mcp add phx-voice-assist --url");
     expect(codex.blocks[0].code).toContain("export PHOENIX_ACCESS_KEY_VOICE_ASSIST=phx_abc");
@@ -222,7 +222,7 @@ describe("firstGreenTarget", () => {
 });
 
 describe("buildBearerValue", () => {
-  it("prefixes the token with Bearer", () => {
+  it("prefixes the access key with Bearer", () => {
     expect(buildBearerValue("phx_x")).toBe("Bearer phx_x");
   });
 });

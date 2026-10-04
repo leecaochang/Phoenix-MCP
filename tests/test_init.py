@@ -506,7 +506,7 @@ async def test_a_coroutine_one_shot_listener_is_awaited(hass: HomeAssistant):
 #
 # Every step before the platform unload is best-effort. The failure these guard
 # against is silent and total: shutting_down is set FIRST and helpers gates every
-# token request on it, so an exception on the way out would leave the entry loaded
+# access key request on it, so an exception on the way out would leave the entry loaded
 # with every route registered and every request answering 503 until the next
 # restart.
 
@@ -569,7 +569,7 @@ async def test_a_failed_unload_keeps_the_frontend(hass: HomeAssistant):
 
     Removing the panel before the outcome is known would leave a running
     integration with no administrative surface, recoverable only by a later
-    successful reload or a restart. The token routes stay live either way.
+    successful reload or a restart. The access key routes stay live either way.
     """
     await _run_setup(hass, kill_switch=False)
     entry = hass.config_entries.async_entries(DOMAIN)[0]
@@ -590,7 +590,7 @@ async def test_a_failed_unload_keeps_the_frontend(hass: HomeAssistant):
 
 async def test_a_failed_unload_leaves_the_integration_usable(hass: HomeAssistant):
     # HA keeps a failed unload LOADED. Leaving shutting_down set would 503 every
-    # token request against an integration Home Assistant still considers up.
+    # access key request against an integration Home Assistant still considers up.
     await _run_setup(hass, kill_switch=False)
     entry = hass.config_entries.async_entries(DOMAIN)[0]
 
@@ -656,13 +656,13 @@ async def test_setup_migrates_phoenix_repairs_without_discarding_receipts(hass):
     from custom_components.phoenix_mcp.agent_recovery import AgentRecovery, STORAGE_KEY
     from custom_components.phoenix_mcp.durable_storage import DurableStore
     recovery = AgentRecovery(DurableStore(hass, 1, STORAGE_KEY, atomic_writes=True))
-    await recovery.begin("token", "call_service", "legacy")
+    await recovery.begin("access_key", "call_service", "legacy")
     for domain, issue_id in ((DOMAIN, "agent_recovery_legacy"), (DOMAIN, "calendar_recovery_old"),
                              (DOMAIN, "mesa_runtime_unavailable"), ("other", "agent_recovery_keep")):
         ir.async_create_issue(hass, domain, issue_id, is_fixable=False, severity=ir.IssueSeverity.ERROR,
                               translation_key="fixture")
     result, _, _ = await _run_setup(hass)
     assert result is True
-    assert hass.data[DOMAIN].agent_recovery.blocks("token")
+    assert hass.data[DOMAIN].agent_recovery.blocks("access_key")
     assert hass.data[DOMAIN].agent_recovery.admin_records()[0]["request_id"] == "legacy"
     assert list(ir.async_get(hass).issues) == [("other", "agent_recovery_keep")]

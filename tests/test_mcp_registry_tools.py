@@ -35,14 +35,14 @@ def _access_key(
     permissions: PermissionTree | None = None,
     **caps,
 ) -> AccessKeyRecord:
-    """Token that grants READ/WRITE on the light domain and the zone.home entity."""
+    """Access key that grants READ/WRITE on the light domain and the zone.home entity."""
     tree = permissions or PermissionTree(
         domains={"light": PermissionNode(state="GREEN")},
         entities={"zone.home": PermissionNode(state="YELLOW")},
     )
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
-        name="reg-token",
+        name="reg-access-key",
         access_key_hash="x",
         created_at=utcnow(),
         created_by="user1",
@@ -117,7 +117,7 @@ def reg_env(hass: HomeAssistant):
         "friendly_name": "Home", "latitude": 1.0, "longitude": 2.0, "radius": 100,
     })
 
-    # A lock in Kitchen, denied by the default token (no lock grant) so it does
+    # A lock in Kitchen, denied by the default access key (no lock grant) so it does
     # not disturb the scoped-enumeration tests; used by find_available_actions.
     lock_front = ent_reg.async_get_or_create(
         "lock", "test_integration", "uid_lock",
@@ -171,7 +171,7 @@ async def test_household_registry_reads_intersect_ha_permissions(hass, hass_admi
 
 
 @pytest.mark.parametrize("pass_through", [False, True])
-async def test_unidentified_registry_reads_keep_the_bound_token_scope(hass, reg_env, pass_through):
+async def test_unidentified_registry_reads_keep_the_bound_access_key_scope(hass, reg_env, pass_through):
     access_key = _access_key(pass_through=pass_through)
     async with household_scope(hass):
         content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, access_key, hass)
@@ -961,7 +961,7 @@ def _data_no_mesa():
     return data
 
 
-def _lock_token(cap_physical_control: str = "deny") -> AccessKeyRecord:
+def _lock_access_key(cap_physical_control: str = "deny") -> AccessKeyRecord:
     tree = PermissionTree(domains={"lock": PermissionNode(state="GREEN")})
     return _access_key(permissions=tree, cap_physical_control=cap_physical_control)
 
@@ -978,7 +978,7 @@ class TestFindAvailableActions:
         access_key = _access_key()
         missing, missing_o, _ = await _call_tool(
             "find_available_actions", {"entity_id": "light.ghost"}, access_key, hass, _data_no_mesa())
-        # sensor.garage exists but is denied to this token.
+        # sensor.garage exists but is denied to this access key.
         hidden, hidden_o, _ = await _call_tool(
             "find_available_actions", {"entity_id": "sensor.garage"}, access_key, hass, _data_no_mesa())
         assert hidden_o == missing_o == "not_found"
@@ -998,7 +998,7 @@ class TestFindAvailableActions:
     async def test_physical_gate_blocks_without_cap(self, hass, reg_env):
         content, outcome, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["lock_front"]},
-            _lock_token(cap_physical_control="deny"), hass, _data_no_mesa())
+            _lock_access_key(cap_physical_control="deny"), hass, _data_no_mesa())
         assert outcome == "allowed"
         lock_svc = next(a for a in _result_json(content)["actions"] if a["service"] == "lock.lock")
         assert lock_svc["available"] is False
@@ -1007,7 +1007,7 @@ class TestFindAvailableActions:
     async def test_physical_gate_allows_with_cap(self, hass, reg_env):
         content, _, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["lock_front"]},
-            _lock_token(cap_physical_control="allow"), hass, _data_no_mesa())
+            _lock_access_key(cap_physical_control="allow"), hass, _data_no_mesa())
         lock_svc = next(a for a in _result_json(content)["actions"] if a["service"] == "lock.lock")
         assert lock_svc["available"] is True
 

@@ -192,7 +192,7 @@ async def test_local_matches_and_unsafe_recognition_failures_skip_remote(hass,de
     classify.assert_not_called()
 
 
-@pytest.mark.parametrize('change',['token','settings','account_model','account_deleted','runtime'])
+@pytest.mark.parametrize('change',['access_key','settings','account_model','account_deleted','runtime'])
 async def test_changes_during_network_wait_discard_decision(hass,decision_home,change):
     data,access_key,store,account=decision_home
     entered=asyncio.Event();release=asyncio.Event()
@@ -201,7 +201,7 @@ async def test_changes_during_network_wait_discard_decision(hass,decision_home,c
     with patch.object(DecisionProvider,'classify',classify):
         task=data.decision_shadow.start(hass,data,access_key,'command','en',observe=True)
         await entered.wait()
-        if change=='token':access_key.revoked=True
+        if change=='access_key':access_key.revoked=True
         if change=='settings':await data.store.async_patch_settings(decision_timeout_ms=1234)
         if change=='account_model':await store.set_model(account,'changed')
         if change=='account_deleted':await store.delete(account)

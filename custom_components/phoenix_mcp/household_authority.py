@@ -62,7 +62,7 @@ def household_admin_access() -> bool:
 
 
 def household_tool_access(tool_name: str) -> bool:
-    """Shared-access key history belongs to administrators, even without a capability."""
+    """Shared-access-key history belongs to administrators, even without a capability."""
     from .const import HOUSEHOLD_ADMIN_TOOLS
 
     return tool_name not in HOUSEHOLD_ADMIN_TOOLS or household_admin_access()

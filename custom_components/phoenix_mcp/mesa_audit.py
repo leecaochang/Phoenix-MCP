@@ -148,7 +148,7 @@ class MesaAuditBridge(logging.Handler):
             if ctx is None:
                 # No request to attribute it to: a preview, or a lease expiring
                 # on a worker thread long after its caller went away. An
-                # unattributed row is noise in a per-access key log.
+                # unattributed row is noise in a per-access-key log.
                 return
             self._data.audit.record(
                 request_id=ctx.request_id,

@@ -2,7 +2,7 @@
 
 The add-on's devices/rename compiles and OTA-flashes a renamed image, so the tool
 is gated on the flash capability: allowlisting the command under cap_esphome_yaml
-would let a token flash a device without the capability that governs flashing.
+would let an access key flash a device without the capability that governs flashing.
 """
 
 from __future__ import annotations
@@ -22,10 +22,10 @@ from tests.test_mcp_esphome_firmware_tools import (
     FakeBuilder,
     _dash,
     _esphome_entry,
-    _flash_token,
+    _flash_access_key,
     _job,
     _runtime,
-    _yaml_token,
+    _yaml_access_key,
 )
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
@@ -46,12 +46,12 @@ async def _run(args, access_key, hass, builder, data=None):
 
 class TestCapability:
     async def test_the_authoring_capability_alone_cannot_rename(self, hass, esphome_dir):
-        # devices/rename flashes, so a token that may author but is denied
+        # devices/rename flashes, so an access key that may author but is denied
         # flashing must not reach it.
         builder = FakeBuilder(**{"devices/rename": RENAMED})
         content, outcome, _ = await _run(
             {"file": FILE, "new_name": "new-name"},
-            _yaml_token(cap_esphome_flash="deny"), hass, builder)
+            _yaml_access_key(cap_esphome_flash="deny"), hass, builder)
 
         assert outcome == "denied"
         assert builder.calls == []
@@ -63,7 +63,7 @@ class TestCapability:
             "devices/rename": RENAMED,
         })
         _c, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
         assert outcome == "allowed"
 
     def test_the_command_is_reachable_but_only_through_this_tool(self):
@@ -87,7 +87,7 @@ class TestValidation:
     ):
         builder = FakeBuilder(**{"firmware/get_jobs": []})
         _c, outcome, _ = await _run(
-            {"file": FILE, "new_name": bad}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": bad}, _flash_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "devices/rename" not in builder.commands
 
@@ -105,14 +105,14 @@ class TestValidation:
 
         content, outcome, _ = await _run(
             {"file": "imported.yaml", "new_name": "real-device-name"},
-            _flash_token(), hass, builder)
+            _flash_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "already has that name" in content["content"][0]["text"]
         assert builder.calls == []
 
         # ...and renaming it to match its own filename is a real rename.
         content, outcome, _ = await _run(
-            {"file": "imported.yaml", "new_name": "imported"}, _flash_token(), hass, builder)
+            {"file": "imported.yaml", "new_name": "imported"}, _flash_access_key(), hass, builder)
         assert outcome == "allowed"
 
     async def test_a_substituted_name_is_resolved(self, hass, esphome_dir):
@@ -125,7 +125,7 @@ class TestValidation:
 
         content, outcome, _ = await _run(
             {"file": "proxy.yaml", "new_name": "bt-proxy-aabbcc"},
-            _flash_token(), hass, builder)
+            _flash_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "already has that name" in content["content"][0]["text"]
         assert builder.calls == []
@@ -142,7 +142,7 @@ class TestValidation:
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
 
         content, outcome, _ = await _run(
-            {"file": "imported.yaml", "new_name": "imported"}, _flash_token(), hass, builder)
+            {"file": "imported.yaml", "new_name": "imported"}, _flash_access_key(), hass, builder)
 
         assert outcome == "allowed"
         assert "already exists" not in content["content"][0]["text"]
@@ -157,14 +157,14 @@ class TestValidation:
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
 
         content, outcome, _ = await _run(
-            {"file": "broken.yaml", "new_name": "broken"}, _flash_token(), hass, builder)
+            {"file": "broken.yaml", "new_name": "broken"}, _flash_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "already has that name" in content["content"][0]["text"]
 
     async def test_renaming_to_the_current_name_is_refused(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_jobs": []})
         _c, outcome, _ = await _run(
-            {"file": FILE, "new_name": FILE.removesuffix(".yaml")}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": FILE.removesuffix(".yaml")}, _flash_access_key(), hass, builder)
         assert outcome == "invalid_request"
         assert "devices/rename" not in builder.commands
 
@@ -174,7 +174,7 @@ class TestValidation:
         (esphome_dir / "taken.yaml").write_text("esphome:\n  name: taken\n")
         builder = FakeBuilder(**{"firmware/get_jobs": []})
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "taken"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "taken"}, _flash_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
         assert "already exists" in content["content"][0]["text"]
@@ -186,7 +186,7 @@ class TestValidation:
             "firmware/get_jobs": [_job(job_id="running-1", status="running")],
         })
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
         assert "running-1" in content["content"][0]["text"]
@@ -197,7 +197,7 @@ class TestResult:
     async def test_reports_both_jobs_of_the_chain(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json_body(content)
@@ -220,7 +220,7 @@ class TestResult:
             },
         })
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json_body(content)
@@ -230,7 +230,7 @@ class TestResult:
     async def test_a_bare_id_still_works_if_the_addon_ever_sends_one(self, hass, esphome_dir):
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, _o, _r = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
         assert _json_body(content)["job_id"] == "j-compile"
 
     async def test_a_reply_carrying_no_job_is_a_config_only_rename(
@@ -249,7 +249,7 @@ class TestResult:
             "devices/rename": {"configuration": FILE, "job": None},
         })
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
 
         assert outcome == "allowed"
         body = _json_body(content)
@@ -276,7 +276,7 @@ class TestResult:
             "devices/rename": {"configuration": FILE, "job": {"identifier": "j-new-shape"}},
         })
         content, outcome, _ = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
         text = content["content"][0]["text"]
 
         assert outcome == "invalid_request"
@@ -293,7 +293,7 @@ class TestResult:
         # note saying only "renamed" leaves a silently uncallable action.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, _o, _r = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
 
         note = _json_body(content)["note"]
         assert "reload" in note.lower()
@@ -305,7 +305,7 @@ class TestResult:
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         await _run(
             {"file": FILE, "new_name": "new-name", "config_only": True},
-            _flash_token(), hass, builder)
+            _flash_access_key(), hass, builder)
         assert "config_only" not in builder.args_for("devices/rename")
 
     async def test_it_says_a_failed_rename_reverts_itself(self, hass, esphome_dir):
@@ -316,7 +316,7 @@ class TestResult:
         # runs; the note denies that misreading by name.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, outcome, _r = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
         note = _json_body(content)["note"]
 
         assert outcome == "allowed"
@@ -333,7 +333,7 @@ class TestResult:
         # the rename in flight.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, _o, _r = await _run(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass, builder)
         note = _json_body(content)["note"]
 
         assert "both the old and the new" in note
@@ -350,7 +350,7 @@ class TestApprovalDiff:
         # stops resolving. That is the fact the card exists to surface.
         _esphome_entry(hass, esphome_entries)
         diff = esphome._build_diff_rename_esphome_device(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["kind"] == "system_action"
         assert "compiles and flashes" in diff["summary"]
@@ -359,7 +359,7 @@ class TestApprovalDiff:
 
     async def test_it_survives_a_device_it_cannot_resolve(self, hass, esphome_dir):
         diff = esphome._build_diff_rename_esphome_device(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
         assert diff["preview"]["new_file"] == "new-name.yaml"
         assert diff["preview"]["device_online"] is False
         assert "cannot reach" in diff["preview"]["offline_note"]
@@ -373,7 +373,7 @@ class TestApprovalDiff:
         # runtime.available answers it, as the install diff does.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
         diff = esphome._build_diff_rename_esphome_device(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["preview"]["device_online"] is False
         assert "cannot reach" in diff["preview"]["offline_note"]
@@ -387,7 +387,7 @@ class TestApprovalDiff:
         # rather than promise a file-only rename.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
         note = esphome._build_diff_rename_esphome_device(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass
         )["preview"]["offline_note"]
 
         assert "only rewrite" not in note
@@ -401,7 +401,7 @@ class TestApprovalDiff:
         # implementation cannot pass.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=True))
         diff = esphome._build_diff_rename_esphome_device(
-            {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)
+            {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["preview"]["device_online"] is True
         assert "offline_note" not in diff["preview"]

@@ -243,7 +243,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
       const detail = (e as CustomEvent).detail as { accessKeyId?: string } | undefined;
       openAgentCliRef.current(detail?.accessKeyId);
     };
-    // An access key created or revoked elsewhere (wizard, Access key Detail) must reach
+    // An access key created or revoked elsewhere (wizard, Access key detail) must reach
     // the panel fallback window's own accessKeys prop independent of navigation,
     // matching the floating window.
     const onAccessKeysChanged = () => { void refreshAccessKeys(); };

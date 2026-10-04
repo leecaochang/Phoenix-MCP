@@ -181,18 +181,18 @@ def auto_env(hass: HomeAssistant):
     return {"entity_id": auto.entity_id}
 
 
-def _auto_token(cap_traces="allow"):
+def _auto_access_key(cap_traces="allow"):
     tree = PermissionTree(domains={"automation": PermissionNode(state="GREEN")})
     return _access_key(permissions=tree, cap_traces=cap_traces)
 
 
 class TestGetAutomationTraces:
     async def test_deny_without_cap(self, hass, auto_env):
-        _, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.morning"}, _auto_token("deny"), hass)
+        _, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key("deny"), hass)
         assert outcome == "denied"
 
     async def test_list_traces(self, hass, auto_env):
-        content, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+        content, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 1
@@ -200,18 +200,18 @@ class TestGetAutomationTraces:
 
     async def test_specific_run_summary(self, hass, auto_env):
         content, _, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning", "run_id": "run1", "summary": True}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning", "run_id": "run1", "summary": True}, _auto_access_key(), hass)
         body = _json(content)
         assert body["script_execution"] == "finished"
         assert "trace" not in body  # summary drops the heavy step tree
 
     async def test_unknown_automation_not_found(self, hass, auto_env):
-        _, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.ghost"}, _auto_token(), hass)
+        _, outcome, _ = await _call("get_automation_traces", {"automation_id": "automation.ghost"}, _auto_access_key(), hass)
         assert outcome == "not_found"
 
     async def test_list_traces_carries_no_warnings_when_trace_loaded(self, hass, auto_env):
         content, _, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert "warnings" not in _json(content)
 
     async def test_unknown_run_id_is_not_found_not_an_error(self, hass, auto_env):
@@ -220,7 +220,7 @@ class TestGetAutomationTraces:
         _, outcome, _ = await _call(
             "get_automation_traces",
             {"automation_id": "automation.morning", "run_id": "no-such-run"},
-            _auto_token(), hass)
+            _auto_access_key(), hass)
         assert outcome == "not_found"
 
 
@@ -243,7 +243,7 @@ class TestTraceStorageShapes:
                                       not_triggered=True)],
         ))
         content, outcome, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 2
@@ -257,7 +257,7 @@ class TestTraceStorageShapes:
         content, outcome, _ = await _call(
             "get_automation_traces",
             {"automation_id": "automation.morning", "run_id": "skipped"},
-            _auto_token(), hass)
+            _auto_access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["run_id"] == "skipped"
 
@@ -265,7 +265,7 @@ class TestTraceStorageShapes:
         # Older HA stored a plain LimitedSizeDict mapping run_id to trace.
         self._set_bucket(hass, {"run1": _FakeTrace(run_id="run1")})
         content, outcome, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["traces"][0]["run_id"] == "run1"
 
@@ -274,7 +274,7 @@ class TestTraceStorageShapes:
         content, outcome, _ = await _call(
             "get_automation_traces",
             {"automation_id": "automation.morning", "run_id": "run1"},
-            _auto_token(), hass)
+            _auto_access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["run_id"] == "run1"
 
@@ -283,7 +283,7 @@ class TestTraceStorageShapes:
         from homeassistant.components.trace.const import DATA_TRACE
         hass.data.pop(DATA_TRACE)
         content, outcome, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 0
@@ -293,7 +293,7 @@ class TestTraceStorageShapes:
         from homeassistant.components.trace.const import DATA_TRACE
         hass.data[DATA_TRACE] = {}
         content, outcome, _ = await _call(
-            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)
+            "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 0
@@ -435,7 +435,7 @@ class TestDiagnostics:
         assert included["matching_count"] == 2
         assert any(issue["ignored"] for issue in included["issues"])
 
-    async def test_repairs_refs_are_stable_per_token_and_results_are_bounded(self, hass):
+    async def test_repairs_refs_are_stable_per_access_key_and_results_are_bounded(self, hass):
         for index in range(3):
             ir.async_create_issue(
                 hass,
@@ -445,17 +445,17 @@ class TestDiagnostics:
                 severity=ir.IssueSeverity.WARNING,
                 translation_key="bounded_issue",
             )
-        first_token = _access_key(cap_diagnostics="allow")
-        second_token = _access_key(cap_diagnostics="allow")
-        second_token.access_key_hash = "different-token-hash"
+        first_access_key = _access_key(cap_diagnostics="allow")
+        second_access_key = _access_key(cap_diagnostics="allow")
+        second_access_key.access_key_hash = "different-access-key-hash"
         first = _json((await _call(
-            "get_repairs", {"domain": "bounded", "limit": 2}, first_token, hass,
+            "get_repairs", {"domain": "bounded", "limit": 2}, first_access_key, hass,
         ))[0])
         repeated = _json((await _call(
-            "get_repairs", {"domain": "bounded", "limit": 2}, first_token, hass,
+            "get_repairs", {"domain": "bounded", "limit": 2}, first_access_key, hass,
         ))[0])
         second = _json((await _call(
-            "get_repairs", {"domain": "bounded", "limit": 2}, second_token, hass,
+            "get_repairs", {"domain": "bounded", "limit": 2}, second_access_key, hass,
         ))[0])
         assert first["count"] == 2
         assert first["matching_count"] == 3

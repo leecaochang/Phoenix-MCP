@@ -12,7 +12,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.tools.discovery import _tool_recognize_intent
-from tests.test_mcp_view import _make_token
+from tests.test_mcp_view import _make_access_key
 
 
 def _result(
@@ -37,7 +37,7 @@ def _body(tool_result: dict) -> dict:
 
 @pytest.mark.asyncio
 async def test_recognition_requires_search_or_config_read(hass):
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     result, outcome, resource = await _tool_recognize_intent(
         {"sentence": "turn on the kitchen"}, access_key, hass
     )
@@ -48,7 +48,7 @@ async def test_recognition_requires_search_or_config_read(hass):
 
 @pytest.mark.asyncio
 async def test_config_read_alone_can_recognize_without_executing(hass):
-    access_key, _ = _make_token(cap_config_read="allow")
+    access_key, _ = _make_access_key(cap_config_read="allow")
     agent = SimpleNamespace(async_recognize_intent=AsyncMock(return_value=None))
 
     with patch(
@@ -73,7 +73,7 @@ async def test_installed_ha_default_agent_recognizes_without_processing(hass):
     """Exercise the real HA conversation API at the installed version."""
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
-    access_key, _ = _make_token(cap_config_read="allow")
+    access_key, _ = _make_access_key(cap_config_read="allow")
 
     result, outcome, _ = await _tool_recognize_intent(
         {"sentence": "what time is it", "language": "en"}, access_key, hass
@@ -90,7 +90,7 @@ async def test_installed_ha_default_agent_recognizes_without_processing(hass):
 async def test_success_targets_are_intersected_with_read_scope(hass):
     hass.states.async_set("light.allowed", "on", {"friendly_name": "Allowed"})
     hass.states.async_set("light.secret", "off", {"friendly_name": "Secret"})
-    access_key, _ = _make_token(permissions=PermissionTree(entities={
+    access_key, _ = _make_access_key(permissions=PermissionTree(entities={
         "light.allowed": PermissionNode(state="YELLOW"),
     }))
     access_key.cap_search = "allow"
@@ -133,7 +133,7 @@ async def test_success_targets_are_intersected_with_read_scope(hass):
 @pytest.mark.asyncio
 async def test_empty_read_scope_never_falls_back_to_all_states(hass):
     hass.states.async_set("light.secret", "off", {"friendly_name": "Secret"})
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     access_key.cap_search = "allow"
     recognition = _result(entities={
         "domain": MatchEntity("domain", "light", "lights"),
@@ -157,7 +157,7 @@ async def test_empty_read_scope_never_falls_back_to_all_states(hass):
 
 @pytest.mark.asyncio
 async def test_incomplete_recognition_returns_one_scrubbed_near_miss(hass):
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     access_key.cap_search = "allow"
     recognition = _result(
         entities={"domain": MatchEntity("domain", "light", "lights")},
@@ -192,7 +192,7 @@ async def test_incomplete_recognition_returns_one_scrubbed_near_miss(hass):
     {"sentence": "hello", "language": 42},
 ])
 async def test_recognition_rejects_invalid_bounded_input(hass, args):
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     access_key.cap_search = "allow"
     result, outcome, _ = await _tool_recognize_intent(args, access_key, hass)
     assert result["isError"] is True

@@ -21,7 +21,7 @@ async def attention_env(hass, hass_client, access_key_store):
     assert await async_setup_component(hass, "http", {})
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    access_key, _ = await access_key_store.async_create_access_key("Review token", "admin")
+    access_key, _ = await access_key_store.async_create_access_key("Review access key", "admin")
     for cls in (PhoenixAdminAttentionView, PhoenixAdminAttentionReviewView):
         view = cls()
         view.hass = hass
@@ -41,7 +41,7 @@ async def test_review_requires_confirmation_and_inactive_action(attention_env, h
     assert data.agent_recovery.blocks(access_key.id)
     response = await client.get("/api/phoenix-mcp/admin/attention")
     items = (await response.json())["items"]
-    assert items[0]["access_key_name"] == "Review token"
+    assert items[0]["access_key_name"] == "Review access key"
     assert items[0]["tool"] == "call_service" and "arguments" not in json.dumps(items)
     assert not ir.async_get(hass).issues
     data.store.get_settings().kill_switch = True
@@ -114,7 +114,7 @@ async def test_concurrent_reviews_only_acknowledge_once():
     import asyncio
     disk = AsyncMock()
     recovery = AgentRecovery(disk)
-    await recovery.begin("token", "call_service", "r")
+    await recovery.begin("access_key", "call_service", "r")
     recovery.interrupted("r")
     results = await asyncio.gather(recovery.reviewed("r"), recovery.reviewed("r"))
     assert sorted(results) == [False, True]

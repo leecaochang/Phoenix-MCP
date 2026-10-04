@@ -187,7 +187,7 @@ def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
     if order == "newest_first":
         blocks.reverse()
     # Bind to the entire safe snapshot, so changed coverage also invalidates a
-    # cursor. Hidden text is never hashed into access key-visible cursor metadata.
+    # cursor. Hidden text is never hashed into access-key-visible cursor metadata.
     fingerprint = hashlib.sha256(json.dumps(
         [source, body["filters"], blocks], sort_keys=True
     ).encode()).hexdigest()

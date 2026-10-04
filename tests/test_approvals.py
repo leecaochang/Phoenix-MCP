@@ -113,7 +113,7 @@ class TestCreate:
         assert 55 <= delta.total_seconds() <= 65
 
     @pytest.mark.asyncio
-    async def test_per_token_capacity_enforced(self, store):
+    async def test_per_access_key_capacity_enforced(self, store):
         for i in range(MAX_PENDING_APPROVALS_PER_ACCESS_KEY):
             await async_create_pending_approval(
                 store, access_key_id="t1", access_key_name="a", tool_name="x",
@@ -126,7 +126,7 @@ class TestCreate:
             )
 
     @pytest.mark.asyncio
-    async def test_capacity_is_per_token(self, store):
+    async def test_capacity_is_per_access_key(self, store):
         # Fill t1 to capacity, then verify t2 can still create.
         for i in range(MAX_PENDING_APPROVALS_PER_ACCESS_KEY):
             await async_create_pending_approval(
@@ -175,7 +175,7 @@ class TestGetAndList:
         assert [r.id for r in approved] == [b.id]
 
     @pytest.mark.asyncio
-    async def test_list_filters_by_token(self, store):
+    async def test_list_filters_by_access_key(self, store):
         a = await async_create_pending_approval(
             store, access_key_id="t1", access_key_name="a", tool_name="x",
             cap_name="cap_restart", args={}, diff={}, request_id="r1",
@@ -236,7 +236,7 @@ class TestUpdateStatus:
 # --- async_cancel_approvals_for_access_key ----------------------------------------------
 
 
-class TestCancelForToken:
+class TestCancelForAccessKey:
     @pytest.mark.asyncio
     async def test_cancels_only_pending(self, store):
         a = await async_create_pending_approval(
@@ -256,7 +256,7 @@ class TestCancelForToken:
         assert get_approval(store, a.id).status == STATUS_APPROVED
 
     @pytest.mark.asyncio
-    async def test_does_not_touch_other_tokens(self, store):
+    async def test_does_not_touch_other_access_keys(self, store):
         await async_create_pending_approval(
             store, access_key_id="t1", access_key_name="a", tool_name="x",
             cap_name="cap_restart", args={}, diff={}, request_id="r1",
@@ -283,7 +283,7 @@ class TestCancelForToken:
         assert get_approval(store, record.id).status == STATUS_PENDING
 
     @pytest.mark.asyncio
-    async def test_token_cleanup_surfaces_a_stale_execution_as_interrupted(self, store):
+    async def test_access_key_cleanup_surfaces_a_stale_execution_as_interrupted(self, store):
         record = await async_create_pending_approval(
             store, access_key_id="t1", access_key_name="a", tool_name="x",
             cap_name="cap_restart", args={}, diff={}, request_id="r1",
@@ -323,7 +323,7 @@ class TestCollectForWipe:
 
         collected = collect_pending_approvals_for_wipe(store, "phoenix_mcp_data_wiped")
 
-        # Only the still-pending record; spans all tokens (no per-token filter).
+        # Only the still-pending record; spans all access keys (no per-access-key filter).
         assert [c.id for c in collected] == [a.id]
         assert collected[0].status == STATUS_CANCELLED
         assert collected[0].rejected_reason == "phoenix_mcp_data_wiped"
@@ -423,9 +423,9 @@ class TestExpire:
 # --- expiry archival cancels queued approvals ---------------------------------
 
 
-class TestExpiredTokenCancelsApprovals:
+class TestExpiredAccessKeyCancelsApprovals:
     @pytest.mark.asyncio
-    async def test_archive_expired_token_rechecks_current_expiry_under_lock(self, store):
+    async def test_archive_expired_access_key_rechecks_current_expiry_under_lock(self, store):
         """A concurrent expiry extension wins over an older timer snapshot."""
         from custom_components.phoenix_mcp.helpers import async_archive_expired_access_key
 
@@ -449,8 +449,8 @@ class TestExpiredTokenCancelsApprovals:
         hass.bus.async_fire.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_archive_expired_token_cancels_and_notifies(self, store):
-        """Token expiry runs the same approval-queue hygiene as revoke: pending
+    async def test_archive_expired_access_key_cancels_and_notifies(self, store):
+        """Access key expiry runs the same approval-queue hygiene as revoke: pending
         approvals flip to cancelled (reason access_key_expired), notifications are
         dismissed, and phoenix_mcp_approval_resolved fires for each."""
         from unittest.mock import MagicMock, patch
@@ -490,9 +490,9 @@ class TestExpiredTokenCancelsApprovals:
         ]
         assert [p["approval_id"] for p in resolved] == [record.id]
 
-    async def test_archive_expired_token_clears_assist_binding(self, store):
-        """Expiry clears the Assist binding + voice-agent token if they pointed at
-        the expiring token, and re-syncs the voice agent."""
+    async def test_archive_expired_access_key_clears_assist_binding(self, store):
+        """Expiry clears the Assist binding + voice-agent access key if they pointed at
+        the expiring access key, and re-syncs the voice agent."""
         from unittest.mock import MagicMock, patch
 
         from custom_components.phoenix_mcp.helpers import async_archive_expired_access_key

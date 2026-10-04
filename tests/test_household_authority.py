@@ -52,7 +52,7 @@ def _context(user_id):
 
 @pytest.mark.parametrize("identity", ["admin", "user", "unknown"])
 @pytest.mark.parametrize("pass_through", [False, True])
-async def test_household_caps_intersect_token_even_in_pass_through(hass, hass_admin_user, identity, pass_through):
+async def test_household_caps_intersect_access_key_even_in_pass_through(hass, hass_admin_user, identity, pass_through):
     assert HOUSEHOLD_CAPABILITIES == {
         "cap_search", "cap_physical_control", "cap_broadcast", "cap_service_response", "cap_registry_read",
     }
@@ -115,7 +115,7 @@ async def test_assist_listing_withholds_admin_tools_for_regular_user(hass, hass_
 
 @pytest.mark.parametrize("identity", ["admin", "user", "unknown"])
 @pytest.mark.parametrize("announce_all", [False, True])
-async def test_shared_token_history_requires_household_admin(hass, hass_admin_user, identity, announce_all):
+async def test_shared_access_key_history_requires_household_admin(hass, hass_admin_user, identity, announce_all):
     data, access_key = await _environment(hass)
     access_key.announce_all_tools = announce_all
     await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)

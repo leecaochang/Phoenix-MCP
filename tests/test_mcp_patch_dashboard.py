@@ -1,7 +1,7 @@
 """Tests for patch_dashboard, the path-addressed single-value dashboard write.
 
 set_dashboard_config needs the WHOLE layout, but a read of that layout is lossy:
-entities the token cannot resolve are redacted, as are ghosts (absent from both
+entities the access key cannot resolve are redacted, as are ghosts (absent from both
 hass.states and the registry). A dashboard with a few dead references therefore
 cannot be written back without persisting the placeholder over them. Patching
 never resends untouched bytes, and the sentinel guard refuses a placeholder value.
@@ -153,7 +153,7 @@ class TestRedactionSentinelDetection:
 
 class TestPatchDashboard:
     async def test_deny_without_cap_never_echoes_the_payload(self, hass, lovelace_env):
-        """A denied token learns nothing about its own arguments."""
+        """A denied access key learns nothing about its own arguments."""
         h, _l = lovelace_env
         await _seed(h)
         content, outcome, _ = await _call(

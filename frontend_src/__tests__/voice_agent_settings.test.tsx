@@ -47,7 +47,7 @@ function renderCard(s: GlobalSettings, onChange = vi.fn()) {
 describe("VoiceAgentSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-access-key" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [{ id: "i1", kind: "claude", name: "Claude", model: "claude-opus-4-8" }] });
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8", "claude-sonnet-5"] });
     createVoiceAgentPipeline.mockResolvedValue({ pipeline_id: "pl1", name: "Phoenix MCP", preferred: true });
@@ -62,9 +62,9 @@ describe("VoiceAgentSettings", () => {
     await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
   });
 
-  it("populates tokens and writes the token selection", async () => {
+  it("populates access keys and writes the access key selection", async () => {
     const { onChange } = renderCard(settings());
-    await waitFor(() => expect(screen.getByRole("option", { name: "voice-token" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: "voice-access-key" })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Voice agent access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("voice_agent_access_key_id", "tok-1");
   });
@@ -136,7 +136,7 @@ describe("VoiceAgentSettings", () => {
   });
 
   it("disables the setup button until fully configured", () => {
-    renderCard(settings({ voice_agent_enabled: true }));  // enabled but no token/provider/model
+    renderCard(settings({ voice_agent_enabled: true }));  // enabled but no access key/provider/model
     expect((screen.getByRole("button", { name: "Set up Phoenix MCP assistant" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -163,11 +163,11 @@ describe("VoiceAgentSettings", () => {
     expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", false);
   });
 
-  it("does not expose internal decision review for any token", async () => {
-    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
-      { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
+  it("does not expose internal decision review for any access key", async () => {
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home access key", persona: "home_companion" },
+      { id: "tok-2", name: "Ordinary access key", persona: "voice_assistant" }]);
     const { rerender } = render(<VoiceAgentSettings settings={settings({ voice_agent_access_key_id: "tok-1", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
-    await screen.findByRole("option", { name: "Home token" });
+    await screen.findByRole("option", { name: "Home access key" });
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();
     rerender(<VoiceAgentSettings settings={settings({ voice_agent_access_key_id: "tok-2", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();

@@ -955,7 +955,7 @@ class TestZoneLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        allow_token = _access_key()
+        allow_access_key = _access_key()
         created_result, outcome, _ = await _call_tool(
             "create_helper",
             {
@@ -967,12 +967,12 @@ class TestZoneLifecycle:
                     "radius": 100,
                 },
             },
-            allow_token, hass, data,
+            allow_access_key, hass, data,
         )
         assert outcome == "allowed"
         helper_id = _json(created_result)["helper"]["id"]
 
-        confirm_token = _access_key(cap_helper_write="confirm")
+        confirm_access_key = _access_key(cap_helper_write="confirm")
         pending_result, outcome, _ = await _call_tool(
             "edit_helper",
             {
@@ -980,7 +980,7 @@ class TestZoneLifecycle:
                 "helper_id": helper_id,
                 "config": {"name": "Approved name"},
             },
-            confirm_token, hass, data,
+            confirm_access_key, hass, data,
         )
         assert outcome == "pending_approval", pending_result
         approved_args = store.pending[0]["args"]
@@ -991,7 +991,7 @@ class TestZoneLifecycle:
             {"zone_id": helper_id, "radius": 250},
         )
         executed = await async_execute_approved_tool(
-            "edit_helper", approved_args, confirm_token, hass, data,
+            "edit_helper", approved_args, confirm_access_key, hass, data,
         )
         assert executed[1] == "invalid_request"
         assert "changed after the request was reviewed" in executed[0]["content"][0]["text"]
@@ -1003,7 +1003,7 @@ class TestZoneLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "zone", "helper_id": helper_id},
-            allow_token, hass, data,
+            allow_access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -1322,7 +1322,7 @@ class TestTagLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        allow_token = _access_key()
+        allow_access_key = _access_key()
         tag_id = "phoenix-tag-approval"
         _, outcome, _ = await _call_tool(
             "create_helper",
@@ -1330,24 +1330,24 @@ class TestTagLifecycle:
                 "helper_type": "tag",
                 "config": {"tag_id": tag_id, "name": "Approval tag"},
             },
-            allow_token, hass, data,
+            allow_access_key, hass, data,
         )
         assert outcome == "allowed"
 
-        confirm_token = _access_key(cap_helper_write="confirm")
+        confirm_access_key = _access_key(cap_helper_write="confirm")
         _, outcome, _ = await _call_tool(
             "edit_helper",
             {
                 "helper_type": "tag", "helper_id": tag_id,
                 "config": {"name": "After scan"},
             },
-            confirm_token, hass, data,
+            confirm_access_key, hass, data,
         )
         assert outcome == "pending_approval"
         approved_args = store.pending.pop()["args"]
         await async_scan_tag(hass, tag_id, "scanner-device")
         executed = await async_execute_approved_tool(
-            "edit_helper", approved_args, confirm_token, hass, data,
+            "edit_helper", approved_args, confirm_access_key, hass, data,
         )
         assert executed[1] == "allowed"
 
@@ -1357,7 +1357,7 @@ class TestTagLifecycle:
                 "helper_type": "tag", "helper_id": tag_id,
                 "config": {"name": "Should not land"},
             },
-            confirm_token, hass, data,
+            confirm_access_key, hass, data,
         )
         assert outcome == "pending_approval"
         stale_args = store.pending.pop()["args"]
@@ -1366,14 +1366,14 @@ class TestTagLifecycle:
             {"tag_id": tag_id, "description": "External change"},
         )
         executed = await async_execute_approved_tool(
-            "edit_helper", stale_args, confirm_token, hass, data,
+            "edit_helper", stale_args, confirm_access_key, hass, data,
         )
         assert executed[1] == "invalid_request"
         assert "changed after the request was reviewed" in executed[0]["content"][0]["text"]
 
         _, outcome, _ = await _call_tool(
             "delete_helper", {"helper_type": "tag", "helper_id": tag_id},
-            allow_token, hass, data,
+            allow_access_key, hass, data,
         )
         assert outcome == "allowed"
         deleted = data.versions.list_for("helper", f"tag:{tag_id}")[0]
@@ -1394,7 +1394,7 @@ class TestTagLifecycle:
 
         _, outcome, _ = await _call_tool(
             "delete_helper", {"helper_type": "tag", "helper_id": tag_id},
-            allow_token, hass, data,
+            allow_access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -1506,18 +1506,18 @@ class TestPersonLifecycle:
         assert stored["user_id"] == linked_user.id
         assert stored["picture"] == "/local/private-person.png"
         assert stored["device_trackers"] == ["device_tracker.phone"]
-        hidden_token = _access_key(permissions=PermissionTree(domains={
+        hidden_access_key = _access_key(permissions=PermissionTree(domains={
             "person": PermissionNode(state="GREEN"),
             "device_tracker": PermissionNode(state="RED"),
         }))
         hidden_list, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "person"}, hidden_token, hass, data,
+            "list_helpers", {"helper_type": "person"}, hidden_access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(hidden_list)["helpers"] == []
         denied, outcome, _ = await _call_tool(
             "delete_helper", {"helper_type": "person", "helper_id": helper_id},
-            hidden_token, hass, data,
+            hidden_access_key, hass, data,
         )
         assert outcome == "not_found"
         assert linked_user.id not in json.dumps(denied)

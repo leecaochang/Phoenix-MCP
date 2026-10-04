@@ -11,14 +11,14 @@ from homeassistant.components.logbook.websocket_api import ws_get_events
 
 from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
 from custom_components.phoenix_mcp.policy_engine import Permission
-from tests.test_mcp_view import _make_data, _make_hass, _make_token
+from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
 _CONTEXT_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
 async def _call(args: dict, *, access_key=None, hass=None, data=None):
     if access_key is None:
-        access_key, _ = _make_token(cap_log_read="allow")
+        access_key, _ = _make_access_key(cap_log_read="allow")
     if data is None:
         data = _make_data(access_key)
     if hass is None:
@@ -68,7 +68,7 @@ def test_installed_logbook_command_keeps_the_filters_phoenix_relies_on():
 
 @pytest.mark.asyncio
 async def test_capability_denial_runs_before_hostile_argument_validation():
-    access_key, _ = _make_token(cap_log_read="deny")
+    access_key, _ = _make_access_key(cap_log_read="deny")
     body, result, outcome = await _call(
         {
             "target": {

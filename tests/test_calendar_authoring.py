@@ -214,7 +214,7 @@ async def test_cancelled_dispatch_keeps_unknown_receipt(calendar_env, monkeypatc
     assert len(rows) == 1 and rows[0]['status'] == 'outcome_unknown'
 
 
-async def test_receipt_is_token_and_identity_scoped(calendar_env):
+async def test_receipt_is_access_key_and_identity_scoped(calendar_env):
     body = payload(await call(calendar_env, 'create_calendar_event', CREATE))
     access_key, _ = await calendar_env[1].store.async_create_access_key('other-calendar', 'admin', rate_limit_requests=0)
     access_key.pass_through = True

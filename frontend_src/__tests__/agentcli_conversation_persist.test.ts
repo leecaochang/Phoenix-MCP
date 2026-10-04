@@ -1,7 +1,7 @@
 /**
  * The Agent Chat conversation survives a full page reload.
  *
- * Window state (geometry, token/provider/model) and the conversation tier
+ * Window state (geometry, access key/provider/model) and the conversation tier
  * (transcript, unsent message box, usage counters) persist under separate
  * storage keys, so a conversation too large to store can be dropped without
  * taking the window geometry and account selections down with it.
@@ -174,18 +174,18 @@ describe("HA user isolation", () => {
     const { setAgentCliOwner } = await import("../utils/agentcli_state");
     setAgentCliOwner("first");
     setSessionTurns([{ text: "first private reply" }]);
-    patchDurable({ accessKeyId: "first-token" });
+    patchDurable({ accessKeyId: "first-access-key" });
     setAgentCliOwner("second");
     expect(getSessionTurns()).toEqual([]);
     expect(getDurable().accessKeyId).toBe("");
     setSessionTurns([{ text: "late first reply" }], "first");
-    patchDurable({ accessKeyId: "late-first-token" }, "first");
+    patchDurable({ accessKeyId: "late-first-access-key" }, "first");
     expect(getSessionTurns()).toEqual([]);
     expect(getDurable().accessKeyId).toBe("");
     setSessionTurns([{ text: "second private reply" }]);
     setAgentCliOwner("first");
     expect(getSessionTurns()).toEqual([{ text: "first private reply" }]);
-    expect(getDurable().accessKeyId).toBe("first-token");
+    expect(getDurable().accessKeyId).toBe("first-access-key");
     setAgentCliOwner(null);
     expect(getSessionTurns()).toEqual([]);
     setSessionTurns([{ text: "anonymous" }]);

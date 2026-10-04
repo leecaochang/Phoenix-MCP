@@ -2,7 +2,7 @@
 
 Automation references go through mesa-core's public entities_by_role; script and
 scene references are extracted by Phoenix MCP. Forward references are scoped to entities
-the token can access; reverse references describe the accessible entity itself.
+the access key can access; reverse references describe the accessible entity itself.
 """
 
 from __future__ import annotations
@@ -646,7 +646,7 @@ class TestRelationshipCoverage:
 
     @pytest.mark.parametrize("hidden", [False, True])
     async def test_a_config_entry_built_on_an_entity_is_found(self, hass, rel_env, hidden):
-        """A config entry built on an entity is scanned, but never named to a token
+        """A config entry built on an entity is scanned, but never named to an access key
         that cannot access it.
 
         A helper config entry keeps an integration alive and nothing in HA records
@@ -682,7 +682,7 @@ class TestRelationshipCoverage:
         """Config entries are matched by entity-id-shaped VALUE, not by key name.
 
         Integrations store their source entity under whatever key they like
-        (entity_id, source, entity_ids). An entry the token cannot access is still
+        (entity_id, source, entity_ids). An entry the access key cannot access is still
         never named.
         """
         helper = MockConfigEntry(

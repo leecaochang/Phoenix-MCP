@@ -39,8 +39,8 @@
         <p>With the <strong>Access key settings presets</strong> toggle enabled in Settings, each access key gains a Presets card: named snapshots of its complete configuration (capabilities, permissions, rate limits, pass-through) you can switch between, for example a locked-down daily preset and a broader maintenance one on the same access key. Enabling the toggle saves every access key's current settings as its first preset ("Default preset", renameable inline).</p>
         <p>The access key is always "in" one preset, and edits you make are that preset's unsaved changes: switching to another preset first saves them into the outgoing preset (the dialog lists exactly what), then applies the target, so nothing is lost and there are no save prompts. Applying the preset you are already in does the opposite: it reverts the access key to the preset's saved state, discarding the listed unsaved changes. The active preset cannot be deleted, and applying a preset that would enable pass-through asks for the same confirmation as enabling it by hand. Switching is admin-only; a connected agent cannot change its own preset, and after a switch the agent is nudged in-band to refresh its tool list (see the audit log's preset column for per-request attribution).</p>
         <figure class="screenshot">
-          <img src="assets/token-panel.png" alt="an access key detail page showing the capability matrix and persona" loading="lazy" />
-          <figcaption>an access key's detail page: capabilities and persona.</figcaption>
+          <img src="assets/access-key-panel.png" alt="an access key detail page showing the capability matrix and persona" loading="lazy" />
+          <figcaption>An access key's detail page: capabilities and persona.</figcaption>
         </figure>
 
           </div>
@@ -57,14 +57,14 @@
           <div class="callout-body"><p class="callout-title">It is a snapshot, not a new permission level</p><p>Area, label, and integration selection all resolve current registry membership and save the affected nodes in one atomic update. Future members are <strong>not</strong> picked up automatically. Registry-only deviceless entities still need a domain grant, and the dialog reports those domains. A shared-device warning means its device grant also affects entities owned by other config entries.</p></div>
         </div>
         <figure class="screenshot">
-          <img src="assets/token-area.png" alt="The bulk permission dialog grouping entities by area" loading="lazy" />
+          <img src="assets/access-key-area.png" alt="The bulk permission dialog grouping entities by area" loading="lazy" />
           <figcaption>The same bulk-apply dialog also supports labels and exact config entries.</figcaption>
         </figure>
 
         <h3 id="emulator">The effective-permission emulator</h3>
         <p>The emulator shows what Phoenix MCP will actually decide for any entity. Type an entity ID, or click one in the tree or summary, and Phoenix MCP runs the full two-pass resolver, then shows the result, which ancestor decided it, and the hint text if one is set. If a result surprises you, the path output names the ancestor that is overriding it.</p>
         <figure class="screenshot">
-          <img src="assets/token-epe.png" alt="The effective-permission emulator showing a result and the deciding ancestor" loading="lazy" />
+          <img src="assets/access-key-epe.png" alt="The effective-permission emulator showing a result and the deciding ancestor" loading="lazy" />
           <figcaption>The emulator, showing the deciding ancestor.</figcaption>
         </figure>
 
@@ -78,8 +78,8 @@
           <div class="kv-row"><dt>All access keys</dt><dd>A global hint for the entity, applied to every access key that can see it. Useful when the clarification is about the entity itself, not one agent's view of it.</dd></div>
         </dl>
         <figure class="screenshot">
-          <img src="assets/token-entity-hint.png" alt="The entity hint editor with the access key-only and all-access-keys scope toggle" loading="lazy" />
-          <figcaption>The hint editor, with the access key-only / all-access-keys toggle.</figcaption>
+          <img src="assets/access-key-entity-hint.png" alt="The entity hint editor with the access-key-only and all-access-keys scope toggle" loading="lazy" />
+          <figcaption>The hint editor, with the access-key-only / all-access-keys toggle.</figcaption>
         </figure>
 
         <h2 id="approvals-tab">Approvals</h2>
@@ -137,7 +137,7 @@ mode: queued</code></pre>
         </details>
 
         <figure class="screenshot">
-          <img src="assets/token-mesa-confirm.png" alt="A pending MESA confirmation approval with its diff and approve or reject actions" loading="lazy" />
+          <img src="assets/access-key-mesa-confirm.png" alt="A pending MESA confirmation approval with its diff and approve or reject actions" loading="lazy" />
           <figcaption>A pending approval awaiting review.</figcaption>
         </figure>
 

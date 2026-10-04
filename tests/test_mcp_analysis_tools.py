@@ -120,7 +120,7 @@ class TestAuditSummary:
         assert body["entries"][0]["request_id"] == "r1"
         # mesa_advisory omitted when false (matches AuditEntry.to_dict)
         assert "mesa_advisory" not in body["entries"][0]
-        # query must be scoped to this token
+        # query must be scoped to this access key
         assert data.audit.query.call_args.kwargs["access_key_id"] == access_key.id
 
     async def test_surfaces_mesa_advisory_flag(self, hass):
@@ -161,7 +161,7 @@ class TestApprovalStatus:
         data = _data()
         data.store.get_pending_approvals.return_value = [
             _approval_dict("appr_mine", access_key.id),
-            _approval_dict("appr_other", other_id),            # another token: hidden
+            _approval_dict("appr_other", other_id),            # another access key: hidden
             _approval_dict("appr_done", access_key.id, "approved"),  # resolved: excluded
         ]
         content, outcome, _ = await _call("get_approval_status", {}, access_key, hass, data)
@@ -179,7 +179,7 @@ class TestApprovalStatus:
         assert outcome == "allowed"
         assert _json(content)["status"] == "pending"
 
-    async def test_cross_token_id_not_found(self, hass):
+    async def test_cross_access_key_id_not_found(self, hass):
         access_key = _access_key()
         data = _data()
         data.store.get_pending_approvals.return_value = [_approval_dict("appr_x", str(uuid.uuid4()))]
@@ -195,7 +195,7 @@ class TestWaitForApproval:
         _, outcome, _ = await _call("wait_for_approval", {}, _access_key(), hass, _data())
         assert outcome == "invalid_request"
 
-    async def test_cross_token_not_found(self, hass):
+    async def test_cross_access_key_not_found(self, hass):
         access_key = _access_key()
         data = _data()
         data.store.get_pending_approvals.return_value = [_approval_dict("appr_x", str(uuid.uuid4()))]
@@ -480,7 +480,7 @@ class TestValidateConfig:
         assert ref["light.kitchen"]["accessible"] is True
 
     async def test_out_of_scope_entity_is_not_an_existence_oracle(self, hass):
-        # A real entity outside the token's scope must look identical to a typo:
+        # A real entity outside the access key's scope must look identical to a typo:
         # exists is collapsed to the accessible flag so existence never leaks.
         hass.states.async_set("lock.front_door", "locked", {})
         config = {

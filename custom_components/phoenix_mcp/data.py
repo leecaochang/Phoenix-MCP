@@ -81,7 +81,7 @@ class PhoenixData:
     # _approve_approval against a concurrent double-approve re-running the same
     # side effect. The durable execution_started_at marker handles process loss.
     approvals_in_progress: set[str] = field(default_factory=set)
-    # Core wipe sets this under the access key-store lock after confirming there is no
+    # Core wipe sets this under the access-key-store lock after confirming there is no
     # live or interrupted approval execution. Approval dispatch checks it under
     # the same lock until the wipe has removed the records.
     core_wipe_in_progress: bool = False
@@ -90,7 +90,7 @@ class PhoenixData:
     entity_tree_cache_valid: bool = False
     entity_tree_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # Serializes a global-settings write with the live registrations it changes.
-    # The access key-store lock protects persistence only; releasing it before route,
+    # The access-key-store lock protects persistence only; releasing it before route,
     # Assist, MESA, or injector reconciliation lets an older PATCH finish after a
     # newer one and put runtime state back on the obsolete generation.
     settings_update_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -99,7 +99,7 @@ class PhoenixData:
     # Keyed by access key ID for fast sensor lookup during counter updates.
     access_key_id_sensors: dict[str, list] = field(default_factory=dict)
     async_add_entities_cb: Callable | None = None
-    # Per-access key expiry timers. Values are cancel callbacks from hass.async_call_later.
+    # Per-access-key expiry timers. Values are cancel callbacks from hass.async_call_later.
     expiry_timers: dict[str, Callable] = field(default_factory=dict)
     # Callbacks wired by __init__.py to decouple sensor lifecycle from views.
     async_on_access_key_created: Callable | None = None

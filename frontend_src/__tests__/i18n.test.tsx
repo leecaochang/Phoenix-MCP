@@ -115,13 +115,13 @@ describe("tRich", () => {
   });
 
   it("interpolates params inside and outside tags", () => {
-    primeTranslations({ w: { s: "Token <code>{name}</code> is {state}." } });
+    primeTranslations({ w: { s: "Access key <code>{name}</code> is {state}." } });
     render(
       <p data-testid="out">
         {tRich("w.s", { code: (c) => <code>{c}</code> }, { name: "daily", state: "ready" })}
       </p>,
     );
-    expect(screen.getByTestId("out")).toHaveTextContent("Token daily is ready.");
+    expect(screen.getByTestId("out")).toHaveTextContent("Access key daily is ready.");
     expect(screen.getByText("daily").tagName).toBe("CODE");
   });
 
@@ -235,7 +235,7 @@ describe("loadTranslations", () => {
     const homeAssistant = document.createElement("home-assistant") as HTMLElement & {
       hass: ReturnType<typeof authenticatedHass>;
     };
-    homeAssistant.hass = authenticatedHass("live-token");
+    homeAssistant.hass = authenticatedHass("live-access-key");
     document.body.appendChild(homeAssistant);
     mockFetch({ resources: { a: "A" } });
 

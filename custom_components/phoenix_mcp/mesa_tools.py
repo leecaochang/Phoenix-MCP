@@ -1,4 +1,4 @@
-"""Access key-scoped wrappers around the vendored mesa-core retrieval tools.
+"""Access-key-scoped wrappers around the vendored mesa-core retrieval tools.
 
 mesa-core ships the four retrieval handlers (mesa_query_profiles,
 mesa_get_profile, mesa_explain_profile, mesa_get_caller_context). Phoenix MCP does not
@@ -58,7 +58,7 @@ _ENTITY_TARGETED = frozenset({"mesa_get_profile", "mesa_explain_profile"})
 #
 # A lease therefore excludes OTHER ACCESS KEYS, not other callers of the same access key:
 # mesa-core treats same-session overlap as a REFRESH and grants it, so two agents
-# sharing one access key do not exclude each other. That matches the one-access key-per-
+# sharing one access key do not exclude each other. That matches the one-access-key-per-
 # connected-agent model, where the access key is the unit of work that can be
 # interrupted.
 _LEASE_TOOLS = frozenset({"mesa_request_lease", "mesa_release_lease"})

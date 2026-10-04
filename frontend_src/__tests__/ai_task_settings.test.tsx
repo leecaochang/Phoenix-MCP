@@ -48,7 +48,7 @@ function renderCard(s: GlobalSettings, onChange = vi.fn()) {
 describe("AiTaskSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "ai-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "ai-access-key" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [{ id: "i1", kind: "claude", name: "Claude", model: "claude-opus-4-8" }] });
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
     getAiTaskPreferred.mockResolvedValue(prefStatus());
@@ -64,9 +64,9 @@ describe("AiTaskSettings", () => {
     await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
   });
 
-  it("writes the token and provider selections", async () => {
+  it("writes the access key and provider selections", async () => {
     const { onChange } = renderCard(settings());
-    await waitFor(() => expect(screen.getByRole("option", { name: "ai-token" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: "ai-access-key" })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("AI Task access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("ai_task_access_key_id", "tok-1");
     fireEvent.change(screen.getByLabelText("AI Task provider account"), { target: { value: "i1" } });
@@ -162,11 +162,11 @@ describe("AiTaskSettings", () => {
     expect(onChange).toHaveBeenCalledWith("ai_task_enabled", false);
   });
 
-  it("does not expose internal decision review for any token", async () => {
-    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
-      { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
+  it("does not expose internal decision review for any access key", async () => {
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home access key", persona: "home_companion" },
+      { id: "tok-2", name: "Ordinary access key", persona: "voice_assistant" }]);
     const { rerender } = render(<AiTaskSettings settings={settings({ ai_task_access_key_id: "tok-1", ai_task_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
-    await screen.findByRole("option", { name: "Home token" });
+    await screen.findByRole("option", { name: "Home access key" });
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();
     rerender(<AiTaskSettings settings={settings({ ai_task_access_key_id: "tok-2", ai_task_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();

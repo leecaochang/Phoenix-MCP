@@ -2,7 +2,7 @@
 
 `resolve_intent_entities` returns an empty list for three unrelated reasons: the
 caller gave nothing usable to select on, the selectors matched nothing, and the
-token may not touch what matched. Collapsing all three into "No accessible
+access key may not touch what matched. Collapsing all three into "No accessible
 entities matched your request." makes an agent that sent a malformed argument
 read its own mistake as a permission decision and retry it unchanged.
 
@@ -155,7 +155,7 @@ async def test_a_real_selector_that_matches_nothing_stays_collapsed(handler):
 
     Matched-nothing and denied must remain byte-identical to each other, and
     must NOT borrow the argument-shaped message: that would turn the pair into
-    an oracle for what this token can see.
+    an oracle for what this access key can see.
     """
     with patch(f"{NATIVE}.resolve_intent_entities", MagicMock(return_value=[])):
         response, outcome, _resource = await handler(

@@ -527,7 +527,7 @@ class TestEntityRegistryWrite:
         return e.entity_id, area.id
 
     @staticmethod
-    def _token_rw():
+    def _access_key_rw():
         tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
         return _access_key(tree=tree, cap_registry_write="allow", cap_registry_read="allow")
 
@@ -536,7 +536,7 @@ class TestEntityRegistryWrite:
         data, versions = _data()
         res = _text((await _call_tool(
             "set_entity", {"entity_id": eid, "name": "Desk Lamp", "area_id": area_id},
-            self._token_rw(), hass, data))[0])
+            self._access_key_rw(), hass, data))[0])
         assert res["updated"]["name"] == "Desk Lamp"
         assert res["updated"]["area_id"] == area_id
 
@@ -557,7 +557,7 @@ class TestEntityRegistryWrite:
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": eid, "new_entity_id": renamed_id},
-            self._token_rw(),
+            self._access_key_rw(),
             hass,
             data,
         )
@@ -588,7 +588,7 @@ class TestEntityRegistryWrite:
     ):
         eid, area_id = env
         data, versions = _data()
-        access_key = self._token_rw()
+        access_key = self._access_key_rw()
         label = lr.async_get(hass).async_create("Registry test")
         category = cr.async_get(hass).async_create(
             name="Registry category", scope="test_scope"
@@ -694,7 +694,7 @@ class TestEntityRegistryWrite:
     ):
         eid, _area = env
         data, _versions = _data()
-        access_key = self._token_rw()
+        access_key = self._access_key_rw()
         _, outcome, _ = await _call_tool(
             "set_entity", {"entity_id": eid, "enabled": False}, access_key, hass, data
         )
@@ -741,7 +741,7 @@ class TestEntityRegistryWrite:
         registry.async_update_entity(eid, **{registry_field: value})
         data, _versions = _data()
         content, outcome, _ = await _call_tool(
-            "set_entity", {"entity_id": eid, **args}, self._token_rw(), hass, data
+            "set_entity", {"entity_id": eid, **args}, self._access_key_rw(), hass, data
         )
         assert outcome == "invalid_request"
         assert fragment in content["content"][0]["text"]
@@ -767,7 +767,7 @@ class TestEntityRegistryWrite:
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": eid, "enabled": True},
-            self._token_rw(),
+            self._access_key_rw(),
             hass,
             data,
         )
@@ -811,7 +811,7 @@ class TestEntityRegistryWrite:
         )
 
         eid, _area = env
-        access_key = self._token_rw()
+        access_key = self._access_key_rw()
         label_registry = lr.async_get(hass)
         label = label_registry.async_create("Approval-window label")
         category_registry = cr.async_get(hass)
@@ -855,8 +855,8 @@ class TestEntityRegistryWrite:
         _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, access_key, hass, data)
         assert outcome == "denied"
 
-    async def test_deny_token_is_not_a_scope_oracle(self, hass, env):
-        # A cap-denied token must get the byte-identical Forbidden body regardless
+    async def test_deny_access_key_is_not_a_scope_oracle(self, hass, env):
+        # A cap-denied access key must get the byte-identical Forbidden body regardless
         # of whether the named entity is writable, out of scope, or nonexistent.
         eid, _area = env  # WRITE-accessible light entity
         hass.states.async_set("lock.front_door", "locked", {})  # exists, out of scope
@@ -885,7 +885,7 @@ class TestEntityRegistryWrite:
         data, _ = _data()
         before = er.async_get(hass).async_get(eid).area_id
         content, outcome, _ = await _call_tool(
-            "set_entity", {"entity_id": eid, "area_id": "no_such_area"}, self._token_rw(), hass, data)
+            "set_entity", {"entity_id": eid, "area_id": "no_such_area"}, self._access_key_rw(), hass, data)
         assert outcome == "invalid_request"
         assert "Unknown area_id" in content["content"][0]["text"]
         assert er.async_get(hass).async_get(eid).area_id == before
@@ -964,7 +964,7 @@ class TestEntityRegistryWrite:
         data, _ = _data()
         content, outcome, _ = await _execute_set_entity(
             {"entity_id": eid, "label_id": "kitchen"},
-            self._token_rw(),
+            self._access_key_rw(),
             hass,
             data,
         )
@@ -979,7 +979,7 @@ class TestEntityRegistryWrite:
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": eid, "changes": {"name": "Desk Lamp"}, "outer_extra": "kitchen"},
-            self._token_rw(),
+            self._access_key_rw(),
             hass,
             data,
         )
@@ -996,7 +996,7 @@ class TestEntityRegistryWrite:
         )
 
         eid, area_id = env
-        access_key = self._token_rw()
+        access_key = self._access_key_rw()
         args = {"entity_id": eid, "area_id": area_id}
         assert _registry_write_precheck(args, access_key, hass, "set_entity") is None
 
@@ -1010,7 +1010,7 @@ class TestEntityRegistryWrite:
     async def test_delete_entity_removes_and_versions(self, hass, env):
         eid, _area = env
         data, versions = _data()
-        res = _text((await _call_tool("delete_entity", {"entity_id": eid}, self._token_rw(), hass, data))[0])
+        res = _text((await _call_tool("delete_entity", {"entity_id": eid}, self._access_key_rw(), hass, data))[0])
         assert res["deleted"] is True
         assert er.async_get(hass).async_get(eid) is None
         hist = versions.list_for("entity", eid)
@@ -1040,7 +1040,7 @@ class TestEntityRegistryWrite:
         assert registry.async_get(eid) is not None
 
         _content, outcome, _ = await _call_tool(
-            "delete_entity", {"entity_id": eid}, self._token_rw(), hass, data
+            "delete_entity", {"entity_id": eid}, self._access_key_rw(), hass, data
         )
         assert outcome == "allowed"
         assert registry.async_get(eid) is None

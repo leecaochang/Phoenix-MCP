@@ -852,7 +852,7 @@ class AccessKeyStore:
         self._pending_approvals: list[dict] = []
         self._settings: GlobalSettings = GlobalSettings()
         # Global per-entity hints (entity_id to hint text), surfaced to every access key
-        # in the context endpoint. Distinct from per-access key permission-node hints.
+        # in the context endpoint. Distinct from per-access-key permission-node hints.
         self._entity_hints: dict[str, str] = {}
         self.async_lock: asyncio.Lock = asyncio.Lock()
 
@@ -1175,7 +1175,7 @@ class AccessKeyStore:
         by construction, so it becomes the active preset (workspace model: a
         dirty outgoing preset keeps its last saved payload; the unsaved changes
         move into the new preset). Raises ValueError on a duplicate name or
-        when the per-access key cap is reached. Returns None if the access key is missing.
+        when the per-access-key cap is reached. Returns None if the access key is missing.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:

@@ -8,7 +8,7 @@ conversation.py so HA does not treat it as a conversation ENTITY platform.
 
 Model-side work is reused from agentcli.py: provider accounts and keys, provider
 construction, and the gated tool loop (async_run_voice_turn), which dispatches
-every tool through mcp_view._dispatch_mcp so per-access key scope, MESA, approvals and
+every tool through mcp_view._dispatch_mcp so per-access-key scope, MESA, approvals and
 audit apply identically. A confirm-gated action degrades to "queued, approve in the
 Phoenix MCP panel" (voice has no inline Approve button), so a turn never blocks.
 The bound access key, provider and model are GlobalSettings.voice_agent_*, set in the

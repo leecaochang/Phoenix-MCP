@@ -114,7 +114,7 @@ async def test_unload_persists_dirty_routing_statistics(hass, hass_storage, enab
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
-async def test_startup_archives_expired_tokens_and_schedules_future_expiry(hass, enable_custom_integrations):
+async def test_startup_archives_expired_access_keys_and_schedules_future_expiry(hass, enable_custom_integrations):
     """Startup enforces expiry without waiting for a request or interval sweep."""
     store = await AccessKeyStore.async_create(hass)
     expired, _ = await store.async_create_access_key('expired', 'admin',

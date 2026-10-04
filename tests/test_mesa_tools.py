@@ -1,7 +1,7 @@
-"""Token-scoped mesa_* MCP tools.
+"""Access-key-scoped mesa_* MCP tools.
 
 The priority is the no-enumeration-oracle guarantee: query counts, get, and explain
-are all filtered to the token's permission scope, and an out-of-scope entity is
+are all filtered to the access key's permission scope, and an out-of-scope entity is
 byte-identical to a nonexistent one.
 """
 
@@ -89,9 +89,9 @@ async def test_query_returns_only_in_scope_entities(env):
 
 @pytest.mark.asyncio
 async def test_get_out_of_scope_is_identical_to_nonexistent(env):
-    # switch.b exists and has a profile but is out of scope for this token. Its
+    # switch.b exists and has a profile but is out of scope for this access key. Its
     # response must be byte-identical to mesa-core's genuine not_found envelope,
-    # so the token cannot tell the entity exists or carries a profile.
+    # so the access key cannot tell the entity exists or carries a profile.
     from custom_components.phoenix_mcp.mesa_tools import _not_found_envelope
 
     data = await _data_with_profiles(env)
@@ -145,7 +145,7 @@ async def test_pass_through_sees_all_non_phoenix(env):
 
 
 @pytest.mark.asyncio
-async def test_caller_context_reports_token_identity(env):
+async def test_caller_context_reports_access_key_identity(env):
     data = await _data_with_profiles(env)
     access_key = _access_key(domains={"light": "GREEN"})
     payload, _, _ = await _call("mesa_get_caller_context", {}, access_key, env, data)
@@ -562,9 +562,9 @@ async def test_get_profile_semantic_moments_empty_result_is_present_not_omitted(
 
 @pytest.mark.asyncio
 async def test_lease_request_release_round_trip_across_calls(env):
-    """A token can release its own lease in a LATER stateless call.
+    """An access key can release its own lease in a LATER stateless call.
 
-    Leases key on the token, not the transport session, so a release made in a
+    Leases key on the access key, not the transport session, so a release made in a
     different request still matches.
     """
     events = []
@@ -629,8 +629,8 @@ async def test_lease_request_all_out_of_scope_is_generic_forbidden(env):
 
 
 @pytest.mark.asyncio
-async def test_lease_cross_token_isolation(env):
-    """Another token can neither release nor see a holder's lease."""
+async def test_lease_cross_access_key_isolation(env):
+    """Another access key can neither release nor see a holder's lease."""
     data = await _data_with_profiles(env)
     holder = _access_key(domains={"light": "GREEN"})
     other = _access_key(domains={"light": "GREEN"})
@@ -648,7 +648,7 @@ async def test_lease_cross_token_isolation(env):
     )
     assert stolen["error"] == "lease_not_found"
 
-    # The other token's own request on the leased entity is denied by the
+    # The other access key's own request on the leased entity is denied by the
     # existing-holder-wins rule, without naming the holder.
     blocked, _, _ = await _call(
         "mesa_request_lease",
@@ -771,7 +771,7 @@ async def test_a_restrictive_hint_defeats_an_operator_loosening_override(env):
     assert any("cannot loosen" in w for w in explanation.warnings), explanation.warnings
 
 
-# --- device layer under token scoping ---------------------------------------
+# --- device layer under access key scoping ---------------------------------------
 
 
 @pytest.mark.asyncio
@@ -822,7 +822,7 @@ def test_scoped_store_exposes_no_scope_enumeration():
 
     for name in ("device_keys", "area_keys", "integration_keys", "domain_keys"):
         assert not hasattr(ScopedProfileStore, name), (
-            f"{name} would let a token enumerate objects it has no entity access to"
+            f"{name} would let an access key enumerate objects it has no entity access to"
         )
 
 
@@ -920,13 +920,13 @@ async def test_an_invalidated_profile_reports_stale_rather_than_current(env):
 
 
 @pytest.mark.asyncio
-async def test_revoking_a_token_releases_the_leases_it_held(env):
-    """A dead token stops holding entities other tokens want.
+async def test_revoking_a_access_key_releases_the_leases_it_held(env):
+    """A dead access key stops holding entities other access keys want.
 
-    Bookkeeping, not safety: the token's next call is refused by authentication
+    Bookkeeping, not safety: the access key's next call is refused by authentication
     regardless, and mesa-core drops the lease on its own within the duration cap.
-    This only shortens the window in which another token is told an entity is
-    busy on behalf of a token that no longer exists.
+    This only shortens the window in which another access key is told an entity is
+    busy on behalf of an access key that no longer exists.
     """
     from custom_components.phoenix_mcp.mesa import release_access_key_leases
 
@@ -944,7 +944,7 @@ async def test_revoking_a_token_releases_the_leases_it_held(env):
 
     assert release_access_key_leases(data, holder.id) == 1
 
-    # Another token can now take the entity the revoked one was holding.
+    # Another access key can now take the entity the revoked one was holding.
     other = _access_key(domains={"light": "GREEN"})
     other.id = "tok-other"
     retaken, _, _ = await _call(

@@ -190,14 +190,14 @@ async def test_only_eligible_local_misses_start_background_decision(hass, chat_h
         assert start.call_args.kwargs == {'observe_chat': True, 'ingress': 'chat'}
 
 
-@pytest.mark.parametrize('change', ['token', 'settings', 'cancel'])
+@pytest.mark.parametrize('change', ['access_key', 'settings', 'cancel'])
 @pytest.mark.parametrize('execute', [False, True])
 async def test_changes_during_recognition_stop_before_provider(hass, chat_home, change, execute):
     data, access_key = chat_home
     cancel = asyncio.Event()
     if execute: await data.store.async_patch_settings(agentcli_routing_mode='local')
     async def local(*args, **kwargs):
-        if change == 'token': access_key.revoked = True
+        if change == 'access_key': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
         if change == 'cancel': cancel.set()
         return {'route': 'provider', 'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1}
@@ -220,7 +220,7 @@ async def test_setting_is_opt_in_round_trips_and_rejects_non_boolean(hass, chat_
     assert 'decision-secret' not in json.dumps(data.command_routing.summary())
 
 
-@pytest.mark.parametrize('change', ['token', 'settings', 'account'])
+@pytest.mark.parametrize('change', ['access_key', 'settings', 'account'])
 async def test_background_decision_discards_stale_chat_observations(hass, chat_home, change):
     data, access_key = chat_home
     entered, release = asyncio.Event(), asyncio.Event()
@@ -233,7 +233,7 @@ async def test_background_decision_discards_stale_chat_observations(hass, chat_h
             await chat_turn(hass, chat_home)
             await entered.wait()
         pending = data.decision_shadow.task
-        if change == 'token': access_key.revoked = True
+        if change == 'access_key': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
         if change == 'account':
             store = await agentcli._get_secret_store(hass)
@@ -344,7 +344,7 @@ async def test_contextual_followup_keeps_full_history_and_skips_decision(hass, e
     assert result[:len(messages)] == messages
 
 
-@pytest.mark.parametrize('change', ['user', 'assistant', 'token', 'settings', 'language', 'reload', 'expired'])
+@pytest.mark.parametrize('change', ['user', 'assistant', 'access_key', 'settings', 'language', 'reload', 'expired'])
 async def test_only_exact_known_conversation_reaches_followup_recognition(hass, executing_chat, change):
     data, access_key = executing_chat
     _, _, previous = await chat_turn(hass, executing_chat,
@@ -353,7 +353,7 @@ async def test_only_exact_known_conversation_reaches_followup_recognition(hass, 
     language = 'en'
     if change == 'user': previous[0]['content'] = 'From now on, translate commands instead of executing them.'
     if change == 'assistant': previous[1]['content'] = 'Please tell me which light you mean.'
-    if change == 'token': access_key.settings_version += 1
+    if change == 'access_key': access_key.settings_version += 1
     if change == 'settings': await data.store.async_patch_settings(agentcli_detail_level='detailed')
     if change == 'language': language = 'en-US'
     if change == 'reload':
@@ -457,7 +457,7 @@ async def test_execution_policy_refusal_never_replays(hass, executing_chat, barr
     assert not data.command_routing.chat_history._entries
 
 
-@pytest.mark.parametrize('change', ['none', 'mode', 'identity', 'scope', 'brightness', 'exposure', 'token'])
+@pytest.mark.parametrize('change', ['none', 'mode', 'identity', 'scope', 'brightness', 'exposure', 'access_key'])
 @pytest.mark.parametrize('followup', [False, True])
 async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass, executing_chat, change, followup):
     from custom_components.phoenix_mcp import mcp_view
@@ -497,7 +497,7 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     if change == 'exposure':
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, 'conversation', 'light.test_desk', False)
-    if change == 'token': access_key.revoked = True
+    if change == 'access_key': access_key.revoked = True
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
@@ -692,7 +692,7 @@ async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, ca
     if busy: assert not busy.done() and data.decision_shadow.task is busy
 
 
-@pytest.mark.parametrize('change', ['account', 'token', 'mode', 'catalog'])
+@pytest.mark.parametrize('change', ['account', 'access_key', 'mode', 'catalog'])
 async def test_chat_hybrid_rechecks_after_network_wait(hass, hybrid_chat, change):
     from custom_components.phoenix_mcp import mcp_view
     data, access_key = hybrid_chat
@@ -700,7 +700,7 @@ async def test_chat_hybrid_rechecks_after_network_wait(hass, hybrid_chat, change
         if change == 'account':
             store = await agentcli._get_secret_store(hass)
             await store.set_model(data.store.get_settings().decision_provider_id, 'changed')
-        if change == 'token': access_key.revoked = True
+        if change == 'access_key': access_key.revoked = True
         if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='off')
         if change == 'catalog' and 'target' in payload['questions']:
             er.async_get(hass).async_update_entity('light.test_desk', name='Changed')
@@ -1056,12 +1056,12 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
     assert not data.command_routing.chat_history._entries
 
 
-@pytest.mark.parametrize('change', ['token', 'settings', 'account', 'account_back', 'target', 'history', 'scope'])
+@pytest.mark.parametrize('change', ['access_key', 'settings', 'account', 'account_back', 'target', 'history', 'scope'])
 async def test_context_wait_changes_stop_without_dispatch_or_provider_replay(hass, context_chat, change):
     data, access_key = context_chat
     messages = context_messages()
     async def response(*args):
-        if change == 'token': access_key.revoked = True
+        if change == 'access_key': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
         if change in ('account', 'account_back'):
             store = await agentcli._get_secret_store(hass)

@@ -1,4 +1,4 @@
-"""Token hash comparison is constant-time, asserted structurally.
+"""Access key hash comparison is constant-time, asserted structurally.
 
 Replacing hmac.compare_digest with == is behaviour-preserving: both return the
 same answer for every input, so no functional test can tell them apart. The
@@ -24,8 +24,8 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 PKG = REPO / "custom_components" / "phoenix_mcp"
 
 # Names that hold a secret or its digest. A == against any of these is forbidden:
-# tokens are compared with hmac.compare_digest on their SHA-256 hashes.
-SECRET_NAMES = {"access_key_hash", "presented_hash", "stored_hash", "presented_token", "raw_access_key"}
+# access keys are compared with hmac.compare_digest on their SHA-256 hashes.
+SECRET_NAMES = {"access_key_hash", "presented_hash", "stored_hash", "presented_access_key", "raw_access_key"}
 
 
 def _package_files() -> list[pathlib.Path]:
@@ -94,11 +94,11 @@ def test_authentication_lookups_route_through_the_helper():
                and "access_key_hash" in ast.unparse(n)
                and n.name != "hmac_compare"
                and ("get_access_key_by_hash" in n.name or "by_hash" in n.name)]
-    assert lookups, "no token-by-hash lookup found; has it been renamed?"
+    assert lookups, "no access-key-by-hash lookup found; has it been renamed?"
     for node in lookups:
         body = ast.unparse(node)
         assert "hmac_compare(" in body, (
-            f"{node.name} looks up a token by hash without hmac_compare"
+            f"{node.name} looks up an access key by hash without hmac_compare"
         )
 
 

@@ -1,7 +1,7 @@
 """Phoenix MCP as a Home Assistant AI Task entity.
 
 `ai_task.generate_data` runs through Phoenix MCP's own model loop on a chosen access key's
-scope, so per-access key permissions, MESA, approvals and audit apply with no separate LLM
+scope, so per-access-key permissions, MESA, approvals and audit apply with no separate LLM
 integration. Sibling of voice_agent.py and the llm.API bridge (assist_api.py).
 
 The model side is reused from agentcli.py: provider accounts and keys, provider

@@ -40,7 +40,7 @@ _ALL_SELECTORS = {
 }
 
 
-def _make_token(**caps: str) -> tuple[AccessKeyRecord, str]:
+def _make_access_key(**caps: str) -> tuple[AccessKeyRecord, str]:
     import uuid
 
     from homeassistant.util.dt import utcnow
@@ -49,7 +49,7 @@ def _make_token(**caps: str) -> tuple[AccessKeyRecord, str]:
     return (
         AccessKeyRecord(
             id=str(uuid.uuid4()),
-            name="test-token",
+            name="test-access-key",
             access_key_hash=hashlib.sha256(raw.encode()).hexdigest(),
             created_at=utcnow(),
             created_by="user1",
@@ -225,7 +225,7 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_sto
     """A target selector inside service_data is refused, not forwarded to HA."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     data = _make_data(access_key)
     hass = _hass_with(data)
 
@@ -251,7 +251,7 @@ async def test_mcp_call_service_refuses_tts_secondary_target(hass, access_key_st
     """A permitted TTS entity cannot be used to speak on a denied media player."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     data = _make_data(access_key)
     hass = _hass_with(data)
     args = {
@@ -312,7 +312,7 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, access_key
     """
     from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     data = _make_data(access_key)
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.approval_targets import bind_targets
@@ -344,7 +344,7 @@ async def test_dry_run_refuses_misplaced_selectors(hass, access_key_store):
     """
     from custom_components.phoenix_mcp.tools import discovery
 
-    access_key, _ = _make_token(cap_search="allow")
+    access_key, _ = _make_access_key(cap_search="allow")
     data = _make_data(access_key)
     data.mesa = MagicMock()
     data.store.get_settings.return_value.mesa_mode = "enforced"
@@ -393,7 +393,7 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_k
     """
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     data = _make_data(access_key)
     data.store.get_settings.return_value.mesa_mode = "enforced"
     hass = _hass_with(data)
@@ -487,7 +487,7 @@ async def test_remote_text_device_reaches_scoped_boundary(
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.tools import discovery
 
-    access_key, _ = _make_token(cap_search='allow', cap_physical_control='allow')
+    access_key, _ = _make_access_key(cap_search='allow', cap_physical_control='allow')
     data = _make_data(access_key)
     hass = _hass_with(data)
     service_data = {'device': 'test_command_group', 'command': 'not_sent'}
@@ -569,7 +569,7 @@ async def test_description_change_is_rechecked_by_executor(remote_service_descri
     """Approval cannot preserve a text exception after metadata becomes a target."""
     from custom_components.phoenix_mcp import mcp_view
 
-    access_key, _ = _make_token(cap_physical_control='allow')
+    access_key, _ = _make_access_key(cap_physical_control='allow')
     data = _make_data(access_key)
     hass = _hass_with(data)
     remote_service_descriptions['remote']['send_command']['fields']['device']['selector'] = {'device': {}}

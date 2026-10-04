@@ -197,7 +197,7 @@ async def async_create_pending_approval(
     """Add a new pending approval to storage and return the record.
 
     Caller must hold store.async_lock if creating from a multi-step path.
-    Raises PendingApprovalCapacityError if the access key is at the per-access key cap.
+    Raises PendingApprovalCapacityError if the access key is at the per-access-key cap.
     """
     raw = store.get_pending_approvals()
     pending_for_access_key = sum(

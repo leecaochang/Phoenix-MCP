@@ -74,7 +74,7 @@ def _dispatch_ok(text):
     return fake
 
 
-def _make_token():
+def _make_access_key():
     return SimpleNamespace(id="tok-1", announce_all_tools=True, confirm_inline_wait_seconds=0)
 
 
@@ -91,7 +91,7 @@ def _make_data(**settings_over):
 
 @pytest.mark.asyncio
 async def test_prior_action_warning_says_new_request_was_not_executed(hass):
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     await data.agent_recovery.begin(access_key.id, 'call_service', 'earlier')
     data.agent_recovery.interrupted('earlier')
@@ -104,7 +104,7 @@ async def test_prior_action_warning_says_new_request_was_not_executed(hass):
 
 @pytest.mark.asyncio
 async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok('{"state": "on"}')
@@ -125,7 +125,7 @@ async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
 
 @pytest.mark.asyncio
 async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data(
         voice_agent_conversation_style="calm_guide",
         voice_agent_detail_level="detailed",
@@ -163,7 +163,7 @@ async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
 
 @pytest.mark.asyncio
 async def test_voice_answer_anyway_is_a_deterministic_one_turn_bypass():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data(voice_agent_home_focused=True)
     capture: dict = {}
     events = [{"type": EV_TEXT, "text": "Jane Austen."}, _done("end_turn")]
@@ -204,7 +204,7 @@ def test_voice_answer_anyway_recognizes_localized_phrase(language, phrase):
 
 @pytest.mark.asyncio
 async def test_voice_turn_pending_becomes_queued_without_blocking():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     record = SimpleNamespace(
@@ -235,7 +235,7 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
 
 @pytest.mark.asyncio
 async def test_voice_turn_appends_review_link_only_when_requested():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
@@ -269,7 +269,7 @@ async def test_voice_turn_appends_review_link_only_when_requested():
 
 @pytest.mark.asyncio
 async def test_voice_turn_authority_loss_skips_side_effect():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
@@ -297,7 +297,7 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
     hostile provider could otherwise accumulate several stream-sized responses in
     memory with no operator watching. AGENTCLI_MAX_TURN_OUTPUT_BYTES bounds it.
     """
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -321,7 +321,7 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
 @pytest.mark.asyncio
 async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
     """With nothing said yet, the ceiling still produces a sayable sentence."""
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -337,14 +337,14 @@ async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
 
 @pytest.mark.asyncio
 async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
-    """A dead token buys exactly one more model call, not max_iterations of them.
+    """A dead access key buys exactly one more model call, not max_iterations of them.
 
     The round that discovers the loss still feeds the refusals back, so the model
     gets a turn to tell the user what happened. If it asks for tools AGAIN instead
     of answering, every call would be refused identically, so the loop stops rather
     than spending its remaining rounds re-reporting one refusal.
     """
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
@@ -368,7 +368,7 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
 @pytest.mark.asyncio
 async def test_voice_turn_running_out_of_steps_says_so():
     """Exhaustion is spoken as its own cause, not the generic apology."""
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
@@ -387,7 +387,7 @@ async def test_voice_turn_running_out_of_steps_says_so():
 @pytest.mark.asyncio
 async def test_voice_turn_marks_an_answer_the_model_truncated():
     """A cut-off answer is acted on as a whole one unless it says otherwise."""
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([
@@ -408,7 +408,7 @@ async def test_voice_turn_marks_an_answer_the_model_truncated():
 @pytest.mark.parametrize("language", ["zh-Hans", "ko"])
 async def test_voice_failure_sentences_follow_the_conversation_language(language: str):
     """Every spoken non-answer is localized, not just the pre-loop declines."""
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
@@ -427,7 +427,7 @@ async def test_voice_failure_sentences_follow_the_conversation_language(language
 
 @pytest.mark.asyncio
 async def test_voice_turn_provider_error_yields_spoken_fallback():
-    access_key = _make_token()
+    access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
@@ -464,7 +464,7 @@ async def test_voice_answer_happy_path_runs_the_loop():
     )
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="The garage is closed.")):
@@ -480,7 +480,7 @@ async def test_voice_answer_unknown_provider_is_misconfigured():
     )
     store = MagicMock()
     store.resolve.return_value = None
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
         text = await voice_agent.async_voice_answer(MagicMock(), data, "hi")
     assert "not fully configured" in text.lower()

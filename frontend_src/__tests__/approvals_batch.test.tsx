@@ -135,7 +135,7 @@ describe("batch approve", () => {
       applied: [{ approval_id: "a", tool_name: "edit_automation" }],
       failed: {
         approval_id: "b", tool_name: "edit_automation", status: 409,
-        error: "conflict", message: "Capability is now denied for this token.",
+        error: "conflict", message: "Capability is now denied for this access key.",
       },
       remaining: ["c"],
     });

@@ -125,7 +125,7 @@ async def test_scrub_before_search_and_paths(context):
     for private in (raw_access_key, "secret-value", "/Users/", "sensor.hidden"):
         searched, _, _ = await _call(context, search=private)
         assert searched["count"] == 0
-    searched, _, _ = await _call(context, search="<phoenix-token>")
+    searched, _, _ = await _call(context, search="<phoenix-access-key>")
     assert searched["count"] == 1
 
 
@@ -253,7 +253,7 @@ async def test_byte_budget_pages_without_splitting(context):
     assert len(seen) == 6
 
 
-async def test_cursor_bound_to_snapshot_filters_and_token(context):
+async def test_cursor_bound_to_snapshot_filters_and_access_key(context):
     _, access_key, _, path = context
     path.write_text(_dump("old") + _dump("new"))
     body, _, _ = await _call(context, limit=1)

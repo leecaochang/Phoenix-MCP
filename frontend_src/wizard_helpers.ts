@@ -18,7 +18,7 @@ export function skillUrlFromMcp(mcpUrl: string): string {
   return mcpUrl.replace(/\/api\/phoenix-mcp\/?$/, "") + SKILL_PATH;
 }
 
-// The per-access key MCP server name used in agent configs. Derived from the access key
+// The per-access-key MCP server name used in agent configs. Derived from the access key
 // name so each access key gets a DISTINCT client entry: configure one entry per
 // access key once, then switch access keys by toggling which entry is enabled in the
 // client. Access key names match ^[A-Za-z0-9_-]{3,32}$ (backend ACCESS_KEY_NAME_REGEX)
@@ -127,7 +127,7 @@ export interface AgentTab {
 }
 
 // Per-agent connection instructions, default first (Claude Code). accessKeyName
-// drives each client's per-access key server name (and Codex env var), so entries can
+// drives each client's per-access-key server name (and Codex env var), so entries can
 // coexist without replacing one another. Harness is an external client, separate
 // from Agent Chat providers.
 export function buildAgentTabs(url: string, accessKey: string, accessKeyName: string): AgentTab[] {

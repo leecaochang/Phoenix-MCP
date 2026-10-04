@@ -1,4 +1,4 @@
-"""Template helper authoring is scoped to what the token may read.
+"""Template helper authoring is scoped to what the access key may read.
 
 Static dependency analysis, plus ingress and executor checks against real HA helpers.
 """

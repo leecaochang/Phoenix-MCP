@@ -156,11 +156,11 @@ async def test_capability_is_enforced_for_pass_through(hass, reconfigure_env):
 
 
 @pytest.mark.parametrize(
-    "token_kwargs",
+    "access_key_kwargs",
     ({"device_state": "YELLOW"}, {"entity_state": "YELLOW"}),
 )
 async def test_complete_config_entry_write_is_required(
-    hass, reconfigure_env, token_kwargs
+    hass, reconfigure_env, access_key_kwargs
 ):
     data = await _data(hass)
     runner = AsyncMock()
@@ -170,7 +170,7 @@ async def test_complete_config_entry_write_is_required(
         content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             {"entry_id": reconfigure_env["entry"].entry_id, "config": {}},
-            _access_key(reconfigure_env, **token_kwargs),
+            _access_key(reconfigure_env, **access_key_kwargs),
             hass,
             data,
         )

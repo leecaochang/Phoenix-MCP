@@ -1,4 +1,4 @@
-"""Frontend/backend contract drift guard for the admin token response.
+"""Frontend/backend contract drift guard for the admin access key response.
 
 The frontend's AccessKeyRecord type (frontend_src/types.ts) is hand-mirrored from the
 Python AccessKeyRecord serializer, so they could drift silently. This test pins the
@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 _CONTRACT = os.path.join(os.path.dirname(__file__), "contract", "access_key_record_keys.json")
 
 
-def _sample_token() -> AccessKeyRecord:
+def _sample_access_key() -> AccessKeyRecord:
     # pass_through=True emits the conditional use_assist_exposure field, giving
     # the full superset of serialized keys.
     return AccessKeyRecord(
@@ -32,8 +32,8 @@ def _sample_token() -> AccessKeyRecord:
     )
 
 
-def test_token_record_serializer_matches_contract_fixture():
-    live_keys = sorted(_sample_token().to_dict().keys())
+def test_access_key_record_serializer_matches_contract_fixture():
+    live_keys = sorted(_sample_access_key().to_dict().keys())
     with open(_CONTRACT, encoding="utf-8") as f:
         expected = sorted(json.load(f)["access_key_record_keys"])
     assert live_keys == expected, (

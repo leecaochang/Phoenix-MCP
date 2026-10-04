@@ -8,7 +8,7 @@ import type { AccessKeyRecord } from "../types";
 function makeAccessKey(overrides: Partial<AccessKeyRecord> = {}): AccessKeyRecord {
   return {
     id: "tok-1",
-    name: "test-token",
+    name: "test-access-key",
     created_at: "2025-01-01T00:00:00Z",
     created_by: "user1",
     expires_at: null,
@@ -82,19 +82,19 @@ describe("formatDateTime", () => {
 });
 
 describe("accessKeyStatus", () => {
-  it("returns 'Active' for a valid non-revoked token without expiry", () => {
+  it("returns 'Active' for a valid non-revoked access key without expiry", () => {
     expect(accessKeyStatus(makeAccessKey())).toBe("Active");
   });
 
-  it("returns 'Revoked' for a revoked token", () => {
+  it("returns 'Revoked' for a revoked access key", () => {
     expect(accessKeyStatus(makeAccessKey({ revoked: true }))).toBe("Revoked");
   });
 
-  it("returns 'Expired' for a token with a past expiry date", () => {
+  it("returns 'Expired' for an access key with a past expiry date", () => {
     expect(accessKeyStatus(makeAccessKey({ expires_at: "2020-01-01T00:00:00Z" }))).toBe("Expired");
   });
 
-  it("returns 'Active' for a token with a future expiry date", () => {
+  it("returns 'Active' for an access key with a future expiry date", () => {
     expect(accessKeyStatus(makeAccessKey({ expires_at: "2099-12-31T23:59:59Z" }))).toBe("Active");
   });
 

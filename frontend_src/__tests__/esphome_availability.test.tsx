@@ -62,7 +62,7 @@ describe("ESPHome availability in the panel", () => {
     expect(screen.queryByText(/not detected/)).toBeNull();
   });
 
-  it("keeps the capability settable so a token can be prepared in advance", () => {
+  it("keeps the capability settable so an access key can be prepared in advance", () => {
     render(
       <CapabilityMatrix
         accessKey={accessKey()}

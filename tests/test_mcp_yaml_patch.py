@@ -317,7 +317,7 @@ class TestPatchTool:
         assert _read(hass) == SAMPLE.replace("sensor.*_energy_*", "sensor.*_debug_*")
 
     async def test_deny_returns_forbidden_without_echoing_the_payload(self, hass):
-        """A denied token learns nothing about its input.
+        """A denied access key learns nothing about its input.
 
         The cap-deny check runs before any validation of the input.
         """

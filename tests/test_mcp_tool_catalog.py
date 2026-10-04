@@ -137,9 +137,9 @@ def test_open_world_is_exactly_the_blueprint_tools():
 
 @pytest.mark.asyncio
 async def test_tools_list_exposes_annotations_and_still_strips_cap():
-    from tests.test_mcp_view import _make_data, _make_hass, _make_token
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     access_key.announce_all_tools = True
     data = _make_data(access_key)
     res, _m, _r, _o = await mcp_view._dispatch_mcp(
@@ -157,15 +157,15 @@ async def test_tools_list_exposes_annotations_and_still_strips_cap():
 
 
 def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wires():
-    """Pin deterministic payload bytes for read, write, and announce-all tokens."""
-    from tests.test_mcp_view import _make_data, _make_token
+    """Pin deterministic payload bytes for read, write, and announce-all access keys."""
+    from tests.test_mcp_view import _make_data, _make_access_key
 
-    read_only, _ = _make_token(cap_config_read="allow", cap_log_read="allow")
+    read_only, _ = _make_access_key(cap_config_read="allow", cap_log_read="allow")
     read_only.cap_search = "allow"
     read_only.cap_registry_read = "allow"
     read_only.cap_diagnostics = "allow"
 
-    write_capable, _ = _make_token(
+    write_capable, _ = _make_access_key(
         cap_config_read="allow", cap_log_read="allow", cap_automation_write="allow"
     )
     write_capable.cap_search = "allow"
@@ -178,7 +178,7 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         domains={"light": PermissionNode(state="GREEN")}
     )
 
-    announce_all, _ = _make_token()
+    announce_all, _ = _make_access_key()
     announce_all.announce_all_tools = True
     profiles = {
         "read_only": read_only,
@@ -253,9 +253,9 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     from unittest.mock import patch
 
     from custom_components.phoenix_mcp import agentcli
-    from tests.test_mcp_view import _make_data, _make_hass, _make_token
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
 
-    access_key, _ = _make_token()
+    access_key, _ = _make_access_key()
     # Grant every cap the ESPHome tools gate on, so this test varies only the
     # availability dimension it is about.
     access_key.cap_esphome_yaml = "allow"
@@ -348,7 +348,7 @@ def test_registered_context_params_are_real_handler_parameters():
         accepted = set(code.co_varnames[: code.co_argcount + code.co_kwonlyargcount])
         assert set(wanted) <= accepted, name
         assert set(bound) <= accepted, name
-        # args/token/hass are passed positionally by _call_tool.
+        # args/access key/hass are passed positionally by _call_tool.
         assert code.co_argcount >= 3, name
 
 

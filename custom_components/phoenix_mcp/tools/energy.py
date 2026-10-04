@@ -192,7 +192,7 @@ async def _tool_get_solar_forecast(
 
 
 def _scoped_body(prefs: dict, configured: bool, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """The access key-scoped response body. Shared by the read and the write's result."""
+    """The access-key-scoped response body. Shared by the read and the write's result."""
     scoped = filter_service_response(prefs, access_key, hass)
     return {
         "configured": configured,

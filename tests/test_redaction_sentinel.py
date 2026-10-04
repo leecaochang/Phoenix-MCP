@@ -24,7 +24,7 @@ from custom_components.phoenix_mcp.access_key_store import PermissionTree, Acces
 
 
 def _access_key() -> AccessKeyRecord:
-    """A token with an empty tree, so every entity resolves to NO_ACCESS."""
+    """An access key with an empty tree, so every entity resolves to NO_ACCESS."""
     return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(domains={}),
@@ -41,7 +41,7 @@ async def test_ghost_entity_redacts_identically(hass: HomeAssistant) -> None:
     """A ghost entity (absent from states and the registry) is NO_ACCESS at once.
 
     It redacts like any inaccessible entity, so a dashboard carrying dead references
-    stays redacted even for a token whose permissions are widened.
+    stays redacted even for an access key whose permissions are widened.
     """
     out = filter_service_response({"entity": "lock.deleted_long_ago"}, _access_key(), hass)
     assert out["entity"] == REDACTION_SENTINEL

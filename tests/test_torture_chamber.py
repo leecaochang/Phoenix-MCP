@@ -15,7 +15,7 @@ Invariants checked on every (tool, attack) pair:
 1. It returns, rather than raising.
 2. It returns the MCP content contract with a recognised audit outcome.
 3. It never leaks a traceback or interpreter path into the response.
-4. A FULLY DENIED token learns nothing about its payload: each attack string
+4. A FULLY DENIED access key learns nothing about its payload: each attack string
    carries a marker, and its return would make the error text a validator.
 """
 from __future__ import annotations
@@ -248,7 +248,7 @@ def _data() -> PhoenixData:
 
 
 def _access_key(mode: str) -> AccessKeyRecord:
-    """A token whose every capability is `mode`, with an EMPTY permission tree.
+    """An access key whose every capability is `mode`, with an EMPTY permission tree.
 
     No entity is ever in scope, so nothing real is actuated.
     """
@@ -286,7 +286,7 @@ for _d in ALL_DEFS:
 
 # Tools whose EXECUTION is not something a test run should trigger. Taken from
 # the tool's own destructiveHint rather than a hand-kept list, so a new
-# destructive tool excludes itself. They still get the denied-token pass below,
+# destructive tool excludes itself. They still get the denied-access-key pass below,
 # which is where the uniform-refusal invariant lives anyway.
 EXECUTABLE_DEFS = [d for d in ALL_DEFS if not d.get("annotations", {}).get("destructiveHint")]
 
@@ -439,8 +439,8 @@ def test_every_tool_falls_into_a_known_archetype():
         assert BY_ARCHETYPE.get(name), f"no tools classified as {name}"
 
 @pytest.mark.parametrize("tool_def", ALL_DEFS, ids=lambda d: d["name"])
-async def test_denied_token_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
-    """Invariants 1-3 against a token holding nothing."""
+async def test_denied_access_key_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
+    """Invariants 1-3 against an access key holding nothing."""
     access_key, data, name = _access_key("deny"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
         result, outcome, resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
@@ -459,7 +459,7 @@ CAP_GATED_DEFS = [d for d in ALL_DEFS if mcp_view._tool_caps(d)]
 async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: HomeAssistant):
     """Invariant 4, the security one.
 
-    A token whose capability is denied must not be able to use the tool's error
+    An access key whose capability is denied must not be able to use the tool's error
     messages as a validator for its own input, so the cap-deny check runs BEFORE
     any precheck; otherwise it could ask "would this have worked?" and read the
     answer off the error text.
@@ -469,13 +469,13 @@ async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: Ho
         result, _outcome, _resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
         text = "\n".join(i["text"] for i in result["content"])
         assert MARKER not in text, (
-            f"{name}/{label}: a token denied {mcp_view._tool_caps(tool_def)} got its own payload "
+            f"{name}/{label}: an access key denied {mcp_view._tool_caps(tool_def)} got its own payload "
             f"echoed back, so the error text is a validity oracle: {text[:300]}"
         )
 
 
 @pytest.mark.parametrize("tool_def", EXECUTABLE_DEFS, ids=lambda d: d["name"])
-async def test_permitted_token_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
+async def test_permitted_access_key_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
     """Invariants 1-3 with every capability granted.
 
     The attack reaches the tool's own argument handling instead of stopping at the

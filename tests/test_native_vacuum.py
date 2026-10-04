@@ -135,7 +135,7 @@ async def test_clean_area_requires_an_area():
 
 async def test_clean_area_refuses_an_unmatched_area_without_saying_so():
     # Same refusal an unmatched entity gets. Answering differently would tell a
-    # token that cannot list areas whether a given area exists.
+    # access key that cannot list areas whether a given area exists.
     patcher = _patch_areas([_area("kitchen", "Kitchen")])
     try:
         resp, outcome, _res = await _tool_hass_vacuum_clean_area(

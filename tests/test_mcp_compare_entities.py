@@ -11,7 +11,7 @@ missing_in_compare_to case.
 The security-shaped tests matter most: scrubbing runs BEFORE the diff, so a
 sensitive attribute cannot reappear as a difference between two entities, and a
 refusal names the tool rather than the entity, so comparing against an id the
-token cannot see never reveals which side was the problem.
+access key cannot see never reveals which side was the problem.
 """
 
 from __future__ import annotations

@@ -12,10 +12,10 @@ import mesaContract from "../../tests/contract/mesa_scopes.json";
 // Contract drift guard between the frontend AccessKeyRecord type and the Python
 // serializer. The shared fixture is generated from AccessKeyRecord.to_dict by a
 // backend contract test. This map is typed `satisfies
-// Record<keyof AccessKeyRecord, true>`, so tsc fails if a AccessKeyRecord field is added
+// Record<keyof AccessKeyRecord, true>`, so tsc fails if an AccessKeyRecord field is added
 // or removed without updating it; the runtime assertion then checks those keys
 // equal the Python-generated fixture, catching drift on either side.
-const TOKEN_RECORD_KEYS = {
+const ACCESS_KEY_RECORD_KEYS = {
   id: true,
   name: true,
   created_at: true,
@@ -68,7 +68,7 @@ const TOKEN_RECORD_KEYS = {
 
 describe("frontend/backend AccessKeyRecord contract", () => {
   it("the TS type's keys match the Python serializer fixture", () => {
-    expect(Object.keys(TOKEN_RECORD_KEYS).sort()).toEqual(
+    expect(Object.keys(ACCESS_KEY_RECORD_KEYS).sort()).toEqual(
       [...contract.access_key_record_keys].sort(),
     );
   });

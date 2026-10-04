@@ -200,7 +200,7 @@ class TestDualCapabilityGate:
                 _access_key(cap_script_write="deny"), hass, _data()[0])
         assert outcome == "allowed"
 
-    async def test_denied_token_learns_nothing_about_its_payload(self, hass, bp_env):
+    async def test_denied_access_key_learns_nothing_about_its_payload(self, hass, bp_env):
         """The cap-deny check runs before validation, so nothing is echoed back."""
         content, outcome, _ = await _call(
             "create_blueprint",
@@ -485,11 +485,11 @@ class TestApprovalDiff:
 class TestBlueprintRestore:
     """async_restore_version routes blueprint snapshots back through the executors.
 
-    The synthetic restore token needs explicit capability allows: without them the
+    The synthetic restore access key needs explicit capability allows: without them the
     executor's dual gate refuses the pass-through-EXEMPT domain caps.
     """
 
-    async def test_restore_token_carries_explicit_allows_for_exempt_caps(self):
+    async def test_restore_access_key_carries_explicit_allows_for_exempt_caps(self):
         access_key = mcp_view._restore_access_key("admin-1")
         assert access_key.cap_automation_write == "allow"
         assert access_key.cap_script_write == "allow"

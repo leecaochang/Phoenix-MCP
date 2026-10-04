@@ -89,7 +89,7 @@ class TestMesaDecisionRouting:
         between returning immediately and holding the request open for
         `confirm_inline_wait_seconds`. Patching the inner `_tool_pending` would assert
         only the no-wait branch and would keep passing if this path stopped consulting
-        the token's wait setting.
+        the access key's wait setting.
         """
         approval = SimpleNamespace(id="ap-1", tool_name="HassTurnOn", expires_at=None)
         hass = _hass(with_mesa=True)
