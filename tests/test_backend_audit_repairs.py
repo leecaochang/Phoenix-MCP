@@ -172,6 +172,7 @@ async def test_nonselector_ai_task_schema_uses_active_converter():
 async def test_rate_limit_event_bus_is_throttled_independently_of_notifications(hass, token_store):
     from custom_components.phoenix_mcp.helpers import fire_rate_limit_events
     caller, _ = await token_store.async_create_token("events", "admin")
+    other, _ = await token_store.async_create_token("other-events", "admin")
     token_store.get_settings().notify_on_rate_limit = False
     events = []
     hass.bus.async_listen("phoenix_mcp_rate_limited", events.append)
@@ -181,10 +182,15 @@ async def test_rate_limit_event_bus_is_throttled_independently_of_notifications(
             fire_rate_limit_events(hass, data, caller)
     await hass.async_block_till_done()
     assert len(events) == 1
+    with patch("custom_components.phoenix_mcp.helpers.time.monotonic", return_value=0):
+        fire_rate_limit_events(hass, data, other)
+        fire_rate_limit_events(hass, data, other)
+    await hass.async_block_till_done()
+    assert [event.data["token_id"] for event in events] == [caller.id, other.id]
     with patch("custom_components.phoenix_mcp.helpers.time.monotonic", return_value=61):
         fire_rate_limit_events(hass, data, caller)
     await hass.async_block_till_done()
-    assert len(events) == 2
+    assert [event.data["token_id"] for event in events] == [caller.id, other.id, caller.id]
 
 
 def test_internal_failure_records_location_without_exception_values(caplog):
@@ -222,3 +228,68 @@ async def test_failed_mesa_registry_runtime_refuses_identity_mutation(hass, toke
         assert result.decisions[0][1].rule == "mesa:runtime_unavailable"
     token_store.get_settings().mesa_mode = "off"
     assert evaluate_registry_action(data, caller, "light.visible", action="update", registry_domain=domain).decision == "allow"
+
+
+@pytest.mark.parametrize("mode", ["deny", "confirm", "allow"])
+def test_dashboard_consumer_requires_its_own_capability(hass, mode):
+    caller = token()
+    caller.cap_lovelace_write = mode
+    assert discovery._consumer_visible({"kind": "dashboard", "id": "private-dashboard"}, caller, hass) is (mode != "deny")
+
+
+async def test_calendar_review_refuses_active_writer_without_waiting_for_its_lock(hass):
+    from custom_components.phoenix_mcp.tools.calendar import CalendarWriteJournal
+
+    journal = CalendarWriteJournal(hass)
+    journal.active.add("in-flight")
+    async with journal.lock:
+        async with asyncio.timeout(0.2):
+            assert await journal.reviewed("in-flight") is False
+
+
+@pytest.mark.parametrize("calendar", [False, True])
+async def test_repair_confirmation_uses_the_owning_recovery_journal(hass, calendar):
+    from homeassistant.data_entry_flow import FlowResultType
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.repairs import AgentRecoveryFlow
+
+    journals = SimpleNamespace(calendar_writes=SimpleNamespace(reviewed=AsyncMock(return_value=True)),
+                               agent_recovery=SimpleNamespace(reviewed=AsyncMock(return_value=True)))
+    hass.data[DOMAIN] = journals
+    flow = AgentRecoveryFlow()
+    flow.hass = hass
+    flow.issue_id = "recovery-fixture"
+    flow.data = {"calendar_receipt_id": "receipt"} if calendar else {"request_id": "request"}
+    refused = await flow.async_step_confirm({"checked_home_assistant": False})
+    assert refused["errors"] == {"base": "check_required"}
+    journals.calendar_writes.reviewed.assert_not_awaited()
+    journals.agent_recovery.reviewed.assert_not_awaited()
+    result = await flow.async_step_confirm({"checked_home_assistant": True})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    owner = journals.calendar_writes if calendar else journals.agent_recovery
+    other = journals.agent_recovery if calendar else journals.calendar_writes
+    owner.reviewed.assert_awaited_once_with("receipt" if calendar else "request")
+    other.reviewed.assert_not_awaited()
+
+
+@pytest.mark.parametrize("tool", ["describe", "whatif"])
+async def test_analysis_omits_hidden_consumer_identity_but_reaches_visible_matches(hass, tool):
+    hass.states.async_set("light.visible", "on")
+    entry = er.async_get(hass).async_get_or_create("automation", "test", "hidden-auto", suggested_object_id="hidden")
+    hass.states.async_set(entry.entity_id, "on")
+    with open(hass.config.path("automations.yaml"), "w") as file:
+        file.write("- id: hidden-auto\n  alias: hidden-name\n  triggers:\n  - trigger: state\n    entity_id: light.visible\n    to: 'off'\n  actions: []\n")
+    caller = token(cap_search="allow")
+    data = SimpleNamespace(store=SimpleNamespace(get_settings=lambda: SimpleNamespace(mesa_mode="off")), mesa=None)
+
+    async def invoke():
+        if tool == "describe":
+            return body(await discovery._tool_describe_entity({"entity_id": "light.visible"}, caller, hass, data))["referenced_by"]
+        return body(await discovery._tool_whatif({"entity_id": "light.visible", "hypothetical_state": "off"}, caller, hass))["candidates"]
+
+    assert await invoke() == []
+    caller.permissions.entities[entry.entity_id] = PermissionNode(state="YELLOW")
+    matches = await invoke()
+    assert len(matches) == 1
+    assert matches[0].get("id", matches[0].get("automation_id")) == "hidden-auto"
+    assert matches[0]["name"] == "hidden-name"

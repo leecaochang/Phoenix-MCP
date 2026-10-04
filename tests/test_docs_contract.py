@@ -446,7 +446,9 @@ def test_event_reference_covers_runtime_events_and_rate_limit_coalescing() -> No
 def test_recovery_and_household_limitations_are_explicit() -> None:
     operations = _plain_page("operations.html")
     assert "no aggregate byte budget" in operations
-    assert "Each phase update rewrites the whole recovery store" in operations
+    assert "without rewriting unchanged snapshots" in operations
+    assert "Keep the index and snapshot files together in backups" in operations
+    assert "next successful protected write" in operations
     assert "Active and unresolved records are never evicted" in operations
     security = _plain_page("security.html")
     assert "household-only authority, even when an administrator starts the task" in security

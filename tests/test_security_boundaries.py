@@ -209,3 +209,36 @@ async def test_released_storage_does_not_cancel_an_execution_claim(hass, hass_st
     stored = store.get_pending_approvals()[0]
     assert stored["status"] == "pending"
     assert stored["execution_started_at"] == stamp
+
+
+@pytest.mark.parametrize("selector", ["entity_id", "device_id", "area_id", "floor_id", "label_id"])
+async def test_service_data_selector_refuses_before_creating_confirm_review(hass, selector):
+    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+
+    store = TokenStore(hass, AsyncMock())
+    token, _ = await store.async_create_token("target", "admin")
+    token.cap_physical_control = "confirm"
+    token.permissions.domains["lock"] = PermissionNode("GREEN")
+    store.get_settings().mesa_mode = "off"
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    er.async_get(hass).async_get_or_create("lock", "test", "front_door", suggested_object_id="front_door")
+    hass.states.async_set("lock.front_door", "locked")
+    calls = []
+
+    async def unlock(call):
+        calls.append(call.data)
+
+    hass.services.async_register("lock", "unlock", unlock)
+    arguments = {"service": {"domain": "lock", "name": "unlock"},
+                 "targets": [{"kind": "entity", "ids": ["lock.front_door"]}]}
+    response, outcome, _ = await _tool_call_service(
+        {**arguments, "service": {**arguments["service"], "data": {selector: "caller-target"}}}, token, hass, data)
+    assert outcome == "invalid_request", response
+    assert "targets" in response["content"][0]["text"]
+    assert store.get_pending_approvals() == []
+    assert calls == []
+    # The same authorized primary target reaches Confirm without nested selectors.
+    response, _, _ = await _tool_call_service(arguments, token, hass, data)
+    assert len(store.get_pending_approvals()) == 1, response
+    assert calls == []

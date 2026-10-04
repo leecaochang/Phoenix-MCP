@@ -1961,6 +1961,22 @@ describe("agentCLI cancellation on close/unmount", () => {
     return { signal, onClose, utils };
   }
 
+  it("keeps the composer focusable while a request runs and refuses a duplicate turn", async () => {
+    patchDurable({ open: true });
+    render(<AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                           initialTokenId="t1" onClose={() => {}} />);
+    const composer = screen.getByPlaceholderText("Message Agent Chat…");
+    composer.focus();
+    fireEvent.change(composer, { target: { value: "hi" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
+    expect(composer).toHaveFocus();
+    expect(composer).not.toBeDisabled();
+    expect(composer).toHaveAttribute("readonly");
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(agentCliChat).toHaveBeenCalledTimes(1);
+  });
+
   it("Close aborts the in-flight request and calls onClose", async () => {
     const { signal, onClose } = await startTurn();
     expect(signal.aborted).toBe(false);

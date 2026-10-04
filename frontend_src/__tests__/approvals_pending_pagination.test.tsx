@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, fireEvent, waitFor } from "@testing-library/react";
 import { ApprovalsView } from "../views/ApprovalsView";
 import { api } from "../api";
 import type { ApprovalRecord } from "../types";
@@ -153,4 +153,18 @@ it("shows the server's pending total before all pages are loaded", async () => {
   vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 60, limit: 50, offset: 0 });
   const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
   expect(await view.findByRole("tab", { name: "Pending (60)" })).toBeInTheDocument();
+});
+
+
+it("keeps approval navigation mounted and focusable during its initial read", async () => {
+  let complete!: (value: { approvals: ApprovalRecord[]; total: number; limit: number; offset: number }) => void;
+  vi.mocked(api.listApprovals).mockReturnValue(new Promise((resolve) => { complete = resolve; }));
+  const { getByRole } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  const pending = getByRole("tab", { name: /Pending/i });
+  pending.focus();
+  expect(pending).toHaveFocus();
+  expect(pending).not.toBeDisabled();
+  await act(async () => complete({ approvals: [], total: 0, limit: 50, offset: 0 }));
+  expect(getByRole("tab", { name: /Pending/i })).toBe(pending);
+  expect(pending).toHaveFocus();
 });

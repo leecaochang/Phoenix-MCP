@@ -81,3 +81,15 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+it("provides a visible keyboard ring and hides closed documentation drawers", () => {
+  const styles = readFileSync("docs/assets/phoenix-mcp-docs.css", "utf8");
+  const ring = styles.match(/:focus-visible\s*\{([^}]+)\}/)![1];
+  expect(ring).toMatch(/outline:\s*[3-9]px solid /);
+  for (const selector of ["body[data-home] .sidebar", ".sidebar"]) {
+    const blocks = [...styles.matchAll(/([^{}]+)\{([^{}]+)\}/g)];
+    const drawers = blocks.filter((block) => block[1].trim() === selector && block[2].includes("translateX"));
+    expect(drawers.length, selector).toBeGreaterThan(0);
+    expect(drawers.some((block) => /visibility:\s*hidden/.test(block[2])), selector).toBe(true);
+  }
+});

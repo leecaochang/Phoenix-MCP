@@ -19,6 +19,7 @@ from .const import (CONFIG_RECOVERY_MAX_BYTES, CONFIG_RECOVERY_MAX_RECORDS,
                     CONFIG_RECOVERY_RETENTION_DAYS, CONFIG_RECOVERY_PER_RESOURCE,
                     CONFIG_RECOVERY_UNRESOLVED)
 from .helpers import redact_structure
+from .recovery_storage import RecoveryStorage
 
 
 recovery_source: ContextVar[dict | None] = ContextVar("phoenix_recovery_source", default=None)
@@ -59,7 +60,7 @@ def safe_snapshot(value: dict | None) -> dict | None:
 class ConfigurationRecovery:
     """Keep in-flight safety copies independent of optional, rotating history."""
 
-    def __init__(self, store: Store | None = None, *, hass: HomeAssistant | None = None) -> None:
+    def __init__(self, store: Store | RecoveryStorage | None = None, *, hass: HomeAssistant | None = None) -> None:
         self._store = store
         self._hass = hass
         self._records: dict[str, dict[str, Any]] = {}
@@ -144,7 +145,8 @@ class ConfigurationRecovery:
                 break
             if rid not in self._active and retained[rid]["phase"] not in CONFIG_RECOVERY_UNRESOLVED:
                 del retained[rid]
-        return {rid: deepcopy(retained[rid]) for rid in self._records if rid in retained}
+        # Internal rows and snapshots are replaced, never mutated in place.
+        return {rid: retained[rid] for rid in self._records if rid in retained}
 
     async def prune(self) -> None:
         async with self._lock:
@@ -255,7 +257,7 @@ class ConfigurationRecovery:
                 raise ConfigurationRecoveryError("The configuration operation is still active.")
             if delete and record["phase"] not in ("verified", "not_applied", "reviewed"):
                 raise ConfigurationRecoveryError("Review this unresolved recovery record before removing it.")
-            previous = deepcopy(self._records)
+            previous = dict(self._records)
             if delete:
                 del self._records[rid]
             else:
