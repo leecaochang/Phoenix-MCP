@@ -373,7 +373,7 @@ def _esphome_runtime_detail(
 async def _tool_get_esphome_overview(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: status of the ESPHome devices this token can see."""
+    """MCP tool: status of the ESPHome devices this access key can see."""
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_esphome_overview"
 
@@ -397,7 +397,7 @@ async def _tool_get_esphome_overview(
     devices: list[dict] = []
     for entry in hass.config_entries.async_entries(_ESPHOME_DOMAIN):
         # Scope on the entity REGISTRY rather than live states so a device whose
-        # entry failed to load is still counted against the token's tree; an
+        # entry failed to load is still counted against the access key's tree; an
         # unloaded entry publishes no states and would otherwise vanish from the
         # fleet view precisely when it is most worth reporting.
         visible = sum(
@@ -441,7 +441,7 @@ _ESPHOME_PATH_REFUSED = (
 
 
 # Nonexistent and out-of-scope are byte-identical, so the refusal is not an
-# existence oracle for devices outside this token's tree.
+# existence oracle for devices outside this access key's tree.
 _ESPHOME_NOT_FOUND = "ESPHome configuration file not found."
 
 
@@ -519,7 +519,7 @@ def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
 
 
 def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel: str, *, write: bool) -> bool:
-    """Whether the token may read (or write) the device YAML at rel.
+    """Whether the access key may read (or write) the device YAML at rel.
 
     Every adopted owner must be in scope, even when unloaded. Orphan files
     follow the capability alone.
@@ -932,7 +932,7 @@ async def _execute_set_esphome_yaml(
 def _esphome_delete_precheck(hass: HomeAssistant, access_key: AccessKeyRecord, args: dict) -> tuple | None:
     """Refuse a delete that cannot work, BEFORE it becomes a pending approval.
 
-    Runs after the cap-deny check, so a fully denied token still
+    Runs after the cap-deny check, so a fully denied access key still
     learns nothing about which files exist.
     """
     resolved = _resolve_esphome_path(hass, args.get("file"))
@@ -1029,7 +1029,7 @@ async def _execute_delete_esphome_yaml(
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
     path, rel = resolved
     # Re-check at apply time: an approval window is minutes long and both the
-    # token's scope and the file itself can drift inside it.
+    # access key's scope and the file itself can drift inside it.
     if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     if not await hass.async_add_executor_job(os.path.exists, path):
@@ -1660,8 +1660,8 @@ async def _esphome_job_precheck(
     """Resolve a job id and authorize the caller against the file it builds.
 
     A job id is a handle to another device's build log, so it is scoped like the
-    file: the job names its configuration, which must be in the token's tree. An
-    id the add-on does not know and an id for a device this token cannot see
+    file: the job names its configuration, which must be in the access key's tree. An
+    id the add-on does not know and an id for a device this access key cannot see
     return the same body, so polling ids is not a way to learn which exist.
 
     allow_file lets the caller name the CONFIGURATION instead, answering "is that
@@ -1996,7 +1996,7 @@ async def _tool_rename_esphome_device(
     Gated on cap_esphome_flash rather than cap_esphome_yaml, and that is the
     whole reason this is safe to expose: the add-on's rename is a compile then an
     OTA-flash-then-swap chain, so putting it under the authoring capability would
-    let a token explicitly denied cap_esphome_flash flash a device through a tool
+    let an access key explicitly denied cap_esphome_flash flash a device through a tool
     whose name says "rename".
 
     NOT versioned: the file change is inseparable from the flash, so a restorable
@@ -2198,7 +2198,7 @@ async def _install_esphome_precheck(
     """Everything install checks before it is allowed to enqueue anything.
 
     Shared by the gate path and the executor, so a change appearing during the
-    approval window (the file going away, the token losing the device, another
+    approval window (the file going away, the access key losing the device, another
     build starting meanwhile) is caught at apply time too.
     """
     if "force_local" in args and not isinstance(args["force_local"], bool):
@@ -2235,7 +2235,7 @@ async def _tool_install_esphome_firmware(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: build and flash one device's firmware (Confirm-eligible)."""
-    # Capability gate first, so a denied token gets a uniform Forbidden and never
+    # Capability gate first, so a denied access key gets a uniform Forbidden and never
     # learns anything about the file it named.
     if effective_cap(access_key, "cap_esphome_flash") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
@@ -2344,7 +2344,7 @@ def _build_diff_install_esphome_firmware(
                 "rather than applied now."
             )
         # Admin-only surface, so the full blast radius is listed rather than only
-        # the entities this token can see.
+        # the entities this access key can see.
         entries = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
         preview["entities"] = sorted(e.entity_id for e in entries)
         mesa_modes = {}

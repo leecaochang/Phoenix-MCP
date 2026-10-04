@@ -71,8 +71,8 @@ function Boot({
   }, []);
 
   // Keep the account list fresh if it changes in Settings while open, and the
-  // token list fresh if a token is revoked elsewhere while this window is open
-  // (AgentCliWindow below reselects/clears on a token list change).
+  // access key list fresh if an access key is revoked elsewhere while this window is open
+  // (AgentCliWindow below reselects/clears on an access key list change).
   useEffect(() => {
     const refresh = () => setReloadKey((k) => k + 1);
     window.addEventListener("phx-agentcli-providers-changed", refresh);

@@ -125,3 +125,60 @@ def test_canonical_fields_win_and_normalization_does_not_traverse_authored_paylo
     row = normalize_access_key_fields(old)
     assert row == {"access_key_id": "current", "rejected_reason": "access_key_expired", "args": args}
     assert old["token_id"] == "old" and old["rejected_reason"] == "token_expired"
+
+
+@pytest.mark.parametrize('tool,preview', [
+    ('set_entity', {'phoenix_configuration': [{'kind': 'token_permission', 'token_id': 'existing'}]}),
+    ('delete_entity', {'phoenix_configuration': [{'kind': 'token_permission', 'token_id': 'existing'}]}),
+    ('remove_device', {'device_permission_references': [{'kind': 'token_permission', 'token_id': 'existing'}]}),
+    ('remove_integration', {'permission_references': {
+        'entities': [{'kind': 'token_permission', 'token_id': 'existing'}],
+        'devices': [{'kind': 'token_permission', 'token_id': 'existing'}]}}),
+])
+async def test_saved_permission_previews_convert_only_owned_paths(hass, hass_storage, tool, preview):
+    authored = {'kind': 'token_permission', 'token_id': 'authored', 'token_version': 99}
+    old = {'id': 'review', 'tool_name': tool, 'args': deepcopy(authored),
+           'diff': {'kind': 'system_action', 'preview': {**preview, 'configuration': deepcopy(authored)}}}
+    original = deepcopy(old)
+    hass_storage[STORAGE_KEY] = {'version': STORAGE_VERSION, 'minor_version': 1, 'key': STORAGE_KEY,
+                                'data': {'pending_approvals': [old]}}
+    store = await AccessKeyStore.async_create(hass)
+    row = store.get_pending_approvals()[0]
+    assert row['args'] == authored and row['diff']['preview']['configuration'] == authored
+    owned = {key: value for key, value in row['diff']['preview'].items() if key != 'configuration'}
+    assert 'token_permission' not in str(owned) and 'token_id' not in str(owned)
+    assert 'access_key_permission' in str(owned) and 'existing' in str(owned)
+    assert old == original
+    assert hass_storage[STORAGE_KEY]['data']['pending_approvals'][0] == row
+    reloaded = await AccessKeyStore.async_create(hass)
+    assert reloaded.get_pending_approvals()[0] == row
+
+
+@pytest.mark.parametrize('tool', ['call_service', 'call_service_mesa_approved'])
+async def test_saved_command_proof_conversion_keeps_original_authority(hass, hass_storage, tool):
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+
+    proof = {'token_id': 'existing', 'token_version': 17, 'settings': 'original-settings-digest',
+             'fingerprints': {'light.fixture': 'original-target-digest'},
+             'proposal': {'intent': 'HassTurnOn', 'entity_ids': ['light.fixture']}}
+    authored = {'token_version': 99, 'kind': 'token_permission'}
+    old = {'id': 'review', 'tool_name': tool,
+           'args': {COMMAND_ROUTING_PLAN_KEY: proof, 'service_data': authored},
+           'execution_started_at': 'original-execution-marker'}
+    unrelated = {**deepcopy(old), 'id': 'authored', 'tool_name': 'edit_automation'}
+    hass_storage[STORAGE_KEY] = {'version': STORAGE_VERSION, 'minor_version': 1, 'key': STORAGE_KEY,
+                                'data': {'pending_approvals': [deepcopy(old), unrelated]}}
+    store = await AccessKeyStore.async_create(hass)
+    row, unmodified = store.get_pending_approvals()
+    assert row['args'][COMMAND_ROUTING_PLAN_KEY] == {
+        **{key: value for key, value in proof.items() if key not in ('token_id', 'token_version')},
+        'access_key_id': 'existing', 'access_key_version': 17}
+    assert row['args']['service_data'] == authored
+    assert row['execution_started_at'] == old['execution_started_at']
+    assert unmodified == unrelated
+    saved = hass_storage[STORAGE_KEY]['data']['pending_approvals'][0]
+    assert saved == row
+    # Canonical values, including an invalid one, must never acquire legacy authority.
+    saved['args'][COMMAND_ROUTING_PLAN_KEY].update(token_version=17, access_key_version=None)
+    await store.async_load()
+    assert store.get_pending_approvals()[0]['args'][COMMAND_ROUTING_PLAN_KEY]['access_key_version'] is None

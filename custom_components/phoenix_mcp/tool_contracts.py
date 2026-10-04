@@ -144,7 +144,7 @@ def _near_parameter(name: str, candidate: str) -> bool:
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
     """Diagnose targeted public-name mistakes without rewriting caller input.
 
-    Callers run it after the capability-deny check (so a denied token learns
+    Callers run it after the capability-deny check (so a denied access key learns
     nothing about its arguments) and before an approval is created. It is
     deliberately not a validator for arbitrary nested configuration.
     """

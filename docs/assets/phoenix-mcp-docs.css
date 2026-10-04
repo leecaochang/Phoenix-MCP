@@ -1307,8 +1307,8 @@ td .no  { color: var(--ink-3); }
   .pt-arrow { order: 3; } .pt-out { order: 4; margin-left: auto; }
 }
 
-/* token format strip */
-.token-strip {
+/* access key format strip */
+.access-key-strip {
   display: flex; flex-wrap: wrap; align-items: stretch;
   font-family: var(--font-mono);
   border-radius: var(--radius-sm);
@@ -1318,14 +1318,14 @@ td .no  { color: var(--ink-3); }
   margin: 0 auto;
   max-width: max-content;
 }
-.token-strip .seg { padding: 16px 22px; display: flex; flex-direction: column; gap: 6px; }
-.token-strip .seg .val { font-size: 1.05rem; color: var(--ink); font-weight: 500; }
-.token-strip .seg .lbl { font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
-.token-strip .seg.prefix { background: var(--accent-tint); }
-.token-strip .seg.prefix .val { color: var(--accent-deep); }
-.token-strip .seg.body { background: var(--surface); flex: 1; min-width: 140px; border-left: 1px solid var(--border); }
-.token-strip .seg.total { background: var(--surface-2); border-left: 1px solid var(--border); }
-.token-strip .seg.total .val { color: var(--accent-deep); font-weight: 700; }
+.access-key-strip .seg { padding: 16px 22px; display: flex; flex-direction: column; gap: 6px; }
+.access-key-strip .seg .val { font-size: 1.05rem; color: var(--ink); font-weight: 500; }
+.access-key-strip .seg .lbl { font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.access-key-strip .seg.prefix { background: var(--accent-tint); }
+.access-key-strip .seg.prefix .val { color: var(--accent-deep); }
+.access-key-strip .seg.body { background: var(--surface); flex: 1; min-width: 140px; border-left: 1px solid var(--border); }
+.access-key-strip .seg.total { background: var(--surface-2); border-left: 1px solid var(--border); }
+.access-key-strip .seg.total .val { color: var(--accent-deep); font-weight: 700; }
 
 /* key/value definition rows */
 .kv { margin: 1.4rem 0; display: grid; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }

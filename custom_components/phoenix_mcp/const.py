@@ -76,7 +76,7 @@ ACCESS_KEY_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
 DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 
-# Token settings presets (named snapshots of a token's full configuration,
+# Access key settings presets (named snapshots of an access key's full configuration,
 # switchable from the panel; gated by settings.access_key_presets_enabled).
 MAX_PRESETS_PER_ACCESS_KEY = 8
 PRESET_NAME_MAX_LENGTH = 40
@@ -87,7 +87,7 @@ EXPIRY_CHECK_INTERVAL = datetime.timedelta(minutes=1)
 SENSOR_PUSH_INTERVAL = datetime.timedelta(hours=1)
 # Coalescing window for per-request sensor state writes (update_access_key_counter):
 # the first request after a flush schedules one write this many seconds out and
-# further requests ride it, so a busy token produces at most one state_changed
+# further requests ride it, so a busy access key produces at most one state_changed
 # per window instead of one per request.
 SENSOR_WRITE_DEBOUNCE_SECONDS = 5
 
@@ -99,7 +99,7 @@ AUDIT_STORAGE_VERSION = 1
 
 # Configuration version history. Immutable before/after snapshots of
 # agent-driven create/edit/delete of automations, scripts, scenes, and helpers,
-# with admin-only rollback. Stored separately from tokens so the schema versions
+# with admin-only rollback. Stored separately from access keys so the schema versions
 # evolve independently.
 VERSION_STORAGE_KEY = "phoenix_mcp_versions"
 VERSION_STORAGE_VERSION = 1
@@ -203,8 +203,8 @@ MAX_CARD_STUB_CONFIG_BYTES = 2000
 MAX_CARD_CATALOG_FAILURES = 50
 
 # agentCLI: the in-panel LLM chat that runs an agentic loop server-side on
-# behalf of a chosen token. Provider API keys / base URLs persist in a dedicated
-# Store, separate from tokens, so the recoverable secret never rides the general
+# behalf of a chosen access key. Provider API keys / base URLs persist in a dedicated
+# Store, separate from access keys, so the recoverable secret never rides the general
 # settings serialization (which the settings GET and audit snapshots echo).
 AGENTCLI_SECRETS_STORAGE_KEY = "phoenix_mcp_agentcli_secrets"
 AGENTCLI_SECRETS_STORAGE_VERSION = 1
@@ -366,7 +366,7 @@ AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # but a provider that stops sending data must not hang the turn forever.
 AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
 # Interactive inline-approval wait, tied to the live SSE connection (far longer
-# than the per-token confirm_inline_wait cap, which is for unattended agents).
+# than the per-access key confirm_inline_wait cap, which is for unattended agents).
 AGENTCLI_APPROVAL_WAIT_SECONDS = 900
 # How often Agent Chat relays a held tool's progress line to the panel. Faster
 # than the MCP keepalive because this is a local connection with no proxy in
@@ -409,7 +409,7 @@ DETAIL_LEVELS = frozenset({
 # enough that ordinary results are shown whole; only pathological dumps clip.
 AGENTCLI_TOOL_RESULT_MAX_CHARS = 20000
 
-# Assist bridge (assist_api.py): a registered llm.API exposes the bound token's
+# Assist bridge (assist_api.py): a registered llm.API exposes the bound access key's
 # scoped tool surface to HA's native Assist/voice conversation agents.
 # Sentinel client_ip so Assist-driven tool calls are attributable in the audit
 # log without a core change to _dispatch_mcp (mirrors AGENTCLI_CLIENT_IP).
@@ -425,7 +425,7 @@ VOICE_AGENT_CLIENT_IP = "voice"
 # advisory like the others (it rebuilds its tool list every task).
 AI_TASK_CLIENT_IP = "ai_task"
 # MESA (semantic safety layer) integration. Profiles persist in a separate
-# Store from tokens so the two storage versions evolve independently.
+# Store from access keys so the two storage versions evolve independently.
 # The inheritance levels a profile can be authored AT, most specific first.
 # Deployment defaults are deliberately absent: they are a single fallback record
 # rather than a keyed level, and every surface treats them separately.
@@ -453,7 +453,7 @@ MESA_MODES = frozenset({MESA_MODE_OFF, MESA_MODE_ADVISORY, MESA_MODE_ENFORCED})
 MESA_CONFIRM_CAP = "mesa_control_mode"
 # Executor key for re-running a MESA-gated service call after admin approval.
 # Registered in mcp_view._EXECUTOR_REGISTRY but never dispatchable from the
-# tool router, so a token cannot invoke the approved-bypass path directly.
+# tool router, so an access key cannot invoke the approved-bypass path directly.
 MESA_APPROVED_EXECUTOR = "call_service_mesa_approved"
 
 # The optional injector is qualified at the supported base release. Its separate
@@ -567,7 +567,7 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
 # access_key_name and access_key_id metadata as credential values.
 SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
 
-# The placeholder every redacting reader substitutes for a value the token may not
+# The placeholder every redacting reader substitutes for a value the access key may not
 # see. Named here so a WRITE path can refuse to persist it: a config read is lossy
 # (an out-of-scope or ghost entity comes back as this string), so a caller that
 # echoes a read back would silently store the placeholder as if it were real
@@ -725,7 +725,7 @@ NO_TARGET_SERVICES = frozenset({
     "timer/reload",
 })
 
-# Capability modes. A token's per-capability state is one of these three values.
+# Capability modes. An access key's per-capability state is one of these three values.
 CAP_DENY = "deny"
 CAP_ALLOW = "allow"
 CAP_CONFIRM = "confirm"
@@ -865,7 +865,7 @@ PASS_THROUGH_EXEMPT_CAPS = frozenset({
 })
 
 # Non-administrator and unidentified household ingress cannot use admin tools.
-# These capabilities still require the bound token's ordinary gates.
+# These capabilities still require the bound access key's ordinary gates.
 HOUSEHOLD_CAPABILITIES = frozenset({
     "cap_search", "cap_physical_control", "cap_broadcast", "cap_service_response", "cap_registry_read",
 })
@@ -1025,7 +1025,7 @@ PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valv
 #
 # Not a stylistic strip. HA's helpers.target.TargetSelection reads exactly these
 # five off ServiceCall.data, and its entity-service schemas accept all five, so a
-# leftover floor_id or label_id actuates a whole floor for a token scoped to one
+# leftover floor_id or label_id actuates a whole floor for an access key scoped to one
 # entity.
 #
 # Deliberately NOT in this set:
@@ -1103,12 +1103,12 @@ ESPHOME_DOMAIN = "esphome"
 # that guessed the wrong verb can self-correct.
 #
 # LEAK SAFETY: this map is consulted ONLY inside the ServiceNotFound catch, which
-# is strictly post-authorization (the token has already cleared the cap gate,
+# is strictly post-authorization (the access key has already cleared the cap gate,
 # entity-scope resolution proving WRITE on an entity in this domain, and MESA).
 # The values are a HARDCODED list of public HA-core service names, never a live
 # hass.services lookup, so the hint reveals nothing about custom/third-party
-# services or about domains/entities the token cannot reach; it only names public
-# core verbs for a domain the token already actuates. Domains absent from this
+# services or about domains/entities the access key cannot reach; it only names public
+# core verbs for a domain the access key already actuates. Domains absent from this
 # map keep the generic no-oracle "Forbidden." response.
 #
 # HA-VERSION-SENSITIVE: these are HA-core service names, verified against HA
@@ -1300,14 +1300,14 @@ MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
 # never about what it is allowed to DO.
 MCP_DISCOVER_TTL_MS = 300_000
 
-# A token's inline wait (seconds) on a confirm gate: a confirm-gated call holds
+# An access key's inline wait (seconds) on a confirm gate: a confirm-gated call holds
 # the response open up to confirm_inline_wait_seconds for an admin decision
 # before falling back to the immediate pending_approval reply. 0 means off
 # (return immediately) and is both the default and the panel's first option. The
 # max is kept well within typical MCP client timeouts so the held response never
 # outlives one.
 #
-# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by a TOKEN
+# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by a ACCESS KEY
 # SETTING, but the party that knows whether the outcome is needed right now is
 # the AGENT: firing twenty writes it needs them queued, not resolved one at a
 # time; turning off one lock it does want the answer. Holding the request removes
@@ -1344,18 +1344,18 @@ YAML_MAX_EXPANDED_NODES = 100_000
 # as {top-level key: protected child keys}. Not operator-configurable, and not a
 # general "powerful keys" list: command_line, shell_command and rest stay writable
 # because command execution and outbound HTTP are already accepted surface for a
-# token holding cap_yaml_edit. These four are different in kind, because each one
+# access key holding cap_yaml_edit. These four are different in kind, because each one
 # redefines Home Assistant's OWN trust boundary rather than acting within it:
 #   homeassistant: auth_providers / auth_mfa_modules change how the instance
 #     authenticates anyone, and packages redirects which folder is loaded as
-#     configuration, i.e. the very surface this tool is bounded by (a token that
+#     configuration, i.e. the very surface this tool is bounded by (an access key that
 #     can also write www/ could then point packages at content it controls).
 #   http: trusted_proxies + use_x_forwarded_for turn a spoofable X-Forwarded-For
 #     header into an authentication bypass; cors_allowed_origins, ip_ban_enabled
 #     and login_attempts_threshold disarm the brute-force and origin defenses.
 #   frontend: extra_module_url and lovelace: resources load arbitrary JavaScript
 #     into the authenticated dashboard, which is a stored-XSS foothold with access
-#     to the instance and its tokens.
+#     to the instance and its access keys.
 # An admin edits these by hand. Enforced by tools.config_files._yaml_protected_check
 # on both the pre-gate and the apply-time path; unchanged values always pass.
 YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {

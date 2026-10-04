@@ -1,8 +1,8 @@
 """Discovery and analysis tools: the read-only half of the tool surface.
 
 Everything here answers "what is there and what would happen", never "change
-it". Every enumeration is scoped to the token's permission tree before it is
-returned, so a listing never becomes an oracle for entities the token cannot see.
+it". Every enumeration is scoped to the access key's permission tree before it is
+returned, so a listing never becomes an oracle for entities the access key cannot see.
 
   - Registry reads: areas, floors, zones, devices, and the entity search /
     overview / describe family.
@@ -114,7 +114,7 @@ def _references_for_entity_details(
     purpose-specific trigger target blocks) is found too, not just direct
     entity_id references. Scripts and scenes are extracted by Phoenix MCP (mesa-core
     does not model them): scripts via entity_id collection, scenes via the
-    entity keys under their `entities` mapping. Callers apply their own token
+    entity keys under their `entities` mapping. Callers apply their own access key
     scoping.
     """
     refs: list[dict] = []
@@ -626,8 +626,8 @@ def _forward_references_details(
 ) -> tuple[list[str], list[dict]]:
     """Entities referenced by entity_id when it is an automation or script.
 
-    Scoped to entities the token can access, so an automation never reveals
-    targets outside the token's permission tree. The second return value names
+    Scoped to entities the access key can access, so an automation never reveals
+    targets outside the access key's permission tree. The second return value names
     unreadable configuration branches rather than making an incomplete [] look
     like proof that the automation or script has no dependencies.
     """
@@ -666,10 +666,10 @@ def _forward_references(hass: HomeAssistant, access_key: AccessKeyRecord, entity
 
 
 def _accessible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
-    """Return the set of entity IDs the token can read.
+    """Return the set of entity IDs the access key can read.
 
     Uses the same scoping/scrubbing path as get_states so registry views never
-    reveal entities, areas, or devices outside the token's permission tree.
+    reveal entities, areas, or devices outside the access key's permission tree.
     """
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     return {e["entity_id"] for e in accessible}
@@ -679,7 +679,7 @@ def _intent_slot_value(entity: Any) -> Any:
     """Return HA's public debug value without disclosing a canonical selector.
 
     Target selectors prefer the text the caller supplied. The canonical value
-    can contain an area or entity name outside the token's scope; the submitted
+    can contain an area or entity name outside the access key's scope; the submitted
     text cannot disclose anything the caller did not already know.
     """
     text = getattr(entity, "text", None)
@@ -740,7 +740,7 @@ def _recognized_entity_value(result: Any, name: str) -> Any:
 def _recognized_targets(
     result: Any, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[dict[str, Any]]:
-    """Resolve one recognition against the intersection of Assist and token scope.
+    """Resolve one recognition against the intersection of Assist and access key scope.
 
     HA's matcher treats an empty ``states`` list as "use every state", so the
     explicit empty guard is a security boundary, not an optimization.
@@ -1045,7 +1045,7 @@ async def _tool_get_device(
 def _accessible_device_entity_ids(
     device_id: str, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[str]:
-    """Registry entities on a device that this token may read."""
+    """Registry entities on a device that this access key may read."""
     expose = assist_expose_check(access_key, hass)
     device = dr.async_get(hass).async_get(device_id)
     force_registry_only = device is not None and device.disabled_by is not None
@@ -1365,7 +1365,7 @@ def _search_membership(
 async def _tool_search_entities(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: filter the token's accessible entities by name/domain/area/etc."""
+    """MCP tool: filter the access key's accessible entities by name/domain/area/etc."""
     if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "search_entities"
 
@@ -1483,7 +1483,7 @@ async def _tool_search_entities(
 async def _tool_get_overview(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: compact home summary scoped to the token."""
+    """MCP tool: compact home summary scoped to the access key."""
     if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_overview"
 
@@ -1576,7 +1576,7 @@ async def _tool_describe_area(
 async def _tool_find_available_actions(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: which services in an entity's domain this token can currently invoke.
+    """MCP tool: which services in an entity's domain this access key can currently invoke.
 
     Availability reflects Phoenix MCP scope (write access + physical/dual gate caps).
     MESA still enforces per-entity nature at call time; the entity's control_mode
@@ -1695,7 +1695,7 @@ _MAX_REPAIR_ISSUES = 50
 
 
 def _repair_ref(access_key: AccessKeyRecord, domain: str, issue_id: str) -> str:
-    """Return a stable per-token reference without disclosing HA's raw issue id."""
+    """Return a stable per-access key reference without disclosing HA's raw issue id."""
     digest = hmac.new(
         access_key.access_key_hash.encode(),
         f"{domain}\0{issue_id}".encode(),
@@ -1909,7 +1909,7 @@ def _relationship_scope(
     """Resolve exactly one selector to the accessible entity ids it names.
 
     Every branch ends in the same filter, so the scope never contains an entity the
-    token cannot read, and a selector naming nothing accessible is byte-identical to
+    access key cannot read, and a selector naming nothing accessible is byte-identical to
     one naming nothing at all: a device, area, label or integration that does not
     exist is indistinguishable from one whose entities are out of scope, so the
     refusal is not an existence oracle.
@@ -2023,7 +2023,7 @@ async def _registry_relationship_preview(
 ) -> dict[str, Any]:
     """Full known-consumer preview for a registry rename or deletion.
 
-    Unlike the token-facing get_relationships response, an admin approval card is
+    Unlike the access key-facing get_relationships response, an admin approval card is
     not capability-narrowed: it always attempts dashboards and config entries as
     well as YAML automations, scripts, scenes and groups. Only matching entity IDs
     reach the preview; config-entry credentials stay in the snapshot.
@@ -2078,7 +2078,7 @@ async def _tool_get_relationships(
     touches and their roles IS the edit work list.
 
     Coverage is reported rather than assumed. Dashboards and config entries need
-    their own capabilities, so a token without them gets a narrower answer and
+    their own capabilities, so an access key without them gets a narrower answer and
     `not_searched` says so. The one unacceptable reply to "is anything still using
     these" is a confident wrong no.
     """
@@ -2242,7 +2242,7 @@ async def _tool_describe_entity(
 async def _tool_get_audit_summary(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: the token's own recent audit entries. No cap required; own data only."""
+    """MCP tool: the access key's own recent audit entries. No cap required; own data only."""
     try:
         limit = int(args.get("limit", 50))
     except (TypeError, ValueError):
@@ -2878,7 +2878,7 @@ async def _tool_validate_config(
         valid = False
         errors.append(str(exc))
 
-    # Never reveal existence for entities the token cannot access: a hidden real
+    # Never reveal existence for entities the access key cannot access: a hidden real
     # entity must be indistinguishable from a typo (no existence oracle). Since
     # resolve() ghost-checks, READ/WRITE already implies the entity exists, so
     # exists is reported as the accessible flag and collapses for everything else.

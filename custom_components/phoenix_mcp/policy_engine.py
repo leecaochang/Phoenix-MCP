@@ -101,17 +101,17 @@ def resolve(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) ->
 
 
 def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> Permission:
-    """Resolve effective permission for entity_id against a token.
+    """Resolve effective permission for entity_id against an access key.
 
     Return values:
-        Permission.WRITE      - write access (unrestricted for pass-through tokens)
+        Permission.WRITE      - write access (unrestricted for pass-through access keys)
         Permission.READ       - read-only access
         Permission.DENY       - explicitly denied; audit outcome: denied
         Permission.NO_ACCESS  - no grant found; audit outcome: denied
         Permission.NOT_FOUND  - ghost entity (not in states or registry); audit outcome: not_found
 
-    Pass-through tokens return WRITE for all entities (after the Phoenix MCP
-    blocklist check). Home Companion tokens are limited to the companion control
+    Pass-through access keys return WRITE for all entities (after the Phoenix MCP
+    blocklist check). Home Companion access keys are limited to the companion control
     and read domains and sensor classes, and are never pass-through. The
     DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
     """
@@ -201,7 +201,7 @@ def resolve_registry_access(
     by the ordinary resolver) but cannot create positive access once the entity
     has left the live permission tree.
 
-    Live, enabled entities get plain resolve() semantics. Pass-through tokens keep
+    Live, enabled entities get plain resolve() semantics. Pass-through access keys keep
     WRITE after the ordinary blocklist/ghost checks; Assist exposure remains the
     caller's shared enumeration filter.
     """
@@ -288,7 +288,7 @@ def resolve_device_registry_access(
 
     An explicit device node authorizes the device even when it has no entities.
     Otherwise one attached entity must pass the ordinary registry-aware entity
-    resolver. Pass-through tokens retain their Assist-exposure filter: a device
+    resolver. Pass-through access keys retain their Assist-exposure filter: a device
     with no exposed attached entity is not an alternate enumeration path.
     """
     if not isinstance(device_id, str):
@@ -464,7 +464,7 @@ def resolve_config_entry_registry_write(
 ) -> Permission:
     """Require complete entity WRITE and explicit device WRITE coverage.
 
-    A scoped token cannot manage a resource-less entry.  For disabling,
+    A scoped access key cannot manage a resource-less entry.  For disabling,
     force_registry_only proves that authorization survives after live states
     disappear instead of relying on a direct entity grant that will self-lock.
     """
@@ -537,9 +537,9 @@ def scrub_state_dict(d: dict) -> dict:
 
 
 def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
-    """Return the Assist-exposure predicate for a pass-through token, or None.
+    """Return the Assist-exposure predicate for a pass-through access key, or None.
 
-    Non-None only for pass_through tokens with use_assist_exposure; scoped tokens
+    Non-None only for pass_through access keys with use_assist_exposure; scoped access keys
     are filtered by their permission tree alone. This is the one shared
     implementation for every entity-filter path (filter_entities_for_access_key,
     build_permitted_states/entity_ids, resolve_intent_entities). The rest of the
@@ -563,11 +563,11 @@ def filter_entities_for_access_key(
     access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> list[dict[str, Any]]:
-    """Filter a list of State objects to those accessible by token, scrub sensitive attributes.
+    """Filter a list of State objects to those accessible by access key, scrub sensitive attributes.
 
     resolve() is the single filter predicate: it blocks the Phoenix MCP domain and Phoenix MCP's
-    own platform entities and grants pass-through tokens WRITE, so scoped and
-    pass-through tokens share one path here. The only pass-through-specific
+    own platform entities and grants pass-through access keys WRITE, so scoped and
+    pass-through access keys share one path here. The only pass-through-specific
     extra is the use_assist_exposure check. Sensitive attributes are
     always scrubbed.
     """
@@ -832,7 +832,7 @@ def filter_service_response(
 ) -> Any:
     """Recursively redact secrets and inaccessible entity IDs from service response data.
 
-    Three redactions are applied: any string that is an entity ID the token cannot
+    Three redactions are applied: any string that is an entity ID the access key cannot
     access becomes "<redacted>", any dict value whose key name is sensitive
     (is_sensitive_key) becomes "<redacted>" without recursing into it, and any dict
     ENTRY whose KEY is an inaccessible entity ID is dropped entirely.
@@ -893,9 +893,9 @@ def get_effective_hint(
 ) -> str | None:
     """Return the most specific hint for an entity.
 
-    Checks the per-token entity, device, then domain nodes. If none is set, falls
+    Checks the per-access key entity, device, then domain nodes. If none is set, falls
     back to the global entity_hints map (entity_id -> hint) when provided. The
-    per-token node hint always wins over the global hint.
+    per-access key node hint always wins over the global hint.
     """
     registry = er.async_get(hass)
     entry = registry.async_get(entity_id)
@@ -1044,7 +1044,7 @@ class IntentSelectors(NamedTuple):
         """True when nothing usable survived coercion.
 
         A native action with zero constraints must match nothing rather than fan
-        out to the token's whole writable scope, so resolve_intent_entities fails
+        out to the access key's whole writable scope, so resolve_intent_entities fails
         closed on this. It is exposed as a property because the CALLER needs to
         tell that case apart from "matched nothing" and "denied", which are the
         same empty list: only this one is the caller's own doing and can be
@@ -1093,7 +1093,7 @@ def resolve_intent_entities(
     read_only includes readable entities for side-effect-free routing previews.
 
     Uses HA's async_match_targets for name/area/floor resolution to match native HA
-    intent scoring behavior. Silently drops entities the token cannot WRITE. Never
+    intent scoring behavior. Silently drops entities the access key cannot WRITE. Never
     acknowledges blocked or inaccessible entities. Returns an empty list when nothing matches.
     """
     from homeassistant.helpers.intent import (  # noqa: PLC0415
@@ -1147,10 +1147,10 @@ def resolve_intent_entities(
         if not domains and not device_classes:
             # No selector at all (no name/area/floor/domain/device_class). A native
             # intent action with zero constraints must match nothing, not fan out to
-            # the token's entire writable scope. An unrecognized argument (e.g. a
+            # the access key's entire writable scope. An unrecognized argument (e.g. a
             # model passing entity_id, which these tools do not accept) leaves every
             # recognized selector empty; without this guard the call would silently
-            # actuate every entity the token can write. Fail closed.
+            # actuate every entity the access key can write. Fail closed.
             return []
         if domains:
             domain_set = set(domains)
@@ -1193,7 +1193,7 @@ def resolve_intent_entities(
 #
 # Authorization is the owning DEVICE's write scope rather than a capability: the
 # action is defined by that device's own firmware and can act on nothing else, so
-# a token that may already actuate the device's entities is exactly the token
+# an access key that may already actuate the device's entities is exactly the access key
 # that may invoke its actions.
 
 
@@ -1255,7 +1255,7 @@ def resolve_esphome_user_service(hass: HomeAssistant, service: str) -> Any | Non
 
 
 def esphome_entry_writable(hass: HomeAssistant, entry: Any, access_key: AccessKeyRecord) -> bool:
-    """True when the token holds WRITE on at least one of the entry's entities."""
+    """True when the access key holds WRITE on at least one of the entry's entities."""
     registry = er.async_get(hass)
     return any(
         resolve(reg_entry.entity_id, access_key, hass) is Permission.WRITE

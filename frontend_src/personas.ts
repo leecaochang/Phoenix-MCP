@@ -1,4 +1,4 @@
-// Persona presets shared by the PersonaPicker (Token Detail) and the onboarding
+// Persona presets shared by the PersonaPicker (Access key Detail) and the onboarding
 // wizard. PERSONA_CAP_DEFAULTS mirrors personas.py PERSONA_DEFINITIONS and
 // pre-fills cap values when a persona is applied via PATCH, so the matrix
 // updates in one round-trip. Both must change together: a contract test pins
@@ -11,7 +11,7 @@ export interface PersonaDef {
   labelKey: string;
   descriptionKey: string;
   // wizardOnly personas are shown only in the onboarding wizard's persona step,
-  // not in the normal Token Detail persona picker.
+  // not in the normal Access key Detail persona picker.
   wizardOnly?: boolean;
 }
 

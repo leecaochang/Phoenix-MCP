@@ -26,7 +26,7 @@ import { ProfileEditor } from "./MesaView";
 import { localeDateTime, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
-// Whether a token change alters which tools the MCP client is shown (tools/list),
+// Whether an access key change alters which tools the MCP client is shown (tools/list),
 // which is the only kind of change that requires a connected agent to reconnect.
 // A capability only changes the announced set when it crosses the deny boundary: a
 // cap-tied tool is announced whenever its cap is not "deny", so switching between
@@ -212,7 +212,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
 }
 
 // Duration choices for the inline-wait select: fixed steps across the allowed
-// 30-180 range (const.py MIN/MAX_CONFIRM_INLINE_WAIT_SECONDS), plus the token's
+// 30-180 range (const.py MIN/MAX_CONFIRM_INLINE_WAIT_SECONDS), plus the access key's
 // own value if the API set an off-step one (so it still displays correctly). 0
 // (off) is rendered separately as the first option and is the DEFAULT (const.py
 // DEFAULT_CONFIRM_INLINE_WAIT_SECONDS): a confirm-gated call returns pending
@@ -226,16 +226,16 @@ function inlineWaitOptions(current: number): number[] {
 }
 
 // ---------------------------------------------------------------------------
-// Token settings presets (workspace model). A preset is a named snapshot of the
-// token's full settings; the ACTIVE preset absorbs live edits when the admin
+// Access key settings presets (workspace model). A preset is a named snapshot of the
+// access key's full settings; the ACTIVE preset absorbs live edits when the admin
 // switches to another preset, and applying the active preset reverts to its
 // saved state. Enforcement never reads presets; apply routes through the same
 // backend paths as manual edits.
 // ---------------------------------------------------------------------------
 
-const MAX_PRESETS = 8; // mirrors const.py MAX_PRESETS_PER_TOKEN
+const MAX_PRESETS = 8; // mirrors const.py MAX_PRESETS_PER_ACCESS_KEY
 
-// Normalized comparable view of a settings snapshot, shared by the token's
+// Normalized comparable view of a settings snapshot, shared by the access key's
 // live state and a stored preset so dirty detection and diffs line up.
 interface SettingsSnap {
   caps: Record<string, string>;
@@ -566,10 +566,10 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
   );
 }
 
-// Inline-editable token name shown as the detail heading. Click to select/edit;
+// Inline-editable access key name shown as the detail heading. Click to select/edit;
 // it auto-saves on blur (and on Enter), validating format client-side and letting
-// the server reject a name that clashes with another token. Escape cancels.
-const TOKEN_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
+// the server reject a name that clashes with another access key. Escape cancels.
+const ACCESS_KEY_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
 
 function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyRecord; onRenamed: (t: AccessKeyRecord) => void }) {
   const [value, setValue] = useState(accessKey.name);
@@ -581,7 +581,7 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
   async function commit() {
     const next = value.trim();
     if (next === accessKey.name) { setValue(accessKey.name); setErr(null); return; }
-    if (!TOKEN_NAME_RE.test(next)) {
+    if (!ACCESS_KEY_NAME_RE.test(next)) {
       setErr(t("accessKeys.nameRuleError"));
       setValue(accessKey.name);
       return;
@@ -645,7 +645,7 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
   const [showSelectByPicker, setShowSelectByPicker] = useState(false);
   const [entityTree, setEntityTree] = useState<import("../types").EntityTree | null>(null);
   // Set when a change alters the announced tool list, to remind the operator to
-  // reconnect the agent. Only surfaced when the token has actually been used.
+  // reconnect the agent. Only surfaced when the access key has actually been used.
   const [reconnectNeeded, setReconnectNeeded] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepth, setSelectedDepth] = useState<"entity" | "device" | "domain">("entity");
@@ -684,7 +684,7 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
 
   // setAccessKey wrapper for the config editors (persona, capabilities, tool
   // announcement, pass-through). If the change alters the announced tool list and
-  // the token has been used by a client, raise the reconnect reminder.
+  // the access key has been used by a client, raise the reconnect reminder.
   const applyAccessKeyUpdate = useCallback((updated: AccessKeyRecord) => {
     if (accessKey && updated.last_used_at && toolGatingChanged(accessKey, updated)) {
       setReconnectNeeded(true);
@@ -733,9 +733,9 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
     setActionBusy(true);
     try {
       await api.revokeAccessKey(accessKeyId);
-      // Any open Agent Chat window (panel or floating) drops the revoked token
+      // Any open Agent Chat window (panel or floating) drops the revoked access key
       // from its own list and reselects/clears, instead of continuing to show
-      // (and let the user submit against) a token that no longer works.
+      // (and let the user submit against) an access key that no longer works.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
       onBack();
     } catch (e: unknown) {
@@ -906,7 +906,7 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
         )}
 
         <div className="two-col">
-          {/* Left: Token info card */}
+          {/* Left: Access key info card */}
           <div className="card access-key-info-card">
             <div className="access-key-card-header">
               <div className="access-key-card-name-row">

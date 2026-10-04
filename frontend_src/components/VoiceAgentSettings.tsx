@@ -12,13 +12,13 @@ import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
 // Voice Agent settings card. Registers Phoenix MCP as a Home Assistant conversation agent
 // so "Phoenix MCP" appears in Settings > Voice assistants and runs Phoenix MCP's own model loop on
-// the chosen token's scope. Needs a token (scope), an Agent Chat provider account,
+// the chosen access key's scope. Needs an access key (scope), an Agent Chat provider account,
 // and a model. Independent of the Assist bridge toggle in the card below.
 //
 // One-click setup: rather than making the operator wire up an Assist pipeline by
 // hand, Phoenix MCP can create one pointed at itself (optionally the preferred assistant).
 // The tracked pipeline is torn down again when the voice agent is disabled or its
-// token/provider goes away (backend); the kill switch leaves it in place (the agent
+// access key/provider goes away (backend); the kill switch leaves it in place (the agent
 // stays registered but declines, so the assistant degrades gracefully).
 export function VoiceAgentSettings({
   settings,

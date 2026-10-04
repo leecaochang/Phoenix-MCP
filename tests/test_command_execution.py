@@ -9,6 +9,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp import agentcli, mcp_view, voice_agent
+from custom_components.phoenix_mcp.access_key_schema import normalize_access_key_root
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.command_execution import async_execute_local_command
 from custom_components.phoenix_mcp.command_routing import RoutingAuthority, async_evaluate_command
@@ -111,14 +112,19 @@ async def test_mesa_checks_apply_to_local_commands(hass, local_home, mode):
         assert "could not complete" in answer
 
 
-@pytest.mark.parametrize("change", ["identity", "unavailable", "brightness", "settings", "scope"])
-async def test_saved_approval_rejects_changed_targets(hass, local_home, change):
+@pytest.mark.parametrize("legacy_proof", [False, True])
+@pytest.mark.parametrize("change", ["identity", "unavailable", "brightness", "settings", "scope", "version", "settings_digest", "proof_conflict"])
+async def test_saved_approval_rejects_changed_targets(hass, local_home, change, legacy_proof):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, data, "set the desk lamp brightness to 50 percent", language="en")
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
+    if legacy_proof:
+        plan = record["args"][COMMAND_ROUTING_PLAN_KEY]
+        plan["token_version"] = plan.pop("access_key_version")
+        record = normalize_access_key_root({"pending_approvals": [record]})[0]["pending_approvals"][0]
     if change == "identity":
         registry = er.async_get(hass)
         registry.async_remove(entity_id)
@@ -129,6 +135,14 @@ async def test_saved_approval_rejects_changed_targets(hass, local_home, change):
         hass.states.async_set(entity_id, "off", {"friendly_name": "Desk lamp", "supported_color_modes": ["onoff"]})
     elif change == "settings":
         await data.store.async_patch_settings(voice_agent_routing_mode="off")
+    elif change == "version":
+        access_key.settings_version += 1
+    elif change == "settings_digest":
+        await data.store.async_patch_settings(command_routing_timeout_ms=501)
+    elif change == "proof_conflict":
+        record["args"][COMMAND_ROUTING_PLAN_KEY].update(
+            token_version=access_key.settings_version, access_key_version=None)
+        record = normalize_access_key_root({"pending_approvals": [record]})[0]["pending_approvals"][0]
     else:
         access_key.permissions = PermissionTree()
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
@@ -139,12 +153,18 @@ async def test_saved_approval_rejects_changed_targets(hass, local_home, change):
     call.assert_not_called()
 
 
-async def test_unchanged_approval_uses_existing_executor(hass, local_home):
+@pytest.mark.parametrize("legacy_proof", [False, True])
+async def test_unchanged_approval_uses_existing_executor(hass, local_home, legacy_proof):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         await run_voice(hass, data, "turn on the desk lamp", language="en")
     record = data.store.get_pending_approvals()[0]
+    plan = record["args"][COMMAND_ROUTING_PLAN_KEY]
+    assert "access_key_version" in plan and "token_version" not in plan
+    if legacy_proof:
+        plan["token_version"] = plan.pop("access_key_version")
+        record = normalize_access_key_root({"pending_approvals": [record]})[0]["pending_approvals"][0]
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)

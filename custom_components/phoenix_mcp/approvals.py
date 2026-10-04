@@ -53,7 +53,7 @@ REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
 # There is deliberately no constant for target_out_of_scope / target_missing /
 # rate_limited_at_execution. The approve path re-validates only the three things
-# it owns (token active, capability permits, kill switch off); target scope and
+# it owns (access key active, capability permits, kill switch off); target scope and
 # existence are re-checked inside each _execute_X, whose failure surfaces as
 # execution_failed with the executor's own message, and an admin approving is
 # not rate limited. The panel keeps label-map entries for those three slugs so an
@@ -62,7 +62,7 @@ REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
 
 
 class PendingApprovalCapacityError(Exception):
-    """Raised when a token already holds MAX_PENDING_APPROVALS_PER_ACCESS_KEY entries."""
+    """Raised when an access key already holds MAX_PENDING_APPROVALS_PER_ACCESS_KEY entries."""
 
 
 @dataclass
@@ -197,7 +197,7 @@ async def async_create_pending_approval(
     """Add a new pending approval to storage and return the record.
 
     Caller must hold store.async_lock if creating from a multi-step path.
-    Raises PendingApprovalCapacityError if the token is at the per-token cap.
+    Raises PendingApprovalCapacityError if the access key is at the per-access key cap.
     """
     raw = store.get_pending_approvals()
     pending_for_access_key = sum(
@@ -449,13 +449,13 @@ async def async_cancel_approvals_for_access_key(
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
-    """Close pending approvals for a token and return the changed records.
+    """Close pending approvals for an access key and return the changed records.
 
-    Called when a token is revoked or expires, so its queued approvals do not
+    Called when an access key is revoked or expires, so its queued approvals do not
     linger as approvable-looking entries until the expiry sweep. skip_ids
     protects an approval whose saved action is mid-execution
     (data.approvals_in_progress). A stale execution marker resolves as failed
-    and interrupted so token cleanup cannot erase evidence of an uncertain side
+    and interrupted so access key cleanup cannot erase evidence of an uncertain side
     effect. Caller must hold async_lock, and must dismiss each returned record's
     notification and fire phoenix_mcp_approval_resolved outside the lock.
     """

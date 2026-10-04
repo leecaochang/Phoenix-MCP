@@ -56,13 +56,13 @@ household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
 
 
 def household_admin_access() -> bool:
-    """Token administration requires a known administrator on household ingress."""
+    """Access key administration requires a known administrator on household ingress."""
     authority = household_authority.get()
     return authority is None or authority.is_admin()
 
 
 def household_tool_access(tool_name: str) -> bool:
-    """Shared-token history belongs to administrators, even without a capability."""
+    """Shared-access key history belongs to administrators, even without a capability."""
     from .const import HOUSEHOLD_ADMIN_TOOLS
 
     return tool_name not in HOUSEHOLD_ADMIN_TOOLS or household_admin_access()
@@ -113,7 +113,7 @@ def household_service_kwargs(hass: HomeAssistant, domain: str, service: str) -> 
 async def household_scope(
     hass: HomeAssistant, context: Context | None = None, *, user_id: str | None = None,
 ) -> AsyncIterator[HouseholdAuthority]:
-    """Admit only HA-supplied identity, with no model or token supplied override."""
+    """Admit only HA-supplied identity, with no model or access key supplied override."""
     if context is not None:
         user_id = context.user_id
     user = await hass.auth.async_get_user(user_id) if user_id else None

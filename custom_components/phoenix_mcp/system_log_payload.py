@@ -1,4 +1,4 @@
-"""Bound scrubbed system-log previews and token-bound detail chunks."""
+"""Bound scrubbed system-log previews and access key-bound detail chunks."""
 
 from __future__ import annotations
 
@@ -63,10 +63,10 @@ def compact_log_text(text: str, budget: int, *, traceback: bool = False) -> tupl
 
 
 def log_detail_ref(entry: dict, access_key: Any, *, phoenix_only: bool, bucket_id: str) -> str:
-    """Bind a reference to this token, namespace and complete scrubbed bucket.
+    """Bind a reference to this access key, namespace and complete scrubbed bucket.
 
-    An HMAC keyed by the token's hash, so a reference is not usable by another
-    token or after the bucket content changes.
+    An HMAC keyed by the access key's hash, so a reference is not usable by another
+    access key or after the bucket content changes.
     """
     payload = json.dumps([phoenix_only, bucket_id, entry], sort_keys=True).encode("utf-8")
     return hmac.new(access_key.access_key_hash.encode(), payload, hashlib.sha256).hexdigest()

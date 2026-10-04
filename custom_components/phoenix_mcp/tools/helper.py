@@ -2096,7 +2096,7 @@ async def _helper_config_entry(hass: HomeAssistant, entry_id: Any) -> Any | None
     and cannot be mistaken for an integration.
 
     That carries the security argument: a helper's options are entity references
-    and numbers, so every entity in a write can be checked against the token's
+    and numbers, so every entity in a write can be checked against the access key's
     tree, while an arbitrary integration's options flow can carry a HOSTNAME AND
     CREDENTIALS, and repointing one at a server the operator does not control is a
     data-exfiltration primitive no scope check catches. Widening past helpers
@@ -2502,10 +2502,10 @@ def _template_options_after_form(options: dict, payload: dict, schema: vol.Schem
 def _unwritable_option_entities(
     options: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, template_type: str | None = None,
 ) -> list[str]:
-    """Entities in an options payload the token may not WRITE.
+    """Entities in an options payload the access key may not WRITE.
 
     WRITE rather than READ, matching _unwritable_scene_members. A helper both
-    EXPOSES its source (a token that cannot read sensor.secret could otherwise
+    EXPOSES its source (an access key that cannot read sensor.secret could otherwise
     point a helper at it and read the helper's own in-scope entity instead) and
     can ACTUATE it (switch_as_x wraps a switch so the new entity turns the old one
     on), and nothing in the serialized schema says which a given field does. The
@@ -2736,7 +2736,7 @@ async def _apply_config_entry_options(
         return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     mechanism = _settings_mechanism(entry)
     settings = args.get("settings")
-    # Re-validated at apply time, not only pre-gate: the entry, the token's tree
+    # Re-validated at apply time, not only pre-gate: the entry, the access key's tree
     # and the entities named can all move while an approval waits.
     pre = _config_entry_settings_precheck(settings, entry, mechanism, access_key, hass, tool)
     if pre is not None:

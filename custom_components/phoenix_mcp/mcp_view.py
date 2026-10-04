@@ -221,7 +221,7 @@ from .tools.camera import _tool_get_camera_image
 from .tools.esphome import _ESPHOME_DOMAIN, _execute_delete_esphome_yaml, _execute_install_esphome_firmware, _execute_rename_esphome_device, _execute_set_esphome_yaml, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_delete_esphome_yaml, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_rename_esphome_device, _tool_set_esphome_yaml, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
 # in tool_defs.py; this module reads it to answer tools/list, build the
-# per-token gate map, and compute the catalog fingerprint. The names are
+# per-access key gate map, and compute the catalog fingerprint. The names are
 # re-exported here so mcp_view._SYSTEM_TOOL_DEFS and friends resolve.
 from .tool_defs import (
     _ENTITY_TOOL_DEFS,
@@ -271,12 +271,12 @@ def _catalog_fingerprint() -> str:
     """Hash of every tool NAME and inputSchema this build defines.
 
     The second staleness signal, alongside settings_version: that one tracks the
-    operator changing a token, this one tracks the code changing under a client
+    operator changing an access key, this one tracks the code changing under a client
     that already fetched its tool list. A client enforces its cached schema
     before sending, so an argument added after that fetch is unusable to it and
     no server-side leniency helps; advising a reconnect is the only remedy.
 
-    Hashes the FULL static catalog, never the per-token announced subset, so a
+    Hashes the FULL static catalog, never the per-access key announced subset, so a
     permission change does not masquerade as a deploy. Descriptions are excluded:
     reworded guidance needs no refetch, and counting prose edits as staleness
     would fire the notice constantly and train operators to ignore it.
@@ -308,10 +308,10 @@ def tool_catalog_counts() -> dict[str, int]:
 
 
 # Tools that perform writes/actions. They are announced in tools/list only when
-# the token has write scope (any GREEN grant or pass_through). Cap-tied tools
+# the access key has write scope (any GREEN grant or pass_through). Cap-tied tools
 # (those with a "cap", "caps" or "caps_any" key) gate on their capability
 # instead; all remaining tools (reads, GetDateTime, get_approval_status) are
-# always announced. The announce_all_tools token flag overrides this gating
+# always announced. The announce_all_tools access key flag overrides this gating
 # entirely.
 _WRITE_GATED_TOOLS = frozenset({
     "call_service",
@@ -349,7 +349,7 @@ def _tool_caps(tool_def: dict) -> tuple[str, ...]:
 def _tool_is_announced(
     tool_def: dict, access_key: AccessKeyRecord, has_write: bool, hass: HomeAssistant
 ) -> bool:
-    """Whether a tool should appear in tools/list for this token.
+    """Whether a tool should appear in tools/list for this access key.
 
     cap-tied tools gate on their capability; write/action tools gate on write
     scope; a tool carrying a "requires" key additionally needs that system
@@ -378,7 +378,7 @@ def _tool_is_announced(
 def _tool_gate_map(
     access_key: AccessKeyRecord, data: PhoenixData, hass: HomeAssistant
 ) -> dict[str, Any]:
-    """Classify every tool for this token at the tool level (no entity oracle).
+    """Classify every tool for this access key at the tool level (no entity oracle).
 
     Buckets: usable (announced, executes directly); needs_approval (a cap-tied
     tool whose cap is Confirm and which actually gates, so returns
@@ -738,7 +738,7 @@ def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
 
 
 
-# One-time in-band advisory appended to a tools/call response when this token's
+# One-time in-band advisory appended to a tools/call response when this access key's
 # settings changed after its last tools/list (the stateless transport cannot
 # push notifications/tools/list_changed). Once per staleness epoch.
 _STALE_TOOLS_ADVISORY = (
@@ -864,7 +864,7 @@ async def _tool_get_state(
 async def _tool_get_states(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: return all entities accessible to the token."""
+    """MCP tool: return all entities accessible to the access key."""
     args, error = normalize_tool_args("get_states", args)
     if error:
         return _tool_error(error), "invalid_request", "get_states"
@@ -1420,8 +1420,8 @@ async def _execute_call_service(
     # outright, and routing them through resolve_service_targets yields
     # an empty list and a spurious 403. Authorization is the owning DEVICE's write
     # scope rather than a capability: the action is defined by that device's own
-    # firmware and can only act on it, so a token that may already actuate the
-    # device's entities is exactly the token that may invoke its actions. MESA
+    # firmware and can only act on it, so an access key that may already actuate the
+    # device's entities is exactly the access key that may invoke its actions. MESA
     # does not apply (no entity target to govern). A service no LOADED entry
     # claims falls through to the normal path and refuses uniformly, so a stale
     # registration left behind by an unload reveals nothing.
@@ -1554,7 +1554,7 @@ async def _execute_call_service(
         # core actuator domains (DOMAIN_SERVICE_HINTS), name the valid core service
         # verbs so an agent that guessed the wrong one (e.g. valve.open instead of
         # valve.open_valve) can self-correct. This is leak-safe: the catch is
-        # post-authorization (the token already proved WRITE on an entity in this
+        # post-authorization (the access key already proved WRITE on an entity in this
         # domain) and the verbs come from a hardcoded public HA-core list, not a
         # live hass.services lookup, so nothing hidden is revealed.
         hint = _service_not_found_hint(domain, service)
@@ -1562,7 +1562,7 @@ async def _execute_call_service(
             return _tool_error(hint[0]), "invalid_request", resource
         return _tool_error("Forbidden."), "denied", resource
     except ServiceValidationError as err:
-        # The token already holds WRITE on this entity and invoked a real service;
+        # The access key already holds WRITE on this entity and invoked a real service;
         # a validation error is about the caller's own argument (e.g. an
         # out-of-range setpoint), not about hidden entities or services, so it is
         # safe to surface and lets the agent self-correct instead of reading it as
@@ -1610,7 +1610,7 @@ async def _execute_call_service_mesa_approved(
     """Re-run a MESA-gated service call after admin approval.
 
     Registered under MESA_APPROVED_EXECUTOR but never dispatchable from the tool
-    router, so a token cannot reach the confirm-approved path itself. Re-runs
+    router, so an access key cannot reach the confirm-approved path itself. Re-runs
     Phoenix MCP scope resolution and MESA evaluation; only control_mode:confirm blocks
     are treated as satisfied, so an entity that became prohibited or read_only
     since the request is still rejected.
@@ -1675,7 +1675,7 @@ async def _tool_log_query(
     # A wrong-SHAPED level degrades to absent (str_arg), but a wrong VALUE is
     # refused rather than coerced: silently answering a WARNING query for a
     # caller that asked for INFO would hide the dropped level. Safe to surface
-    # because the cap check above already ran, so a denied token never reaches
+    # because the cap check above already ran, so a denied access key never reaches
     # a message about its own argument.
     raw_level = str_arg(args.get("level"), "WARNING").strip().upper() or "WARNING"
     if raw_level not in LOG_LEVELS:
@@ -2252,7 +2252,7 @@ async def _tool_set_integration_log_level(
 ) -> tuple[dict, str, str]:
     """Gate a scoped process-wide integration logger change without MESA."""
     # Capability ordering is intentional: argument errors must not become an
-    # oracle for tokens lacking either explicit capability.
+    # oracle for access keys lacking either explicit capability.
     if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_log_level"
     if effective_cap(access_key, "cap_log_control") == CAP_DENY:
@@ -2460,7 +2460,7 @@ def _apply_alias_edits(
 def _registry_write_perm_error(perm: Any, entity_id: str) -> tuple[dict, str, str] | None:
     """Shared scope check for registry writes; None means WRITE-accessible.
 
-    READ-only access returns a specific forbidden (the token can already see the
+    READ-only access returns a specific forbidden (the access key can already see the
     entity, so no existence oracle); anything else returns the not_found body.
     """
     if perm == Permission.WRITE:
@@ -2694,7 +2694,7 @@ def _entity_identity_references(
         if entity_id in record.permissions.entities:
             references.append(
                 {
-                    "kind": "token_permission",
+                    "kind": "access_key_permission",
                     "access_key_id": record.id,
                     "access_key_name": record.name,
                 }
@@ -3705,14 +3705,14 @@ def _device_owner_summary(entry: Any, *, supports_removal: bool | None = None) -
 def _device_permission_references(
     data: PhoenixData, device_id: str
 ) -> list[dict[str, Any]]:
-    """Active-token and preset permission nodes keyed to one device."""
+    """Active-access key and preset permission nodes keyed to one device."""
     references: list[dict[str, Any]] = []
     for record in data.store.list_access_keys():
         if not record.is_valid():
             continue
         if device_id in record.permissions.devices:
             references.append({
-                "kind": "token_permission",
+                "kind": "access_key_permission",
                 "access_key_id": record.id,
                 "access_key_name": record.name,
             })
@@ -4389,7 +4389,7 @@ async def _tool_set_entity(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit an entity's registry metadata (Confirm-eligible)."""
-    # Capability gate first: a denied token gets a uniform Forbidden with no entity
+    # Capability gate first: a denied access key gets a uniform Forbidden with no entity
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_entity"
@@ -4692,7 +4692,7 @@ async def _tool_delete_entity(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete an entity's registry entry (Confirm-eligible)."""
-    # Capability gate first: a denied token gets a uniform Forbidden with no entity
+    # Capability gate first: a denied access key gets a uniform Forbidden with no entity
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
@@ -4903,10 +4903,10 @@ async def _execute_restart_ha(
 async def _tool_get_approval_status(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: poll one of the token's own approvals, or list its pending ones.
+    """MCP tool: poll one of the access key's own approvals, or list its pending ones.
 
-    With no approval_id it lists this token's outstanding approvals. A record
-    owned by another token answers exactly like a missing one ("Approval not
+    With no approval_id it lists this access key's outstanding approvals. A record
+    owned by another access key answers exactly like a missing one ("Approval not
     found."), so a refusal is not an existence oracle.
     """
     from .approvals import STATUS_PENDING, get_approval, list_approvals  # noqa: PLC0415
@@ -4914,7 +4914,7 @@ async def _tool_get_approval_status(
     await data.agent_recovery.reconcile(data.store, access_key.id)
     approval_id = args.get("approval_id")
     if approval_id is None:
-        # No id: enumerate this token's own pending approvals (own data only).
+        # No id: enumerate this access key's own pending approvals (own data only).
         pending = list_approvals(data.store, status=STATUS_PENDING, access_key_id=access_key.id)
         items = [
             {
@@ -5061,8 +5061,8 @@ async def _wait_for_many_approvals(
     records = {}
     for approval_id in ids:
         record = get_approval(data.store, approval_id)
-        # Unknown and belonging-to-another-token answer identically, so a refusal
-        # is not an existence oracle for another token's queue.
+        # Unknown and belonging-to-another-access key answer identically, so a refusal
+        # is not an existence oracle for another access key's queue.
         if record is None or record.access_key_id != access_key.id:
             return _tool_error("Approval not found."), "not_found", "wait_for_approval"
         records[approval_id] = record
@@ -5124,11 +5124,11 @@ async def _wait_for_many_approvals(
 async def _tool_wait_for_approval(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: block until the token's own approval(s) resolve, or until timeout.
+    """MCP tool: block until the access key's own approval(s) resolve, or until timeout.
 
     A bounded server-side wait (not a stream): returns immediately if already
     resolved, else waits on the phoenix_mcp_approval_resolved event filtered to
-    the requested approval ids. Own-data only (another token's id answers like a
+    the requested approval ids. Own-data only (another access key's id answers like a
     missing one, as in get_approval_status); no capability required.
 
     Accepts `approval_ids` (a list), including a one-item list for a single
@@ -5163,7 +5163,7 @@ def _register_executor(tool_name: str, fn: Any) -> None:
 _TOOL_HANDLERS: dict[str, tuple[Any, tuple[str, ...], dict[str, Any]]] = {}
 
 # Request context a handler opts into by naming the parameter. Reads take
-# (args, token, hass); gated writes add all three of these.
+# (args, access_key, hass); gated writes add all three of these.
 _TOOL_CONTEXT_PARAMS = ("data", "request_id", "client_ip")
 
 
@@ -5189,7 +5189,7 @@ def _register_tool(name: str, handler: Any, /, **bound: Any) -> None:
 
 
 def _restore_access_key(user_id: str) -> AccessKeyRecord:
-    """Synthetic pass-through token for re-applying a config under admin authority.
+    """Synthetic pass-through access key for re-applying a config under admin authority.
 
     pass_through makes policy_engine.resolve() return WRITE for every entity, so the
     per-entity scope checks inside the scene/helper executors pass for an admin who
@@ -5591,7 +5591,7 @@ def _build_diff_restart_ha(args: dict, access_key: AccessKeyRecord, hass: HomeAs
 async def _tool_get_capability_summary(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: the token introspecting its own caps/persona/limits. No cap required."""
+    """MCP tool: the access key introspecting its own caps/persona/limits. No cap required."""
     caps = effective_caps(access_key)
     body = {
         "access_key_name": access_key.name,
@@ -7087,14 +7087,14 @@ def _config_entry_permission_references(
         for entity_id in sorted(entity_set.intersection(record.permissions.entities)):
             entity_references.append({
                 "entity_id": entity_id,
-                "kind": "token_permission",
+                "kind": "access_key_permission",
                 "access_key_id": record.id,
                 "access_key_name": record.name,
             })
         for device_id in sorted(device_set.intersection(record.permissions.devices)):
             device_references.append({
                 "device_id": device_id,
-                "kind": "token_permission",
+                "kind": "access_key_permission",
                 "access_key_id": record.id,
                 "access_key_name": record.name,
             })
@@ -7771,7 +7771,7 @@ async def _get_ha_assist_api(hass: HomeAssistant) -> Any:
 
     HA-COUPLING POINT. LLMContext's fields differ across HA versions (older
     ones declare `user_prompt`), and a TypeError from an unknown field would be
-    swallowed by BOTH callers (prompts/list and prompts/get, pass-through tokens
+    swallowed by BOTH callers (prompts/list and prompts/get, pass-through access keys
     only) and silently reported as no prompts. So the kwargs are filtered to the
     fields the live dataclass declares, the same "supply the intersection with the
     live signature" approach ws_dispatch uses for ActiveConnection: a future
@@ -7799,7 +7799,7 @@ def _build_server_info(access_key: AccessKeyRecord, hass: HomeAssistant, base_ur
     """Build the phx://server-info resource payload for the MCP resources/read endpoint."""
     states = hass.states.async_all()
     if access_key.pass_through:
-        # Use build_permitted_states to get the same set the token actually sees,
+        # Use build_permitted_states to get the same set the access key actually sees,
         # including the Phoenix-platform entity filter (sensor.phoenix_mcp_* telemetry sensors).
         count = len(_build_permitted_states(access_key, hass))
     else:
@@ -7828,7 +7828,7 @@ def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> st
 
     if access_key.pass_through:
         # Use build_permitted_states for an accurate count that respects Phoenix-platform
-        # entity filtering and use_assist_exposure (same set the token actually sees).
+        # entity filtering and use_assist_exposure (same set the access key actually sees).
         count = len(_build_permitted_states(access_key, hass))
         lines.append("This access key operates in pass-through mode.")
         lines.append(
@@ -7913,7 +7913,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
                 continue
             entry = registry.async_get(eid)
             # Exclude Phoenix MCP telemetry sensors (registered to the phoenix_mcp platform) so
-            # pass_through tokens see the same entity set as build_permitted_states().
+            # pass_through access keys see the same entity set as build_permitted_states().
             if entry is not None and entry.platform == DOMAIN:
                 continue
             if _expose_check is not None and not _expose_check(eid):
@@ -7955,11 +7955,11 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
 
 
 def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str) -> str:
-    """Token-aware MCP `instructions` primer, sent at every session start.
+    """Access key-aware MCP `instructions` primer, sent at every session start.
 
     Short: the etiquette that prevents the common failure modes (treating
     pending_approval as an error, retrying, ignoring the per-entity safety layer)
-    plus this token's gated capabilities and a link to the full guide at
+    plus this access key's gated capabilities and a link to the full guide at
     /api/phoenix-mcp/skill.
     """
     from .home_companion import is_companion
@@ -8032,16 +8032,16 @@ def _maybe_append_stale_advisory(
     row. This is the stateless transport's substitute for tools/list_changed: the
     notice rides in-band on the next tools/call, once per staleness epoch (a fresh
     tools/list resets it). The epoch key spans two independent axes, so resolving
-    one does not re-fire the other: the OPERATOR changed this token
+    one does not re-fire the other: the OPERATOR changed this access key
     (settings_version moved past the version echoed at the last tools/list), and
     the BUILD changed under a client that already fetched its schemas (catalog
     fingerprint differs; an empty stored fingerprint means never recorded, so
     never stale).
 
     Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild their tool list every turn from the live token and have no external
+    rebuild their tool list every turn from the live access key and have no external
     MCP server to reconnect. The epoch is deliberately NOT marked for them, so a
-    real external client sharing the token still gets advised.
+    real external client sharing the access key still gets advised.
     """
     internal = client_ip in (
         AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
@@ -8263,7 +8263,7 @@ async def _dispatch_mcp_authorized(
         # The stateless-era replacement for initialize: identity, versions and
         # capabilities in one call, with no handshake to establish. A client
         # speaking a revision that has no initialize would otherwise never receive
-        # the token-aware primer, which is the only place an agent is told which
+        # the access key-aware primer, which is the only place an agent is told which
         # of its capabilities are approval-gated.
         resp = _jsonrpc_result(msg_id, {
             "resultType": "complete",
@@ -8271,9 +8271,9 @@ async def _dispatch_mcp_authorized(
             "capabilities": _SERVER_CAPABILITIES,
             "instructions": _build_instructions(access_key, data, base_url),
             "ttlMs": MCP_DISCOVER_TTL_MS,
-            # NEVER "public". The instructions name THIS token's confirm-gated
-            # capabilities, so a shared intermediary caching one token's answer
-            # would serve it to the next token reaching it through that proxy.
+            # NEVER "public". The instructions name THIS access key's confirm-gated
+            # capabilities, so a shared intermediary caching one access key's answer
+            # would serve it to the next access key reaching it through that proxy.
             "cacheScope": "private",
             "_meta": {
                 "io.modelcontextprotocol/serverInfo": {
@@ -8324,7 +8324,7 @@ async def _dispatch_mcp_authorized(
     if is_companion(access_key) and method in {"resources/read", "prompts/get"}:
         return _jsonrpc_error(msg_id, -32602, "Unavailable for this persona."), method, "/api/phoenix-mcp", "denied"
     if method == "tools/list":
-        # Announce only the tools this token can use, unless announce_all_tools
+        # Announce only the tools this access key can use, unless announce_all_tools
         # is set. Cap-tied tools gate on their cap; write/action tools gate on
         # write scope; tools needing a system surface (ESPHome, the Device
         # Builder) gate on it being present; reads are always announced.
@@ -8517,7 +8517,7 @@ async def _handle_streamable_batch(
 
     # Rate limiting for a batch is charged PER ITEM and preflighted against both
     # the minute and burst ceilings by RateLimiter.charge_batch, in post() before
-    # anything here runs; charging one unit per batch would let a token spend
+    # anything here runs; charging one unit per batch would let an access key spend
     # MAX_BATCH_ITEMS times its configured ceiling.
     # Items are dispatched sequentially (not via asyncio.gather) so a batch can never
     # run up to MAX_BATCH_ITEMS side-effecting tools concurrently and interleave
@@ -8636,7 +8636,7 @@ async def _dispatch_streamable_batch(
         if bus is not None:
             # Progress is per-request in MCP, and each batch item carries its own
             # token; items run one at a time, so one field is enough.
-            bus.access_key = _progress_token(method, params)
+            bus.progress_token = _progress_token(method, params)
         try:
             response_msg, _, _, outcome = await _dispatch_mcp(
                 method, msg_id, params, access_key, hass, data, client_ip,
@@ -8645,7 +8645,7 @@ async def _dispatch_streamable_batch(
             )
         finally:
             if bus is not None:
-                bus.access_key = None
+                bus.progress_token = None
                 bus.status = None
         if (not is_notification and response_msg is not None and method == "tools/call"
                 and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])):
@@ -8733,7 +8733,7 @@ async def _dispatch_modern_mcp_result(
 
 
 def _rate_limit_headers(access_key: AccessKeyRecord, rl_result: Any) -> dict[str, str]:
-    """The X-RateLimit-* trio, or nothing when rate limiting is off for this token."""
+    """The X-RateLimit-* trio, or nothing when rate limiting is off for this access key."""
     if access_key.rate_limit_requests <= 0:
         return {}
     return {
@@ -8776,7 +8776,7 @@ def _progress_notification(bus: _ProgressBus, elapsed: float) -> dict:
     value increase with every notification for a given token.
     """
     params: dict[str, Any] = {
-        "progressToken": bus.access_key,
+        "progressToken": bus.progress_token,
         "progress": round(elapsed, 1),
     }
     if bus.total is not None:
@@ -8836,7 +8836,7 @@ async def _mcp_sse_response(
             elapsed = time.monotonic() - started
             frame = (
                 _sse_frame(_progress_notification(bus, elapsed))
-                if bus.access_key is not None
+                if bus.progress_token is not None
                 else b": keepalive\n\n"
             )
             try:
@@ -8929,7 +8929,7 @@ def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str)
     matches one of Home Assistant's own configured URLs. It is validated against
     HA's configured URLs via is_hass_url, never the request's own Host header,
     which a rebinding attacker also forges. This is defense in depth: Phoenix MCP
-    already requires its bearer token, which such a page cannot know, so a rebound
+    already requires its access key sent as a bearer credential, which such a page cannot know, so a rebound
     request still gets the uniform 401; the Origin check refuses it one step
     earlier.
     """
@@ -9054,7 +9054,7 @@ class PhoenixMcpView(PhoenixView):
             request_authority.reset(context)
 
     async def _delete(self, request: web.Request) -> web.Response:
-        """Release a session created by ``initialize`` for this token."""
+        """Release a session created by ``initialize`` for this access key."""
         hass = self.hass
         request_id = generate_request_id()
         data = hass.data.get(DOMAIN)
@@ -9309,11 +9309,11 @@ class PhoenixMcpView(PhoenixView):
                     body=parsed, resource="mcp:batch")
             # A batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS calls,
             # and the auth check above charged it as one, so batching would
-            # multiply a token's effective rate by MAX_BATCH_ITEMS. The items are
+            # multiply an access key's effective rate by MAX_BATCH_ITEMS. The items are
             # the work, so the other N-1 are charged here, once the count is
             # known, and the whole batch is REFUSED if the budget will not cover
             # it. Preflighting is what makes the ceiling real: charging without
-            # refusing would let a token run every item and only then be
+            # refusing would let an access key run every item and only then be
             # throttled. Nothing has been dispatched yet, so there is no
             # half-applied batch to worry about.
             batch_rl = data.rate_limiter.charge_batch(
@@ -9331,7 +9331,7 @@ class PhoenixMcpView(PhoenixView):
                 return resp
             # From here on the batch's own result is what the client is told, on
             # BOTH paths: the single-request result above was computed before the
-            # other N-1 items were charged, so it would report a budget the token
+            # other N-1 items were charged, so it would report a budget the access key
             # no longer has. This covers the SSE framing; the JSON path takes
             # batch_rl directly.
             if batch_rl.rate_limiting_enabled:
@@ -9511,7 +9511,7 @@ class PhoenixMcpView(PhoenixView):
             rl_headers = {**rl_headers, "Mcp-Session-Id": legacy_session_id}
 
         if wants_sse and not is_notification:
-            bus = _ProgressBus(access_key=_progress_token(method, params))
+            bus = _ProgressBus(progress_token=_progress_token(method, params))
             _progress_ctx.set(bus)
             dispatch = (
                 _dispatch_modern_mcp_result(

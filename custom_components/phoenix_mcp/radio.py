@@ -171,11 +171,11 @@ def present_zigbee_backends(hass: HomeAssistant) -> list[str]:
 
 
 def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[str]) -> dict[str, str]:
-    """Map ieee to device_id for every Zigbee device the token can see.
+    """Map ieee to device_id for every Zigbee device the access key can see.
 
-    A device is visible when at least one of its entities is in the token's
+    A device is visible when at least one of its entities is in the access key's
     accessible set (the get_device rule). Decides which neighbor identifiers a
-    scoped token may see un-redacted.
+    scoped access key may see un-redacted.
     """
     from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
@@ -1632,13 +1632,13 @@ def project_zha_device(
 ) -> dict[str, Any]:
     """Project a zha/device payload to the scoped per-device view.
 
-    The entities list is filtered to the token's accessible set. Neighbor
+    The entities list is filtered to the access key's accessible set. Neighbor
     metrics (lqi, depth, relationship) always pass through, but neighbor
     ieee/nwk identifiers are replaced with "<redacted>" unless the neighbor
-    maps to a device the token can see (then its device_id is included so the
+    maps to a device the access key can see (then its device_id is included so the
     agent can chain another get_radio_device call). Routes are intentionally
     omitted: they carry only nwk shorts, which cannot be scope-checked without
-    whole-network enumeration. Pass-through tokens see everything.
+    whole-network enumeration. Pass-through access keys see everything.
     """
     raw = raw if isinstance(raw, dict) else {}
     projected = {
@@ -1856,12 +1856,12 @@ def _get_zha_gateway(hass: HomeAssistant) -> Any:
 async def async_scan_zha_topology(
     hass: HomeAssistant, visible_ieees: set[str]
 ) -> dict[str, Any]:
-    """Scan only token-visible ZHA routers and return an internal raw map.
+    """Scan only access key-visible ZHA routers and return an internal raw map.
 
     ZHA's websocket update command intentionally has no result and would always
     time out through Phoenix's synthetic dispatcher. Calling zigpy's topology
     object directly also allows passing only visible devices instead of probing
-    every router on a partially scoped token. The returned IEEE values are
+    every router on a partially scoped access key. The returned IEEE values are
     internal and must pass through :func:`project_zigbee_topology`.
     """
     try:

@@ -49,7 +49,7 @@ export function AuditView({ accessKeys }: Props) {
     return () => clearTimeout(timer);
   }, [methodFilter, resourceFilter, ipFilter]);
 
-  // Current id to name map so renamed tokens show their current name on existing
+  // Current id to name map so renamed access keys show their current name on existing
   // audit rows (falls back to the row's stored name for archived/admin entries).
   const accessKeyNames = useMemo(
     () => Object.fromEntries(accessKeys.map((t) => [t.id, t.name])),

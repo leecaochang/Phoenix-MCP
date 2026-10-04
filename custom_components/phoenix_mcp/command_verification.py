@@ -97,7 +97,7 @@ async def async_verify_command_state(hass: Any, data: Any, access_key: Any, plan
     deadline = loop.time() + COMMAND_VERIFICATION_WAIT_SECONDS
     while True:
         current = authority.current_access_key()
-        if current.settings_version != plan.get("token_version"):
+        if current.settings_version != plan.get("access_key_version"):
             return "unconfirmed"
         # Recheck read access, exposure and registry identity before every read.
         # The fingerprint deliberately excludes changing state and setpoints.

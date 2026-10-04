@@ -5,7 +5,7 @@ preferences (statistics mapped to roles: grid, solar, battery, gas, water, or an
 individual device) live in .storage/energy and are reachable ONLY through the
 energy/get_prefs WebSocket command, so this module is the single path to them.
 That command runs under the resolved admin user and names every statistic, so
-results pass through filter_service_response, which replaces an entity the token
+results pass through filter_service_response, which replaces an entity the access key
 cannot resolve with the redaction sentinel and drops entity-keyed entries.
 
 THE WRITE IS ADDRESSED, NEVER WHOLESALE. energy/save_prefs full-replaces each
@@ -100,7 +100,7 @@ def _referenced_entities(prefs: Any, _depth: int = 0) -> list[str]:
     silently and report no dependency where one exists.
 
     Call this on the REDACTED preferences, never the raw ones: the sentinel is
-    skipped, so an entity the token cannot resolve is absent rather than named.
+    skipped, so an entity the access key cannot resolve is absent rather than named.
     External statistics ("domain:name") are not entity ids and are not collected.
     """
     if _depth > 10:
@@ -192,7 +192,7 @@ async def _tool_get_solar_forecast(
 
 
 def _scoped_body(prefs: dict, configured: bool, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """The token-scoped response body. Shared by the read and the write's result."""
+    """The access key-scoped response body. Shared by the read and the write's result."""
     scoped = filter_service_response(prefs, access_key, hass)
     return {
         "configured": configured,
@@ -207,7 +207,7 @@ def _plain(value: Any) -> Any:
     HA's ValidationIssue carries `affected_entities` as a set of TUPLES.
     json.dumps cannot serialize a set, and filter_service_response walks dicts,
     lists and strings only, so a tuple would fall through it and return entity ids
-    the token cannot see. Normalising first puts them where the redactor looks.
+    the access key cannot see. Normalising first puts them where the redactor looks.
     """
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in value.items()}
@@ -267,7 +267,7 @@ async def _energy_issues(
                     "type": issue.get("type"),
                     "affected_entities": _plain(issue.get("affected_entities") or []),
                 })
-    # Scoped last, over plain containers, so an issue naming an entity this token
+    # Scoped last, over plain containers, so an issue naming an entity this access key
     # cannot resolve reports the redaction sentinel rather than the id.
     return filter_service_response(issues, access_key, hass)
 
@@ -321,7 +321,7 @@ _SOURCE_REQUIRED: dict[str, tuple[str, ...]] = {
 }
 
 # Fields naming a statistic or an entity rather than holding a number. Only these
-# are checked against the token's scope, and only when being WRITTEN.
+# are checked against the access key's scope, and only when being WRITTEN.
 _STATISTIC_FIELDS = frozenset({
     "stat_energy_from", "stat_energy_to", "stat_cost", "stat_compensation",
     "entity_energy_price", "entity_energy_price_export",
@@ -350,7 +350,7 @@ _DEVICE_KEYS = ("device_consumption", "device_consumption_water")
 def _find_device(prefs: dict, statistic: str, device_name: str) -> tuple[str, int]:
     """Locate one device entry by statistic id or by its display name.
 
-    Addressing by NAME is not a convenience: a device whose statistic the token
+    Addressing by NAME is not a convenience: a device whose statistic the access key
     cannot resolve comes back as the redaction sentinel, so its id is genuinely
     unavailable to the caller and the name is the only handle left. That is the
     common case for a dead entry, which is exactly what an operator wants to fix.
@@ -705,7 +705,7 @@ async def _read_prefs_raw(hass: HomeAssistant) -> dict:
     """The current preferences, UNREDACTED, defaulting when nothing is configured.
 
     Unredacted is the point: this is the base a write is applied to, so an entry
-    the calling token cannot resolve must survive as its real statistic id rather
+    the calling access key cannot resolve must survive as its real statistic id rather
     than being rewritten to the redaction sentinel.
     """
     try:
@@ -741,7 +741,7 @@ def _preview_rows(prefs: dict, access_key: AccessKeyRecord, hass: HomeAssistant)
     _truncate, and a truncated JSON string does not parse. These rows are small
     enough never to be truncated.
 
-    Scoped through filter_service_response, so a statistic the token cannot
+    Scoped through filter_service_response, so a statistic the access key cannot
     resolve previews as the sentinel rather than being disclosed to whoever opens
     the approval.
     """
@@ -810,7 +810,7 @@ async def _tool_edit_energy_config(
 
     Never takes a preferences blob (see the module docstring). Validated against
     the CURRENT preferences before the approval is created, after the cap-deny
-    check so a denied token learns nothing about its payload, so an invalid
+    check so a denied access key learns nothing about its payload, so an invalid
     request never becomes a pending approval. Re-validated at apply time so a
     change during the approval window is caught.
     """
@@ -963,7 +963,7 @@ def validate_energy_recovery_snapshot(snapshot: dict[str, Any]) -> dict[str, Any
 def validate_energy_recovery_scope(
     snapshot: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> None:
-    """Refuse restores whose entity references exceed the token's current scope."""
+    """Refuse restores whose entity references exceed the access key's current scope."""
     prefs = validate_energy_recovery_snapshot(snapshot)
     for entity_id in _referenced_entities(prefs):
         try:

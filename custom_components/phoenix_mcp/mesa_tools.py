@@ -1,9 +1,9 @@
-"""Token-scoped wrappers around the vendored mesa-core retrieval tools.
+"""Access key-scoped wrappers around the vendored mesa-core retrieval tools.
 
 mesa-core ships the four retrieval handlers (mesa_query_profiles,
 mesa_get_profile, mesa_explain_profile, mesa_get_caller_context). Phoenix MCP does not
 reimplement them; it builds a per-request ScopedProfileStore so the handlers
-only ever see entities the token may read, then delegates to mesa-core. This
+only ever see entities the access key may read, then delegates to mesa-core. This
 keeps total_matched counts, pagination cursors, and the fingerprint all
 scope-relative so there is no entity-enumeration oracle.
 
@@ -53,13 +53,13 @@ _ENTITY_TARGETED = frozenset({"mesa_get_profile", "mesa_explain_profile"})
 # The advisory-lease tools. The MCP transport is stateless (session_id is
 # normally the per-request id), which would make every lease call a different
 # session and release or refresh impossible, so these two run with
-# session_id = token.id: a lease belongs to the TOKEN, stable across stateless
-# calls, and mesa-core's session matching isolates tokens from each other's leases.
+# session_id = access_key.id: a lease belongs to the ACCESS KEY, stable across stateless
+# calls, and mesa-core's session matching isolates access keys from each other's leases.
 #
-# A lease therefore excludes OTHER TOKENS, not other callers of the same token:
+# A lease therefore excludes OTHER ACCESS KEYS, not other callers of the same access key:
 # mesa-core treats same-session overlap as a REFRESH and grants it, so two agents
-# sharing one token do not exclude each other. That matches the one-token-per-
-# connected-agent model, where the token is the unit of work that can be
+# sharing one access key do not exclude each other. That matches the one-access key-per-
+# connected-agent model, where the access key is the unit of work that can be
 # interrupted.
 _LEASE_TOOLS = frozenset({"mesa_request_lease", "mesa_release_lease"})
 
@@ -155,14 +155,14 @@ def _not_found_envelope(entity_id: str) -> dict[str, Any]:
 
 
 def _is_visible(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
-    """True when the token may read the entity (READ or WRITE)."""
+    """True when the access key may read the entity (READ or WRITE)."""
     return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
 
 
 class ScopedProfileStore:
-    """A read-only ProfileStore view filtered to one token's permission scope.
+    """A read-only ProfileStore view filtered to one access key's permission scope.
 
-    Entity-level reads are hidden when the token cannot read the entity, so the
+    Entity-level reads are hidden when the access key cannot read the entity, so the
     delegated mesa-core handlers and resolver never observe out-of-scope
     entities. The scoped layers (device, area, integration, domain) and the
     deployment defaults pass through UNFILTERED, and that direction is
@@ -395,7 +395,7 @@ async def async_call_mesa_tool(
     data: PhoenixData,
     session_id: str,
 ) -> tuple[dict, str, str]:
-    """Dispatch a mesa_* retrieval tool with token scoping.
+    """Dispatch a mesa_* retrieval tool with access key scoping.
 
     Returns the standard Phoenix MCP tool tuple (result, outcome, resource).
     """
@@ -407,13 +407,13 @@ async def async_call_mesa_tool(
         return _tool_error("MESA is not available."), "denied", tool_name
 
     if tool_name in _LEASE_TOOLS:
-        # Leases belong to the token across stateless calls (see _LEASE_TOOLS).
+        # Leases belong to the access key across stateless calls (see _LEASE_TOOLS).
         session_id = access_key.id
         if tool_name == "mesa_request_lease":
             entities = args.get("entities")
             if isinstance(entities, list) and entities:
                 # A lease is an intent to control, so it is scoped to entities
-                # the token can WRITE. Out-of-scope, ghost, and blocked-domain
+                # the access key can WRITE. Out-of-scope, ghost, and blocked-domain
                 # entities are silently dropped (indistinguishable from one
                 # another, no enumeration oracle); nothing in scope is the
                 # standard generic denial.

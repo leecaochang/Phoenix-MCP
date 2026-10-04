@@ -9,8 +9,8 @@ import { auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 interface Props {
   entries: AuditEntry[];
   loading?: boolean;
-  // Current access_key_id -> name, so a renamed token's existing audit rows show its
-  // current name. The stored entry.access_key_name is the fallback for tokens no
+  // Current access_key_id -> name, so a renamed access key's existing audit rows show its
+  // current name. The stored entry.access_key_name is the fallback for access keys no
   // longer active (archived/revoked) and for admin actions.
   accessKeyNames?: Record<string, string>;
 }
@@ -145,7 +145,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  // Prefer the token's current name (by id) over the snapshot stored on the row,
+  // Prefer the access key's current name (by id) over the snapshot stored on the row,
   // so a rename is reflected in its historical audit entries.
   const displayName = (e: AuditEntry): string => accessKeyNames?.[e.access_key_id] ?? e.access_key_name;
 
@@ -240,7 +240,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
                     for the mouse; this button keeps it keyboard- and screen-
                     reader-accessible (tab to it, Enter/Space to open the
                     entry). stopPropagation so activating it does not also
-                    re-fire the row's handler. Lives in the Token column, not
+                    re-fire the row's handler. Lives in the Access key column, not
                     Outcome, because Outcome is one of the columns mobile
                     hides (display:none un-renders anything inside it). */}
                 <button

@@ -13,8 +13,8 @@ and fails closed rather than touching configuration.yaml, so a domain defined
 inline there or in a package is not edited.
 
 Scene writes add one check: a scene captures member entities' states, so
-`_unwritable_scene_members` refuses a scene naming an entity the token cannot
-WRITE; otherwise a token could snapshot and later restore entities outside its
+`_unwritable_scene_members` refuses a scene naming an entity the access key cannot
+WRITE; otherwise an access key could snapshot and later restore entities outside its
 scope. mcp_view owns the transport and the registries and imports from here;
 this module does not import it.
 """
@@ -1046,7 +1046,7 @@ def _scene_member_entities(config: Any) -> list[str]:
 
 
 def _unwritable_scene_members(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> list[str]:
-    """Scene member entities the token cannot WRITE (the scene will actuate them)."""
+    """Scene member entities the access key cannot WRITE (the scene will actuate them)."""
     return sorted(e for e in _scene_member_entities(config) if resolve(e, access_key, hass) != Permission.WRITE)
 
 
@@ -1083,7 +1083,7 @@ async def _tool_get_scene(
 ) -> tuple[dict, str, str]:
     """MCP tool: read one scene's current stored config, with a content_hash.
 
-    Applies edit_scene's member rule: a scene controlling entities this token
+    Applies edit_scene's member rule: a scene controlling entities this access key
     cannot write is refused with the same message as a missing scene, so the
     scene id is not an existence oracle.
     """
@@ -1127,7 +1127,7 @@ async def _scene_write(
                 items = await hass.async_add_executor_job(_read_scenes_yaml, path)
                 if replace:
                     idx = next((i for i, s in enumerate(items) if isinstance(s, dict) and str(s.get("id")) == scene_id), None)
-                    # The token must already own the scene it is replacing: it can only
+                    # The access key must already own the scene it is replacing: it can only
                     # edit a scene whose CURRENT members are all WRITE-accessible. A
                     # missing scene and an out-of-scope one return the same error so the
                     # id is not an existence oracle.
@@ -1321,7 +1321,7 @@ async def _execute_delete_scene(
                     return _tool_error("scenes.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "delete_scene"
                 items = await hass.async_add_executor_job(_read_scenes_yaml, path)
                 existing = next((s for s in items if isinstance(s, dict) and str(s.get("id")) == scene_id), None)
-                # The token may only delete a scene whose current members are all
+                # The access key may only delete a scene whose current members are all
                 # WRITE-accessible. Missing and out-of-scope return the same error.
                 if existing is None or _unwritable_scene_members(existing, access_key, hass):
                     return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"

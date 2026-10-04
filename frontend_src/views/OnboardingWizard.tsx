@@ -110,15 +110,15 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         setRawAccessKey(raw);
         setAccessKeyId(record.id);
         setPermissions(record.permissions);
-        // Creation changes the token list every host caches: the panel shell
+        // Creation changes the access key list every host caches: the panel shell
         // gates its header "Agent Chat" button on a non-empty list and hands
-        // the panel-hosted chat window its tokens prop, and the floating
-        // window refetches on this event. Without it a token made here stays
+        // the panel-hosted chat window its accessKeys prop, and the floating
+        // window refetches on this event. Without it an access key made here stays
         // invisible to both until a page reload.
         window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
         await api.patchAccessKey(record.id, patchBody);
       } else {
-        // Token already created (back-navigation): re-apply persona only.
+        // Access key already created (back-navigation): re-apply persona only.
         await api.patchAccessKey(accessKeyId, patchBody);
       }
       setStep(2);
@@ -152,7 +152,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   }, [step, branch, connected, poll]);
 
   // Agent Chat branch: the wizard's job is done the moment the user sends
-  // their first prompt through the window it opened; close to the token page.
+  // their first prompt through the window it opened; close to the access key page.
   useEffect(() => {
     if (step !== 5 || branch !== "chat") return;
     const done = () => { if (accessKeyId) onFinish(accessKeyId); };
@@ -160,7 +160,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
     return () => window.removeEventListener("phx-agentcli-sent", done);
   }, [step, branch, accessKeyId, onFinish]);
 
-  // Open Agent Chat on the new token with the chosen account/model preselected
+  // Open Agent Chat on the new access key with the chosen account/model preselected
   // and the test prompt pre-typed. Closing any already-open global window first
   // forces a remount, so the freshly patched durable selections are picked up.
   const launchAgentChat = useCallback((instanceId: string, model: string) => {

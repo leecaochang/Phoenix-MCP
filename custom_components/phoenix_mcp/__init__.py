@@ -469,7 +469,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         data.routes_registered = True
 
     # Assist bridge: register the Phoenix MCP scoped llm.API so HA's native Assist/voice
-    # conversation agents can drive the bound token's tools. Kill-switch-gated like
+    # conversation agents can drive the bound access key's tools. Kill-switch-gated like
     # the client routes (Assist is agent activity); the admin settings PATCH toggles
     # it live when the kill switch flips. No-op on HA versions lacking the seam.
     from .assist_api import (
@@ -500,12 +500,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     from .sensor import async_create_access_key_sensors, async_remove_access_key_sensors
 
     async def _on_access_key_created(access_key) -> None:
-        """Create sensor entities when a new token is minted."""
+        """Create sensor entities when a new access key is minted."""
         await async_create_access_key_sensors(hass, entry, access_key)
         schedule_expiry_timer(hass, data, access_key)
 
     async def _on_access_key_archived(access_key_slug: str) -> None:
-        """Remove sensor entities when a token is revoked or archived."""
+        """Remove sensor entities when an access key is revoked or archived."""
         await async_remove_access_key_sensors(hass, access_key_slug)
 
     data.async_on_access_key_created = _on_access_key_created
@@ -717,7 +717,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         try:
             await store.async_flush_last_used()
         except Exception:  # noqa: BLE001 - shutdown must not depend on a writable disk
-            _LOGGER.exception("Phoenix MCP: could not flush token usage at shutdown")
+            _LOGGER.exception("Phoenix MCP: could not flush access key usage at shutdown")
         try:
             await audit.async_save()
         except Exception:  # noqa: BLE001 - shutdown must not depend on a writable disk
@@ -827,7 +827,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Tear down Phoenix MCP: unload the platforms, then remove the panel.
 
     EVERY step before the platform unload is best-effort. `shutting_down` is set
-    first and `helpers` gates every token request on it, so anything that raises
+    first and `helpers` gates every access key request on it, so anything that raises
     between there and the unload would leave the entry still loaded, every route
     still registered, and every request answering 503 until the next restart,
     with a logged store error as the only clue. Persisting the last few rows is
@@ -868,7 +868,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _remove_frontend(hass)
         hass.data.pop(DOMAIN, None)
     elif data is not None:
-        # Still loaded, so it has to stay usable: this flag gates every token
+        # Still loaded, so it has to stay usable: this flag gates every access key
         # request, and the panel and injectors are deliberately left registered.
         data.shutting_down = False
         data.ready = True

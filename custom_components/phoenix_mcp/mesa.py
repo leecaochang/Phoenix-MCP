@@ -1,10 +1,10 @@
 """MESA semantic-safety runtime for Phoenix MCP.
 
 Wires the vendored mesa-core (custom_components.phoenix_mcp.mesa_core) into the
-integration. mesa-core is per-ENTITY policy (what is safe to touch); tokens are
+integration. mesa-core is per-ENTITY policy (what is safe to touch); access keys are
 per-CALLER policy (who may touch what). Phoenix MCP flattens targets first, then
 MESA evaluates the explicit entity list. MESA is orthogonal to the permission tree
-and binds pass-through tokens too.
+and binds pass-through access keys too.
 
 - The profile store is an in-memory dict (PhoenixMesaBackend) persisted through
   HA's Store. It never blocks, so enforcement runs mesa-core's synchronous APIs on
@@ -494,11 +494,11 @@ def read_automation_configs(hass: HomeAssistant) -> list[dict[str, Any]]:
 
 
 def build_caller_context(access_key: AccessKeyRecord, session_id: str) -> CallerContext:
-    """Map a Phoenix MCP token to a MESA CallerContext.
+    """Map a Phoenix MCP access key to a MESA CallerContext.
 
-    Phoenix MCP has no per-user roles; the token's persona is its only role-like
+    Phoenix MCP has no per-user roles; the access key's persona is its only role-like
     attribute, so MESA access_roles rules are persona-granular. caller_id uses
-    the token id (stable across renames); the name is surfaced as display_name.
+    the access key id (stable across renames); the name is surfaced as display_name.
     """
     return CallerContext(
         caller_id=access_key.id,
@@ -537,7 +537,7 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     )
     store.attach_resolver(resolver)
     # The enforcer resolves through whatever store it is handed, so it takes the
-    # UNFILTERED one. Backing it with a per-token scoped view would turn reduced
+    # UNFILTERED one. Backing it with a per-access key scoped view would turn reduced
     # visibility into reduced policy: every inheritance layer only ever tightens,
     # so a hidden layer yields a MORE permissive effective profile than the
     # operator authored, and nothing in a resolution marks a layer as missing.
@@ -920,7 +920,7 @@ def entity_control_mode(
     control_mode is an entity-level property, so the representative service used
     to drive the evaluation does not change it. Returns the control_mode string
     (autonomous, confirm, read_only, prohibited) or None if it cannot be
-    determined. Callers only pass entities the token can already access, so this
+    determined. Callers only pass entities the access key can already access, so this
     is not an enumeration oracle.
 
     runtime is None when MESA never started (callers pass data.mesa), which
@@ -1152,10 +1152,10 @@ async def async_apply_mesa_to_call(
             decision="deny", blocked=verdict.blocked, warnings=verdict.warnings
         )
 
-    # Known gap (low severity): warnings flow to the token via mesa_advisory /
+    # Known gap (low severity): warnings flow to the access key via mesa_advisory /
     # native speech regardless of cap_config_read, so an advisory warning reveals an
-    # in-scope entity's control_mode even to a token that lacks profile-read access.
-    # Not an enumeration oracle (the token targeted an entity it already has WRITE on).
+    # in-scope entity's control_mode even to an access key that lacks profile-read access.
+    # Not an enumeration oracle (the access key targeted an entity it already has WRITE on).
     # Hiding it would mean gating warnings on cap_config_read at the surfacing sites.
     return MesaGateOutcome(
         decision="allow",
@@ -1226,16 +1226,16 @@ def fire_mesa_blocked_event(
 
 
 def release_access_key_leases(data: Any, access_key_id: str) -> int:
-    """Drop any advisory leases a token still holds. Returns how many.
+    """Drop any advisory leases an access key still holds. Returns how many.
 
-    Called when a token is revoked or expires. Bookkeeping, not a safety
-    mechanism: what stops a dead token is authentication refusing its next call. A
+    Called when an access key is revoked or expires. Bookkeeping, not a safety
+    mechanism: what stops a dead access key is authentication refusing its next call. A
     lease it left behind blocks other sessions for at most
     MAX_LEASE_DURATION_SECONDS, after which mesa-core drops it during the next
     request's own sweep, so this only shortens that window.
 
-    Leases are keyed by session and Phoenix runs the lease tools with the token id
-    as the session, so releasing the token's session releases exactly its own.
+    Leases are keyed by session and Phoenix runs the lease tools with the access key id
+    as the session, so releasing the access key's session releases exactly its own.
     Fails quiet: leases are in-memory and advisory, so a failure here must never
     interrupt a revocation.
     """

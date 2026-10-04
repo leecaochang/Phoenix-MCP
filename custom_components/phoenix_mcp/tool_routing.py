@@ -45,9 +45,9 @@ class ToolReviewState:
 
 
 def create_review_state(data: Any, access_key: Any, surface: str) -> ToolReviewState:
-    """Capture routing authority for observe or advise mode on a non-companion token.
+    """Capture routing authority for observe or advise mode on a non-companion access key.
 
-    Companion tokens and the off mode get an empty state, which leaves the loop unchanged.
+    Companion access keys and the off mode get an empty state, which leaves the loop unchanged.
     """
     from .home_companion import is_companion
     if is_companion(access_key):

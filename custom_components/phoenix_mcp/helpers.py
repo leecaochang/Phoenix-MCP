@@ -80,10 +80,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """Return {entity_id: ScrubbedState} for the entities a token may read.
+    """Return {entity_id: ScrubbedState} for the entities an access key may read.
 
     resolve() is the single filter predicate, plus the shared assist_expose_check
-    for pass_through tokens with use_assist_exposure. Every template handler must
+    for pass_through access keys with use_assist_exposure. Every template handler must
     build its sandbox from this function so the filtering never diverges.
     """
     expose = assist_expose_check(access_key, hass)
@@ -96,11 +96,11 @@ def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> 
 
 
 def build_permitted_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set:
-    """Return the entity IDs accessible to a token, including registry-only entities.
+    """Return the entity IDs accessible to an access key, including registry-only entities.
 
     Unlike build_permitted_states, this unions live states with the entity registry
     so history and statistics can query recorder data for entities that are offline
-    or disabled. Also applies use_assist_exposure filtering for pass_through tokens.
+    or disabled. Also applies use_assist_exposure filtering for pass_through access keys.
     """
     from homeassistant.helpers import entity_registry as er_mod
 
@@ -141,7 +141,7 @@ def service_not_found_hint(domain: str, service: str) -> tuple[str, list[str]] |
     Returns (message, suggestions) naming the domain's valid core service verbs,
     or None if the domain is not in DOMAIN_SERVICE_HINTS (caller keeps the generic
     no-oracle "Forbidden."). Safe only in the ServiceNotFound catch, which is
-    post-authorization: the token has already proven WRITE on an entity in this
+    post-authorization: the access key has already proven WRITE on an entity in this
     domain, so naming public HA-core verbs for it reveals nothing hidden. See
     DOMAIN_SERVICE_HINTS in const.py for the full leak-safety rationale.
     """
@@ -174,8 +174,8 @@ def log_request(
     mesa_advisory: bool = False,
     stale_tools_advisory: bool = False,
 ) -> None:
-    """Record an audit entry and update in-memory token counters."""
-    # Attribute the request to the token's active settings preset, when one is
+    """Record an audit entry and update in-memory access key counters."""
+    # Attribute the request to the access key's active settings preset, when one is
     # set. getattr-guarded so bare test doubles keep working.
     preset_name: str | None = None
     active_preset_id = getattr(access_key, "active_preset_id", None)
@@ -203,7 +203,7 @@ def log_request(
 
 
 def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
-    """Bound bus and notification notices to one per token per minute."""
+    """Bound bus and notification notices to one per access key per minute."""
     now_mono = time.monotonic()
     last = data.rate_limit_notified.get(access_key.id)
     if last is not None and now_mono - last < 60.0:
@@ -273,10 +273,10 @@ async def async_get_authenticated_access_key(
     request_id: str,
     resource: str,
 ) -> tuple[AccessKeyRecord, RateLimitResult] | web.Response:
-    """Validate the Phoenix MCP bearer token and check rate limits.
+    """Validate the Phoenix MCP bearer access key and check rate limits.
 
-    Returns (token, rl_result) on success, or an aiohttp Response on failure.
-    Checks readiness, kill switch, query-param token leakage, format
+    Returns (access_key, rl_result) on success, or an aiohttp Response on failure.
+    Checks readiness, kill switch, query-param access key leakage, format
     pre-validation, hash lookup, revocation, expiry, and rate limits in that order.
     """
     if not data.ready or data.shutting_down:
@@ -344,16 +344,16 @@ async def async_get_authenticated_access_key(
 
 
 def cancel_expiry_timer(data: PhoenixData, access_key_id: str) -> None:
-    """Cancel and remove the pending expiry timer for a token, if one exists."""
+    """Cancel and remove the pending expiry timer for an access key, if one exists."""
     cancel = data.expiry_timers.pop(access_key_id, None)
     if cancel is not None:
         cancel()
 
 
 def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
-    """Schedule a timer to archive a token at its expiry time.
+    """Schedule a timer to archive an access key at its expiry time.
 
-    A token without an expiry is left untouched. Otherwise any earlier timer for
+    An access key without an expiry is left untouched. Otherwise any earlier timer for
     it is cancelled first, and none is scheduled when it has already expired.
     """
     if access_key.expires_at is None:
@@ -379,7 +379,7 @@ async def async_archive_expired_access_key(
     data: PhoenixData,
     access_key: AccessKeyRecord,
 ) -> None:
-    """Move an expired token to the archive and perform full cleanup.
+    """Move an expired access key to the archive and perform full cleanup.
 
     Archives the record to storage, closes its queued approvals, destroys rate
     limiter and counter state, fires the phoenix_mcp_access_key_expired bus event, and
@@ -393,12 +393,12 @@ async def async_archive_expired_access_key(
     )
 
     cancel_expiry_timer(data, access_key.id)
-    # Expiry removes the same live token references as explicit revocation, so it
-    # follows the same settings-lock then token-store-lock order.
+    # Expiry removes the same live access key references as explicit revocation, so it
+    # follows the same settings-lock then access key-store-lock order.
     async with data.settings_update_lock:
         async with data.store.async_lock:
             # The timer, request-path expiry check, and periodic sweep may all arrive
-            # for the same token. Re-read under the mutation lock so only the first
+            # for the same access key. Re-read under the mutation lock so only the first
             # expired transition archives it, and so PATCH/revoke cannot interleave
             # with the stored snapshot and dependent cleanup below.
             current = data.store.get_access_key_by_id(access_key.id)
@@ -415,9 +415,9 @@ async def async_archive_expired_access_key(
             )
             if archived is None:
                 return
-            # Same queue hygiene as revoke: an expired token's approvals cannot be
+            # Same queue hygiene as revoke: an expired access key's approvals cannot be
             # legitimately approved anymore (re-validation would auto-reject them).
-            # Clear bindings in the same transaction as token archival.
+            # Clear bindings in the same transaction as access key archival.
             _s = data.store.get_settings()
             _patch: dict[str, Any] = {}
             if _s.assist_bound_access_key_id == current.id:
@@ -435,18 +435,18 @@ async def async_archive_expired_access_key(
     for approval in changed_approvals:
         dismiss_approval_notification(hass, approval.id)
         fire_approval_resolved_event(hass, approval)
-    # Advisory leases the token still held; in-memory, so outside the store lock.
+    # Advisory leases the access key still held; in-memory, so outside the store lock.
     from .mesa import release_access_key_leases  # noqa: PLC0415
     release_access_key_leases(data, current.id)
     if data.async_sync_voice_agent is not None:
         data.async_sync_voice_agent()
     if "voice_agent_access_key_id" in _patch:
-        # The voice agent lost its token and is unregistered; remove any
+        # The voice agent lost its access key and is unregistered; remove any
         # Phoenix-created Assist pipeline so a broken assistant is not left behind.
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         await async_remove_assist_pipeline(hass, data)
     if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
-        # The AI Task lost its token; remove the AI Task entity from HA (and picker).
+        # The AI Task lost its access key; remove the AI Task entity from HA (and picker).
         data.async_sync_ai_task()
     data.rate_limiter.destroy(current.id)
     data.rate_limit_notified.pop(current.id, None)
@@ -610,7 +610,7 @@ _SAFE_TEMPLATE_ENV = None
 
 
 def safe_template_env() -> Any:
-    """Return the cached hass-less TemplateEnvironment used for token template renders.
+    """Return the cached hass-less TemplateEnvironment used for access key template renders.
 
     A TemplateEnvironment constructed without hass never registers the hass-aware
     helpers (states, expand, area_entities, integration_entities, ...) as globals,
@@ -627,7 +627,7 @@ def safe_template_env() -> Any:
 
 
 def render_template_for_access_key(template_str: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
-    """Render a Jinja2 template against the token's permitted entity state.
+    """Render a Jinja2 template against the access key's permitted entity state.
 
     Renders in safe_template_env() with permission-restricted replacements for the
     HA state helpers and pure dt_util shims for the time helpers the hass-less
@@ -732,7 +732,7 @@ _LOG_LEVEL_RANK: dict[str, int] = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR":
 _PHOENIX_ACCESS_KEY_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
 # Home Assistant long-lived access tokens (and other JWTs) are three base64url
 # segments whose header always begins "eyJ". Redact so a leaked LLAT in a log
-# line is not handed back to a token holding cap_log_read.
+# line is not handed back to an access key holding cap_log_read.
 _JWT_SCRUB_RE = re.compile(r"eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}")
 # Credentials embedded in URLs/log text: query params (token=..., api_password=...)
 # and userinfo (https://user:pass@host). Over-redaction in logs is acceptable.
@@ -744,7 +744,7 @@ _PHOENIX_LOGGER_PREFIXES = ("homeassistant.components.phoenix_mcp", "custom_comp
 
 
 def _scrub_log_text(text: str) -> str:
-    """Redact Phoenix MCP tokens, JWTs/LLATs, and URL-embedded credentials from a log line."""
+    """Redact Phoenix MCP access keys, JWTs/LLATs, and URL-embedded credentials from a log line."""
     text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-token>", text)
     text = _JWT_SCRUB_RE.sub("<token>", text)
     text = _URL_CRED_QUERY_RE.sub(r"\1=<redacted>", text)
@@ -909,7 +909,7 @@ def redact_diagnostics(obj: Any, _depth: int = 0) -> Any:
     return obj
 
 
-# Config keys safe to disclose to a cap_config_read token. Allowlist, not denylist,
+# Config keys safe to disclose to a cap_config_read access key. Allowlist, not denylist,
 # so a new HA config key defaults to excluded. Deliberately omits precise location
 # (latitude/longitude/elevation/radius), internal_url/external_url, and filesystem
 # paths (config_dir, allowlist_external_dirs/urls, media_dirs) which reveal home
@@ -926,7 +926,7 @@ def build_safe_config(hass: HomeAssistant) -> dict:
 
     Agent-useful context (HA version, time zone, units, location name, loaded
     components for capability detection) with the sensitive fields removed. Phoenix
-    MCP's own components are stripped so a token cannot enumerate its routes.
+    MCP's own components are stripped so an access key cannot enumerate its routes.
     """
     raw = hass.config.as_dict()
     safe = {k: raw[k] for k in _SAFE_CONFIG_KEYS if k in raw}
@@ -1427,10 +1427,10 @@ def collect_log_entries(
 
 @callback
 def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
-    """Write HA state for every token marked dirty since the last flush.
+    """Write HA state for every access key marked dirty since the last flush.
 
     Runs at most once per debounce window (scheduled by update_access_key_counter).
-    Tokens revoked or archived in the window drop out: their access_key_id_sensors
+    Access keys revoked or archived in the window drop out: their access_key_id_sensors
     entry is already gone.
 
     Must be @callback: async_write_ha_state() requires the event loop thread, and
@@ -1447,7 +1447,7 @@ def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
 
 
 def update_access_key_counter(data: PhoenixData, access_key_id: str, outcome: str) -> None:
-    """Increment the in-memory request/denied/rate-limit counters for a token.
+    """Increment the in-memory request/denied/rate-limit counters for an access key.
 
     Counters are initialised on first use and read by sensor.py and, directly, by
     the admin stats view. Sensor state writes are debounced: request_count and
@@ -1581,7 +1581,7 @@ def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
 
 
 def access_key_has_write_scope(access_key: AccessKeyRecord) -> bool:
-    """True if the token can write to at least one entity.
+    """True if the access key can write to at least one entity.
 
     Decides whether tools/list announces the control tools (call_service, the
     native Hass* action tools). Pass-through always has write scope; otherwise any
@@ -1600,7 +1600,7 @@ def access_key_has_write_scope(access_key: AccessKeyRecord) -> bool:
 
 
 def effective_caps(access_key: AccessKeyRecord) -> dict[str, str]:
-    """Return {cap name: effective mode} for every capability of a token."""
+    """Return {cap name: effective mode} for every capability of an access key."""
     return {name: effective_cap(access_key, name) for name in CAPABILITY_NAMES}
 
 

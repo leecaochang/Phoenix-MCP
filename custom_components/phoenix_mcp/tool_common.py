@@ -93,7 +93,7 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
     rather than different advice: that hold already spent its budget, so blocking
     again on the same id would likely spend it twice. The advice is otherwise
     identical on every path that reaches here, because the agent cannot tell
-    which it is on (the inline wait is a token setting).
+    which it is on (the inline wait is an access key setting).
     """
     waited = (
         f"This call already held for {waited_seconds} seconds without resolving, so the operator "
@@ -207,12 +207,12 @@ class _ProgressBus:
     handler code deep in a tool only sets fields here, because two coroutines
     writing to one StreamResponse would interleave frames.
 
-    `token` is the client's MCP progressToken. It is None unless the client asked
+    `progress_token` is the client's MCP progressToken. It is None unless the client asked
     for progress on THIS request, and no token means no progress notifications are
     ever emitted (the spec forbids unsolicited ones).
     """
 
-    access_key: str | int | None = None
+    progress_token: str | int | None = None
     total: float | None = None
     status: str | None = None
     status_key: str | None = None
@@ -326,7 +326,7 @@ async def _await_inline_confirm(
 ) -> tuple[dict, str, str]:
     """Optionally hold the response open for a confirm gate to resolve inline.
 
-    When the token opts in (confirm_inline_wait_seconds > 0), block up to that
+    When the access key opts in (confirm_inline_wait_seconds > 0), block up to that
     many seconds (capped at MAX_CONFIRM_INLINE_WAIT_SECONDS) on the same
     phoenix_mcp_approval_resolved event wait_for_approval uses. On approval within the
     window, return the executed tool result the agent would otherwise have to
@@ -391,13 +391,13 @@ async def _pending_or_inline(
     access_key: AccessKeyRecord,
     approval: Any,
 ) -> tuple[dict, str, str]:
-    """Return a pending approval, held inline when the token is configured to wait.
+    """Return a pending approval, held inline when the access key is configured to wait.
 
     One definition for every confirm gate (capability, and the MESA gates of
     call_service and the native tools), so they answer identically and all
     deliver _OPERATOR_ACCEPTED_NOTE when an approval resolves inline.
 
-    The wait is SKIPPED when the token already has another approval pending. The
+    The wait is SKIPPED when the access key already has another approval pending. The
     hold blocks the request and tool calls arrive one at a time, so approval N+1
     cannot be created until approval N finishes waiting; a batch of writes would
     spend one full wait per approval just to fill the queue the operator reviews
@@ -415,7 +415,7 @@ async def _pending_or_inline(
 
 
 def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord, approval: Any) -> bool:
-    """True when this token has a pending approval OTHER than this one.
+    """True when this access key has a pending approval OTHER than this one.
 
     The current approval is excluded because `async_evaluate_capability` has
     already stored it, so counting it would make the queue never look empty and no
@@ -534,7 +534,7 @@ async def _record_version(
     Called from each _execute_* at Phoenix MCP's single execution chokepoint, so
     directly-allowed and Confirm-approved changes are each recorded exactly once.
     Never raises: a version-store failure must not fail the user's write.
-    request_id is not threaded (versions correlate to the audit log by token,
+    request_id is not threaded (versions correlate to the audit log by access key,
     resource and timestamp); approved_by_user_id is set only on the admin restore
     path. `summary` is a one-line what-changed description for the panel's Changes
     list; callers with op context (the card tools) pass their own, and everything

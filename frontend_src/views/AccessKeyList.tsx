@@ -125,9 +125,9 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
     );
   }
 
-  // First run: no tokens and no filter. Show an onboarding hero that launches
+  // First run: no access keys and no filter. Show an onboarding hero that launches
   // the wizard instead of the empty table. The create modal is still mounted
-  // here so the header "Create Token" button works in the empty state.
+  // here so the header "Create access key" button works in the empty state.
   if (!loading && !error && accessKeys.length === 0 && !filter && !showArchived) {
     return (
       <div className="view-root">
@@ -240,7 +240,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
                       {/* The row's own onClick (above) makes the whole row
                           clickable for the mouse; this button keeps it
                           keyboard- and screen-reader-accessible (tab to it,
-                          Enter/Space to open the token). stopPropagation so
+                          Enter/Space to open the access key). stopPropagation so
                           activating it does not also re-fire the row's
                           handler. */}
                       <button

@@ -21,7 +21,7 @@ description: >-
 # Using Home Assistant through Phoenix MCP
 
 You are connected to Home Assistant through Phoenix MCP (Phoenix MCP), a
-scoped gateway. Your access token sees only the entities and tools an operator
+scoped gateway. Your access key sees only the entities and tools an operator
 granted it, and some actions are gated behind human approval or a per-entity
 safety layer. Phoenix MCP is the enforcement: this guide is advisory. Working with the
 grain of the model gives the smoothest results and avoids dead ends.
@@ -668,7 +668,7 @@ class PhoenixSkillView(PhoenixView):
         # The skill guide is unauthenticated, but the kill switch should silence
         # every client route. At startup the route is never registered; if the
         # kill switch is flipped at runtime the route already exists (HA cannot
-        # unregister it), so refuse here the way the token-authenticated routes do.
+        # unregister it), so refuse here the way the access key-authenticated routes do.
         data = self.hass.data.get(DOMAIN)
         if (
             data is None

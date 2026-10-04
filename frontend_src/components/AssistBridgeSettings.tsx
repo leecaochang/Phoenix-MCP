@@ -6,11 +6,11 @@ import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
-// Assist tool-provider card ("Phoenix MCP (scoped)"). Binds ONE token whose scoped tools
+// Assist tool-provider card ("Phoenix MCP (scoped)"). Binds ONE access key whose scoped tools
 // Phoenix MCP hands to a conversation agent supplied by another integration (OpenAI,
 // Anthropic, Ollama, and so on). Distinct from the Voice Agent card, which runs
 // Phoenix MCP's own model. Install-wide singleton, so it is a Settings-level control (a
-// bound-token dropdown), not a per-token toggle.
+// bound-access key dropdown), not a per-access key toggle.
 export function AssistBridgeSettings({
   settings,
   onChange,

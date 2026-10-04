@@ -1,12 +1,12 @@
 """Assist bridge: expose Phoenix MCP's scoped tools to HA's native Assist/voice pipeline.
 
 Registers a Home Assistant ``llm.API`` whose tools are the Phoenix MCP tool surface of a
-single admin-chosen (bound) token. Every tool call flows through the same
-``_dispatch_mcp`` path an external MCP client uses, so per-token scoping, MESA, the
+single admin-chosen (bound) access key. Every tool call flows through the same
+``_dispatch_mcp`` path an external MCP client uses, so per-access key scoping, MESA, the
 approval gate, and the audit log apply identically. A voice turn cannot show inline
 Approve/Reject buttons, so confirm-gated actions degrade to "queued, approve in the
-Phoenix MCP panel" (the per-call token copy forces ``confirm_inline_wait_seconds`` to 0
-so the turn never blocks). The bound token stays a normal, live-editable token; it is
+Phoenix MCP panel" (the per-call access key copy forces ``confirm_inline_wait_seconds`` to 0
+so the turn never blocks). The bound access key stays a normal, live-editable access key; it is
 re-resolved on every instance build and tool call, so cap/scope edits take effect on
 the next call with no re-registration.
 
@@ -160,7 +160,7 @@ def _unwrap_result(result: dict) -> dict:
 if _ASSIST_API_SUPPORTED:
 
     class PhoenixAssistTool(_llm.Tool):
-        """One announced Phoenix MCP tool, dispatched through the bound token's scope."""
+        """One announced Phoenix MCP tool, dispatched through the bound access key's scope."""
 
         def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str) -> None:
             self.name = name
@@ -176,7 +176,7 @@ if _ASSIST_API_SUPPORTED:
 
             async with household_scope(hass, getattr(llm_context, "context", None)):
                 data = hass.data[DOMAIN]
-                # Re-resolve the bound token per call: it may have been revoked,
+                # Re-resolve the bound access key per call: it may have been revoked,
                 # expired, narrowed, or the kill switch flipped since the conversation
                 # started. _current_dispatch_access_key also zeroes confirm_inline_wait so a
                 # voice turn never blocks on an approval; the gate returns pending and
@@ -218,7 +218,7 @@ if _ASSIST_API_SUPPORTED:
                 return _unwrap_result(result)
 
     class PhoenixAssistAPI(_llm.API):
-        """An llm.API whose tools are the bound Phoenix MCP token's scoped tool surface."""
+        """An llm.API whose tools are the bound Phoenix MCP access key's scoped tool surface."""
 
         def __init__(self, hass: HomeAssistant, data: Any) -> None:
             super().__init__(hass=hass, id=DOMAIN, name="Phoenix MCP (scoped)")
@@ -227,11 +227,11 @@ if _ASSIST_API_SUPPORTED:
         async def async_get_api_instance(
             self, llm_context: "_llm.LLMContext"
         ) -> "_llm.APIInstance":
-            """Build the per-turn tool set + primer for the currently bound token."""
+            """Build the per-turn tool set + primer for the currently bound access key."""
             data = self._data
             settings = data.store.get_settings()
             access_key = None
-            # Resolve the bound token FRESH every turn (never cache token state).
+            # Resolve the bound access key FRESH every turn (never cache access key state).
             # Unbound, missing, invalid, or Phoenix MCP disabled yields zero tools and
             # never raises (raising would fail the whole conversation turn).
             if data.ready and not data.shutting_down and not settings.kill_switch:

@@ -474,7 +474,7 @@
   padding: 9px 20px;
   font-size: 14px;
 }
-/* The outlined Agent Chat button carries a 1.5px border the solid Create Token
+/* The outlined Agent Chat button carries a 1.5px border the solid Create access key
    button lacks; trim its vertical padding by that much so both are the same height. */
 .btn-header-action { padding: 7.5px 20px; }
 
@@ -835,7 +835,7 @@ select.input {
 /* ============================================================
    Responsive / mobile
    ============================================================ */
-/* Two-row tab bar: row 1 is Tokens/Approvals/Changes plus whichever of the
+/* Two-row tab bar: row 1 is Access keys/Approvals/Changes plus whichever of the
    Agent Chat button / kill-switch banner is showing (both must stay visible
    without scrolling); row 2 is MESA/Audit Log/Settings plus Documentation.
    The split point is fixed by .phx-tabs-break, not by wherever content
@@ -896,7 +896,7 @@ select.input {
   .btn-header-action { padding: 6px 10px; font-size: 12px; }
 
   /* Pulls Refresh up next to the filter input, leaving Set up an agent /
-     Archived / Create Token as their own full-width row below. */
+     Archived / Create access key as their own full-width row below. */
   .filter-row-refresh { order: 2; flex-shrink: 0; }
   .filter-row-right { order: 3; flex-basis: 100%; flex-wrap: wrap; }
 
@@ -1104,7 +1104,7 @@ select.input {
 .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--phx-text-2); }
 
 /* ============================================================
-   Token display (rotated modal)
+   Access key display (rotated modal)
    ============================================================ */
 .access-key-display {
   font-family: "Roboto Mono", monospace; font-size: 13px;
@@ -1183,7 +1183,7 @@ select.input {
 .checkbox-warning { accent-color: var(--phx-warning); }
 
 /* ============================================================
-   Token detail stat row (legacy, kept for RotatedTokenModal)
+   Access key detail stat row (legacy, kept for RotatedAccessKeyModal)
    ============================================================ */
 .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .stat-item { display: flex; flex-direction: column; gap: 3px; }
@@ -1225,16 +1225,16 @@ select.input {
 .audit-cell-source.audit-source-name { font-family: inherit; }
 
 /* ============================================================
-   Token list
+   Access key list
    ============================================================ */
 .access-key-list-actions { display: flex; gap: 8px; }
 .access-key-table-empty { text-align: center; color: var(--phx-text-2); padding: 24px; }
 .access-key-name { font-weight: 600; }
 .row-actions { display: flex; gap: 4px; }
 
-/* Whole-row click for the token and audit tables, kept accessible. The Name/
-   Token cell holds a real <button> (so the row is reachable by Tab and
-   activated by Enter/Space, and a screen reader announces "Edit token
+/* Whole-row click for the access key and audit tables, kept accessible. The Name/
+   Access key cell holds a real <button> (so the row is reachable by Tab and
+   activated by Enter/Space, and a screen reader announces "Edit access key
    <name>, button"); the <tr> itself also carries the same onClick so a
    mouse/touch tap anywhere else in the row opens it too (native event
    bubbling from any <td>, nothing CSS-positioned about it). The button's own
@@ -1265,7 +1265,7 @@ select.input {
 .archived-empty { color: var(--phx-text-2); font-size: 13px; }
 
 /* ============================================================
-   Token create modal
+   Access key create modal
    ============================================================ */
 .access-key-create-expiry-row { display: flex; gap: 8px; }
 .access-key-create-expiry-value { width: 80px; }
@@ -1274,7 +1274,7 @@ select.input {
 .access-key-create-rate-field { margin: 0; flex: 1; }
 
 /* ============================================================
-   Token detail - sticky layout
+   Access key detail - sticky layout
    ============================================================ */
 .access-key-detail-wrap { display: flex; flex-direction: column; }
 .access-key-detail-sticky {
@@ -1299,7 +1299,7 @@ select.input {
   .epe-card { height: auto; min-height: 280px; overflow: visible; }
 }
 
-/* Token info card - colored header */
+/* Access key info card - colored header */
 .access-key-info-card { overflow: hidden; }
 .access-key-card-header {
   background: var(--phx-surface-2);
@@ -1339,7 +1339,7 @@ select.input {
 .access-key-name-input:disabled, .access-key-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
 .access-key-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
 
-/* Token settings presets (workspace model) */
+/* Access key settings presets (workspace model) */
 .preset-list { display: flex; flex-direction: column; gap: 8px; }
 .preset-row {
   display: flex;
@@ -2115,7 +2115,7 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .command-block { margin: 12px 0; }
 .command-block-title { font-size: 12px; font-weight: 700; color: var(--phx-text); margin-bottom: 2px; }
 .command-block .wizard-hint { display: block; margin-bottom: 6px; }
-/* Every value (URL, token, command, JSON, header field) renders as a full-width
+/* Every value (URL, access key, command, JSON, header field) renders as a full-width
    box with the Copy button pinned inside at the top-right. */
 .command-field { margin: 8px 0; }
 .command-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin-bottom: 3px; }
@@ -2235,7 +2235,7 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .link-btn:hover { text-decoration: underline; }
 .tag-reco { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px 0; }
 
-/* Inline "jump to MESA profile" affordance (token cards) */
+/* Inline "jump to MESA profile" affordance (access key cards) */
 .mesa-link {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; flex: 0 0 auto;
@@ -2875,7 +2875,7 @@ button.changes-row:hover { background: var(--phx-surface-2); }
   .agentcli-settings-model-edit > select,
   .agentcli-settings-model-row select { width: 100%; }
 }
-/* Post-create "how do you want to use this token" choice list. */
+/* Post-create "how do you want to use this access key" choice list. */
 .post-create-choices { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
 .post-create-choice {
   display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;

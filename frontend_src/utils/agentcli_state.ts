@@ -1,6 +1,6 @@
 // Persistence for the agentCLI floating window so it survives navigating away
 // from the panel and back, and closing/reopening. Two tiers:
-//   - Durable (localStorage): open flag, geometry, and the token/provider/model/
+//   - Durable (localStorage): open flag, geometry, and the access key/provider/model/
 //     options selections. Restored after a full page reload too.
 //   - Conversation (localStorage plus a module cache): transcript, draft, and
 //     usage. Survives panel remounts and full page reloads until Clear is used.
@@ -174,7 +174,7 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 //
 // Kept under its OWN storage key: it is the only part that can grow without
 // bound, and if it has to be dropped (quota, corruption) the window geometry
-// and the token / provider / model selections must survive independently.
+// and the access key / provider / model selections must survive independently.
 //
 // Conversation content, including tool results, is therefore written to browser
 // localStorage on an admin-only page. It is bounded by the scrollback-lines

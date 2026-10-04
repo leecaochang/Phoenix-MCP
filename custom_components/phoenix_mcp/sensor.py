@@ -1,4 +1,4 @@
-"""Sensor platform for Phoenix MCP per-token telemetry."""
+"""Sensor platform for Phoenix MCP per-access key telemetry."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ _SENSOR_TYPES = (
 
 
 def _unique_id(access_key_id: str, sensor_type: str) -> str:
-    """Key sensor identity on the token UUID so renames preserve entity IDs."""
+    """Key sensor identity on the access key UUID so renames preserve entity IDs."""
     return f"phoenix_mcp_{access_key_id}_{sensor_type}"
 
 
@@ -49,15 +49,15 @@ def _make_sensors(
     access_key: AccessKeyRecord,
     data: PhoenixData,
 ) -> list[PhoenixAccessKeySensor]:
-    """Create the full set of sensor entities for one token."""
+    """Create the full set of sensor entities for one access key."""
     return [PhoenixAccessKeySensor(access_key, sensor_type, data) for sensor_type in _SENSOR_TYPES]
 
 
 class PhoenixAccessKeySensor(SensorEntity):
-    """HA sensor entity representing one telemetry dimension for a Phoenix MCP token.
+    """HA sensor entity representing one telemetry dimension for a Phoenix MCP access key.
 
-    One sensor is created per entry in _SENSOR_TYPES per active token. Sensors
-    are removed immediately when a token is revoked or archived.
+    One sensor is created per entry in _SENSOR_TYPES per active access key. Sensors
+    are removed immediately when an access key is revoked or archived.
     """
 
     _attr_should_poll = False
@@ -99,7 +99,7 @@ class PhoenixAccessKeySensor(SensorEntity):
 
     @callback
     def async_follow_access_key_update(self, access_key: AccessKeyRecord) -> None:
-        """Point this sensor at the token's current record, in place.
+        """Point this sensor at the access key's current record, in place.
 
         A rename produces a NEW AccessKeyRecord, and every reading is taken off the
         one held in _token, so without this the status and expiry sensors would
@@ -123,7 +123,7 @@ class PhoenixAccessKeySensor(SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        # Unconditional: expires_in is always days. A token with no expiry
+        # Unconditional: expires_in is always days. An access key with no expiry
         # reports None, which HA shows as unknown with the unit intact.
         if self._sensor_type == "expires_in":
             return UnitOfTime.DAYS
@@ -164,7 +164,7 @@ class PhoenixAccessKeySensor(SensorEntity):
             return access_key.last_used_at.replace(second=0, microsecond=0)
 
         if sensor_type == "expires_in":
-            # None, not a sentence, when the token has no expiry. A string would
+            # None, not a sentence, when the access key has no expiry. A string would
             # make one sensor alternate between a number with a unit and
             # untranslated prose, breaking its history and statistics and any
             # template comparing the value. None renders as HA's own "unknown" in
@@ -179,7 +179,7 @@ class PhoenixAccessKeySensor(SensorEntity):
 
 @callback
 def _async_migrate_unique_ids(hass: HomeAssistant, access_keys: list[AccessKeyRecord]) -> None:
-    """Move name-based sensor unique IDs to token-ID-based ones, keeping entity IDs."""
+    """Move name-based sensor unique IDs to access key-ID-based ones, keeping entity IDs."""
     from homeassistant.helpers import entity_registry as er
 
     registry = er.async_get(hass)
@@ -200,7 +200,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Initialize the sensor platform and create sensors for all existing tokens."""
+    """Initialize the sensor platform and create sensors for all existing access keys."""
     data: PhoenixData = hass.data[DOMAIN]
     data.async_add_entities_cb = async_add_entities
 
@@ -224,11 +224,11 @@ async def async_rename_access_key_sensors(
     old_name: str,
     access_key: AccessKeyRecord,
 ) -> None:
-    """Follow a token rename WITHOUT touching entity identity.
+    """Follow an access key rename WITHOUT touching entity identity.
 
     Only the device's display name (inherited through has_entity_name) and the
     AccessKeyRecord each sensor reads from change. The entity registry is untouched,
-    and unique_id derives from the token ID, so entity_ids, and any dashboard
+    and unique_id derives from the access key ID, so entity_ids, and any dashboard
     card or automation naming them, survive the rename.
     """
     from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
@@ -251,7 +251,7 @@ async def async_rename_access_key_sensors(
 
     device_registry = dr.async_get(hass)
     # HA 2026.9 deprecated the identifier-only lookup because identifiers are
-    # no longer globally unique across config entries. Token sensors have no
+    # no longer globally unique across config entries. Access key sensors have no
     # entry-specific lookup context, so use the collection API and retain the
     # legacy fallback for older HA releases.
     if hasattr(device_registry, "async_get_devices"):
@@ -268,7 +268,7 @@ async def async_create_access_key_sensors(
     entry: ConfigEntry,
     access_key: AccessKeyRecord,
 ) -> None:
-    """Create and register sensor entities for a newly created token."""
+    """Create and register sensor entities for a newly created access key."""
     data: PhoenixData = hass.data[DOMAIN]
     if data.async_add_entities_cb is None:
         return
@@ -283,10 +283,10 @@ async def async_remove_access_key_sensors(
     hass: HomeAssistant,
     access_key_slug: str,
 ) -> None:
-    """Remove a token's sensor entities, registries, and Recorder statistics.
+    """Remove an access key's sensor entities, registries, and Recorder statistics.
 
     Removing from the entity registry prevents 'unavailable' ghost entries after
-    the token is gone. The associated device is also removed from the device registry.
+    the access key is gone. The associated device is also removed from the device registry.
     """
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
@@ -299,7 +299,7 @@ async def async_remove_access_key_sensors(
     device_reg = dr.async_get(hass)
 
     # Capture registered IDs before removal, including operator-renamed entities.
-    # Statistics are keyed by entity_id, not the token name or sensor unique_id.
+    # Statistics are keyed by entity_id, not the access key name or sensor unique_id.
     device_id = None
     statistic_ids = []
     for sensor in sensors:

@@ -108,7 +108,7 @@ def _err(
         status=status,
         content_type="application/json",
         text=json.dumps(body),
-        # Every admin response reflects live, frequently-mutating state (tokens,
+        # Every admin response reflects live, frequently-mutating state (access keys,
         # approvals, audit); without this a browser or intermediary can serve a
         # stale GET on a plain page refresh, e.g. an approval resolved elsewhere
         # still reading "pending" after reloading the Approvals tab.
@@ -522,7 +522,7 @@ def _bulk_permission_selection(
 
 
 def _build_resolution_path(entity_id: str, access_key: Any, hass: HomeAssistant) -> list[dict]:
-    """Return the ancestor chain and each node's state for a given entity/token pair.
+    """Return the ancestor chain and each node's state for a given entity/access key pair.
 
     Used by the resolve admin endpoint to explain why an entity has a particular
     effective permission.
@@ -611,7 +611,7 @@ class PhoenixAdminCatalogView(PhoenixView):
 
 
 class PhoenixAdminArchivedAccessKeysView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/access-keys/archived - list all archived tokens."""
+    """GET /api/phoenix-mcp/admin/access-keys/archived - list all archived access keys."""
 
     url = "/api/phoenix-mcp/admin/access-keys/archived"
     name = "api:phoenix-mcp:admin:archived_access_keys"
@@ -653,8 +653,8 @@ class PhoenixAdminArchivedAccessKeyView(PhoenixView):
 
 
 class PhoenixAdminAccessKeysView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/access-keys - list active tokens.
-    POST /api/phoenix-mcp/admin/access-keys - create a new token.
+    """GET /api/phoenix-mcp/admin/access-keys - list active access keys.
+    POST /api/phoenix-mcp/admin/access-keys - create a new access key.
     """
 
     url = "/api/phoenix-mcp/admin/access-keys"
@@ -784,7 +784,7 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         return _ok(response_body, status=201, request_id=rid)
 
 
-# The per-token settings a PATCH may write. Capabilities are folded in from
+# The per-access key settings a PATCH may write. Capabilities are folded in from
 # const, so adding one needs no change here.
 _PATCHABLE_ACCESS_KEY_FIELDS = {
     "name", "pass_through", "use_assist_exposure", "announce_all_tools",
@@ -798,7 +798,7 @@ _RATE_LIMIT_MAX = 100_000
 def _validated_access_key_patch(
     body: dict, access_key: Any, access_key_id: str, data: PhoenixData, rid: str
 ) -> tuple[dict, web.Response | None]:
-    """Filter a token PATCH body to writable fields and validate them.
+    """Filter an access key PATCH body to writable fields and validate them.
 
     Returns (patchable, None) or ({}, error_response) on the first rejection.
 
@@ -934,10 +934,10 @@ def _validated_access_key_patch(
 async def _rename_access_key_sensors(
     hass: HomeAssistant, access_key_id: str, old_name: str, updated: Any
 ) -> None:
-    """Follow a token rename on its sensors, in place.
+    """Follow an access key rename on its sensors, in place.
 
     Best-effort: a registry problem must never fail a patch that already
-    succeeded. Sensor identity derives from the token id, not its name, so the
+    succeeded. Sensor identity derives from the access key id, not its name, so the
     rename only updates the device's display name and the record the sensors read
     from; entity_ids, and whatever refers to them, are unchanged.
     """
@@ -950,7 +950,7 @@ async def _rename_access_key_sensors(
 
 
 class PhoenixAdminAccessKeyView(PhoenixView):
-    """GET/PATCH/DELETE /api/phoenix-mcp/admin/access-keys/{access_key_id} - manage a single token."""
+    """GET/PATCH/DELETE /api/phoenix-mcp/admin/access-keys/{access_key_id} - manage a single access key."""
 
     url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}"
     name = "api:phoenix-mcp:admin:access-key"
@@ -1014,7 +1014,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
 
     @require_admin
     async def delete(self, request: web.Request, access_key_id: str) -> web.Response:
-        """Revoke a token, close its queued approvals, and fire the bus event."""
+        """Revoke an access key, close its queued approvals, and fire the bus event."""
         from .approvals import (  # noqa: PLC0415
             REASON_REVOKED,
             async_cancel_approvals_for_access_key,
@@ -1027,9 +1027,9 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         data: PhoenixData = hass.data[DOMAIN]
         user = request[KEY_HASS_USER]
 
-        # Settings reference validation uses this lock before the token-store
+        # Settings reference validation uses this lock before the access key-store
         # lock. Revoke follows the same order and clears dependent references in
-        # the archival transaction, so a settings PATCH cannot bind a token in
+        # the archival transaction, so a settings PATCH cannot bind an access key in
         # the gap between validation and persistence.
         async with data.settings_update_lock:
             async with data.store.async_lock:
@@ -1042,8 +1042,8 @@ class PhoenixAdminAccessKeyView(PhoenixView):
 
                 await data.store.async_archive_access_key(access_key_id, revoked=True, revoked_at=now)
                 cancel_expiry_timer(data, access_key_id)
-                # If this token was the Assist binding, the voice agent's token or
-                # the AI Task token, clear it in the same transaction as archival.
+                # If this access key was the Assist binding, the voice agent's access key or
+                # the AI Task access key, clear it in the same transaction as archival.
                 _s = data.store.get_settings()
                 _patch: dict[str, Any] = {}
                 if _s.assist_bound_access_key_id == access_key_id:
@@ -1054,9 +1054,9 @@ class PhoenixAdminAccessKeyView(PhoenixView):
                     _patch["ai_task_access_key_id"] = None
                 if _patch:
                     await data.store.async_patch_settings(**_patch)
-                # A revoked token's queued approvals must not linger as approvable
+                # A revoked access key's queued approvals must not linger as approvable
                 # entries. Live claims are skipped; a stale marker is closed as
-                # interrupted so token cleanup preserves its uncertainty.
+                # interrupted so access key cleanup preserves its uncertainty.
                 changed_approvals = await async_cancel_approvals_for_access_key(
                     data.store, access_key_id, REASON_REVOKED,
                     skip_ids=data.approvals_in_progress,
@@ -1065,7 +1065,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
 
-        # Advisory leases the token still held. Outside the store lock: they are
+        # Advisory leases the access key still held. Outside the store lock: they are
         # in-memory and unrelated to stored state.
         from .mesa import release_access_key_leases  # noqa: PLC0415
         release_access_key_leases(data, access_key_id)
@@ -1074,13 +1074,13 @@ class PhoenixAdminAccessKeyView(PhoenixView):
             data.async_sync_voice_agent()
 
         if "voice_agent_access_key_id" in _patch:
-            # The voice agent lost its token and is unregistered; remove any
+            # The voice agent lost its access key and is unregistered; remove any
             # Phoenix-created Assist pipeline so a broken assistant is not left behind.
             from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
             await async_remove_assist_pipeline(hass, data)
 
         if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
-            # The AI Task lost its token and is not fully configured; remove the AI
+            # The AI Task lost its access key and is not fully configured; remove the AI
             # Task entity from HA (and the picker).
             data.async_sync_ai_task()
 
@@ -1243,7 +1243,7 @@ class PhoenixAdminAccessKeyPresetView(PhoenixView):
 
 
 class PhoenixAdminAccessKeyPresetApplyView(PhoenixView):
-    """POST /api/phoenix-mcp/admin/access-keys/{access_key_id}/presets/{preset_id}/apply - make the token match a preset.
+    """POST /api/phoenix-mcp/admin/access-keys/{access_key_id}/presets/{preset_id}/apply - make the access key match a preset.
 
     Workspace model: applying a DIFFERENT preset first auto-saves the
     live state back into the outgoing active preset, then applies the target and
@@ -1585,7 +1585,7 @@ async def _patch_permission_node(
             access_key_id, node_type, node_id, state, hint
         )
         if updated is None:
-            # Same reasoning as the token PATCH above: report rather than
+            # Same reasoning as the access key PATCH above: report rather than
             # dereference None if the record vanished inside the lock.
             return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
 
@@ -1663,7 +1663,7 @@ class PhoenixAdminScopeView(PhoenixView):
         writable: list[str] = []
 
         if access_key.pass_through:
-            # Fast path: pass_through tokens have WRITE on everything except BLOCKED_DOMAINS
+            # Fast path: pass_through access keys have WRITE on everything except BLOCKED_DOMAINS
             # and Phoenix MCP platform entities. Avoids an O(n) resolve() call per entity.
             registry = er_mod.async_get(hass)
             for state in all_states:
@@ -1749,8 +1749,8 @@ class PhoenixAdminEntityHintsView(PhoenixView):
 class PhoenixAdminEntityHintView(PhoenixView):
     """PUT /api/phoenix-mcp/admin/entity-hints/{entity_id} - set or clear one global entity hint.
 
-    A global hint applies to every token that can see the entity. It is distinct
-    from a per-token permission-node hint, which always takes precedence.
+    A global hint applies to every access key that can see the entity. It is distinct
+    from a per-access key permission-node hint, which always takes precedence.
     """
 
     url = "/api/phoenix-mcp/admin/entity-hints/{entity_id}"
@@ -1800,7 +1800,7 @@ class PhoenixAdminEntityHintView(PhoenixView):
 
 
 class PhoenixAdminAccessKeyStatsView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/stats - in-memory counters for one token."""
+    """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/stats - in-memory counters for one access key."""
 
     url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}/stats"
     name = "api:phoenix-mcp:admin:access-key_stats"
@@ -1838,10 +1838,10 @@ class PhoenixAdminAccessKeyStatsView(PhoenixView):
 class PhoenixAdminAccessKeyConnectionView(PhoenixView):
     """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/connection - connection signals.
 
-    Used by the onboarding wizard to detect when a token's MCP client has
+    Used by the onboarding wizard to detect when an access key's MCP client has
     connected. The Streamable HTTP transport is stateless and registers no
     session, so ``request_count`` is the signal: any authenticated MCP request
-    bumps it. The wizard treats the token as connected once it is above zero.
+    bumps it. The wizard treats the access key as connected once it is above zero.
     """
 
     url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}/connection"
@@ -1866,7 +1866,7 @@ class PhoenixAdminAccessKeyConnectionView(PhoenixView):
 
 
 class PhoenixAdminAccessKeyAuditView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/audit - paginated audit log for one token."""
+    """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/audit - paginated audit log for one access key."""
 
     url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}/audit"
     name = "api:phoenix-mcp:admin:access-key_audit"
@@ -2088,14 +2088,14 @@ _DETAIL_LEVEL_SETTINGS = frozenset({
 })
 
 # Nullable string settings: None/"" clears, anything else must be a string.
-# The token and provider ones are additionally checked against live records
-# below, so the panel cannot point a surface at a dead token or provider.
+# The access key and provider ones are additionally checked against live records
+# below, so the panel cannot point a surface at a dead access key or provider.
 _NULLABLE_STRING_SETTINGS = (
     "voice_agent_access_key_id", "voice_agent_provider_id", "voice_agent_model",
     "ai_task_access_key_id", "ai_task_provider_id", "ai_task_model", "decision_provider_id",
 )
 
-# (token setting, provider setting) pairs validated against live records.
+# (access key setting, provider setting) pairs validated against live records.
 _SURFACE_ACCESS_KEY_PROVIDER_PAIRS = (
     ("voice_agent_access_key_id", "voice_agent_provider_id"),
     ("ai_task_access_key_id", "ai_task_provider_id"),
@@ -2250,7 +2250,7 @@ async def _validated_settings_patch(
                 return {}, err
 
     if "assist_bound_access_key_id" in patchable:
-        # None/"" unbinds; a string must reference a currently active token, so
+        # None/"" unbinds; a string must reference a currently active access key, so
         # the panel cannot bind Assist to a revoked/expired/ghost id.
         val = patchable["assist_bound_access_key_id"]
         if val in (None, ""):
@@ -2271,7 +2271,7 @@ async def _validated_settings_patch(
 
     # Voice-agent and AI-Task string fields: each is None/"" (clear) or must
     # reference a live target, so the panel cannot point either surface at a dead
-    # token or provider. Both runtime surfaces still degrade gracefully if the set
+    # access key or provider. Both runtime surfaces still degrade gracefully if the set
     # is incomplete.
     for vkey in _NULLABLE_STRING_SETTINGS:
         if vkey not in patchable:
@@ -2383,7 +2383,7 @@ async def _apply_settings_side_effects(
         data.async_sync_voice_agent()
 
     # If a voice-agent config change left it not fully configured (disabled, or a
-    # token/provider/model cleared), tear down any Phoenix-created Assist pipeline so a
+    # access key/provider/model cleared), tear down any Phoenix-created Assist pipeline so a
     # broken assistant is not left pointing at the unregistered agent. The kill
     # switch is intentionally excluded (it keeps the agent registered-but-declining,
     # so its pipeline stays valid). No-op when nothing is tracked. Must run AFTER the
@@ -2544,7 +2544,7 @@ class PhoenixAdminSettingsView(PhoenixView):
             return body
 
         # Keep persistence and live reconciliation in one request-order critical
-        # section. Reference validation belongs here too: token archival and
+        # section. Reference validation belongs here too: access key archival and
         # provider deletion participate in this lock, so a target proved live
         # here cannot disappear before the settings write.
         async with data.settings_update_lock:
@@ -2560,7 +2560,7 @@ class PhoenixAdminSettingsView(PhoenixView):
                 old_presets_enabled = data.store.get_settings().access_key_presets_enabled
                 updated = await data.store.async_patch_settings(**patchable)
                 if updated.access_key_presets_enabled and not old_presets_enabled:
-                    # Feature just enabled: every token gets a "Default preset" from
+                    # Feature just enabled: every access key gets a "Default preset" from
                     # its current state (workspace model). Idempotent on re-enables.
                     seeded = await data.store.async_seed_default_presets()
                     if seeded:
@@ -2715,7 +2715,7 @@ def _wipe_flag(value: Any, default: bool) -> bool:
 class PhoenixAdminWipeView(PhoenixView):
     """DELETE /api/phoenix-mcp/admin/wipe - selectively wipe Phoenix MCP data.
 
-    Body flags (all optional): wipe_core (tokens/audit/versions/settings,
+    Body flags (all optional): wipe_core (access keys/audit/versions/settings,
     default True), wipe_providers (Agent Chat provider keys, default True),
     wipe_mesa (MESA profiles, default False).
     """
@@ -2757,9 +2757,9 @@ class PhoenixAdminWipeView(PhoenixView):
                 fire_approval_resolved_event,
             )
 
-            # Settings PATCH validates token references under this lock and then
+            # Settings PATCH validates access key references under this lock and then
             # takes the store lock. Core wipe must use the same order so it cannot
-            # remove every token between validation and settings persistence.
+            # remove every access key between validation and settings persistence.
             async with data.settings_update_lock:
                 async with data.store.async_lock:
                     if data.approvals_in_progress:
@@ -2830,10 +2830,10 @@ class PhoenixAdminWipeView(PhoenixView):
                 await data.async_register_routes()
                 data.routes_registered = True
 
-            # Sensor removal runs after the lock is released. A concurrent token creation
-            # with the same slug as a just-wiped token could have its sensors removed here.
+            # Sensor removal runs after the lock is released. A concurrent access key creation
+            # with the same slug as a just-wiped access key could have its sensors removed here.
             # This race is accepted: wipe is a destructive admin operation and should not
-            # be run concurrently with token creation.
+            # be run concurrently with access key creation.
             if data.async_on_access_key_archived:
                 await asyncio.gather(
                     *[data.async_on_access_key_archived(slug) for slug in active_slugs],
@@ -2841,8 +2841,8 @@ class PhoenixAdminWipeView(PhoenixView):
                 )
             # Clear unconditionally: if any sensor removal above failed and left stale
             # entries in access_key_id_sensors, they would cause async_write_ha_state() to
-            # be called for token IDs that no longer exist. Since the wipe removes all
-            # tokens, there are no valid sensors left regardless.
+            # be called for access key IDs that no longer exist. Since the wipe removes all
+            # access keys, there are no valid sensors left regardless.
             data.access_key_id_sensors.clear()
 
             # Settings were reset, so the voice agent and AI Task are not
@@ -2920,7 +2920,7 @@ class PhoenixAdminWipeView(PhoenixView):
 
 
 class PhoenixAdminAccessKeyRotateView(PhoenixView):
-    """POST /api/phoenix-mcp/admin/access-keys/{access_key_id}/rotate - replace the raw token value atomically."""
+    """POST /api/phoenix-mcp/admin/access-keys/{access_key_id}/rotate - replace the raw access key value atomically."""
 
     url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}/rotate"
     name = "api:phoenix-mcp:admin:access-key_rotate"
@@ -2965,7 +2965,7 @@ class PhoenixAdminAccessKeyRotateView(PhoenixView):
 
 
 class PhoenixAdminApprovalsView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/approvals - list approvals, optionally filtered by status/token."""
+    """GET /api/phoenix-mcp/admin/approvals - list approvals, optionally filtered by status/access key."""
 
     url = "/api/phoenix-mcp/admin/approvals"
     name = "api:phoenix-mcp:admin:approvals"
@@ -3052,7 +3052,7 @@ class PhoenixAdminApprovalBatchApproveView(PhoenixView):
 
     Approves several pending approvals in ONE admin action; an operator
     convenience only. Each id goes through the SAME `_approve_approval` (its own
-    store-lock claim, token/capability/kill-switch re-validation, executor run
+    store-lock claim, access key/capability/kill-switch re-validation, executor run
     and audit row), so the security model is unchanged and a batch is
     equivalent to the admin clicking Approve N times.
 
@@ -3461,7 +3461,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     # is the distinction the two excepts below draw.
     try:
         try:
-            # Approved executors must retain the admitted token and policy epoch
+            # Approved executors must retain the admitted access key and policy epoch
             # across their own waits, just like ordinary MCP dispatch.
             from .request_authority import (  # noqa: PLC0415
                 RequestAuthority, policy_version, request_authority,
@@ -4752,7 +4752,7 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             # ("'wifi.ap.password' is a masked credential and cannot be changed to
             # a new value"), which a fixed string would hide. This is an
             # admin-only surface authenticated by an HA session, so there is no
-            # caller to keep in the dark, unlike the token-facing tools where
+            # caller to keep in the dark, unlike the access key-facing tools where
             # uniform messages are what prevent an oracle.
             detail = " ".join(
                 item.get("text", "")

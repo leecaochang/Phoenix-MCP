@@ -1104,7 +1104,7 @@ async def _tool_patch_dashboard(
     The escape hatch for everything the card ops cannot address: view badges, view
     options, a single field inside a card. It exists because set_dashboard_config
     requires resending the WHOLE layout, and a read of that layout is lossy (it
-    redacts entities the token cannot resolve, INCLUDING ghost entities that no
+    redacts entities the access key cannot resolve, INCLUDING ghost entities that no
     longer exist), so a dashboard carrying a few dead references cannot be written
     back without persisting placeholders over them. Patching never resends the
     untouched bytes, so redaction stops being a write barrier.

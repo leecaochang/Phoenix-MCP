@@ -1,4 +1,4 @@
-"""Token-scoped MCP restoration for qualified configuration records."""
+"""Access key-scoped MCP restoration for qualified configuration records."""
 
 from __future__ import annotations
 

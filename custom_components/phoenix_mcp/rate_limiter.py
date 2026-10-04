@@ -1,4 +1,4 @@
-"""Per-token sliding window rate limiter for Phoenix MCP. In-memory only, no I/O."""
+"""Per-access key sliding window rate limiter for Phoenix MCP. In-memory only, no I/O."""
 
 from __future__ import annotations
 
@@ -32,13 +32,13 @@ class RateLimitResult:
 
 
 class RateLimiter:
-    """Sliding window rate limiter keyed by token ID.
+    """Sliding window rate limiter keyed by access key ID.
 
-    State is in-memory only and is lost on HA restart. Destroy a token's state
+    State is in-memory only and is lost on HA restart. Destroy an access key's state
     immediately on revocation or archival by calling destroy(access_key_id).
 
     Algorithm per request (when rate limiting is enabled):
-      1. Evict timestamps older than WINDOW_SECONDS from the per-token deque.
+      1. Evict timestamps older than WINDOW_SECONDS from the per-access key deque.
       2. If len(window) >= rate_limit_requests, return denied. Do not record.
       3. Count timestamps within the last BURST_WINDOW_SECONDS. If that count
          is >= rate_limit_burst (and burst > 0), return denied. Do not record.
@@ -192,7 +192,7 @@ class RateLimiter:
         )
 
     def destroy(self, access_key_id: str) -> None:
-        """Destroy rate limit state for a single token (call on revocation/archival)."""
+        """Destroy rate limit state for a single access key (call on revocation/archival)."""
         self._windows.pop(access_key_id, None)
 
     def destroy_all(self) -> None:
@@ -200,5 +200,5 @@ class RateLimiter:
         self._windows.clear()
 
     def active_access_key_count(self) -> int:
-        """Return the number of tokens with active rate limit windows."""
+        """Return the number of access keys with active rate limit windows."""
         return len(self._windows)

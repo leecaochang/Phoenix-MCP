@@ -8,10 +8,10 @@ conversation.py so HA does not treat it as a conversation ENTITY platform.
 
 Model-side work is reused from agentcli.py: provider accounts and keys, provider
 construction, and the gated tool loop (async_run_voice_turn), which dispatches
-every tool through mcp_view._dispatch_mcp so per-token scope, MESA, approvals and
+every tool through mcp_view._dispatch_mcp so per-access key scope, MESA, approvals and
 audit apply identically. A confirm-gated action degrades to "queued, approve in the
 Phoenix MCP panel" (voice has no inline Approve button), so a turn never blocks.
-The bound token, provider and model are GlobalSettings.voice_agent_*, set in the
+The bound access key, provider and model are GlobalSettings.voice_agent_*, set in the
 panel rather than a config-entry options flow.
 
 HA-COUPLING POINT alongside ws_dispatch / assist_api: the conversation agent API
@@ -106,7 +106,7 @@ async def async_voice_answer(
 ) -> str:
     """Run one voice turn inside the requesting HA user's authority scope.
 
-    A change to that user mid-turn ends the turn with the "token unavailable" sentence.
+    A change to that user mid-turn ends the turn with the "access key unavailable" sentence.
     """
     from .household_authority import household_scope
     from .request_authority import AuthorityChangedError
@@ -134,7 +134,7 @@ async def _async_voice_answer(
     device_id: object = None,
     conversation_id: object = None,
 ) -> str:
-    """Resolve config, token and provider, then route or run the gated voice loop.
+    """Resolve config, access key and provider, then route or run the gated voice loop.
 
     Independent of the conversation base class. A provider or loop failure degrades
     to a spoken sentence instead of raising. include_review_links is passed through
@@ -160,7 +160,7 @@ async def _async_voice_answer(
     if not (settings.voice_agent_access_key_id and settings.voice_agent_provider_id):
         return voice_text(language, "not_configured")
 
-    # Re-resolve the token every turn (never cache it). This also zeroes the
+    # Re-resolve the access key every turn (never cache it). This also zeroes the
     # inline-confirm wait, so a confirm gate returns pending immediately and the
     # loop reports it queued instead of blocking the turn.
     access_key = _current_dispatch_access_key(data, settings.voice_agent_access_key_id)
@@ -270,7 +270,7 @@ async def _async_voice_answer(
 if _CONVERSATION_AVAILABLE:
 
     class PhoenixConversationAgent(_conversation.AbstractConversationAgent):
-        """A conversation agent that runs Phoenix MCP's scoped model loop for one bound token."""
+        """A conversation agent that runs Phoenix MCP's scoped model loop for one bound access key."""
 
         def __init__(self, hass: HomeAssistant, data: Any) -> None:
             self.hass = hass
@@ -340,14 +340,14 @@ def async_unregister_voice_agent(hass: HomeAssistant, entry: Any) -> None:
 def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
     """Register or unregister the agent to match current settings.
 
-    Registered only when fully configured (enabled + token + provider + model) and
+    Registered only when fully configured (enabled + access key + provider + model) and
     not shutting down, so Phoenix MCP never appears as an agent that answers "not
-    configured"; a deleted provider or revoked token clears its field and
+    configured"; a deleted provider or revoked access key clears its field and
     unregisters it.
 
     The kill switch is deliberately NOT part of this gate. With it on, the agent
     stays registered but async_voice_answer declines every turn before resolving
-    the token or dispatching any tool, so nothing runs. An Assist pipeline pointed
+    the access key or dispatching any tool, so nothing runs. An Assist pipeline pointed
     at Phoenix MCP then degrades to a spoken "unavailable" instead of a hard "agent
     not found" error, and recovers when the kill switch is turned off. The kill
     switch gates the network route surface, not in-process helpers.

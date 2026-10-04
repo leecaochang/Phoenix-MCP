@@ -127,7 +127,7 @@ def _capture_plan(hass: Any, data: Any, access_key: Any, proposal: dict, *, ingr
     if not fingerprints or any(value is None for value in fingerprints.values()):
         return None
     return {"proposal": proposal, "fingerprints": fingerprints, "access_key_id": access_key.id, "ingress": ingress,
-            "token_version": access_key.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
+            "access_key_version": access_key.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
 
 
 def _decision_plan_current(plan: dict, hass: Any, data: Any, access_key: Any) -> bool:
@@ -287,7 +287,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, access_key: Any) -> bool:
             return False
         return bool(
             enabled and access_key.is_valid() and access_key.id == plan["access_key_id"]
-            and access_key.settings_version == plan["token_version"]
+            and access_key.settings_version == plan["access_key_version"]
             and _digest(settings.to_dict()) == plan["settings"]
             and _decision_plan_current(plan, hass, data, access_key)
             and _context_plan_current(plan, hass, data)

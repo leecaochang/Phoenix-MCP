@@ -1,7 +1,7 @@
 """Phoenix MCP as a Home Assistant AI Task entity.
 
-`ai_task.generate_data` runs through Phoenix MCP's own model loop on a chosen token's
-scope, so per-token permissions, MESA, approvals and audit apply with no separate LLM
+`ai_task.generate_data` runs through Phoenix MCP's own model loop on a chosen access key's
+scope, so per-access key permissions, MESA, approvals and audit apply with no separate LLM
 integration. Sibling of voice_agent.py and the llm.API bridge (assist_api.py).
 
 The model side is reused from agentcli.py: provider accounts and keys, provider
@@ -361,7 +361,7 @@ async def async_generate_ai_task_data(
 async def _async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any
 ) -> Any:
-    """Resolve config, token and provider, run the gated AI Task loop, return the data.
+    """Resolve config, access key and provider, run the gated AI Task loop, return the data.
 
     Returns a string (no structure) or a parsed JSON value (with a structure). Raises
     HomeAssistantError for any not-ready or generation failure, so the service call
@@ -423,7 +423,7 @@ def _base_url(hass: HomeAssistant) -> str:
 if _AI_TASK_AVAILABLE:
 
     class PhoenixAITaskEntity(_ai_task.AITaskEntity):
-        """An AI Task entity that runs Phoenix MCP's scoped model loop for one bound token."""
+        """An AI Task entity that runs Phoenix MCP's scoped model loop for one bound access key."""
 
         _attr_supported_features = _ai_task.AITaskEntityFeature.GENERATE_DATA
         _attr_name = "Phoenix MCP AI Task"
@@ -488,7 +488,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
 def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> None:
     """Add or remove the Phoenix MCP AI Task entity to match current settings.
 
-    Present only when fully configured (enabled, token, provider and model); the kill
+    Present only when fully configured (enabled, access key, provider and model); the kill
     switch does NOT remove it (it stays present but unavailable). Removal drops the
     entity-registry entry, which removes the live entity from HA and the AI Task picker.
     """

@@ -71,7 +71,7 @@ export interface PermissionTree {
   entities: Record<string, PermissionNode>;
 }
 
-// A named snapshot of a token's full settings (workspace model): the active
+// A named snapshot of an access key's full settings (workspace model): the active
 // preset absorbs live edits when the admin switches to another preset.
 export interface AccessKeyPreset {
   id: string;
@@ -158,14 +158,14 @@ export interface GlobalSettings {
   agentcli_conversation_style: ConversationStyle;
   agentcli_detail_level: DetailLevel;
   agentcli_home_focused: boolean;
-  // Assist bridge: the token id whose scoped tools HA's native Assist/voice
+  // Assist bridge: the access key id whose scoped tools HA's native Assist/voice
   // pipeline resolves against (null = unbound). Writable.
   assist_bound_access_key_id?: string | null;
   // Read-only: whether the running HA exposes the llm.API seam (server-computed,
   // not persisted). The Assist bind toggle is disabled when false.
   assist_api_supported?: boolean;
   // Phoenix MCP voice agent: Phoenix MCP registered as HA's own conversation agent, running its
-  // own model on the chosen token's scope. Independent of the Assist bridge above.
+  // own model on the chosen access key's scope. Independent of the Assist bridge above.
   voice_agent_routing_mode?: "off" | "auto" | "local_shadow" | "local" | "hybrid";
   agentcli_routing_shadow_enabled?: boolean;
   agentcli_routing_mode?: "off" | "auto" | "local" | "hybrid";
@@ -188,7 +188,7 @@ export interface GlobalSettings {
   // Read-only: whether the running HA exposes the Assist pipeline seam (one-click).
   voice_agent_pipeline_supported?: boolean;
   // Phoenix MCP AI Task entity: Phoenix MCP registered as an HA AITaskEntity running its own model
-  // on the chosen token's scope. Independent of the voice agent and the bridge.
+  // on the chosen access key's scope. Independent of the voice agent and the bridge.
   ai_task_enabled?: boolean;
   ai_task_access_key_id?: string | null;
   ai_task_provider_id?: string | null;

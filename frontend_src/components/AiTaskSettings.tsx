@@ -11,8 +11,8 @@ import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
 // AI Task settings card. Registers Phoenix MCP as a Home Assistant AI Task entity ("Phoenix MCP AI
 // Task") so ai_task.generate_data can target Phoenix MCP and run its own model on the chosen
-// token's scope, with MESA safety, approvals, and audit. Independent of the Voice
-// Agent and the Assist bridge; needs a token, an Agent Chat provider account, a model.
+// access key's scope, with MESA safety, approvals, and audit. Independent of the Voice
+// Agent and the Assist bridge; needs an access key, an Agent Chat provider account, a model.
 export function AiTaskSettings({
   settings,
   onChange,
@@ -238,7 +238,7 @@ export function AiTaskSettings({
 
 // Confirm making Phoenix MCP the default AI Task data-gen entity. Since HA allows only one,
 // this overwrites any prior default, so the modal names it when there is one. Also the
-// first-enable prompt: when the entity is not ready yet (no token/provider/model), it
+// first-enable prompt: when the entity is not ready yet (no access key/provider/model), it
 // guides the operator to finish configuring first rather than failing the set.
 function AiTaskDefaultModal({
   entityReady,

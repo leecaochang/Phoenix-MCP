@@ -47,9 +47,9 @@ export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { 
   );
 }
 
-// The raw-token reveal block (amber warning + monospace token). Shared by the
+// The raw-access key reveal block (amber warning + monospace access key). Shared by the
 // post-create modal and the onboarding wizard so both look identical. The
-// warning text is overridable because the wizard shows the token again on its
+// warning text is overridable because the wizard shows the access key again on its
 // Connect step, so the default "will not be shown again" copy is inaccurate there.
 export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: string; note?: React.ReactNode }) {
   return (
@@ -66,12 +66,12 @@ interface PostCreateProps {
   rawAccessKey: string;
   accessKeyName: string;
   onOpenSettings: () => void;   // "Setup Agent Chat" -> closes this modal, opens Settings
-  onDone: () => void;           // finish -> refresh + open the new token's detail page
+  onDone: () => void;           // finish -> refresh + open the new access key's detail page
 }
 
-// After a token is created, offer three ways forward instead of dumping the raw
-// token immediately: connect an external agent, set up in-panel Agent Chat, or
-// just reveal the token to copy.
+// After an access key is created, offer three ways forward instead of dumping the raw
+// access key immediately: connect an external agent, set up in-panel Agent Chat, or
+// just reveal the access key to copy.
 function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
   const [view, setView] = useState<"choice" | "connect" | "access-key">("choice");
 
@@ -197,7 +197,7 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
       const { access_key: rawAccessKey, ...record } = resp;
       setCreatedAccessKey({ record, raw: rawAccessKey });
       // The caller's onRefresh covers the panel shell, but the floating chat
-      // window is a separate bundle that only learns about new tokens here.
+      // window is a separate bundle that only learns about new access keys here.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.createFailed"));

@@ -68,20 +68,20 @@ class PhoenixData:
     # Process-global manager is also kept under its own hass.data key, so a
     # Phoenix config-entry reload cannot strand a timed logger restoration.
     logger_control: LoggerOverrideManager | None = None
-    # Tracks the monotonic time of the last rate-limit notification per token
+    # Tracks the monotonic time of the last rate-limit notification per access key
     # to enforce the one-per-minute throttle on phoenix_mcp_rate_limited bus events.
     rate_limit_notified: dict[str, float] = field(default_factory=dict)
-    # settings_version already advised per token, so the stale-tool-list notice
+    # settings_version already advised per access key, so the stale-tool-list notice
     # fires once per staleness epoch (a fresh tools/list clears the entry). In
     # memory only; after a restart the worst case is one repeated advisory.
     stale_tools_advised: dict[str, str] = field(default_factory=dict)
-    # In-memory request/denied/rate-limit counters keyed by token ID.
+    # In-memory request/denied/rate-limit counters keyed by access key ID.
     access_key_counters: dict[str, dict[str, int]] = field(default_factory=dict)
     # Approval IDs whose saved action is currently mid-execution. Guards
     # _approve_approval against a concurrent double-approve re-running the same
     # side effect. The durable execution_started_at marker handles process loss.
     approvals_in_progress: set[str] = field(default_factory=set)
-    # Core wipe sets this under the token-store lock after confirming there is no
+    # Core wipe sets this under the access key-store lock after confirming there is no
     # live or interrupted approval execution. Approval dispatch checks it under
     # the same lock until the wipe has removed the records.
     core_wipe_in_progress: bool = False
@@ -90,16 +90,16 @@ class PhoenixData:
     entity_tree_cache_valid: bool = False
     entity_tree_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # Serializes a global-settings write with the live registrations it changes.
-    # The token-store lock protects persistence only; releasing it before route,
+    # The access key-store lock protects persistence only; releasing it before route,
     # Assist, MESA, or injector reconciliation lets an older PATCH finish after a
     # newer one and put runtime state back on the obsolete generation.
     settings_update_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    # Keyed by token name slug; values are the list of PhoenixAccessKeySensor instances.
+    # Keyed by access key name slug; values are the list of PhoenixAccessKeySensor instances.
     platform_entities: dict[str, list] = field(default_factory=dict)
-    # Keyed by token ID for fast sensor lookup during counter updates.
+    # Keyed by access key ID for fast sensor lookup during counter updates.
     access_key_id_sensors: dict[str, list] = field(default_factory=dict)
     async_add_entities_cb: Callable | None = None
-    # Per-token expiry timers. Values are cancel callbacks from hass.async_call_later.
+    # Per-access key expiry timers. Values are cancel callbacks from hass.async_call_later.
     expiry_timers: dict[str, Callable] = field(default_factory=dict)
     # Callbacks wired by __init__.py to decouple sensor lifecycle from views.
     async_on_access_key_created: Callable | None = None
@@ -129,7 +129,7 @@ class PhoenixData:
     # the periodic flush timer picks up the new interval immediately.
     reschedule_audit_flush: Callable | None = None
     # Debounce state for per-request sensor writes (helpers.update_access_key_counter):
-    # token IDs with unwritten counter changes, and the pending flush cancel.
+    # access key IDs with unwritten counter changes, and the pending flush cancel.
     sensor_write_dirty: set[str] = field(default_factory=set)
     sensor_flush_cancel: Callable | None = None
     # Set to True by async_unload_entry. Views check this before accessing store/audit

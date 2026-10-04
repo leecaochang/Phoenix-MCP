@@ -40,7 +40,7 @@
           <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate access key name or an approval already being processed), <code>already_exists</code> (409, duplicate provider account), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
         </dl>
 
-        <h2 id="tokens">Access keys</h2>
+        <h2 id="access-keys">Access keys</h2>
         <p>Manage access keys under <code>/access-keys</code>. Credential references use <code>access_key_id</code>; Voice Agent, Assist and AI Task settings use the access-key binding fields shown below. Existing access keys and permission settings are preserved when Phoenix upgrades saved records. Scripts must use the current route and field names; no aliases are provided for retired token names.</p>
         <pre class="code" data-lang="http" data-label="Access keys"><code>GET     /api/phoenix-mcp/admin/access-keys                 List access keys
 POST    /api/phoenix-mcp/admin/access-keys                 Create an access key
@@ -111,7 +111,7 @@ DELETE  /api/phoenix-mcp/admin/access-keys/archived/{id}   Delete an archived re
   "use_assist_exposure": false,
   "announce_all_tools": false
 }</code></pre>
-        <p>Setting a <code>persona</code> applies that persona's full preset across every capability in one request; see <a href="capabilities.html#personas">Personas</a>. <code>use_assist_exposure</code> and <code>announce_all_tools</code> are advanced options described in <a href="operations.html#advanced-token-options">Operations</a>. <code>confirm_inline_wait_seconds</code> is how long a confirm-gated call holds the response open waiting for your decision before returning <code>pending_approval</code>. It must be <code>0</code> (off) or an integer from 30 to 180, and <strong>off is the default</strong>. It applies to external MCP clients only: Agent Chat, the Assist bridge, the voice agent and AI Task always return immediately and do their own waiting, so the value makes no difference to them.</p>
+        <p>Setting a <code>persona</code> applies that persona's full preset across every capability in one request; see <a href="capabilities.html#personas">Personas</a>. <code>use_assist_exposure</code> and <code>announce_all_tools</code> are advanced options described in <a href="operations.html#advanced-access-key-options">Operations</a>. <code>confirm_inline_wait_seconds</code> is how long a confirm-gated call holds the response open waiting for your decision before returning <code>pending_approval</code>. It must be <code>0</code> (off) or an integer from 30 to 180, and <strong>off is the default</strong>. It applies to external MCP clients only: Agent Chat, the Assist bridge, the voice agent and AI Task always return immediately and do their own waiting, so the value makes no difference to them.</p>
 
         <h2 id="permissions">Permissions</h2>
         <pre class="code" data-lang="http" data-label="Permissions"><code>GET    /api/phoenix-mcp/admin/access-keys/{id}/permissions                    Read the tree

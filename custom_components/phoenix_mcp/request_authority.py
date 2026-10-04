@@ -75,7 +75,7 @@ execution_guard: ContextVar[Callable[[], None] | None] = ContextVar("phoenix_exe
 def check_request_authority() -> None:
     """Refuse further dispatch or disclosure when authority changed during a wait.
 
-    Checks the household authority, the execution guard, the token and runtime
+    Checks the household authority, the execution guard, the access key and runtime
     state, then the permission policy version captured at admission.
     """
     from .household_authority import household_authority

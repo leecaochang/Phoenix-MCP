@@ -1,4 +1,4 @@
-// The "connect Phoenix MCP to your agent" UI: editable URL, token, per-agent tabs with
+// The "connect Phoenix MCP to your agent" UI: editable URL, access key, per-agent tabs with
 // prefilled commands/configs. Shared by the onboarding wizard's Connect step and
 // the standard access-key-created modal so both show identical, copy-ready instructions.
 import React, { useState } from "react";

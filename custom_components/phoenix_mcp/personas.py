@@ -1,7 +1,7 @@
-"""Hardcoded persona presets for Phoenix MCP tokens.
+"""Hardcoded persona presets for Phoenix MCP access keys.
 
 Personas seed the capability matrix when an admin selects them. After applying,
-the admin may override individual caps; the token's persona field records
+the admin may override individual caps; the access key's persona field records
 which preset was applied. Home Companion additionally enforces delegated access;
 ordinary persona labels are not authorization.
 
@@ -357,7 +357,7 @@ def get_persona_caps(persona: str) -> dict[str, str] | None:
 
 
 def matches_persona(access_key_caps: dict[str, str], persona: str) -> bool:
-    """Check whether a token's current cap values exactly match a persona's defaults."""
+    """Check whether an access key's current cap values exactly match a persona's defaults."""
     expected = get_persona_caps(persona)
     if expected is None:
         return False
@@ -365,7 +365,7 @@ def matches_persona(access_key_caps: dict[str, str], persona: str) -> bool:
 
 
 def detect_persona(access_key_caps: dict[str, str]) -> str:
-    """Identify which persona (if any) a token's current caps match.
+    """Identify which persona (if any) an access key's current caps match.
 
     Returns PERSONA_CUSTOM when the cap values do not exactly match any preset.
     PERSONA_HOME_COMPANION is never inferred from caps: it is assigned explicitly

@@ -1,7 +1,7 @@
 """agentCLI: the in-panel LLM chat that runs an agentic loop server-side.
 
 Phoenix MCP itself drives an LLM from a configured provider account on behalf
-of a chosen Phoenix MCP token, calling that token's scoped Home Assistant tools through
+of a chosen Phoenix MCP access key, calling that access key's scoped Home Assistant tools through
 the same in-process dispatch a real MCP client uses, so every capability gate,
 MESA check, approval, and audit entry fires identically. The loop streams its
 progress to the panel over Server-Sent Events; the browser owns the (ephemeral)
@@ -561,7 +561,7 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
 
 
 class AgentCliStore:
-    """Provider accounts ("instances") in a dedicated Store, separate from tokens.
+    """Provider accounts ("instances") in a dedicated Store, separate from access keys.
 
     Shape: {"instances": {"<id>": {"kind": str, "api_key"?: str, "base_url"?: str,
     "model": str}}}. Multiple instances of the same kind are allowed when their
@@ -1079,7 +1079,7 @@ def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[d
 
     Two ephemeral markers: one on the system block, which caches the stable
     prefix (the tools array plus the system prompt, both large and unchanged
-    across turns unless the token's caps change), and one on the last message
+    across turns unless the access key's caps change), and one on the last message
     block, so each agentic-loop iteration and each later turn reuses the prior
     message history instead of re-billing it. Markers go on copies only; the
     stored transcript round-trips through the browser and must stay clean.
@@ -2420,7 +2420,7 @@ _TOOL_PRIORITY = (
 
 
 def build_mcp_tool_list(access_key: AccessKeyRecord, data: PhoenixData) -> list[dict]:
-    """The tool defs this token would announce, cap key stripped (mirrors tools/list)."""
+    """The tool defs this access key would announce, cap key stripped (mirrors tools/list)."""
     from .mcp_view import (  # noqa: PLC0415
         _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS, _tool_is_announced,
     )
@@ -2455,7 +2455,7 @@ def build_agent_tool_list(access_key: AccessKeyRecord, data: PhoenixData, surfac
 
 
 def catalog_payload_metrics(access_key: AccessKeyRecord, data: PhoenixData) -> dict[str, int]:
-    """Return deterministic byte metrics for the token's announced catalog."""
+    """Return deterministic byte metrics for the access key's announced catalog."""
     tools = build_mcp_tool_list(access_key, data)
     canonical = json.dumps(tools, sort_keys=True, separators=(",", ":")).encode()
     claude = ClaudeProvider(ProviderConfig("claude", "metrics", "")).format_tools(tools)
@@ -3403,7 +3403,7 @@ async def _run_tool_batch(
     appends a synthetic error rather than being skipped. That is why this drains
     the whole batch instead of returning early.
 
-    The token is re-resolved per call (_current_dispatch_access_key), so a mid-turn
+    The access key is re-resolved per call (_current_dispatch_access_key), so a mid-turn
     revoke, expiry, kill switch or cap narrowing is honored BEFORE any side
     effect, not just at the start of the turn.
     """
@@ -3645,7 +3645,7 @@ async def async_run_agent_turn(
     )
     agent_tools = build_agent_tool_list(access_key, data, "chat")
     tools = provider.format_tools(agent_tools)
-    # The token is re-resolved per dispatch (see _current_dispatch_access_key), so a
+    # The access key is re-resolved per dispatch (see _current_dispatch_access_key), so a
     # mid-turn revoke/expire/cap-change/kill-switch is honored before any side
     # effect. Each dispatch gets the inline-confirm wait zeroed so a confirm gate
     # returns pending immediately (snappy approval card); the loop's own longer,
@@ -3773,7 +3773,7 @@ async def async_run_agent_turn(
         # guard, since a human is actively gating the loop.
         if human_resolved:
             iterations = 0
-        # The token lost authority mid-batch (revoked/expired/kill-switch): the
+        # The access key lost authority mid-batch (revoked/expired/kill-switch): the
         # batch was completed with synthetic results (protocol-safe); end the
         # turn rather than looping into more denied dispatches.
         if authority_lost:
@@ -3893,7 +3893,7 @@ async def _run_headless_turn(
     sharing _run_tool_batch, which blocks up to AGENTCLI_APPROVAL_WAIT_SECONDS on
     a human.
 
-    The token is re-resolved before every dispatch (_current_dispatch_access_key), so a
+    The access key is re-resolved before every dispatch (_current_dispatch_access_key), so a
     mid-turn revoke, expiry, kill switch or cap narrowing is honored before any
     side effect.
     """
@@ -3919,7 +3919,7 @@ async def _run_headless_turn(
     # ceiling a faulty or hostile provider could inflate it. Checked BEFORE the
     # append, so the offending message is never retained.
     turn_output_bytes = 0
-    # Set when a dispatch was refused because the token lost authority mid-turn.
+    # Set when a dispatch was refused because the access key lost authority mid-turn.
     # The round that discovers it still finishes and still feeds the refusals
     # back, so the model gets ONE turn to tell the user; asking for tools again
     # after that is stopped rather than repeated (see below).
@@ -4032,7 +4032,7 @@ async def _run_headless_turn(
             # and this round asked for tools again rather than answering. Every
             # one would be refused identically, so stop instead of spending the
             # remaining rounds re-reporting the same refusal to the same dead
-            # token. The interactive loop ends the turn outright here; headless
+            # access key. The interactive loop ends the turn outright here; headless
             # allows the one intervening round so the model can say what happened.
             exhausted = False
             break
@@ -4142,7 +4142,7 @@ async def _run_headless_turn(
 
     if authority_lost:
         # Reported ahead of exhaustion: a turn can hit both (authority lost in the
-        # final allowed round), and the token dying is the actionable cause. It
+        # final allowed round), and the access key dying is the actionable cause. It
         # also cannot be inferred from the outside: the closing round often ends
         # normally, so without this the turn would look like an ordinary success
         # that produced nothing.
@@ -4355,9 +4355,9 @@ async def async_run_ai_task(
     """Run one AI Task (ai_task.generate_data) to completion; return the final text.
 
     A headless sibling of async_run_voice_turn for HA's AI Task platform: same gated tool
-    loop (per-token scope, MESA, approvals, audit via _dispatch_mcp with sentinel
+    loop (per-access key scope, MESA, approvals, audit via _dispatch_mcp with sentinel
     client_ip "ai_task"), no SSE, no interactive wait. A confirm gate returns pending,
-    fed back as a "queued_for_approval" tool result so a task never blocks. The token
+    fed back as a "queued_for_approval" tool result so a task never blocks. The access key
     is re-resolved before every dispatch, so a mid-task revoke/kill-switch is honored.
 
     When structure_json is given (the caller's JSON schema derived from the task's
@@ -4449,9 +4449,9 @@ def _status_of(result: dict) -> str:
 
 
 def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
-    """Return a copy of the token with confirm_inline_wait_seconds zeroed.
+    """Return a copy of the access key with confirm_inline_wait_seconds zeroed.
 
-    Falls back to the original token if it is not a dataclass.
+    Falls back to the original access key if it is not a dataclass.
     """
     try:
         return dataclasses.replace(access_key, confirm_inline_wait_seconds=0)
@@ -4460,13 +4460,13 @@ def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
 
 
 def _current_dispatch_access_key(data: PhoenixData, access_key_id: str) -> AccessKeyRecord | None:
-    """Re-resolve the token for one tool dispatch, or None if it may no longer act.
+    """Re-resolve the access key for one tool dispatch, or None if it may no longer act.
 
     A single Agent Chat turn can stay open a long time (a confirm gate blocks on
     an approval wait), so authority must be re-checked before EVERY side effect,
     not just at stream open, mirroring async_get_authenticated_access_key on the MCP path.
     Returns None when Phoenix MCP is shutting down, the runtime kill switch is on, or the
-    token has been revoked/expired or narrowed away since the turn started; the
+    access key has been revoked/expired or narrowed away since the turn started; the
     fresh record is returned otherwise so cap changes take effect immediately.
     """
     if (
@@ -4507,7 +4507,7 @@ class PhoenixAgentCliChatView(PhoenixView):
 
         # Agent Chat bypasses async_get_authenticated_access_key (it is admin-authed, not
         # bearer-authed), so it must enforce the same invariants that gate every
-        # MCP request: shutdown, the runtime kill switch, and token validity.
+        # MCP request: shutdown, the runtime kill switch, and access key validity.
         settings = data.store.get_settings()
         if not data.ready or data.shutting_down or settings.kill_switch:
             return _err(

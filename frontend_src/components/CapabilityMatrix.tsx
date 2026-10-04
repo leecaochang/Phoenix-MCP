@@ -13,7 +13,7 @@ interface Props {
   accessKey: AccessKeyRecord;
   onUpdate: (updated: AccessKeyRecord) => void;
   // What ESPHome surfaces this system has, when known. The row stays settable
-  // either way so a token can be prepared before ESPHome is installed; this only
+  // either way so an access key can be prepared before ESPHome is installed; this only
   // explains why the tools are not showing up yet.
   esphome?: EsphomeAvailability | null;
 }
@@ -247,7 +247,7 @@ const CAPS: CapDef[] = [
 ];
 
 // All capability keys, in matrix order. Exported so other views (e.g. the
-// Token Detail summary) can tally allow/confirm/deny without re-listing caps.
+// Access key Detail summary) can tally allow/confirm/deny without re-listing caps.
 export const CAP_NAMES: CapName[] = CAPS.map((c) => c.key);
 
 const TIER_LABEL_KEYS: Record<CapTier, string> = {

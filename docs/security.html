@@ -32,7 +32,7 @@
 
         <h2>Access key design</h2>
         <figure class="diagram">
-          <div class="token-strip" role="img" aria-label="A Phoenix MCP access key is the prefix phx_ followed by 64 random characters, 68 in total.">
+          <div class="access-key-strip" role="img" aria-label="A Phoenix MCP access key is the prefix phx_ followed by 64 random characters, 68 in total.">
             <div class="seg prefix"><span class="val">phx_</span><span class="lbl">prefix &middot; 4 chars</span></div>
             <div class="seg body"><span class="val">a1b2c3 &hellip; 64 random characters &hellip; f9e8d7</span><span class="lbl">secret</span></div>
             <div class="seg total"><span class="val">= 68</span><span class="lbl">total length</span></div>
@@ -65,8 +65,8 @@
         <h2 id="sensitive-attributes">Sensitive attribute scrubbing</h2>
         <p>Four named attributes are removed from every state response, for every access key type and permission level.</p>
         <dl class="kv">
-          <div class="kv-row"><dt>access_token</dt><dd>Authentication access keys embedded in entity state by some integrations.</dd></div>
-          <div class="kv-row"><dt>entity_picture</dt><dd>Image and icon URLs, often carrying auth access keys or private asset paths.</dd></div>
+          <div class="kv-row"><dt>access_token</dt><dd>Authentication tokens embedded in entity state by some integrations.</dd></div>
+          <div class="kv-row"><dt>entity_picture</dt><dd>Image and icon URLs, often carrying auth tokens or private asset paths.</dd></div>
           <div class="kv-row"><dt>still_image_url</dt><dd>Static image URLs that may contain sensitive identifiers or auth parameters.</dd></div>
           <div class="kv-row"><dt>stream_url</dt><dd>Direct stream URLs (for example from cameras) that may contain credentials or expose internal topology.</dd></div>
         </dl>

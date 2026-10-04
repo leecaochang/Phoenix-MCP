@@ -630,7 +630,7 @@ export function AgentCliWindow({
   const [usage, setUsage] = useState<SessionUsage>(() => getSessionUsage());
   // Screen-reader announcement of discrete chat events (completed replies,
   // approvals, errors). Deliberately NOT the streaming transcript itself:
-  // a live region over access-key-by-token deltas would announce every chunk.
+  // a live region over token-by-token deltas would announce every chunk.
   const [announcement, setAnnouncement] = useState("");
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
@@ -831,7 +831,7 @@ export function AgentCliWindow({
     setUsage(zero);
   }, [persistenceOwner]);
 
-  // Reset the conversation when the token or account changes (tool scope /
+  // Reset the conversation when the access key or account changes (tool scope /
   // message format differ), but NOT on the initial restore.
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
@@ -850,10 +850,10 @@ export function AgentCliWindow({
     }
   }, [instances, instanceId]);
 
-  // Same as above for the token: a revoke elsewhere (Token Detail fires
-  // phx-access-keys-changed, which both window hosts turn into a fresh tokens prop)
-  // must not leave a dead token selected. Falls back to another available
-  // token, or "" if none remain; the conversation-reset effect above already
+  // Same as above for the access key: a revoke elsewhere (Access key Detail fires
+  // phx-access-keys-changed, which both window hosts turn into a fresh accessKeys prop)
+  // must not leave a dead access key selected. Falls back to another available
+  // access key, or "" if none remain; the conversation-reset effect above already
   // clears history whenever accessKeyId changes, including this reselect.
   useEffect(() => {
     if (accessKeyId && !accessKeys.some((tok) => tok.id === accessKeyId)) {

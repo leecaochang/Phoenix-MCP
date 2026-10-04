@@ -5,7 +5,7 @@ resource types in `VERSIONED_RESOURCE_TYPES`, with admin-only rollback. Records
 are captured at the executor (Phoenix MCP's single execution chokepoint), so both
 directly-allowed and Confirm-approved changes are recorded exactly once.
 
-Storage is a separate HA Store from tokens (``phoenix_mcp_versions``) holding a
+Storage is a separate HA Store from access keys (``phoenix_mcp_versions``) holding a
 flat list of records. Retention is per-resource FIFO: the newest
 ``MAX_VERSIONS_PER_RESOURCE`` versions per ``(resource_type, resource_id)`` are
 kept; older ones are evicted on write. Records are stored raw (un-redacted)

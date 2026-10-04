@@ -4,8 +4,8 @@ The TOOL layer only. The backend adapter that talks to Zigbee2MQTT and ZHA is
 the package-level radio.py, imported here as `radio_backend` so the two are
 never confused inside a module that shares its name.
 
-Every tool resolves through the token's permission tree before touching a
-radio: `_resolve_radio_device` returns a device only when the token can see it,
+Every tool resolves through the access key's permission tree before touching a
+radio: `_resolve_radio_device` returns a device only when the access key can see it,
 so a device lookup cannot become an oracle for the rest of the mesh. Every
 mutating tool is Confirm-eligible and builds a registry-scoped diff naming its
 specific devices or group, because radio topology changes are not reversible
@@ -68,7 +68,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclasses.dataclass(frozen=True)
 class _ResolvedRadioDevice:
-    """A radio device resolved under a token's scope: all three always present."""
+    """A radio device resolved under an access key's scope: all three always present."""
 
     device: Any
     backend: str
@@ -343,7 +343,7 @@ def _resolve_radio_device(
     the device must have at least one accessible entity, and a ghost device and an
     out-of-scope device return identical not_found bodies (no existence oracle).
     Write ops additionally require WRITE on at least one of the device's entities;
-    a visible but READ-only device gets a specific message, since the token can
+    a visible but READ-only device gets a specific message, since the access key can
     already see it. A visible non-radio device (including the Z2M bridge itself,
     which never detects as a radio device, protecting the coordinator) is
     invalid_request.
@@ -590,7 +590,7 @@ def _valid_content_hash(value: Any) -> bool:
 def _radio_mesa_entities(
     access_key: AccessKeyRecord, hass: HomeAssistant, device_ids: set[str]
 ) -> tuple[str, ...]:
-    """All registry entities on selected devices that the token may write."""
+    """All registry entities on selected devices that the access key may write."""
     registry = er.async_get(hass)
     return tuple(
         sorted(
@@ -1338,7 +1338,7 @@ class _ResolvedPermitJoin:
 def _resolve_topology_scan(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedTopologyScan | tuple[dict, str, str]:
-    """Validate the backend and capture only devices visible to this token."""
+    """Validate the backend and capture only devices visible to this access key."""
     tool = "scan_zigbee_topology"
     backend = args.get("backend")
     if backend is not None and backend not in radio_backend.ZIGBEE_BACKENDS:
@@ -1856,7 +1856,7 @@ async def _build_diff_remove_zigbee_device(
     device, ieee = resolved.device, resolved.ieee
     preview = _radio_device_diff_preview(device, ieee)
     # The approval diff is admin-only, so it lists all of the device's registry
-    # entities (not just the token-visible ones) plus any MESA control modes:
+    # entities (not just the access key-visible ones) plus any MESA control modes:
     # the reviewer should see the full blast radius of dropping the device.
     entries = er.async_entries_for_device(er.async_get(hass), device.id, include_disabled_entities=True)
     preview["entities"] = sorted(entry.entity_id for entry in entries)
@@ -2019,7 +2019,7 @@ async def _tool_get_radio_device(
             )
             if entry is None:
                 # Registered in HA but unknown to Z2M (a stale discovery
-                # leftover). The token already sees the device, so no oracle.
+                # leftover). The access key already sees the device, so no oracle.
                 return _tool_error("Device is not on the Zigbee network."), "invalid_request", device.id
             accessible = _accessible_entity_ids(access_key, hass)
             projected = radio_backend.project_z2m_device(
@@ -2123,7 +2123,7 @@ async def _tool_permit_zigbee_join(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: open/close the Zigbee join window (Confirm-eligible)."""
-    # Capability gate first: a denied token gets a uniform Forbidden with no
+    # Capability gate first: a denied access key gets a uniform Forbidden with no
     # device work, so the tool can never be a scope/existence oracle.
     if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "permit_zigbee_join"

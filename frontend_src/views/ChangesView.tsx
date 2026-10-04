@@ -83,7 +83,7 @@ function label(v: { alias: string | null; resource_id: string }): string {
   return v.alias || v.resource_id;
 }
 
-// Author display name. Prefer the token's CURRENT name (it may have been renamed
+// Author display name. Prefer the access key's CURRENT name (it may have been renamed
 // since the change was recorded), falling back to the name captured at the time,
 // then to "admin" for admin-driven restores.
 function whoNow(
@@ -94,7 +94,7 @@ function whoNow(
   return cur || v.access_key_name || (v.approved_by_user_id ? "admin" : "-");
 }
 
-// Detail view: when the token has since been renamed, show "current (original)".
+// Detail view: when the access key has since been renamed, show "current (original)".
 function whoDetail(
   v: { access_key_id: string | null; access_key_name: string | null; approved_by_user_id: string | null },
   current: Map<string, string>,
@@ -142,8 +142,8 @@ export function ChangesView({ hass }: { hass: unknown }) {
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
 
-  // access_key_id -> latest known name, so a renamed token shows its new name here.
-  // Covers archived tokens too, so a renamed-then-revoked token resolves to its
+  // access_key_id -> latest known name, so a renamed access key shows its new name here.
+  // Covers archived access keys too, so a renamed-then-revoked access key resolves to its
   // final name rather than the one captured with the change.
   const loadAccessKeys = useCallback(async () => {
     try {

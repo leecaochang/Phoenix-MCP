@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 async def async_render_template_for_access_key(
     template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> str:
-    """Render a template in a disposable subprocess over this token's permitted states.
+    """Render a template in a disposable subprocess over this access key's permitted states.
 
     Concurrency (`template_slots`), input size and wall time are bounded here;
     the worker applies the memory and CPU limits itself, and is always killed and

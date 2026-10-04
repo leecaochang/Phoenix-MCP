@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 #   allowed        - request completed successfully
 #   denied         - blocked by permission rules, blocklist, dual-gate, or RED/NO_ACCESS
 #   not_found      - entity absent from hass.states and entity registry (ghost pre-check)
-#   rate_limited   - token exceeded its rate limit
+#   rate_limited   - access key exceeded its rate limit
 #   not_implemented - MCP method received but not supported (e.g. resources/templates/list)
 #   invalid_request - request was structurally invalid (e.g. template render with bad syntax)
 #   pending_approval - a cap_* mode of "confirm" queued the action for admin review.
@@ -72,7 +72,7 @@ class AuditEntry:
     # True when MESA waved this action through under advisory mode (a confirm/
     # read_only-by-nature entity proceeded with a warning instead of being gated).
     mesa_advisory: bool = False
-    # Name of the token's active settings preset at request time.
+    # Name of the access key's active settings preset at request time.
     preset: str | None = None
     # True when the stale-tool-list notice was injected into this response.
     stale_tools_advisory: bool = False

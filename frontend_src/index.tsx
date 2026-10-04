@@ -65,8 +65,8 @@ function readStoredTab(): Tab {
   return "accessKeys";
 }
 
-// Persist the token being edited so returning to the Tokens tab reopens its
-// detail; with none stored (or any other tab), reopen at the Tokens list.
+// Persist the access key being edited so returning to the Access keys tab reopens its
+// detail; with none stored (or any other tab), reopen at the Access keys list.
 const ACCESS_KEY_DETAIL_STORAGE_KEY = "phx-access-key-detail";
 function readStoredView(tab: Tab): View {
   if (tab !== "accessKeys") return { name: "list" };
@@ -84,7 +84,7 @@ function readStoredView(tab: Tab): View {
   return { name: "list" };
 }
 
-// Persist the Approvals sub-tab (Pending vs History) the same way the Tokens
+// Persist the Approvals sub-tab (Pending vs History) the same way the Access keys
 // detail view is remembered, so reloading or navigating away and back keeps
 // whichever one was open.
 type ApprovalsTab = "pending" | "history";
@@ -210,7 +210,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch { /* storage blocked: skip */ }
   }, [tab]);
 
-  // Remember the open token detail (only on the Tokens tab); clear it otherwise
+  // Remember the open access key detail (only on the Access keys tab); clear it otherwise
   // so returning lands on the list rather than a stale detail.
   useEffect(() => {
     try {
@@ -233,8 +233,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     const refresh = () => api.getAgentCliProviders()
       .then((r) => setAgentCliInstances(r.instances)).catch(() => { /* not configured yet */ });
     refresh();
-    // Opening from a token's connect flow binds the window to that token;
-    // opening from the header restores the last-used token.
+    // Opening from an access key's connect flow binds the window to that access key;
+    // opening from the header restores the last-used access key.
     // Routed through a ref, not the closure: this effect mounts once, when
     // `settings` is still null, so a captured openAgentCli would decide routing
     // (kill switch, global-vs-panel window) before settings loaded and always
@@ -243,8 +243,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
       const detail = (e as CustomEvent).detail as { accessKeyId?: string } | undefined;
       openAgentCliRef.current(detail?.accessKeyId);
     };
-    // A token created or revoked elsewhere (wizard, Token Detail) must reach
-    // the panel fallback window's own tokens prop independent of navigation,
+    // An access key created or revoked elsewhere (wizard, Access key Detail) must reach
+    // the panel fallback window's own accessKeys prop independent of navigation,
     // matching the floating window.
     const onAccessKeysChanged = () => { void refreshAccessKeys(); };
     window.addEventListener("phx-open-agentcli", onOpen);
@@ -452,8 +452,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   }, [refreshAccessKeys]);
 
   // Jump to the Settings tab (used by the "Use Agent Chat"/"Setup Agent Chat"
-  // options in the create/connect flows). Refresh tokens first so a token just
-  // made in the wizard is listed when the user returns to the Tokens tab.
+  // options in the create/connect flows). Refresh access keys first so an access key just
+  // made in the wizard is listed when the user returns to the Access keys tab.
   const goToSettings = useCallback(() => {
     refreshAccessKeys();
     setView({ name: "list" });

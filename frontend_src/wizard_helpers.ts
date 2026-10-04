@@ -18,24 +18,24 @@ export function skillUrlFromMcp(mcpUrl: string): string {
   return mcpUrl.replace(/\/api\/phoenix-mcp\/?$/, "") + SKILL_PATH;
 }
 
-// The per-token MCP server name used in agent configs. Derived from the token
-// name so each token gets a DISTINCT client entry: configure one entry per
-// token once, then switch tokens by toggling which entry is enabled in the
-// client. Token names match ^[A-Za-z0-9_-]{3,32}$ (backend TOKEN_NAME_REGEX)
-// and the backend rejects two tokens whose lowercased name slugs collide, so
-// this derivation is unique across tokens without extra sanitization.
+// The per-access key MCP server name used in agent configs. Derived from the access key
+// name so each access key gets a DISTINCT client entry: configure one entry per
+// access key once, then switch access keys by toggling which entry is enabled in the
+// client. Access key names match ^[A-Za-z0-9_-]{3,32}$ (backend ACCESS_KEY_NAME_REGEX)
+// and the backend rejects two access keys whose lowercased name slugs collide, so
+// this derivation is unique across access keys without extra sanitization.
 export function mcpServerName(accessKeyName: string): string {
   return "phx-" + accessKeyName.toLowerCase().replace(/_/g, "-");
 }
 
-// The env var Codex's config.toml reads the token from. Must also be unique
-// per token: two [mcp_servers.*] tables sharing one env var would collide.
-// The PHOENIX_ACCESS_KEY_ prefix keeps it a valid identifier for any token name.
+// The env var Codex's config.toml reads the access key from. Must also be unique
+// per access key: two [mcp_servers.*] tables sharing one env var would collide.
+// The PHOENIX_ACCESS_KEY_ prefix keeps it a valid identifier for any access key name.
 export function codexAccessKeyEnv(accessKeyName: string): string {
   return "PHOENIX_ACCESS_KEY_" + accessKeyName.toUpperCase().replace(/-/g, "_");
 }
 
-// Harness accepts at most 32 characters. The backend's unique token slug fits
+// Harness accepts at most 32 characters. The backend's unique access key slug fits
 // without truncation; omit the optional phx- prefix for this client only.
 export function harnessServerName(accessKeyName: string): string {
   return mcpServerName(accessKeyName).slice(4);
@@ -127,7 +127,7 @@ export interface AgentTab {
 }
 
 // Per-agent connection instructions, default first (Claude Code). accessKeyName
-// drives each client's per-token server name (and Codex env var), so entries can
+// drives each client's per-access key server name (and Codex env var), so entries can
 // coexist without replacing one another. Harness is an external client, separate
 // from Agent Chat providers.
 export function buildAgentTabs(url: string, accessKey: string, accessKeyName: string): AgentTab[] {

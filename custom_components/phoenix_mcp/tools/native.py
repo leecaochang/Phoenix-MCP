@@ -366,7 +366,7 @@ async def _mesa_gate_native(
     if outcome.blocked:
         fire_mesa_blocked_event(hass, access_key, outcome.blocked)
     if outcome.decision == "pending":
-        # Held inline when the token asks for it, exactly as a capability confirm
+        # Held inline when the access key asks for it, exactly as a capability confirm
         # is (tool_common._pending_or_inline); otherwise a MESA confirm on a
         # native tool would return immediately and never deliver the
         # operator-accepted note, which only the inline path appends.
@@ -698,7 +698,7 @@ def _with_declined_targets(
     that only when a service call RAISED, so a client written against HA's shape
     would read a declined target as a transport error on a successful call.
 
-    Leak-safe: each entity resolved WRITE for this token before the capability
+    Leak-safe: each entity resolved WRITE for this access key before the capability
     removed it. The outcome check keeps a REFUSAL from ever being annotated; that
     must not rest on a refusal body happening to be unparseable plain text.
     """
@@ -1791,7 +1791,7 @@ async def _tool_hass_vacuum_clean_area(
     matched_areas = _areas_matching(hass, area_name)
     if not matched_areas:
         # Collapsed into the same refusal an unmatched entity gets, deliberately.
-        # Answering differently would tell a token that cannot list areas whether
+        # Answering differently would tell an access key that cannot list areas whether
         # a given area exists, and it matches how every other native tool already
         # treats an area name that resolves to nothing.
         return _tool_error("No accessible entities matched your request."), "denied", "HassVacuumCleanArea"

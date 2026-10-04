@@ -4,7 +4,7 @@ Reads gate on cap_config_read; writes carry a DUAL gate. cap_blueprint_write
 authorizes authoring blueprints and the domain cap (cap_automation_write or
 cap_script_write) authorizes affecting that domain's configs. Both must permit,
 because a blueprint edit reloads every automation or script built from it while
-those configs stay byte-identical: without the domain key a token could rewire
+those configs stay byte-identical: without the domain key an access key could rewire
 scripts through a script blueprint with cap_script_write set to deny. For the
 same reason the approval diff names the consumer entities, not just the YAML.
 
@@ -106,7 +106,7 @@ async def _tool_list_blueprints(
 _BLUEPRINT_DOMAINS = ("automation", "script")
 
 # The domain cap that must ALSO permit a blueprint write, per domain. Without it, a
-# token holding cap_blueprint_write but cap_script_write=deny could edit a script
+# access key holding cap_blueprint_write but cap_script_write=deny could edit a script
 # blueprint and rewire scripts it cannot write directly.
 _BLUEPRINT_DOMAIN_CAPS = {
     "automation": "cap_automation_write",
@@ -256,7 +256,7 @@ async def _blueprint_write_precheck(
     Returns (refusal_response | None, realpath, config-relative path). The first
     element is a COMPLETE tool response tuple so callers can `return pre` directly.
 
-    Runs after the cap-deny checks, so a denied token learns nothing about its
+    Runs after the cap-deny checks, so a denied access key learns nothing about its
     own payload.
     """
     def _refuse(message: str) -> tuple[tuple[dict, str, str], str, str]:

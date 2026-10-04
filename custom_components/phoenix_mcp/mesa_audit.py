@@ -77,7 +77,7 @@ def request_context(
 ) -> Iterator[None]:
     """Attribute any mesa-core event raised in this block to one request."""
     # Resolved once here rather than per event: a call can raise one event per
-    # targeted entity, and the preset lookup is a scan of the token's presets.
+    # targeted entity, and the preset lookup is a scan of the access key's presets.
     preset: str | None = None
     active = getattr(access_key, "active_preset_id", None)
     if active:
@@ -148,7 +148,7 @@ class MesaAuditBridge(logging.Handler):
             if ctx is None:
                 # No request to attribute it to: a preview, or a lease expiring
                 # on a worker thread long after its caller went away. An
-                # unattributed row is noise in a per-token log.
+                # unattributed row is noise in a per-access key log.
                 return
             self._data.audit.record(
                 request_id=ctx.request_id,

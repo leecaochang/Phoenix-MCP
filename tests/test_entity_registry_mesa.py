@@ -369,7 +369,7 @@ async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
 
     references = _entity_identity_references(data, entity_id)
     assert {item["kind"] for item in references} == {
-        "token_permission",
+        "access_key_permission",
         "preset_permission",
         "global_hint",
         "mesa_entity_profile",
