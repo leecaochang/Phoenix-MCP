@@ -201,7 +201,7 @@ it("shows copyable tool invocations and explains provider purpose, output and ch
   fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
   const invocation = await view.findByText(/get_state \{/);
   expect(invocation.closest("details")?.className).toBe("conversation-entry");
-  fireEvent.click(invocation.parentElement!.querySelector("button")!);
+  fireEvent.click(invocation.closest(".conversation-evidence")!.querySelector("button")!);
   await waitFor(() => expect(writeText).toHaveBeenCalledWith('get_state {\n  "entity_id": "light.test"\n}'));
   expect(view.getByText("Assist did not recognize a supported command.")).toBeTruthy();
   expect(view.getByText("Purpose: select a device from the available candidates.")).toBeTruthy();
@@ -211,4 +211,26 @@ it("shows copyable tool invocations and explains provider purpose, output and ch
   expect(view.getAllByText("Text checked")).toHaveLength(2);
   expect(view.getAllByText("Model request completed")).toHaveLength(2);
   expect(view.getAllByText("turn on the lamp")).toHaveLength(2);
+});
+
+
+it.each(["missing", "rejected", "unavailable"])("copies through HTTP fallback and reports the actual result (%s)", async mode => {
+  const writeText = vi.fn().mockRejectedValue(new Error("Not allowed"));
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: mode === "rejected" ? { writeText } : undefined });
+  const command = vi.fn(() => mode !== "unavailable");
+  document.execCommand = command;
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const invocation = await view.findByText(/get_state \{/);
+  const evidence = invocation.closest(".conversation-evidence")!;
+  const button = evidence.querySelector("button")!;
+  expect(button.getAttribute("aria-label")).toBe("Copy text");
+  expect(button.textContent).toBe("");
+  expect(button.querySelector("svg[aria-hidden='true']")).toBeTruthy();
+  button.focus();
+  fireEvent.click(button);
+  await waitFor(() => expect(evidence.querySelector("[role='status']")?.textContent).toBe(mode === "unavailable" ? "Copy failed. Select the text to copy it." : "Copied"));
+  expect(command).toHaveBeenCalledWith("copy");
+  expect(document.querySelector("textarea")).toBeNull();
+  expect(document.activeElement).toBe(button);
 });

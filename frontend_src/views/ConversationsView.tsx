@@ -1,6 +1,7 @@
-import { mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
+import { mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { copyToClipboard } from "../utils";
 import type { ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
 import { BusyButton } from "../components/BusyButton";
 import { hasMessage, t, tn } from "../i18n";
@@ -82,16 +83,19 @@ function raw(value: unknown): string {
 
 function TextEvidence({ value, code = false }: { value: unknown; code?: boolean }) {
   const text = raw(value);
-  const [copyState, setCopyState] = useState("");
+  const [copyState, setCopyState] = useState<"" | "copied" | "failed">("");
+  const feedback = copyState ? t(copyState === "copied" ? "conversations.copied" : "conversations.copyFailed") : "";
   const body = code ? <pre>{text}</pre> : <div className="conversation-prose">{text}</div>;
   return <div className="conversation-evidence">
-    {text.length > 1200 ? <details><summary>{t("conversations.fullText", { count: localeNumber(text.length) })}</summary>{body}</details> : body}
-    <button className="btn btn-text btn-sm" onClick={async () => {
-      try { await navigator.clipboard.writeText(text); setCopyState(t("conversations.copied")); }
-      catch { setCopyState(t("conversations.copyFailed")); }
-    }}>{t("conversations.copy")}</button>
-    <span role="status">{copyState}</span>
+    <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary>{t("conversations.fullText", { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
+    <button type="button" className="btn btn-icon conversation-copy" aria-label={t("conversations.copy")} title={feedback || t("conversations.copy")} onClick={async () => {
+      setCopyState("");
+      try { await copyToClipboard(text); setCopyState("copied"); }
+      catch { setCopyState("failed"); }
+    }}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={copyState === "copied" ? mdiCheck : mdiContentCopy} /></svg></button>
+    <span role="status" className={copyState === "failed" ? "conversation-copy-feedback" : "sr-only"}>{feedback}</span>
   </div>;
+
 }
 
 const OPERATION_KEYS: Record<string, string> = {
