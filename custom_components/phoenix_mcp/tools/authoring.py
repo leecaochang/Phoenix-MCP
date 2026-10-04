@@ -113,7 +113,7 @@ async def _finish_entity_write(
     check_request_authority()
     status = body["registration"]["status"]
     if status == "timed_out":
-        body["message"] = "Configuration saved and reload completed. Entity registration or live state was not observed within the wait budget and token scope. Retry a lookup, not the write."
+        body["message"] = "Configuration saved and reload completed. Entity registration or live state was not observed within the wait budget and access key scope. Retry a lookup, not the write."
     elif status == "disabled":
         body["message"] = "Configuration saved and reload completed. The registered entity is disabled."
     elif status == "observation_failed":
@@ -1108,7 +1108,7 @@ async def _scene_write(
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
     bad = _unwritable_scene_members(config, token, hass)
     if bad:
-        return _tool_error("Scene references entities this token cannot write: " + ", ".join(bad)), "denied", tool_name
+        return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
 
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = scene_id

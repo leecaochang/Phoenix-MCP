@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP est déjà configuré."
     },
     "create_entry": {
-      "default": "Utilisez le panneau Phoenix MCP pour gérer vos jetons"
+      "default": "Utilisez le panneau Phoenix MCP pour gérer vos clés d’accès"
     }
   },
   "issues": {

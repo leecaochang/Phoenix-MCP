@@ -118,7 +118,7 @@ def set_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
     entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     if entity_id is None:
         raise AiTaskSetupError(
-            "Configure and enable the Phoenix MCP AI Task (token, provider, and model) first."
+            "Configure and enable the Phoenix MCP AI Task (access key, provider, and model) first."
         )
     prefs = _ai_task_preferences(hass)
     if prefs is None:
@@ -383,7 +383,7 @@ async def _async_generate_ai_task_data(
 
     token = _current_dispatch_token(data, settings.ai_task_token_id)
     if token is None:
-        raise HomeAssistantError("The Phoenix MCP AI Task entity's token is no longer available.")
+        raise HomeAssistantError("The Phoenix MCP AI Task entity's access key is no longer available.")
 
     store = await _get_secret_store(hass)
     cfg = store.resolve(settings.ai_task_provider_id, settings.ai_task_model or None)

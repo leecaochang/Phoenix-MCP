@@ -1804,7 +1804,7 @@ async def _tool_get_repairs(
         "truncated": len(matches) > limit,
         "issues": projected,
         "note": (
-            "Repair references are token-specific. Open Home Assistant Repairs "
+            "Repair references are access-key-specific. Open Home Assistant Repairs "
             "to view localized descriptions, links, and repair flows."
         ),
     }
@@ -1890,7 +1890,7 @@ _RELATIONSHIP_SELECTORS = ("entity_id", "device_id", "integration", "area", "lab
 
 _SCOPE_NOT_FOUND = (
     "Nothing accessible matched that scope. Check the selector value, or the entities "
-    "it names may be outside this token's permission tree."
+    "it names may be outside this access key's permission tree."
 )
 
 
@@ -2266,7 +2266,7 @@ async def _tool_get_audit_summary(
         if e.mesa_advisory:
             item["mesa_advisory"] = True
         items.append(item)
-    body = {"token_name": token.name, "count": len(items), "entries": items}
+    body = {"access_key_name": token.name, "count": len(items), "entries": items}
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_audit_summary"
 
 

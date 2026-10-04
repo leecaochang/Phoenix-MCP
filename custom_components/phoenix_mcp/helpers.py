@@ -462,7 +462,7 @@ async def async_archive_expired_token(
             await data.async_on_token_archived(slug)
         except Exception:
             _LOGGER.warning(
-                "Sensor cleanup failed for expired token %s", current.id, exc_info=True,
+                "Sensor cleanup failed for expired access key %s", current.id, exc_info=True,
             )
 
 
@@ -737,7 +737,7 @@ _JWT_SCRUB_RE = re.compile(r"eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9
 # Credentials embedded in URLs/log text: query params (token=..., api_password=...)
 # and userinfo (https://user:pass@host). Over-redaction in logs is acceptable.
 _URL_CRED_QUERY_RE = re.compile(
-    r"(?i)(access_token|refresh_token|api_password|password|api_key|apikey|client_secret|secret|token|auth)=[^\s&\"';]+"
+    r"(?i)(access_key|accesskey|access_token|refresh_token|api_password|password|api_key|apikey|client_secret|secret|token|auth)=[^\s&\"';]+"
 )
 _URL_CRED_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s:@]+@")
 _PHOENIX_LOGGER_PREFIXES = ("homeassistant.components.phoenix_mcp", "custom_components.phoenix_mcp")
@@ -1337,7 +1337,7 @@ def collect_log_entries(
         scrub: Callable[[str], str] = _scrub_log_text
         if phoenix_only:
             if token is None:
-                raise SystemLogDegradedError("Phoenix diagnostics token context is unavailable")
+                raise SystemLogDegradedError("Phoenix diagnostics access key context is unavailable")
             scrub = lambda value: _strict_phoenix_log_text(value, token, hass)
         safe_messages = [scrub(message) for message in messages]
         exception = _log_exception(getattr(record, "exception", None))

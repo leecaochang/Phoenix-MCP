@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP jest już skonfigurowany."
     },
     "create_entry": {
-      "default": "Użyj panelu Phoenix MCP do zarządzania tokenami"
+      "default": "Użyj panelu Phoenix MCP do zarządzania kluczami dostępu"
     }
   },
   "issues": {

@@ -126,7 +126,7 @@ async def test_hidden_or_read_only_source_refused_before_approval(hass, permissi
     data.approvals = MagicMock(async_create=AsyncMock())
     result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps(expression)}, token, hass, data)
     assert outcome == "denied", result
-    assert "outside this token's write scope" in result["content"][0]["text"]
+    assert "outside this access key's write scope" in result["content"][0]["text"]
     data.approvals.async_create.assert_not_awaited()
     assert not hass.config_entries.async_entries("template")
     assert not hass.config_entries.flow.async_progress_by_handler("template")

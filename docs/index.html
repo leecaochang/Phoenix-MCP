@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Phoenix MCP</title>
-  <meta name="description" content="Phoenix MCP is a security-focused, drop-in replacement for Home Assistant's MCP server. Every AI agent gets its own scoped, rate-limited, audited, instantly revocable token." />
+  <meta name="description" content="Phoenix MCP is a security-focused, drop-in replacement for Home Assistant's MCP server. Every AI agent gets its own scoped, rate-limited, audited, instantly revocable access key." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,7 +27,7 @@
         <div class="hero-inner">
           <div class="hero-copy">
             <h1 class="reveal d1">Give your AI agent the keys to <span class="amber">exactly</span> what it needs.</h1>
-            <p class="hero-lede reveal d2">Create one scoped token for each AI agent. Choose what it can read, what it can control, and which actions need approval. Use Agent Chat inside Home Assistant or connect any MCP client.</p>
+            <p class="hero-lede reveal d2">Create one scoped access key for each AI agent. Choose what it can read, what it can control, and which actions need approval. Use Agent Chat inside Home Assistant or connect any MCP client.</p>
             <div class="hero-cta reveal d3">
               <a class="btn btn-primary" href="install.html">Get started <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
               <a class="btn btn-ghost" href="https://github.com/leecaochang/Phoenix-MCP" target="_blank" rel="noopener">View on GitHub</a>
@@ -39,9 +39,9 @@
             </div>
           </div>
 
-          <figure class="hero-figure reveal d2" aria-label="Diagram: a scoped token passes through the Phoenix MCP gate, which grants write, read, or no access to each entity.">
+          <figure class="hero-figure reveal d2" aria-label="Diagram: a scoped access key passes through the Phoenix MCP gate, which grants write, read, or no access to each entity.">
             <svg viewBox="0 0 560 440" role="img" xmlns="http://www.w3.org/2000/svg">
-              <title>One token, filtered through Phoenix MCP into per-entity permissions</title>
+              <title>One access key, filtered through Phoenix MCP into per-entity permissions</title>
               <defs>
                 <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0" stop-color="#f59e0b"/>
@@ -111,18 +111,18 @@
         <!-- ===================== START HERE ===================== -->
         <section>
           <h2>Choose how you want to chat</h2>
-          <p>Use Agent Chat inside Home Assistant for the shortest setup, or connect an external MCP client. Both options use the same token scope, approvals, audit log, and MESA rules.</p>
+          <p>Use Agent Chat inside Home Assistant for the shortest setup, or connect an external MCP client. Both options use the same access key scope, approvals, audit log, and MESA rules.</p>
           <div class="grid-2">
             <a class="card card-link" href="agentcli.html">
               <span class="card-ix">Internal</span>
               <h3>Use Agent Chat</h3>
-              <p>A floating chat window with a token switcher, inline Approve/Reject for gated actions, and per-provider model and thinking controls.</p>
+              <p>A floating chat window with an access key switcher, inline Approve/Reject for gated actions, and per-provider model and thinking controls.</p>
               <span class="card-go">Agent Chat <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             </a>
             <a class="card card-link" href="connect.html">
               <span class="card-ix">External</span>
               <h3>Connect a client</h3>
-              <p>Point Claude Code, Cursor, Codex, Gemini CLI, or another bearer-token-compatible MCP client at Phoenix MCP's endpoint.</p>
+              <p>Point Claude Code, Cursor, Codex, Gemini CLI, or another MCP client that supports bearer authentication at Phoenix MCP's endpoint.</p>
               <span class="card-go">Connect an AI client <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             </a>
           </div>
@@ -137,19 +137,19 @@
           <div class="table-wrap compare">
             <table>
               <thead>
-                <tr><th scope="col">Capability</th><th scope="col">LLAT + native MCP</th><th scope="col">Phoenix MCP token</th></tr>
+                <tr><th scope="col">Capability</th><th scope="col">LLAT + native MCP</th><th scope="col">Phoenix MCP access key</th></tr>
               </thead>
               <tbody>
                 <tr><td>MCP tool compatibility</td><td>23 native tools</td><td>Same 23 native operations with stable domain-prefixed names and permission-scoped responses, plus 146 additional tools</td></tr>
-                <tr><td>Entity filtering</td><td>Binary: expose or hide, same for all clients</td><td>Four permission states, per token</td></tr>
-                <tr><td>Per-client control</td><td><span class="no">No, all clients share one exposed set</span></td><td><span class="yes">Yes, independent permissions per token</span></td></tr>
+                <tr><td>Entity filtering</td><td>Binary: expose or hide, same for all clients</td><td>Four permission states, per access key</td></tr>
+                <tr><td>Per-client control</td><td><span class="no">No, all clients share one exposed set</span></td><td><span class="yes">Yes, independent permissions per access key</span></td></tr>
                 <tr><td>Read-only access</td><td><span class="no">No</span></td><td><span class="yes">Yes, READ allows reads and blocks writes</span></td></tr>
                 <tr><td>Audit trail</td><td><span class="no">None</span></td><td><span class="yes">Request logging with outcome and entity, on by default and configurable per outcome</span></td></tr>
-                <tr><td>Rate limiting</td><td><span class="no">None</span></td><td><span class="yes">Per token, configurable</span></td></tr>
+                <tr><td>Rate limiting</td><td><span class="no">None</span></td><td><span class="yes">Per access key, configurable</span></td></tr>
                 <tr><td>Expiry</td><td><span class="no">None</span></td><td><span class="yes">Optional, auto-archived on expiry</span></td></tr>
-                <tr><td>Revocation</td><td>Revoke the LLAT on the HA profile page</td><td><span class="yes">Instant; the token's next request is rejected</span></td></tr>
+                <tr><td>Revocation</td><td>Revoke the LLAT on the HA profile page</td><td><span class="yes">Instant; the access key's next request is rejected</span></td></tr>
                 <tr><td>Sensitive attribute scrubbing</td><td><span class="no">None</span></td><td><span class="yes">Always applied</span></td></tr>
-                <tr><td>Client reconfiguration</td><td><code>/api/mcp</code> with an LLAT</td><td><code>/api/phoenix-mcp</code> with a <code>phx_</code> token (same tools; swap the URL and the bearer value)</td></tr>
+                <tr><td>Client reconfiguration</td><td><code>/api/mcp</code> with an LLAT</td><td><code>/api/phoenix-mcp</code> with a <code>phx_</code> access key (same tools; swap the URL and the bearer value)</td></tr>
               </tbody>
             </table>
           </div>
@@ -178,7 +178,7 @@
             <div class="card">
               <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.5l2 2 4-4.5"/><path d="M12 3 4 6v5c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6z"/></svg></div>
               <h3>Semantic safety profiles</h3>
-              <p>MESA stores a semantic profile for each entity: what it is, how sensitive it is, and how it should be treated by your AI agent, not just allow or deny. Describe an entity's restrictions once so they apply across tokens. Advisory is the default: most restrictions warn rather than block until you enforce them.</p>
+              <p>MESA stores a semantic profile for each entity: what it is, how sensitive it is, and how it should be treated by your AI agent, not just allow or deny. Describe an entity's restrictions once so they apply across access keys. Advisory is the default: most restrictions warn rather than block until you enforce them.</p>
               <a class="card-go" href="mesa.html">MESA <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
             </div>
           </div>

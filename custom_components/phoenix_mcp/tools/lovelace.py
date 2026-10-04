@@ -612,7 +612,7 @@ def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, st
         return (
             _tool_error(
                 f"config contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
-                "get_dashboard_config substitutes that placeholder for an entity this token "
+                "get_dashboard_config substitutes that placeholder for an entity this access key "
                 "cannot resolve, so writing the full layout back would replace real "
                 "configuration with it. Use patch_dashboard for a single value, or the "
                 "individual card tools for a card change whose payload contains no "
@@ -1050,7 +1050,7 @@ def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, Any, 
         where = _patch_path_label(offender) if offender else "value"
         return None, None, (
             f"value contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
-            "That placeholder is what a read substitutes for an entity this token cannot "
+            "That placeholder is what a read substitutes for an entity this access key cannot "
             "resolve (out of scope, or one that no longer exists), so writing it back would "
             "replace real configuration with the placeholder. Send the intended value instead."
         )

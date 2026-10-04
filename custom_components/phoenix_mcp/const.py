@@ -561,7 +561,11 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
     "password", "secret", "api_key", "apikey", "access_token",
     "auth_token", "authorization", "credential", "private_key",
     "token", "session", "community",
+    "access_key_value", "access_key_hash", "accesskeyvalue", "accesskeyhash",
 })
+# Credential suffixes also catch integration-prefixed secrets without treating
+# access_key_name and access_key_id metadata as credential values.
+SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
 
 # The placeholder every redacting reader substitutes for a value the token may not
 # see. Named here so a WRITE path can refuse to persist it: a config read is lossy
@@ -1761,9 +1765,9 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
     "approval.title": "Phoenix MCP",
     # The link label is inside the markdown, so it has to be part of the string;
     # the URL is substituted and must not be translated.
-    "approval.message": "Token '{token}' requested approval.\n\n[Review in Phoenix MCP]({url})",
+    "approval.message": "Access Key '{token}' requested approval.\n\n[Review in Phoenix MCP]({url})",
     "rate_limit.title": "Phoenix MCP Alert",
-    "rate_limit.message": "Phoenix MCP: token '{token}' has hit its rate limit.",
+    "rate_limit.message": "Phoenix MCP: access key '{token}' has hit its rate limit.",
 }
 
 # The sentences the voice agent speaks when it declines a turn. Unlike a
@@ -1779,7 +1783,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_cancelled": "Cancelled.",
     "local_clarification": "Which target do you mean? {choices}. Reply with its number or exact entity ID, or say cancel. This choice expires in two minutes.",
     "local_clarification_expired": "That choice is no longer current. Please repeat the full command.",
-    "local_unauthorized": "This token is no longer authorized.",
+    "local_unauthorized": "This access key is no longer authorized.",
     "local_state_matched": "Home Assistant reports the requested state.",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
@@ -1796,7 +1800,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
-    "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
+    "token_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
     # How a turn that did not finish cleanly is SPOKEN. The loop reports an
     # outcome code and each surface renders it from here, so a Chinese pipeline
@@ -2613,5 +2617,6 @@ CONVERSATION_LOG_STATUS_PRIORITY = (
     "interrupted", "cancelled", "partial", "paused",
 )
 CONVERSATION_LOG_METADATA = frozenset({
-    "request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref", "provider", "model",
+    "request_id", "client_ip", "conversation_id", "session_ref", "provider", "model",
+    "access_key_id", "access_key_name",
 })

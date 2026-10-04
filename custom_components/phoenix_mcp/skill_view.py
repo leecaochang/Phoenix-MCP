@@ -28,7 +28,7 @@ grain of the model gives the smoothest results and avoids dead ends.
 
 ## The three rules that explain almost every surprise
 
-1. You see only what this token is scoped to. Entities and tools outside the
+1. You see only what this access key is scoped to. Entities and tools outside the
    scope are invisible, not merely hidden. Missing means inaccessible; never
    infer that an entity exists because it would in a default Home Assistant.
 2. Some actions need a human. They return `status: "pending_approval"`. That is
@@ -42,10 +42,10 @@ grain of the model gives the smoothest results and avoids dead ends.
 - `get_capability_summary` (no special capability needed): your persona, which
   capabilities are allowed, which are gated behind admin approval ("confirm"),
   whether you can write at all, and your rate limits. Call it once at the start.
-- `mesa_get_caller_context`: who this token is from MESA's perspective.
+- `mesa_get_caller_context`: who this access key is from MESA's perspective.
 - `get_audit_summary`: your own recent calls, useful to avoid repeating work.
 
-### 2. Discover (read-only; results are always scoped to your token)
+### 2. Discover (read-only; results are always scoped to your access key)
 - `get_overview`: a compact home summary to get your bearings.
 - `search_entities`: find entities by name, state, `device_class`, area, or
   filters like unavailable or "stale > N". It defaults to live enabled
@@ -55,7 +55,7 @@ grain of the model gives the smoothest results and avoids dead ends.
   keyword/attribute search.
 - `recognize_intent`: diagnose how Home Assistant's default voice grammar reads
   one sentence without executing it. A match includes parsed slots and only
-  entity targets in this token's read scope; an incomplete match includes the
+  entity targets in this access key's read scope; an incomplete match includes the
   closest candidate. Use it when a spoken command is not matching as expected.
 - `mesa_query_profiles`: a different search, by MESA's semantic profile (an
   entity's nature/role), not by name. Reach for it when you care about what an
@@ -228,7 +228,7 @@ config is good on the strength of validation alone if you can compile it.
   again. Polling spends the turn's remaining calls and it ends with no reply at
   all, which is worse for the user than saying "it is building".
 - `install_esphome_firmware` compiles AND flashes the device over the air, and
-  usually needs an operator's approval. If you do not have this tool, this token
+  usually needs an operator's approval. If you do not have this tool, this access key
   cannot flash: build it, report that it builds, and let the operator install.
 - **A finished compile does not mean the device was flashed.** An install runs
   two jobs, and `get_esphome_job` tells you the truth: report success only when
@@ -296,7 +296,7 @@ must approve it. Handle it like this:
 
 ## Respect the safety layer (MESA)
 
-MESA classifies entities by their real-world nature, independent of your token's
+MESA classifies entities by their real-world nature, independent of your access key's
 capabilities. An entity's `control_mode` (shown by `describe_entity` and
 `find_available_actions`) may be:
 
@@ -337,8 +337,8 @@ you still need to watch.
 
 ## If a tool is not listed, you do not have it
 
-The advertised tool list reflects this token's capabilities. If a tool is absent
-(automation editing, backups, dashboards, filesystem, and so on), this token
+The advertised tool list reflects this access key's capabilities. If a tool is absent
+(automation editing, backups, dashboards, filesystem, and so on), this access key
 cannot use it. Do not attempt unadvertised tools; ask the operator to grant the
 capability instead. A `forbidden` result means the same thing.
 
@@ -348,7 +348,7 @@ Use `get_calendar_events` to read an accessible calendar and its integration-pro
 
 Creation supplies `event` with `summary`, `start` and exclusive `end`, using all-day ISO dates or timestamps with timezones. Updates and deletes supply the current `uid`, `expected_hash`, `start_time` and `end_time` lookup window. Updates explicitly select `mode`: `replace` requires summary/start/end and clears omitted optional fields; `patch` preserves omissions and accepts null to clear description/location. Recurrence-rule removal is refused because Home Assistant has no validated clear value; an existing rule must be retained or explicitly replaced. Recurring writes require the exact `recurrence_id`; the optional range is spelled `THISANDFUTURE` and requires a visible recurrence rule; edited exceptions are refused.
 
-Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this token's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data. Interrupted unknown outcomes appear under Needs attention in the Phoenix MCP panel. An administrator must check the calendar before acknowledging it; acknowledgment marks the receipt reviewed without replay or rollback. The 200-receipt journal may evict applied, not_applied and reviewed records, but keeps unresolved uncertain outcomes.
+Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this access key's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data. Interrupted unknown outcomes appear under Needs attention in the Phoenix MCP panel. An administrator must check the calendar before acknowledging it; acknowledgment marks the receipt reviewed without replay or rollback. The 200-receipt journal may evict applied, not_applied and reviewed records, but keeps unresolved uncertain outcomes.
 
 ## Home Assistant authoring best practices
 
@@ -437,7 +437,7 @@ mode: single
   `wait_for_trigger`, `choose`). Use `fields` to make it callable with parameters
   and `variables` for values reused across steps; `mode` works as in automations.
 - A scene is a snapshot of entity states. Every entity it sets must be writable by
-  this token. Keep a scene to the entities you actually want to pin, not the whole
+  this access key. Keep a scene to the entities you actually want to pin, not the whole
   room.
 
 ### Dashboards and cards
@@ -519,7 +519,7 @@ mode: single
 
 ### Integration registry lifecycle
 
-- Discover exact config-entry IDs with `list_integrations`. A scoped token sees an
+- Discover exact config-entry IDs with `list_integrations`. A scoped access key sees an
   entry only through an accessible owned entity or device. Every write requires
   WRITE on every owned entity and an explicit WRITE grant on every owned device;
   do not retry a whole-entry refusal by targeting only one child.

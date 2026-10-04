@@ -101,8 +101,8 @@ def assist_api_supported() -> bool:
 
 
 _UNBOUND_PROMPT = (
-    "No Home Assistant token is currently bound to Phoenix MCP. An administrator must bind "
-    "a token in the Phoenix MCP panel (Tokens, then Tool Announcement & Assist) before this "
+    "No Phoenix MCP access key is currently bound to Phoenix MCP. An administrator must bind "
+    "an access key in the Phoenix MCP panel (Access Keys, then Tool Announcement & Assist) before this "
     "assistant can control anything. Until then you have no tools available."
 )
 
@@ -183,7 +183,7 @@ if _ASSIST_API_SUPPORTED:
                 # the result is reported as queued below.
                 token = _current_dispatch_token(data, self._token_id)
                 if token is None:
-                    return {"error": "This Phoenix MCP token is no longer available."}
+                    return {"error": "This Phoenix MCP access key is no longer available."}
 
                 request_id = generate_request_id()
                 resp_msg, _m, _r, outcome = await _dispatch_mcp(

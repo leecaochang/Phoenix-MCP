@@ -326,7 +326,7 @@ async def test_unbound_instance_has_no_tools_and_never_raises(hass):
     api = PhoenixAssistAPI(hass, data)
     instance = await api.async_get_api_instance(_ctx())
     assert instance.tools == []
-    assert "bind a token" in instance.api_prompt.lower()
+    assert "bind an access key" in instance.api_prompt.lower()
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP 已配置。"
     },
     "create_entry": {
-      "default": "请在 Phoenix MCP 面板中管理您的令牌"
+      "default": "请在 Phoenix MCP 面板中管理您的访问密钥"
     },
     "step": {
       "user": {

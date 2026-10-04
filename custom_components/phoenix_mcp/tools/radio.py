@@ -1098,7 +1098,7 @@ async def _resolve_remove_zigbee_group(
         )
     if group.hidden_member_count:
         return (
-            _tool_error("The group has members outside this token's scope and cannot be removed safely."),
+            _tool_error("The group has members outside this access key's scope and cannot be removed safely."),
             "denied",
             group.entity_id,
         )
@@ -1366,7 +1366,7 @@ def _resolve_topology_scan(
     }
     if not visible_map:
         return (
-            _tool_error("No Zigbee devices on that backend are accessible to this token."),
+            _tool_error("No Zigbee devices on that backend are accessible to this access key."),
             "invalid_request",
             tool,
         )

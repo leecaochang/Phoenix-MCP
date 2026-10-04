@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP уже настроен."
     },
     "create_entry": {
-      "default": "Используйте панель Phoenix MCP для управления токенами"
+      "default": "Используйте панель Phoenix MCP для управления ключами доступа"
     },
     "step": {
       "user": {

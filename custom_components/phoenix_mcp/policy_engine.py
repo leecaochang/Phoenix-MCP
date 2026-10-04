@@ -23,6 +23,7 @@ from .const import (
     SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES,
     SENSITIVE_KEY_SUBSTRINGS,
+    SENSITIVE_KEY_SUFFIXES,
 )
 from .device_semantics import (
     DeviceRegistrySnapshot,
@@ -503,15 +504,16 @@ def is_sensitive_key(key: Any) -> bool:
     """Whether an attribute/response key name marks its value as sensitive.
 
     True when the key is in the fixed SENSITIVE_ATTRIBUTES list or contains any
-    SENSITIVE_KEY_SUBSTRINGS marker (case-insensitive), which catches secrets that
-    third-party integrations surface under arbitrary keys.
+    SENSITIVE_KEY_SUBSTRINGS marker or ends in SENSITIVE_KEY_SUFFIXES
+    (case-insensitive), catching credentials surfaced under integration prefixes.
     """
     if not isinstance(key, str):
         return False
     if key in SENSITIVE_ATTRIBUTES:
         return True
     lowered = key.lower()
-    return any(marker in lowered for marker in SENSITIVE_KEY_SUBSTRINGS)
+    return (any(marker in lowered for marker in SENSITIVE_KEY_SUBSTRINGS)
+            or lowered.endswith(SENSITIVE_KEY_SUFFIXES))
 
 
 def scrub_sensitive_attributes(state: State) -> dict[str, Any]:

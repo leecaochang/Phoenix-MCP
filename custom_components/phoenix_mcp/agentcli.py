@@ -3425,7 +3425,7 @@ async def _run_tool_batch(
                 reason: str | None = "Cancelled by the operator; not run."
             else:
                 authority_lost = True
-                reason = "This token is no longer authorized; not run."
+                reason = "This access key is no longer authorized; not run."
             results.append({"tool_use_id": tc.get("id"), "tool_name": name,
                             "result_text": reason, "is_error": True})
             continue
@@ -3778,7 +3778,7 @@ async def async_run_agent_turn(
         # turn rather than looping into more denied dispatches.
         if authority_lost:
             await emit("error", {"code": "unauthorized",
-                                 "message": "This token is no longer authorized."})
+                                 "message": "This access key is no longer authorized."})
             break
         if stop_turn:
             # Defence in depth with no observable effect today, so no test can
@@ -4071,11 +4071,11 @@ async def _run_headless_turn(
             dispatch_token = _current_dispatch_token(data, token_id)
             if dispatch_token is None:
                 record_rejected_tool(tc.get("id"), name, tc.get("input"),
-                                     reason="This token is no longer authorized; the tool was not run.", stage="authority_guard")
+                                     reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
                 authority_lost = True
                 results.append({
                     "tool_use_id": tc.get("id"), "tool_name": name,
-                    "result_text": "This token is no longer authorized; not run.",
+                    "result_text": "This access key is no longer authorized; not run.",
                     "is_error": True,
                 })
                 continue
@@ -4420,7 +4420,7 @@ async def async_run_ai_task(
         raise AiTaskError("the model produced too much output this turn")
     if turn.outcome == TURN_AUTHORITY_LOST:
         raise AiTaskError(
-            "the token lost authority mid-task (revoked, expired, or the kill "
+            "the access key lost authority mid-task (revoked, expired, or the kill "
             "switch); at least one tool call was refused, so the result is unsound"
         )
     if turn.outcome == TURN_EXHAUSTED:
@@ -4519,12 +4519,12 @@ class PhoenixAgentCliChatView(PhoenixView):
         token = data.store.get_token_by_id(token_id)
         if token is None:
             return _err(
-                "not_found", "Token not found.", 404, rid,
+                "not_found", "Access Key not found.", 404, rid,
                 key="tokenNotFound",
             )
         if not token.is_valid():
             return _err(
-                "invalid_request", "This token is revoked or expired.", 400, rid,
+                "invalid_request", "This access key is revoked or expired.", 400, rid,
                 key="tokenInactive",
             )
 

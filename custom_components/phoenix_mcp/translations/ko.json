@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP가 이미 설정되어 있습니다."
     },
     "create_entry": {
-      "default": "Phoenix MCP 패널에서 토큰을 관리하세요"
+      "default": "Phoenix MCP 패널에서 액세스 키를 관리하세요"
     },
     "step": {
       "user": {

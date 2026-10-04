@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP 已設定。"
     },
     "create_entry": {
-      "default": "請在 Phoenix MCP 面板中管理您的權杖"
+      "default": "請在 Phoenix MCP 面板中管理您的存取金鑰"
     },
     "step": {
       "user": {

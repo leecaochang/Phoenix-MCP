@@ -249,7 +249,7 @@ def _set_progress_status(
 # same regardless of any entity it names, so it can never be used as a scope or
 # existence oracle. Shared by _gate and any pre-gate deny short-circuit.
 _CAP_FORBIDDEN_MESSAGE = (
-    "Forbidden: this capability is not enabled for this token. It may have changed "
+    "Forbidden: this capability is not enabled for this access key. It may have changed "
     "since you connected; call get_capability_summary for the current state, refresh "
     "your tool list (reconnect) if it changed, or ask the operator to grant it."
 )

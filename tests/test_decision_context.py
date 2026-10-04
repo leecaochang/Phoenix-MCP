@@ -464,3 +464,38 @@ async def test_decimal_text_is_preserved_but_numeric_entity_ids_keep_scope(hass,
     result = redact_inaccessible_entity_ids_in_text('Set to 21.5 degrees', token, hass)
     assert result == ('Set to 21.5 degrees' if entity_exists == 'no' else 'Set to <redacted-entity> degrees')
     assert '<redacted-entity>' in redact_inaccessible_entity_ids_in_text('Read sensor.hidden', token, hass)
+
+
+@pytest.mark.parametrize('tool_name', ['get_capability_summary', 'get_audit_summary'])
+@pytest.mark.parametrize('source', ['agentcli', 'assist', 'voice', 'ai_task', 'home_companion', '127.0.0.1'])
+async def test_access_key_introspection_preserves_context_on_every_ingress(hass, context_home, tool_name, source):
+    from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+    data, token, *_ = context_home
+    data.audit.query.return_value = []
+    response, _, _, outcome = await _dispatch_mcp(
+        'tools/call', 1, {'name': tool_name, 'arguments': {}}, token, hass, data, source, '')
+    assert outcome == 'allowed'
+    content = response['result']['content'][0]['text']
+    body = json.loads(content)
+    assert body['access_key_name'] == token.name
+    assert 'token_name' not in body
+    history = [HISTORY[0], {'role': 'assistant', 'content': '', 'tool_calls': [{
+        'id': 'summary', 'type': 'function', 'function': {'name': tool_name, 'arguments': '{}'}}]},
+        {'role': 'tool', 'tool_call_id': 'summary', 'name': tool_name, 'content': content}, HISTORY[1]]
+    with patch.object(DecisionProvider, 'review_context', AsyncMock(return_value=answer())) as review:
+        result = await preview(hass, context_home, history)
+    assert result['reason'] == 'compatible'
+    assert review.await_args.args[1]['history'] == history
+
+
+@pytest.mark.parametrize('metadata', [
+    {'access_key': 'test-private-key'}, {'storage_access_key': 'test-private-key'},
+    {'access_key_name': 'phx_' + 'a' * 64}, {'access_key_name': 'test-private-key'},
+    {'access_key_name': 'switch.hidden'}, {'token_name': 'context_preview'},
+])
+async def test_renamed_metadata_never_discloses_sensitive_context(hass, context_home, metadata):
+    history = [dict(HISTORY[0], content=json.dumps(metadata)), HISTORY[1]]
+    with patch.object(DecisionProvider, 'review_context') as review:
+        result = await preview(hass, context_home, history)
+    assert result['reason'] == 'context_unavailable'
+    review.assert_not_called()

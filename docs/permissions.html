@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Concepts / Permissions</p>
           <h1>Permissions</h1>
-          <p class="lede">Use the permission tree to choose which entities a token can read or control. Set broad access at the domain or device level, then add entity-level exceptions.</p>
+          <p class="lede">Use the permission tree to choose which entities an access key can read or control. Set broad access at the domain or device level, then add entity-level exceptions.</p>
         </header>
 
         <h2>The four states</h2>
@@ -43,12 +43,12 @@
               <tr>
                 <td><span class="state yellow"><span class="swatch"></span>YELLOW</span></td>
                 <td><span class="yes">yes</span></td><td><span class="no">no</span></td>
-                <td>Read-only. The token can read state but cannot call services that change it.</td>
+                <td>Read-only. The access key can read state but cannot call services that change it.</td>
               </tr>
               <tr>
                 <td><span class="state green"><span class="swatch"></span>GREEN</span></td>
                 <td><span class="yes">yes</span></td><td><span class="yes">yes</span></td>
-                <td>Read and write. The token can read state and call services.</td>
+                <td>Read and write. The access key can read state and call services.</td>
               </tr>
               <tr>
                 <td><span class="state red"><span class="swatch"></span>RED</span></td>
@@ -171,26 +171,26 @@
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
           <div class="callout-body">
             <p class="callout-title">WRITE on these domains reaches past the tree</p>
-            <p>Granting <span class="state green"><span class="swatch"></span>GREEN</span> to an automation, script, or scene lets a client trigger it, and the triggered actions run under Home Assistant's full context, not Phoenix MCP's. A token with <span class="state red"><span class="swatch"></span>RED</span> on a door but WRITE on <code>automation.*</code> can still unlock that door through a triggered automation.</p>
+            <p>Granting <span class="state green"><span class="swatch"></span>GREEN</span> to an automation, script, or scene lets a client trigger it, and the triggered actions run under Home Assistant's full context, not Phoenix MCP's. an access key with <span class="state red"><span class="swatch"></span>RED</span> on a door but WRITE on <code>automation.*</code> can still unlock that door through a triggered automation.</p>
           </div>
         </div>
 
         <p>Granting <span class="state yellow"><span class="swatch"></span>YELLOW</span> to these domains is safe: it allows reading whether an automation is enabled or a scene exists, without the ability to trigger anything.</p>
 
-        <p>The same reach applies to <strong>authoring</strong> caps and to MESA. A token with <code>cap_automation_write</code> or <code>cap_script_write</code> can persist an automation or script whose embedded service actions are <em>not</em> re-gated by Phoenix MCP's capability checks or MESA when the automation later fires, because a stored automation runs under Home Assistant natively, outside Phoenix MCP's request path. So an entity that MESA marks <code>read_only</code> or <code>prohibited</code> can still be actuated by an authored automation that references it. Authoring caps are therefore broad HA write access by nature, and Phoenix MCP cannot soundly static-analyze an automation's runtime targets (they may be templated or computed). The mitigation is to set authoring caps to <strong>Confirm</strong> where this matters, so an admin reviews the authored configuration, including its actions, before it persists.</p>
+        <p>The same reach applies to <strong>authoring</strong> caps and to MESA. an access key with <code>cap_automation_write</code> or <code>cap_script_write</code> can persist an automation or script whose embedded service actions are <em>not</em> re-gated by Phoenix MCP's capability checks or MESA when the automation later fires, because a stored automation runs under Home Assistant natively, outside Phoenix MCP's request path. So an entity that MESA marks <code>read_only</code> or <code>prohibited</code> can still be actuated by an authored automation that references it. Authoring caps are therefore broad HA write access by nature, and Phoenix MCP cannot soundly static-analyze an automation's runtime targets (they may be templated or computed). The mitigation is to set authoring caps to <strong>Confirm</strong> where this matters, so an admin reviews the authored configuration, including its actions, before it persists.</p>
 
         <p>For the <em>triggering</em> half of this risk, MESA can gate the orchestrator entity itself: a <code>confirm</code> profile on the automation or script routes an agent's trigger through the approval gate, whatever the actions inside do. The MESA tab's <a href="mesa.html#suggestions">Suggested profiles</a> section finds exactly these cases for you, unprofiled automations, scripts, and scenes whose declared actions reach risky devices, and offers the profile in one click.</p>
         <p>Immediate control approvals bind the selected entities and observable group membership to the reviewed request. Changed membership requires a new review. This detects drift; it does not recursively check permission or MESA for every downstream action of a native group, scene, script or automation. Review those native effects when granting access to the controlling entity.</p>
 
         <h2>What Phoenix MCP always blocks</h2>
-        <p>These apply to every token, including pass-through tokens, and are not configurable.</p>
+        <p>These apply to every access key, including pass-through access keys, and are not configurable.</p>
         <dl class="kv">
           <div class="kv-row"><dt>phoenix_mcp domain</dt><dd>All internal Phoenix MCP sensors are permanently blocked and invisible. A client cannot read its own telemetry through Phoenix MCP.</dd></div>
           <div class="kv-row"><dt>secrets</dt><dd>Attributes that can leak credentials (<code>access_token</code>, <code>entity_picture</code>, <code>stream_url</code>, <code>still_image_url</code>) are stripped from every state response.</dd></div>
         </dl>
 
         <h2>Working in the panel</h2>
-        <p>The panel has tools that make scoping faster than clicking every node: atomic bulk select by area, label, or exact integration config entry; an effective-permission emulator that runs the two-pass resolver for any entity; a sortable summary of every node set to something other than GREY; and per-entity hints (token-local or global) that clarify what an entity is for the connected AI. Integration selection is a snapshot convenience, not a new permission node: it grants current owned devices and live enabled deviceless entities while preserving child restrictions and warning about shared devices. These all live in the <a href="panel.html">Panel guide</a>.</p>
+        <p>The panel has tools that make scoping faster than clicking every node: atomic bulk select by area, label, or exact integration config entry; an effective-permission emulator that runs the two-pass resolver for any entity; a sortable summary of every node set to something other than GREY; and per-entity hints (access key-local or global) that clarify what an entity is for the connected AI. Integration selection is a snapshot convenience, not a new permission node: it grants current owned devices and live enabled deviceless entities while preserving child restrictions and warning about shared devices. These all live in the <a href="panel.html">Panel guide</a>.</p>
 
         <nav class="pager" id="pager" aria-label="Page navigation"></nav>
       </div>

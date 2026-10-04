@@ -450,7 +450,7 @@ class TokenRecord:
                 presets.append(TokenPreset.from_dict(p))
             except Exception as exc:  # noqa: BLE001 - any unparseable preset is dropped, never the token
                 _LOGGER.warning(
-                    "Dropping corrupt preset %r on token %r: %s",
+                    "Dropping corrupt preset %r on access key %r: %s",
                     p.get("id", "?") if isinstance(p, dict) else "?",
                     data.get("id", "?"), exc,
                 )
@@ -876,7 +876,7 @@ class TokenStore:
                 tokens[record.id] = record
             except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
-                    "Skipping corrupt token record %r: %s",
+                    "Skipping corrupt access key record %r: %s",
                     r.get("id", "?") if isinstance(r, dict) else "?", exc,
                 )
         self._tokens = tokens
@@ -888,7 +888,7 @@ class TokenStore:
                 archived[archived_record.id] = archived_record
             except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
-                    "Skipping corrupt archived token record %r: %s",
+                    "Skipping corrupt archived access key record %r: %s",
                     r.get("id", "?") if isinstance(r, dict) else "?", exc,
                 )
         self._archived = archived
@@ -1181,9 +1181,9 @@ class TokenStore:
         if token is None:
             return None
         if len(token.presets) >= MAX_PRESETS_PER_TOKEN:
-            raise ValueError(f"A token can have at most {MAX_PRESETS_PER_TOKEN} presets")
+            raise ValueError(f"An access key can have at most {MAX_PRESETS_PER_TOKEN} presets")
         if self._preset_name_taken(token, name):
-            raise ValueError(f"A preset named {name!r} already exists on this token")
+            raise ValueError(f"A preset named {name!r} already exists on this access key")
         preset = snapshot_preset(token, name)
         token.presets.append(preset)
         token.active_preset_id = preset.id
@@ -1202,9 +1202,9 @@ class TokenStore:
             return None
         preset = next((p for p in token.presets if p.id == preset_id), None)
         if preset is None:
-            raise LookupError(f"No preset {preset_id!r} on this token")
+            raise LookupError(f"No preset {preset_id!r} on this access key")
         if self._preset_name_taken(token, name, exclude_id=preset_id):
-            raise ValueError(f"A preset named {name!r} already exists on this token")
+            raise ValueError(f"A preset named {name!r} already exists on this access key")
         preset.name = name
         token.updated_at = utcnow()
         await self.async_save()
@@ -1222,7 +1222,7 @@ class TokenStore:
             return None
         preset = next((p for p in token.presets if p.id == preset_id), None)
         if preset is None:
-            raise LookupError(f"No preset {preset_id!r} on this token")
+            raise LookupError(f"No preset {preset_id!r} on this access key")
         if preset_id == token.active_preset_id:
             raise ValueError("The active preset cannot be deleted; switch to another preset first")
         token.presets.remove(preset)
@@ -1248,7 +1248,7 @@ class TokenStore:
                 token.presets[i] = synced
                 await self.async_save()
                 return token
-        raise LookupError(f"No preset {preset_id!r} on this token")
+        raise LookupError(f"No preset {preset_id!r} on this access key")
 
     async def async_seed_default_presets(self) -> int:
         """Seed a "Default preset" on every token that has none, marked active.

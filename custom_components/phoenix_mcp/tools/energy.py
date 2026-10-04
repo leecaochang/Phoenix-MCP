@@ -492,7 +492,7 @@ def _check_writable_statistic(value: Any, field: str, token: TokenRecord, hass: 
         # Byte-identical for out-of-scope and nonexistent, so the refusal is not an
         # existence oracle. Naming the field is safe: it is the caller's own argument.
         raise _OpError(
-            f"{field}: {statistic!r} is not an entity this token can use. "
+            f"{field}: {statistic!r} is not an entity this access key can use. "
             "Check the entity id with search_entities."
         )
     return statistic
@@ -728,7 +728,7 @@ def _sentinel_refusal(args: dict) -> str | None:
         if field in args and redaction_sentinel_path(args[field]) is not None:
             return (
                 f"{field} contains the redaction placeholder {REDACTION_SENTINEL!r}. That placeholder is "
-                "what a read substitutes for an entity this token cannot resolve, so it names nothing. "
+                "what a read substitutes for an entity this access key cannot resolve, so it names nothing. "
                 "Address the entry by device_name instead, or send the real entity id."
             )
     return None
@@ -970,7 +970,7 @@ def validate_energy_recovery_scope(
             _check_writable_statistic(entity_id, "recovery", token, hass)
         except _OpError:
             raise ConfigurationRecoveryError(
-                "The Energy snapshot references an entity outside this token's current scope."
+                "The Energy snapshot references an entity outside this access key's current scope."
             ) from None
 
 

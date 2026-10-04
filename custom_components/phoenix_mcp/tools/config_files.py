@@ -1038,7 +1038,7 @@ def _prepare_yaml_patch(
         return (
             _tool_error(
                 f"content contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
-                "That placeholder is what a read substitutes for an entity this token cannot "
+                "That placeholder is what a read substitutes for an entity this access key cannot "
                 "resolve (out of scope, or one that no longer exists), so writing it back would "
                 "replace real configuration with the placeholder. Send the intended value instead."
             ),

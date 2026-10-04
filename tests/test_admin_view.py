@@ -2749,12 +2749,12 @@ def _patchable_hass():
         ({"audit_log_maxlen": 250}, "audit_log_maxlen must be one of"),
         ({"agentcli_scrollback_lines": "many"}, "agentcli_scrollback_lines must be an integer"),
         ({"agentcli_max_iterations": "lots"}, "agentcli_max_iterations must be an integer"),
-        ({"assist_bound_token_id": 42}, "must be a token id string or null"),
-        ({"assist_bound_token_id": "ghost"}, "must reference an active token"),
+        ({"assist_bound_token_id": 42}, "must be an access key id string or null"),
+        ({"assist_bound_token_id": "ghost"}, "must reference an active access key"),
         ({"voice_agent_token_id": 7}, "voice_agent_token_id must be a string or null"),
         ({"ai_task_model": []}, "ai_task_model must be a string or null"),
-        ({"voice_agent_token_id": "ghost"}, "voice_agent_token_id must reference an active token"),
-        ({"ai_task_token_id": "ghost"}, "ai_task_token_id must reference an active token"),
+        ({"voice_agent_token_id": "ghost"}, "voice_agent_token_id must reference an active access key"),
+        ({"ai_task_token_id": "ghost"}, "ai_task_token_id must reference an active access key"),
     ],
 )
 async def test_settings_patch_rejects_invalid_values(payload, fragment):
@@ -2902,7 +2902,7 @@ async def _token_patch(data, token_id, body: dict):
         ({"pass_through": True, "confirm_pass_through": "true"}, 400, "confirm_pass_through: true is required"),
         ({"announce_all_tools": "yes"}, 400, "announce_all_tools must be a boolean"),
         ({"use_assist_exposure": "yes"}, 400, "use_assist_exposure must be a boolean"),
-        ({"use_assist_exposure": True}, 400, "only valid for pass_through tokens"),
+        ({"use_assist_exposure": True}, 400, "only valid for pass_through access keys"),
         ({"persona": "wizard"}, 400, "Unknown persona"),
         ({"cap_backup": "maybe"}, 400, "must be one of: deny, allow, confirm"),
         ({"confirm_inline_wait_seconds": 5}, 400, "must be 0 (off) or an integer from"),
@@ -2929,7 +2929,7 @@ async def test_token_patch_unknown_token_is_404():
     data.store.get_token_by_id = MagicMock(return_value=None)
     resp = await _token_patch(data, "ghost", {"name": "whatever"})
     assert resp.status == 404
-    assert "Token not found" in json.loads(resp.text)["message"]
+    assert "Access Key not found" in json.loads(resp.text)["message"]
 
 
 @pytest.mark.asyncio

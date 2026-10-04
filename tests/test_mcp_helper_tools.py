@@ -307,7 +307,7 @@ class TestConfigFlowHelperCreation:
             hass,
         )
         assert outcome == "denied"
-        assert "outside this token's write scope" in content["content"][0]["text"]
+        assert "outside this access key's write scope" in content["content"][0]["text"]
 
     async def test_final_form_is_confirmation_gated_without_leaking_a_flow(
         self, hass: HomeAssistant, hass_admin_user,

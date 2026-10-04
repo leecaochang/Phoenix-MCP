@@ -2118,7 +2118,7 @@ async def test_tools_call_create_automation_denied_before_validation_no_leak():
 
     assert outcome == "denied"
     text = result["result"]["content"][0]["text"]
-    assert "not enabled for this token" in text
+    assert "not enabled for this access key" in text
     assert "validation" not in text.lower()
 
 
@@ -2305,7 +2305,7 @@ async def test_resources_read_server_info():
     contents = result["result"]["contents"]
     assert len(contents) == 1
     payload = json.loads(contents[0]["text"])
-    assert payload["token_name"] == token.name
+    assert payload["access_key_name"] == token.name
     assert "capability_flags" in payload
 
 

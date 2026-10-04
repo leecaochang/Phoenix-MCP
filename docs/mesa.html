@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>MESA &middot; Phoenix MCP docs</title>
-  <meta name="description" content="MESA is Phoenix MCP's per-entity safety layer: it runs last on the flattened entity list and governs each entity's control nature, no matter what a token allows." />
+  <meta name="description" content="MESA is Phoenix MCP's per-entity safety layer: it runs last on the flattened entity list and governs each entity's control nature, no matter what an access key allows." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Concepts / MESA</p>
           <h1>MESA</h1>
-          <p class="lede">MESA sets safety rules based on what an entity is, not which token calls it. Its profile can require approval or block an action even when the token would otherwise allow it.</p>
+          <p class="lede">MESA sets safety rules based on what an entity is, not which access key calls it. Its profile can require approval or block an action even when the access key would otherwise allow it.</p>
         </header>
 
         <h2>What MESA is</h2>
@@ -33,13 +33,13 @@
 
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.4" fill="currentColor"/></svg>
-          <div class="callout-body"><p class="callout-title">Orthogonal to the token</p><p>MESA is per-entity nature policy, independent of the per-token tree. It applies to every token, including pass-through tokens, and to the native control tools, because it asks a different question: not "may this token act here" but "is acting on this entity safe at all".</p></div>
+          <div class="callout-body"><p class="callout-title">Orthogonal to the access key</p><p>MESA is per-entity nature policy, independent of the per-access-key tree. It applies to every access key, including pass-through access keys, and to the native control tools, because it asks a different question: not "may this access key act here" but "is acting on this entity safe at all".</p></div>
         </div>
 
         <h2 id="why-profiles">Why a profile, not a flag</h2>
-        <p>A permission says <em>this token may not touch that entity</em>. A semantic profile says something more durable: <em>what the entity is</em>. It records the entity's nature, the tags that describe its role, how private its data is, and how it should be operated, and Phoenix MCP derives the safe treatment from that. Describing your home this way, instead of as a pile of per-token allow and deny rules, pays off in several ways.</p>
+        <p>A permission says <em>this access key may not touch that entity</em>. A semantic profile says something more durable: <em>what the entity is</em>. It records the entity's nature, the tags that describe its role, how private its data is, and how it should be operated, and Phoenix MCP derives the safe treatment from that. Describing your home this way, instead of as a pile of per-access-key allow and deny rules, pays off in several ways.</p>
         <ul>
-          <li><strong>Describe once, applies to everyone.</strong> A profile lives on the entity, the device, the area, the integration, or the domain, never on a token. Every agent you connect, scoped or pass-through, inherits the same treatment, so you never re-encode "the front door is dangerous" in each token's tree.</li>
+          <li><strong>Describe once, applies to everyone.</strong> A profile lives on the entity, the device, the area, the integration, or the domain, never on an access key. Every agent you connect, scoped or pass-through, inherits the same treatment, so you never re-encode "the front door is dangerous" in each access key's tree.</li>
           <li><strong>Records why, not just allow or deny.</strong> A profile records <em>why</em> an entity is sensitive (an exterior lock, a camera that sees a bedroom, a child's room), so the right control mode follows from the nature and the decision is explainable rather than a bare flag.</li>
           <li><strong>Safe by inheritance.</strong> Profiles cascade from deployment defaults to domain to integration to area to device to entity. Say "all locks need confirmation" once and every lock you add next year is covered, with no new rule to remember; risky domains have conservative baseline profiles, whose restrictions mostly warn in the default advisory mode. A device profile is the one that covers hardware rather than a list: it governs every entity a physical device owns, including the ones a firmware or integration update adds later.</li>
           <li><strong>A shared vocabulary.</strong> Tags come from a canonical set, not free text, so profiles stay consistent and machine-checkable across the whole install instead of drifting into one-off notes.</li>
@@ -48,8 +48,8 @@
         </ul>
 
         <h2>Where MESA runs</h2>
-        <p>Every supported service-call path resolves and flattens its primary target to explicit entity IDs, applies the token's capability gates, and only then hands the entity list to MESA. Service fields that can name additional entity, device, or area targets are refused until Phoenix can model them safely. MESA never sees an entity Phoenix MCP has already denied; it has the final say on what survives. Explicitly selecting Off makes MESA allow all. If a configured MESA runtime fails to initialize, Phoenix keeps reads and admin recovery available, shows the problem under Needs attention in the Phoenix panel, and refuses protected state-changing operations until the integration is reloaded successfully.</p>
-        <p>MESA governs <strong>writes</strong>. Reads are scoped by the permission tree, not by MESA, so a read-only or confirm entity is still readable if the token can read it.</p>
+        <p>Every supported service-call path resolves and flattens its primary target to explicit entity IDs, applies the access key's capability gates, and only then hands the entity list to MESA. Service fields that can name additional entity, device, or area targets are refused until Phoenix can model them safely. MESA never sees an entity Phoenix MCP has already denied; it has the final say on what survives. Explicitly selecting Off makes MESA allow all. If a configured MESA runtime fails to initialize, Phoenix keeps reads and admin recovery available, shows the problem under Needs attention in the Phoenix panel, and refuses protected state-changing operations until the integration is reloaded successfully.</p>
+        <p>MESA governs <strong>writes</strong>. Reads are scoped by the permission tree, not by MESA, so a read-only or confirm entity is still readable if the access key can read it.</p>
 
         <h2>An entity's control mode</h2>
         <p>Each entity resolves to one effective <code>control_mode</code>, surfaced in <code>describe_entity</code>, <code>search_entities</code>, and <code>find_available_actions</code> so an agent can see it without trial and error.</p>
@@ -57,7 +57,7 @@
           <table>
             <thead><tr><th scope="col">control_mode</th><th scope="col">What it means for a write</th></tr></thead>
             <tbody>
-              <tr><td><span class="badge badge-success">autonomous</span></td><td>The agent may control the entity directly, subject to the token and capabilities.</td></tr>
+              <tr><td><span class="badge badge-success">autonomous</span></td><td>The agent may control the entity directly, subject to the access key and capabilities.</td></tr>
               <tr><td><span class="badge badge-cap">confirm</span></td><td>The action is held for a human. Under enforced mode it becomes a pending approval; under advisory mode it runs but the agent is told why it was risky.</td></tr>
               <tr><td><span class="badge badge-neutral">read_only</span></td><td>Phoenix refuses control when the evaluated restriction is read_only, including inherited and active time-based restrictions. This holds even in advisory mode and after approval.</td></tr>
               <tr><td><span class="badge badge-error">prohibited</span></td><td>Control is refused outright.</td></tr>
@@ -149,7 +149,7 @@
           <summary>Use MESA tools and advisory leases</summary>
           <div class="advanced-content">
         <h2 id="mesa-tools">The MESA tools</h2>
-        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Configuration read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are token-scoped: the handlers and resolver only ever see entities the token can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
+        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Configuration read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are access key-scoped: the handlers and resolver only ever see entities the access key can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Tool</th><th scope="col">Returns</th></tr></thead>
@@ -161,12 +161,12 @@
             </tbody>
           </table>
         </div>
-        <p>Two more tools, under the same gate, implement MESA's advisory lease protocol: <code>mesa_request_lease</code> announces "I am operating these entities for the next few seconds" (capped at 30) so MESA-aware components can coordinate, and <code>mesa_release_lease</code> ends the announcement early. A lease is a courtesy signal, not a lock, and grants nothing: every action stays gated by the permission tree, capabilities, and MESA. It covers only entities the token could already control, is denied for entities under protected or critical automation control, and lease endings fire an <code>phoenix_mcp_mesa_lease_expired</code> event you can automate on.</p>
+        <p>Two more tools, under the same gate, implement MESA's advisory lease protocol: <code>mesa_request_lease</code> announces "I am operating these entities for the next few seconds" (capped at 30) so MESA-aware components can coordinate, and <code>mesa_release_lease</code> ends the announcement early. A lease is a courtesy signal, not a lock, and grants nothing: every action stays gated by the permission tree, capabilities, and MESA. It covers only entities the access key could already control, is denied for entities under protected or critical automation control, and lease endings fire an <code>phoenix_mcp_mesa_lease_expired</code> event you can automate on.</p>
         <p>These appear in the <a href="tools.html#mesa-tools">Tools reference</a> alongside the rest of the surface.</p>
 
         <div class="callout tip">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.5.4.9 1 1 1.6h5c.1-.6.5-1.2 1-1.6A6 6 0 0 0 12 3z"/></svg>
-          <div class="callout-body"><p class="callout-title">Scoped token plus MESA is the recommended pairing</p><p>The permission tree scopes what an agent sees, which keeps context cheap and reads secure; MESA governs the nature of writes on top. <a href="capabilities.html#mesa">Pass-through and MESA</a> explains why pass-through plus MESA, though possible, is usually not the better trade.</p></div>
+          <div class="callout-body"><p class="callout-title">Scoped access key plus MESA is the recommended pairing</p><p>The permission tree scopes what an agent sees, which keeps context cheap and reads secure; MESA governs the nature of writes on top. <a href="capabilities.html#mesa">Pass-through and MESA</a> explains why pass-through plus MESA, though possible, is usually not the better trade.</p></div>
         </div>
 
           </div>

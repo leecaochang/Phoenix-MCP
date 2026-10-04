@@ -561,7 +561,7 @@ async def test_generate_kill_switch_raises_unavailable():
 async def test_generate_token_gone_raises():
     data = _make_data(**_FULL)
     with patch.object(agentcli, "_current_dispatch_token", return_value=None):
-        with pytest.raises(HomeAssistantError, match="token"):
+        with pytest.raises(HomeAssistantError, match="access key"):
             await ai_task.async_generate_ai_task_data(MagicMock(), data, "x", None)
 
 

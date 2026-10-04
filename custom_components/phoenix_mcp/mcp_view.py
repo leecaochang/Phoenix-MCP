@@ -742,7 +742,7 @@ def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
 # settings changed after its last tools/list (the stateless transport cannot
 # push notifications/tools/list_changed). Once per staleness epoch.
 _STALE_TOOLS_ADVISORY = (
-    "Notice: this token's permissions or settings were changed by the operator "
+    "Notice: this access key's permissions or settings were changed by the operator "
     "after your client last fetched the tool list, so your tool list and "
     "capability summary may be stale. Call get_capability_summary for the "
     "current state and ask the user to reconnect or refresh this MCP server's "
@@ -1285,7 +1285,7 @@ async def _dispatch_no_target_tool_call(
     """
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
-            "High-risk service call %s/%s by token %s",
+            "High-risk service call %s/%s by access key %s",
             domain, service, token.name,
         )
     try:
@@ -1504,7 +1504,7 @@ async def _execute_call_service(
 
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
-            "High-risk service call %s/%s by token %s",
+            "High-risk service call %s/%s by access key %s",
             domain, service, token.name,
         )
 
@@ -2851,7 +2851,7 @@ def _registry_write_precheck(
         ) != Permission.WRITE:
             return (
                 _tool_error(
-                    "Disabling this entity would remove the token's only write grant. "
+                    "Disabling this entity would remove the access key's only write grant. "
                     "Grant WRITE to its device or domain first."
                 ),
                 "denied",
@@ -3064,7 +3064,7 @@ def _device_child_write_error(
                 {
                     "error": (
                         "The device update would affect registry entities that are "
-                        "not writable by this token."
+                        "not writable by this access key."
                     ),
                     "device_id": device.id,
                     "blocked_entities": blocked,
@@ -4534,7 +4534,7 @@ def _commit_set_entity(
     ) != Permission.WRITE:
         return (
             _tool_error(
-                "Disabling this entity would remove the token's only write grant. "
+                "Disabling this entity would remove the access key's only write grant. "
                 "Grant WRITE to its device or domain first."
             ),
             "denied",
@@ -5594,7 +5594,7 @@ async def _tool_get_capability_summary(
     """MCP tool: the token introspecting its own caps/persona/limits. No cap required."""
     caps = effective_caps(token)
     body = {
-        "token_name": token.name,
+        "access_key_name": token.name,
         "persona": token.persona,
         "pass_through": token.pass_through,
         "write_scope": token_has_write_scope(token),
@@ -7809,7 +7809,7 @@ def _build_server_info(token: TokenRecord, hass: HomeAssistant, base_url: str) -
     return {
         "name": "Phoenix MCP Scoped Proxy",
         "version": PHOENIX_VERSION,
-        "token_name": token.name,
+        "access_key_name": token.name,
         "permitted_entity_count": count,
         "capability_flags": effective_caps(token),
         "persona": token.persona,
@@ -7830,12 +7830,12 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
         # Use build_permitted_states for an accurate count that respects Phoenix-platform
         # entity filtering and use_assist_exposure (same set the token actually sees).
         count = len(_build_permitted_states(token, hass))
-        lines.append("This token operates in pass-through mode.")
+        lines.append("This access key operates in pass-through mode.")
         lines.append(
             f"It has unrestricted access to all {count} accessible Home Assistant entities and services."
         )
         lines.append("")
-        lines.append("The phoenix_mcp domain is always blocked regardless of token type.")
+        lines.append("The phoenix_mcp domain is always blocked regardless of access key type.")
     else:
         states = hass.states.async_all()
         entity_hints = hass.data[DOMAIN].store.get_entity_hints()
@@ -7892,7 +7892,7 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     """Build the structured JSON context document for the ?format=json context endpoint."""
     from .home_companion import is_companion
     if is_companion(token):
-        return {"token_name": token.name, "persona": token.persona, "entities": [],
+        return {"access_key_name": token.name, "persona": token.persona, "entities": [],
                 "capability_flags": effective_caps(token), "message": "Use home_request for scoped household requests."}
     registry = er.async_get(hass)
     dev_registry = dr.async_get(hass)
@@ -7942,7 +7942,7 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     entities.sort(key=lambda e: e["entity_id"])
 
     return {
-        "token_name": token.name,
+        "access_key_name": token.name,
         "pass_through": token.pass_through,
         "persona": token.persona,
         "entities": entities,
@@ -7964,14 +7964,14 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
     """
     from .home_companion import is_companion
     if is_companion(token):
-        return ("This token uses Phoenix Home Companion. Only home_request is exposed. "
+        return ("This access key uses Phoenix Home Companion. Only home_request is exposed. "
                 "Send a complete home request with all restrictions. Each request is independent. "
                 "Read the structured status and tool_outcomes; pending approval is not execution. "
                 "Do not automatically retry an unknown action outcome.")
     caps = effective_caps(token)
     confirm_gated = sorted(c for c, m in caps.items() if m == CAP_CONFIRM)
     lines = [
-        "Phoenix MCP is a scoped Home Assistant gateway. This token sees only operator-granted "
+        "Phoenix MCP is a scoped Home Assistant gateway. This access key sees only operator-granted "
         "entities/tools; some actions are gated.",
         "",
         "- Call get_capability_summary first for read/control permissions and approval gates. "
@@ -8111,7 +8111,7 @@ async def _dispatch_tools_call(
         # error. Log the real exception server-side for diagnosis, never leak it
         # to the client, return something self-correctable.
         _LOGGER.exception(
-            "Unhandled exception in tool %s for token %s rid=%s",
+            "Unhandled exception in tool %s for access key %s rid=%s",
             tool_name, token.name, request_id,
         )
         tool_result = _tool_error("Internal error processing this tool call.")
@@ -8205,7 +8205,7 @@ async def _dispatch_mcp(
             if data.agent_recovery.blocks(token.id, request_id):
                 _log(data, token, request_id=request_id, method=params["name"], resource=params["name"],
                      outcome="denied", client_ip=client_ip)
-                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Phoenix MCP > Needs attention before trying again. Direct read-only tools remain available where this token exposes them; delegated requests are blocked.")
+                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Phoenix MCP > Needs attention before trying again. Direct read-only tools remain available where this access key exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
@@ -8435,7 +8435,7 @@ async def _dispatch_mcp_authorized(
         else:
             prompts = [{
                 "name": "Phoenix MCP access context",
-                "description": "Describes the Home Assistant entities and capabilities accessible to this token",
+                "description": "Describes the Home Assistant entities and capabilities accessible to this access key",
             }]
         resp = _jsonrpc_result(msg_id, {"prompts": prompts})
         _log(data, token, request_id=request_id, method="prompts/list",
@@ -8473,7 +8473,7 @@ async def _dispatch_mcp_authorized(
                 return _jsonrpc_error(msg_id, -32602, "Unknown prompt."), "prompts/get", "/api/phoenix-mcp", "denied"
             prompt_text = _UNTRUSTED_DATA_BOUNDARY + "\n\n" + _build_context_plain(token, hass)
             resp = _jsonrpc_result(msg_id, {
-                "description": "Describes the Home Assistant entities and capabilities accessible to this token",
+                "description": "Describes the Home Assistant entities and capabilities accessible to this access key",
                 "messages": [{"role": "user", "content": {"type": "text", "text": prompt_text}}],
             })
         _log(data, token, request_id=request_id, method="prompts/get",

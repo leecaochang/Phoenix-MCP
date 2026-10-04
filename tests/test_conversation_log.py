@@ -351,7 +351,7 @@ async def test_restart_skips_bad_rows_preserves_safe_identity(conversation_data)
     restored = history.ConversationLog(persisted)
     restored.configure(data.store.get_settings())
     await restored.async_load()
-    assert only(restored)["metadata"]["token_id"] == "safe-id"
+    assert only(restored)["metadata"]["access_key_id"] == "safe-id"
     assert restored.query()["bytes"] == log.query()["bytes"]
 
 
@@ -446,7 +446,8 @@ async def test_selected_identity_is_sanitized_without_copying_provider_secrets(c
     await chat(data=data, token=token, provider=SimpleNamespace(cfg=cfg),
                messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
     entry = only(data.conversations)
-    assert entry["metadata"] == {"token_id": token.id, "token_name": token.name, "provider": "openai", "model": "selected-model"}
+    assert entry["metadata"] == {"access_key_id": token.id, "access_key_name": token.name,
+                                 "provider": "openai", "model": "selected-model"}
     assert "canary-provider-key" not in json.dumps(entry) and "secret-host" not in json.dumps(entry)
     store = AsyncMock()
     store.async_load.return_value = {"entries": [entry]}
@@ -1009,3 +1010,52 @@ async def test_context_review_records_why_no_decision_request_was_made(hass, con
             'route': 'decision_result', 'stage': 'context', 'reason': 'invalid_context', 'executed': False}
     finally:
         history._current.reset(ctx)
+
+
+@pytest.mark.parametrize("value", [
+    {"access_key": "canary-access-key"},
+    {"storage_access_key": "canary-access-key"},
+    {"AccessKey": "canary-access-key"},
+    {"access_key_value": "canary-access-key"},
+    {"access_key_hash": "canary-access-key"},
+    '{"access_key":"canary-access-key"}',
+    "access key is canary-access-key",
+    "access_key: |\n  canary-access-key",
+    "https://example.test/?access_key=canary-access-key",
+])
+def test_access_key_secrets_remain_redacted(value):
+    assert "canary-access-key" not in json.dumps(history.sanitized(value, max_bytes=10000))
+
+
+def test_access_key_metadata_does_not_exempt_credential_values():
+    value = {"access_key_name": "test-client", "access_key_id": "safe-id"}
+    assert history.sanitized(value, max_bytes=10000) == value
+    # Canonical metadata never makes a real credential or a legacy secret public.
+    raw = "phx_" + "a" * 64
+    result = history.sanitized({**value, "access_key_name": raw, "token_name": "canary-legacy"}, max_bytes=10000)
+    assert raw not in json.dumps(result)
+    assert "canary-legacy" not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+async def test_access_key_name_survives_dispatch_recording_and_reload(hass, conversation_data):
+    data, token = conversation_data
+    result = await _dispatch_mcp("tools/call", 1, {"name": "get_capability_summary", "arguments": {}},
+                                 token, hass, data, "127.0.0.1", "")
+    body = json.loads(result[0]["result"]["content"][0]["text"])
+    assert result[3] == "allowed"
+    assert body["access_key_name"] == token.name
+    assert "token_name" not in body
+    entry = only(data.conversations)
+    assert entry["metadata"]["access_key_name"] == token.name
+    assert entry["metadata"]["access_key_id"] == token.id
+    recorded = json.loads(entry["events"][1]["payload"]["result"]["content"][0]["text"])
+    assert recorded["access_key_name"] == token.name
+    # Re-sanitization on startup must retain the canonical identity too.
+    saved = SimpleNamespace(async_load=AsyncMock(return_value={"entries": [entry]}))
+    log = history.ConversationLog(saved)
+    log.configure(data.store.get_settings())
+    await log.async_load()
+    loaded = only(log)
+    assert loaded["metadata"]["access_key_name"] == token.name
+    assert token.name in loaded["events"][1]["payload"]["result"]["content"][0]["text"]

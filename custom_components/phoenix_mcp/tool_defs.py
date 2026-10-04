@@ -20,7 +20,7 @@ from .const import SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
         "type": "string", "pattern": "^[0-9a-f]{64}$",
-        "description": "system_log only. Token-bound detail_ref from a returned bucket. Fetch one bounded scrubbed text chunk; omit query filters, limit and cursor. Stale references require a fresh query.",
+        "description": "system_log only. Access-key-bound detail_ref from a returned bucket. Fetch one bounded scrubbed text chunk; omit query filters, limit and cursor. Stale references require a fresh query.",
     },
     "detail_field": {
         "type": "string", "enum": ["message", "exception"], "default": "message",
@@ -87,7 +87,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_states",
         "description": (
-            "Get the current state of every entity this token can access (may be a large response). "
+            "Get the current state of every entity this access key can access (may be a large response). "
             "To find specific entities or filter by domain, area, or state use search_entities; "
             "for a counts-only orientation use get_overview. Returns a compact, domain-aware view per "
             "entity when projection.kind is compact; choose full or fields for another projection."
@@ -368,7 +368,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                                                         'series.'}},
                      'required': ['entity_id', 'uid', 'start_time', 'end_time', 'expected_hash']}},
     {'name': 'get_calendar_write',
-     'description': "Read this token's durable calendar write receipts and UID-bearing before/after "
+     'description': "Read this access key's durable calendar write receipts and UID-bearing before/after "
                     'snapshots. READ scope and unchanged calendar identity required. Omit receipt_id '
                     'to list retained receipts after an interrupted call. outcome_unknown means '
                     'effects may have occurred; never automatically replay. Occurrence snapshots do '
@@ -406,7 +406,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "name": "call_service",
         "description": (
             "Call a Home Assistant service with explicit targets; targetless services are unsupported. Targets (entity_id, area_id, "
-            "device_id, or 'all') are resolved and flattened to the entities this token can write; "
+            "device_id, or 'all') are resolved and flattened to the entities this access key can write; "
             "out-of-scope targets are dropped silently. The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
@@ -432,18 +432,18 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Check a pending approval created by an earlier tool call, or list your own outstanding "
             "approvals. With approval_id: returns that approval's status (pending, approved, rejected, "
             "failed, expired, cancelled) and any stored execution result. Without approval_id: returns all of this "
-            "token's currently pending approvals (id, tool, created/expires), useful after a reconnect "
-            "or to resume polling. Also returns agent_recovery records for this token's interrupted "
+            "access key's currently pending approvals (id, tool, created/expires), useful after a reconnect "
+            "or to resume polling. Also returns agent_recovery records for this access key's interrupted "
             "Phoenix-owned provider turns. outcome_unknown blocks further writes until an administrator "
             "checks Home Assistant and reviews it in Phoenix MCP > Needs attention. dispatch_result is a receipt, not "
-            "proof of physical completion. Never replay an uncertain action. Tokens only see their own records."
+            "proof of physical completion. Never replay an uncertain action. Access Keys only see their own records."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "approval_id": {
                     "type": "string",
-                    "description": "Omit to list all of this token's pending approvals.",
+                    "description": "Omit to list all of this access key's pending approvals.",
                 },
             },
         },
@@ -451,7 +451,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "wait_for_approval",
         "description": (
-            "Wait for approvals this token created instead of polling get_approval_status. Pass the "
+            "Wait for approvals this access key created instead of polling get_approval_status. Pass the "
             "required approval_ids list, including for one approval. Collect confirm-gated calls first, "
             "then wait once for the whole set; the operator may resolve them in any order or batch. "
             "Already-resolved approvals return immediately; others wait for approval, rejection or "
@@ -480,19 +480,19 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_capability_summary",
         "description": (
-            "Introspect this token: its persona, effective capabilities (deny/allow/confirm), which "
+            "Introspect this access key: its persona, effective capabilities (deny/allow/confirm), which "
             "capabilities are Confirm-gated (will require admin approval), write scope, rate limits, and a "
             "tool-level gate map (tools.usable / tools.needs_approval / tools.unavailable) so you know "
             "which tools run directly, which return pending_approval, and which you cannot use. "
-            "Call this at session start to orient. No capability required; a token only ever sees itself."
+            "Call this at session start to orient. No capability required; an access key only ever sees itself."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_audit_summary",
         "description": (
-            "Return this token's own recent activity from the Phoenix MCP audit log (request_id, time, method, "
-            "resource, outcome), newest first. Only this token's entries are returned. Useful for "
+            "Return this access key's own recent activity from the Phoenix MCP audit log (request_id, time, method, "
+            "resource, outcome), newest first. Only this access key's entries are returned. Useful for "
             "self-correction (did my last call succeed?). No capability required."
         ),
         "inputSchema": {
@@ -623,7 +623,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "render_template",
         "description": (
-            "Render a Jinja2 template in Home Assistant. Templates are scoped to this token: states() of "
+            "Render a Jinja2 template in Home Assistant. Templates are scoped to this access key: states() of "
             "an out-of-scope entity returns 'unknown', and enumeration helpers like area_entities() return "
             "empty. Discover entities with search_entities, not template enumeration."
         ),
@@ -897,7 +897,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "redaction for credentials, topology, paths, opaque identifiers, and inaccessible "
             "entities. Uses the same bounded source-status, coverage, filter, and cursor contract "
             "as get_logs, including compact previews, explicit truncation, full scrubbed search, "
-            "byte-bounded pages and token-bound detail_ref text chunks. Requires both Diagnostics and Log read capabilities."
+            "byte-bounded pages and access-key-bound detail_ref text chunks. Requires both Diagnostics and Log read capabilities."
         ),
         "caps": ["cap_diagnostics", "cap_log_read"],
         "inputSchema": {
@@ -984,7 +984,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "list_integration_log_levels",
         "description": (
             "Inspect effective logger levels and integration-aware overrides for integration domains "
-            "visible within this token's resource scope. Phoenix MCP and inaccessible integrations "
+            "visible within this access key's resource scope. Phoenix MCP and inaccessible integrations "
             "are hidden. The response distinguishes runtime-only, once, and permanent persistence and "
             "reports any active Phoenix timed restoration."
         ),
@@ -1204,7 +1204,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "set_area_or_floor",
         "description": (
-            "Create, update or delete an area or floor through cap_registry_write. Scoped tokens require "
+            "Create, update or delete an area or floor through cap_registry_write. Scoped access keys require "
             "WRITE on every affected registry entity and an explicit WRITE grant on every affected device; "
             "empty locations and creation require pass-through authority. Use exact IDs from list_areas/list_floors. "
             "Area labels must reference existing label IDs: labels replaces the set ([] clears), while "
@@ -1613,7 +1613,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "get_zigbee_groups",
         "description": (
-            "List ZHA and Zigbee2MQTT groups anchored by Home Assistant group entities this token can access. Returns "
+            "List ZHA and Zigbee2MQTT groups anchored by Home Assistant group entities this access key can access. Returns "
             "group entity IDs, scoped member device IDs/endpoints, hidden-member counts, scene counts, exact content "
             "hashes, and the visible devices/endpoints eligible for grouping. Raw Zigbee group IDs, IEEE addresses, "
             "MQTT topics, and inaccessible members are never returned. Use the content hash for every existing-group write."
@@ -1740,7 +1740,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_areas",
         "description": (
-            "List Home Assistant areas that contain at least one entity this token can access. "
+            "List Home Assistant areas that contain at least one entity this access key can access. "
             "Each area includes its floor and a count of accessible entities. "
             "Areas with no accessible entities are not returned."
         ),
@@ -1750,7 +1750,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_floors",
         "description": (
-            "List Home Assistant floors that contain at least one entity this token can access, "
+            "List Home Assistant floors that contain at least one entity this access key can access, "
             "with a count of accessible areas and entities on each floor."
         ),
         "cap": "cap_registry_read",
@@ -1758,14 +1758,14 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_zones",
-        "description": "List Home Assistant zones (zone.* entities) this token can access.",
+        "description": "List Home Assistant zones (zone.* entities) this access key can access.",
         "cap": "cap_registry_read",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "list_devices",
         "description": (
-            "List Home Assistant device-registry entries this token can access. By default this returns "
+            "List Home Assistant device-registry entries this access key can access. By default this returns "
             "enabled devices; set registry_state to disabled or all to include disabled entries. A device "
             "is visible through an explicit device grant or an accessible attached entity. Rows include "
             "effective/original/user names, area, disabled state, labels, manufacturer/model, accessible "
@@ -1804,7 +1804,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_entities",
         "description": (
-            "Search the entities this token can access by name, domain, area, device_class, or state. "
+            "Search the entities this access key can access by name, domain, area, device_class, or state. "
             "By default this searches live enabled entities. Set registry_state to disabled to find "
             "explicitly disabled registry entries, or all to also include enabled registry entries "
             "whose integration currently publishes no state. Registry-only access is inherited from "
@@ -1852,7 +1852,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Diagnose how Home Assistant's default conversation agent recognizes one natural-language "
             "sentence, without invoking an intent handler or changing state. Returns the matched intent, "
-            "parsed slots, and resolved entities intersected with this token's read scope and Assist "
+            "parsed slots, and resolved entities intersected with this access key's read scope and Assist "
             "exposure. Incomplete recognition returns match false and an empty near_misses list. Custom sentence "
             "templates and source file paths are never exposed."
         ),
@@ -1879,7 +1879,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "get_overview",
         "description": (
-            "A compact summary of the home as this token sees it: total accessible entities, "
+            "A compact summary of the home as this access key sees it: total accessible entities, "
             "counts by domain and by area, how many are unavailable, and the deployment MESA mode "
             "(off | advisory | enforced) so you know whether to expect confirm/read-only gates. "
             "When MESA is active it also lists the operator-set prohibited and read-only entities "
@@ -1892,7 +1892,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "describe_area",
         "description": (
-            "Describe one area: its floor and the entities this token can access in it, grouped by domain. "
+            "Describe one area: its floor and the entities this access key can access in it, grouped by domain. "
             "Returns 'not found' if the area does not exist or has no accessible entities."
         ),
         "cap": "cap_search",
@@ -1907,7 +1907,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "find_available_actions",
         "description": (
-            "Given an accessible entity, list the services in its domain and whether this token can "
+            "Given an accessible entity, list the services in its domain and whether this access key can "
             "invoke each right now (considering write access and capability gates). Also lists the "
             "entity's purpose-built automation triggers and conditions ('semantic_moments'), each with "
             "a ready-to-use config example where the shape is non-obvious, so you can author the exact "
@@ -1956,7 +1956,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "List active Home Assistant repair issues as a bounded diagnostic projection. "
             "Issues are ordered by severity and recency. Raw issue IDs, repair data, URLs, "
             "credentials, private topology, and out-of-scope entity IDs are not exposed; "
-            "use the token-specific repair_ref to distinguish rows and open Home Assistant "
+            "use the access-key-specific repair_ref to distinguish rows and open Home Assistant "
             "Repairs for localized descriptions and repair flows. Ignored issues are omitted "
             "unless include_ignored is true."
         ),
@@ -1993,7 +1993,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_esphome_yaml",
         "requires": "esphome",
         "description": (
-            "List the ESPHome device YAML files this token can see, or read one. Credentials "
+            "List the ESPHome device YAML files this access key can see, or read one. Credentials "
             "(API encryption keys, wifi/OTA/MQTT passwords, and anything matching the ESPHome "
             "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders; leave "
             "them exactly as they are when editing and they are restored on write. "
@@ -2051,7 +2051,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_esphome_devices",
         "requires": "esphome_builder",
-        "description": "List configured ESPHome Device Builder devices this token may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
+        "description": "List configured ESPHome Device Builder devices this access key may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -2173,7 +2173,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_esphome_overview",
         "requires": "esphome",
         "description": (
-            "Status of the ESPHome devices this token can see: firmware version and build time, "
+            "Status of the ESPHome devices this access key can see: firmware version and build time, "
             "online state, Bluetooth proxy connection slots, the user-defined API actions each "
             "device declares, and (when the ESPHome Device Builder add-on is set up) the device's "
             "configuration filename and whether a firmware update is available."
@@ -2584,7 +2584,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "recent_activity",
         "description": (
             "Summarize which accessible entities changed state in the last N minutes (the 'catch me up' "
-            "primitive), newest first. Scoped to entities this token can read."
+            "primitive), newest first. Scoped to entities this access key can read."
         ),
         "cap": "cap_search",
         "inputSchema": {
@@ -2599,7 +2599,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "dry_run_service",
         "description": (
             "Preview a service call without executing it: resolves and flattens the targets to the "
-            "entities this token can write, reports the MESA verdict (allow/confirm/block) per entity, and "
+            "entities this access key can write, reports the MESA verdict (allow/confirm/block) per entity, and "
             "gives a single predicted_outcome (allowed | pending_approval | denied) folding in the "
             "capability gate and MESA. Use before a risky call_service to know in advance whether it will "
             "run, need approval, or be refused."
@@ -2618,8 +2618,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "validate_automation_or_script",
         "description": (
             "Validate an automation or script config without saving it. Returns structural validity plus, "
-            "for each referenced entity, whether it is accessible to this token (entities outside the "
-            "token's scope are reported as inaccessible and not visible). Decouples the "
+            "for each referenced entity, whether it is accessible to this access key (entities outside the "
+            "access key's scope are reported as inaccessible and not visible). Decouples the "
             "schema check from committing the write."
         ),
         "cap": "cap_diagnostics",
@@ -2634,7 +2634,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_scenes",
-        "description": "List Home Assistant scenes this token can access (entity_id, name, and scene id for editing).",
+        "description": "List Home Assistant scenes this access key can access (entity_id, name, and scene id for editing).",
         "cap": "cap_registry_read",
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -2646,7 +2646,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "editing without reading first silently destroys any member you did not resend. "
             "Returns a content_hash; pass it back as edit_scene's expected_hash to make the edit "
             "conditional on the scene not having changed since this read. Every entity the scene "
-            "controls must be writable by this token, the same rule edit_scene applies. Get the "
+            "controls must be writable by this access key, the same rule edit_scene applies. Get the "
             "scene_id from list_scenes."
         ),
         "cap": "cap_scene_write",
@@ -2662,7 +2662,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "create_scene",
         "description": (
             "Create a Home Assistant scene in scenes.yaml. Provide a config with 'name' and 'entities' "
-            "(a map of entity_id to desired state). Every referenced entity must be writable by this token. "
+            "(a map of entity_id to desired state). Every referenced entity must be writable by this access key. "
             "Phoenix MCP assigns the scene id and returns the saved config."
             " Returns a receipt with config, write_success, reload_status and registration "
             "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
@@ -2682,7 +2682,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Replace the config of an existing scene by its scene id. The 'config' object ENTIRELY "
             "replaces the current scene, so call get_scene first and resend every member you want "
             "to keep; anything you omit is destroyed. Every referenced entity must be writable by "
-            "this token."
+            "this access key."
             " Returns a receipt with config, write_success, reload_status and registration "
             "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),
@@ -2790,7 +2790,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "restore_configuration",
         "description": (
-            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout snapshot created by this token. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
+            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
         ),
         "caps_any": [
             "cap_helper_write", "cap_yaml_edit", "cap_filesystem",
@@ -3021,7 +3021,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "optional field with no default, explicitly send null; other fields follow the "
             "form's validation. Pass that read's content_hash as expected_hash so the write is "
             "refused if something else changed the settings meanwhile. Any "
-            "entity you name must be one this token could already control. May require admin "
+            "entity you name must be one this access key could already control. May require admin "
             "approval. Inherited MESA is resolved across every entity owned by the helper and "
             "fingerprint-rechecked before its flow runs. The helper reloads with the new settings; no restart. Helpers only, and a "
             "helper whose options flow has more than one step must be changed in the Home "
@@ -3044,7 +3044,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_integrations",
         "description": (
-            "List Home Assistant config entries visible through this token's accessible owned entities or "
+            "List Home Assistant config entries visible through this access key's accessible owned entities or "
             "devices. Returns safe registry metadata, normalized state and disabled reason, scrubbed setup "
             "failure reason, feature support (null when probing is inconclusive), preferences, and accessible "
             "entity/device counts. Never returns config-entry data, options, unique IDs, discovery identity, "
@@ -3271,7 +3271,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Read a Lovelace dashboard's view and card layout. Omit url_path for the "
             "default dashboard, or pass a url_path from list_dashboards. Entity IDs "
-            "outside this token's read scope come back as \"<redacted>\"; do not write a "
+            "outside this access key's read scope come back as \"<redacted>\"; do not write a "
             "redacted read back with set_dashboard_config. The response includes a "
             "content_hash; pass it as expected_hash to the dashboard write tools to make "
             "the write conditional on the layout not having changed since this read. To "
@@ -3408,7 +3408,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "expected_hash to refuse the write if the layout changed since your read; "
             "the result returns the new content_hash for chaining further patches. "
             "Values that a read redacted are refused: a read replaces entities this "
-            "token cannot resolve with a placeholder, and writing one back would "
+            "access key cannot resolve with a placeholder, and writing one back would "
             "overwrite real configuration with it."
         ),
         "cap": "cap_lovelace_write",

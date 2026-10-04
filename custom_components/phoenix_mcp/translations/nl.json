@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP is al geconfigureerd."
     },
     "create_entry": {
-      "default": "Gebruik het Phoenix MCP-paneel om je tokens te beheren"
+      "default": "Gebruik het Phoenix MCP-paneel om je toegangssleutels te beheren"
     }
   },
   "issues": {

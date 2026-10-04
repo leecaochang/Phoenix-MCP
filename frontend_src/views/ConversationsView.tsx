@@ -290,10 +290,15 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
   if (error) return <div role="alert">{error} <button className="btn btn-text" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
   if (!entry) return <p role="status">{t("common.loading")}</p>;
   const finalTextIndex = entry.events.reduce((last, event, index) => event.kind === "assistant_text" && event.payload === entry.response ? index : last, -1);
+  const identityFields = [
+    { key: "access_key_name", title: "conversations.tokenLabel", value: entry.metadata.access_key_name },
+    { key: "provider", title: "conversations.providerLabel", value: entry.metadata.provider },
+    { key: "model", title: "conversations.modelLabel", value: entry.metadata.model },
+  ];
   return <div className="conversation-detail">
     <dl className="conversation-identity">
       <div><dt>{t("conversations.sourceLabel")}</dt><dd>{label("source", entry.source)}</dd></div>
-      {([ ["token_name", "conversations.tokenLabel"], ["provider", "conversations.providerLabel"], ["model", "conversations.modelLabel"] ] as const).map(([key, title]) => <div key={key}><dt>{t(title)}</dt><dd>{typeof entry.metadata[key] === "string" ? String(entry.metadata[key]) : t("conversations.identityUnavailable")}</dd></div>)}
+      {identityFields.map(({ key, title, value }) => <div key={key}><dt>{t(title)}</dt><dd>{typeof value === "string" ? value : t("conversations.identityUnavailable")}</dd></div>)}
     </dl>
     {entry.coverage === "tool_exchange" && <p className="conversation-secondary">{t("conversations.groupingUnavailable")}</p>}
     {entry.omissions.map(reason => <p className="banner banner-warning" key={reason}>{label("omission", reason)}</p>)}

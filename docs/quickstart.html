@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Quick start &middot; Phoenix MCP docs</title>
-  <meta name="description" content="From nothing to a working scoped token in a few minutes: the guided setup creates your first token, connects your agent, and tests it." />
+  <meta name="description" content="From nothing to a working scoped access key in a few minutes: the guided setup creates your first access key, connects your agent, and tests it." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Getting started / Quick start</p>
           <h1>Quick start</h1>
-          <p class="lede">Use the guided setup to create a scoped token, grant one entity, and run a test. Choose Agent Chat inside Home Assistant or connect an external client. Allow about five minutes.</p>
+          <p class="lede">Use the guided setup to create a scoped access key, grant one entity, and run a test. Choose Agent Chat inside Home Assistant or connect an external client. Allow about five minutes.</p>
         </header>
 
         <div class="callout note">
@@ -38,7 +38,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Open the panel and launch the guided setup</h3>
-            <p>Open the <strong>Phoenix MCP</strong> panel from your Home Assistant sidebar. On the <strong>Tokens</strong> tab, start the guided setup ("Connect your first AI agent"). The wizard takes you from an empty token to a working agent without leaving the panel.</p>
+            <p>Open the <strong>Phoenix MCP</strong> panel from your Home Assistant sidebar. On the <strong>Access keys</strong> tab, start the guided setup ("Connect your first AI agent"). The wizard takes you from an empty access key to a working agent without leaving the panel.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -48,13 +48,13 @@
           </div></div>
 
           <div class="step"><div class="step-body">
-            <h3>Name the test token</h3>
-            <p>The wizard suggests <code>test_token</code> so its purpose is obvious; change it if you like, and set an optional expiry. The expiry is fixed once the token is created, so set it here if you want one; the name can be changed later from the token's detail page.</p>
+            <h3>Name the test access key</h3>
+            <p>The wizard suggests <code>test_token</code> so its purpose is obvious; change it if you like, and set an optional expiry. The expiry is fixed once the access key is created, so set it here if you want one; the name can be changed later from the access key's detail page.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Grant access to one entity</h3>
-            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the token's detail page.</p>
+            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the access key's detail page.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -85,7 +85,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Try it</h3>
-            <p>Click <strong>Try now</strong>. The wizard opens the Agent Chat window with your new token and the provider and model you just set up already selected, and a test question typed in for you: <em>"How many lights are in my home?"</em> Press <strong>Send</strong>. The wizard closes as soon as you send your first prompt, so you land in a normal chat with your new agent.</p>
+            <p>Click <strong>Try now</strong>. The wizard opens the Agent Chat window with your new access key and the provider and model you just set up already selected, and a test question typed in for you: <em>"How many lights are in my home?"</em> Press <strong>Send</strong>. The wizard closes as soon as you send your first prompt, so you land in a normal chat with your new agent.</p>
           </div></div>
 
         </div>
@@ -96,24 +96,24 @@
 
           <div class="step"><div class="step-body">
             <h3>Connect your agent</h3>
-            <p>The wizard shows a ready-to-paste command for your agent, plus the raw token value; both are shown once here.</p>
+            <p>The wizard shows a ready-to-paste command for your agent, plus the raw access key value; both are shown once here.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
-              <div class="callout-body"><p class="callout-title">Shown once</p><p>The token value cannot be retrieved later. Copy it now, or copy the ready-to-paste command below, which already carries it.</p></div>
+              <div class="callout-body"><p class="callout-title">Shown once</p><p>The access key value cannot be retrieved later. Copy it now, or copy the ready-to-paste command below, which already carries it.</p></div>
             </div>
-            <p>Claude Code, for example, uses a single command line; substitute your Home Assistant address. Each client has its own command or configuration format. The panel shows the form for each supported client, including DeepSeek Harness, and <a href="connect.html#client-setup">Connect an AI client</a> explains the file locations, environment variables, and verification steps. If you are not ready to connect an agent yet, <strong>Connect later</strong> skips straight to the end; the token is already created and waiting on the token page.</p>
+            <p>Claude Code, for example, uses a single command line; substitute your Home Assistant address. Each client has its own command or configuration format. The panel shows the form for each supported client, including DeepSeek Harness, and <a href="connect.html#client-setup">Connect an AI client</a> explains the file locations, environment variables, and verification steps. If you are not ready to connect an agent yet, <strong>Connect later</strong> skips straight to the end; the access key is already created and waiting on the access key page.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Run a test</h3>
-            <p>Ask your agent to do something simple, like <em>"List my Home Assistant lights"</em>. The moment it calls Phoenix MCP, the wizard detects the connection and confirms it. That is the whole loop: a scoped token, connected and verified.</p>
+            <p>Ask your agent to do something simple, like <em>"List my Home Assistant lights"</em>. The moment it calls Phoenix MCP, the wizard detects the connection and confirms it. That is the whole loop: a scoped access key, connected and verified.</p>
           </div></div>
 
         </div>
 
         <h2>What you end up with</h2>
-        <p>Connection commands and files contain a bearer credential. Use HTTPS across untrusted networks, keep credentials out of shell history and version control, and rotate a disclosed token. See <a href="connect.html#credential-handling">credential handling</a> before sharing a configuration or screenshot.</p>
-        <p>The result is a normal scoped token, no different from one you build by hand. You can widen or tighten its <a href="permissions.html">permission tree</a>, change its <a href="capabilities.html">capabilities</a>, or rotate its value at any time from the token's detail page. When you are done with it, open the token and choose <strong>Revoke</strong>; revoked tokens can then be deleted permanently from the Archived list. An open Agent Chat window refreshes its token selection when it receives a token-change event; another browser may retain a stale selection until refresh. The server refuses the revoked credential on its next authorization check.</p>
+        <p>Connection commands and files contain a bearer credential. Use HTTPS across untrusted networks, keep credentials out of shell history and version control, and rotate a disclosed access key. See <a href="connect.html#credential-handling">credential handling</a> before sharing a configuration or screenshot.</p>
+        <p>The result is a normal scoped access key, no different from one you build by hand. You can widen or tighten its <a href="permissions.html">permission tree</a>, change its <a href="capabilities.html">capabilities</a>, or rotate its value at any time from the access key's detail page. When you are done with it, open the access key and choose <strong>Revoke</strong>; revoked access keys can then be deleted permanently from the Archived list. An open Agent Chat window refreshes its access key selection when it receives an access key-change event; another browser may retain a stale selection until refresh. The server refuses the revoked credential on its next authorization check.</p>
 
         <h2>Where to go next</h2>
         <div class="grid-2">

@@ -65,13 +65,13 @@ describe("VoiceAgentSettings", () => {
   it("populates tokens and writes the token selection", async () => {
     const { onChange } = renderCard(settings());
     await waitFor(() => expect(screen.getByRole("option", { name: "voice-token" })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("Voice agent token"), { target: { value: "tok-1" } });
+    fireEvent.change(screen.getByLabelText("Voice agent access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("voice_agent_token_id", "tok-1");
   });
 
   it("places select help above all three dropdowns without stacking the switch", () => {
     renderCard(settings());
-    for (const label of ["Voice agent token", "Voice agent provider account", "Voice agent model"]) {
+    for (const label of ["Voice agent access key", "Voice agent provider account", "Voice agent model"]) {
       expect(screen.getByLabelText(label).closest(".toggle-row")).toHaveClass("toggle-row-stacked-control");
     }
     expect(screen.getByLabelText("Enable Phoenix MCP voice agent").closest(".toggle-row"))

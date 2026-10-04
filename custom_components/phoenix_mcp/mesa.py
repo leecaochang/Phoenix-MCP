@@ -1245,5 +1245,5 @@ def release_token_leases(data: Any, token_id: str) -> int:
     try:
         return runtime.lease_manager.release_session(token_id)
     except Exception:  # noqa: BLE001 - advisory cleanup never blocks a revocation
-        _LOGGER.debug("Phoenix MCP: releasing leases for token %s failed", token_id, exc_info=True)
+        _LOGGER.debug("Phoenix MCP: releasing leases for access key %s failed", token_id, exc_info=True)
         return 0

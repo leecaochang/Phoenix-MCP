@@ -463,7 +463,7 @@ async def async_create_assist_pipeline(
         and s.voice_agent_provider_id and s.voice_agent_model
     ):
         raise VoicePipelineError(
-            "Configure and enable the Phoenix MCP voice agent (token, provider, and model) first."
+            "Configure and enable the Phoenix MCP voice agent (access key, provider, and model) first."
         )
 
     # Idempotent: if a tracked pipeline still exists, reuse it rather than duplicate.

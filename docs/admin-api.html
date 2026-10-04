@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Admin API &middot; Phoenix MCP docs</title>
-  <meta name="description" content="The full Phoenix MCP admin API: every route for tokens, permissions, approvals, MESA profiles, entity hints, and settings, with request and response payload schemas." />
+  <meta name="description" content="The full Phoenix MCP admin API: every route for access keys, permissions, approvals, MESA profiles, entity hints, and settings, with request and response payload schemas." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,40 +25,41 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Admin API</p>
           <h1>Admin API <span class="badge badge-neutral">Advanced</span></h1>
-          <p class="lede">Automate panel operations through the admin routes under <code>/api/phoenix-mcp/admin/</code>. Use a Home Assistant administrator access token or session; Phoenix tokens cannot call this API.</p>
+          <p class="lede">Automate panel operations through the admin routes under <code>/api/phoenix-mcp/admin/</code>. Use a Home Assistant administrator access token or session; Phoenix access keys cannot call this API.</p>
         </header>
 
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
-          <div class="callout-body"><p class="callout-title">Home Assistant session, admin only</p><p>Every admin route requires a valid Home Assistant access token or session belonging to an active administrator. A long-lived access token belonging to that administrator is accepted. A Phoenix MCP token can never authenticate here, not even a pass-through token. See <a href="security.html">Security</a>.</p></div>
+          <div class="callout-body"><p class="callout-title">Home Assistant session, admin only</p><p>Every admin route requires a valid Home Assistant access token or session belonging to an active administrator. A long-lived access token belonging to that administrator is accepted. A Phoenix MCP access key can never authenticate here, not even a pass-through access key. See <a href="security.html">Security</a>.</p></div>
         </div>
 
         <h2>Conventions</h2>
         <dl class="kv">
           <div class="kv-row"><dt>Bodies</dt><dd>JSON, <code>Content-Type: application/json</code>. Bodies over 1&nbsp;MB are rejected with 413.</dd></div>
           <div class="kv-row"><dt>Request ID</dt><dd>Every response carries <code>X-Phoenix-Request-ID</code>. Audited administrator mutations use this ID in the Phoenix audit store, with the administrator as actor. Version restores retain an optional opaque <code>originating_token_id</code> for provenance. Administrator reads and diagnostic previews are not a complete audit of Home Assistant; the <a href="operations.html#audit-log">logging switches</a> still apply.</dd></div>
-          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate token name or an approval already being processed), <code>already_exists</code> (409, duplicate provider account), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
+          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate access key name or an approval already being processed), <code>already_exists</code> (409, duplicate provider account), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
         </dl>
 
-        <h2 id="tokens">Tokens</h2>
-        <pre class="code" data-lang="http" data-label="Tokens"><code>GET     /api/phoenix-mcp/admin/tokens                 List tokens
-POST    /api/phoenix-mcp/admin/tokens                 Create a token
-GET     /api/phoenix-mcp/admin/tokens/{id}            Get one token
-PATCH   /api/phoenix-mcp/admin/tokens/{id}            Update a token
-DELETE  /api/phoenix-mcp/admin/tokens/{id}            Revoke a token
+        <h2 id="tokens">Access keys</h2>
+        <p>The panel calls these credentials access keys. The admin route names and stored binding fields still use <code>tokens</code> and <code>token_id</code>; use the literal names shown below when scripting. Existing credentials and permission settings continue to work.</p>
+        <pre class="code" data-lang="http" data-label="Access keys"><code>GET     /api/phoenix-mcp/admin/tokens                 List access keys
+POST    /api/phoenix-mcp/admin/tokens                 Create an access key
+GET     /api/phoenix-mcp/admin/tokens/{id}            Get one access key
+PATCH   /api/phoenix-mcp/admin/tokens/{id}            Update an access key
+DELETE  /api/phoenix-mcp/admin/tokens/{id}            Revoke an access key
 POST    /api/phoenix-mcp/admin/tokens/{id}/rotate     Generate a new raw value
 POST    /api/phoenix-mcp/admin/tokens/{id}/presets                Save current settings as a preset
 PATCH   /api/phoenix-mcp/admin/tokens/{id}/presets/{pid}          Rename a preset
 DELETE  /api/phoenix-mcp/admin/tokens/{id}/presets/{pid}          Delete a preset (active preset refused)
-POST    /api/phoenix-mcp/admin/tokens/{id}/presets/{pid}/apply    Make the token match a preset
+POST    /api/phoenix-mcp/admin/tokens/{id}/presets/{pid}/apply    Make the access key match a preset
 GET     /api/phoenix-mcp/admin/tokens/{id}/stats      Request counters
 GET     /api/phoenix-mcp/admin/tokens/{id}/connection last_used_at + request_count
-GET     /api/phoenix-mcp/admin/tokens/{id}/audit      Audit log for one token
-GET     /api/phoenix-mcp/admin/tokens/archived        List archived tokens
+GET     /api/phoenix-mcp/admin/tokens/{id}/audit      Audit log for one access key
+GET     /api/phoenix-mcp/admin/tokens/archived        List archived access keys
 DELETE  /api/phoenix-mcp/admin/tokens/archived/{id}   Delete an archived record</code></pre>
 
-        <p><strong>Create</strong> (<code>POST /tokens</code>) takes a name and optional lifetime and limits. The response is the full token record plus a one-time <code>token</code> field (the raw value, never returned again).</p>
-        <pre class="code" data-lang="json" data-label="Create token body"><code>{
+        <p><strong>Create</strong> (<code>POST /tokens</code>) takes a name and optional lifetime and limits. The response is the full access key record plus a one-time <code>token</code> field (the raw value, never returned again).</p>
+        <pre class="code" data-lang="json" data-label="Create access key body"><code>{
   "name": "claude-code",          // required, 3-32 chars: letters, digits, _ or -
   "expires_at": "2026-07-01T00:00:00Z", // optional ISO-8601, omit for no expiry; a value without a timezone is read as HA's local time and stored as UTC
   "pass_through": false,          // optional
@@ -67,10 +68,10 @@ DELETE  /api/phoenix-mcp/admin/tokens/archived/{id}   Delete an archived record<
   "rate_limit_burst": 10          // optional
 }</code></pre>
 
-        <p><strong>Presets</strong> (all four endpoints return 403 while the <code>token_presets_enabled</code> setting is off): a preset is a named snapshot of the token's full configuration. Create takes <code>{"name": "..."}</code> and snapshots the CURRENT settings (at most 8 per token, names unique per token). Apply makes the token match the stored preset; applying a preset other than the active one first auto-saves the live state into the outgoing active preset, while applying the active preset reverts to its saved state. Applying a preset that would enable pass-through on a scoped token requires <code>{"confirm_pass_through": true}</code>. All return the updated token record.</p>
+        <p><strong>Presets</strong> (all four endpoints return 403 while the <code>token_presets_enabled</code> setting is off): a preset is a named snapshot of the access key's full configuration. Create takes <code>{"name": "..."}</code> and snapshots the CURRENT settings (at most 8 per access key, names unique per access key). Apply makes the access key match the stored preset; applying a preset other than the active one first auto-saves the live state into the outgoing active preset, while applying the active preset reverts to its saved state. Applying a preset that would enable pass-through on a scoped access key requires <code>{"confirm_pass_through": true}</code>. All return the updated access key record.</p>
 
-        <p><strong>Update</strong> (<code>PATCH /tokens/{id}</code>) accepts any subset of these fields. Capability fields take <code>"deny"</code> or <code>"allow"</code>; <code>"confirm"</code> is accepted only for the Confirm-eligible capabilities (the write, system, and irreversible tiers listed under <a href="capabilities.html#capability-flags">Capabilities</a>), and a PATCH setting it on a read-tier capability returns 400. Enabling pass-through requires <code>confirm_pass_through: true</code> in the same request, or the call returns 400. A token can also be renamed by sending <code>name</code> (same format and uniqueness rules as creation, excluding the token's own name); <code>expires_at</code> stays immutable. Renaming updates the display name of the token's sensors and their device; their entity IDs are unchanged.</p>
-        <pre class="code" data-lang="json" data-label="Patch token body (all optional)"><code>{
+        <p><strong>Update</strong> (<code>PATCH /tokens/{id}</code>) accepts any subset of these fields. Capability fields take <code>"deny"</code> or <code>"allow"</code>; <code>"confirm"</code> is accepted only for the Confirm-eligible capabilities (the write, system, and irreversible tiers listed under <a href="capabilities.html#capability-flags">Capabilities</a>), and a PATCH setting it on a read-tier capability returns 400. Enabling pass-through requires <code>confirm_pass_through: true</code> in the same request, or the call returns 400. an access key can also be renamed by sending <code>name</code> (same format and uniqueness rules as creation, excluding the access key's own name); <code>expires_at</code> stays immutable. Renaming updates the display name of the access key's sensors and their device; their entity IDs are unchanged.</p>
+        <pre class="code" data-lang="json" data-label="Patch access key body (all optional)"><code>{
   "persona": "voice_assistant",
   "pass_through": false,
   "confirm_pass_through": false,
@@ -122,7 +123,7 @@ PATCH  /api/phoenix-mcp/admin/tokens/{id}/permissions/devices/{node}     Set one
 PATCH  /api/phoenix-mcp/admin/tokens/{id}/permissions/entities/{node}    Set one entity node
 GET    /api/phoenix-mcp/admin/tokens/{id}/resolve/{entity}               Explain effective permission
 GET    /api/phoenix-mcp/admin/tokens/{id}/scope                          Readable / writable lists</code></pre>
-        <p>A node PATCH sets a single node's state, with an optional per-token hint (max 200 characters; <code>null</code> clears it). The PUT replaces the whole tree; nodes use the same shape.</p>
+        <p>A node PATCH sets a single node's state, with an optional per-access-key hint (max 200 characters; <code>null</code> clears it). The PUT replaces the whole tree; nodes use the same shape.</p>
         <pre class="code" data-lang="json" data-label="Permission node body"><code>{
   "state": "GREEN",   // GREY | YELLOW | GREEN | RED
   "hint": "Rachel's desk lamp, not the ceiling light"  // optional, &lt;= 200 chars, null clears
@@ -137,7 +138,7 @@ GET    /api/phoenix-mcp/admin/tokens/{id}/scope                          Readabl
         <p><code>bulk-select</code> resolves the selected area, label, or integration on the server and atomically applies the state to its device and entity nodes. <code>GREY</code> removes explicit nodes. The response is <code>{ permissions, summary }</code>; the summary includes the selector, state, affected counts, registry-only deviceless count, required domain IDs, and shared-device count.</p>
 
         <h2 id="entity-hints">Entity hints</h2>
-        <p>Global hints apply to every token that can see the entity. A per-token permission-node hint (above) always takes precedence over the global one. Both are capped at 200 characters.</p>
+        <p>Global hints apply to every access key that can see the entity. A per-access-key permission-node hint (above) always takes precedence over the global one. Both are capped at 200 characters.</p>
         <pre class="code" data-lang="http" data-label="Entity hints"><code>GET  /api/phoenix-mcp/admin/entity-hints               The global entity_id > hint map
 PUT  /api/phoenix-mcp/admin/entity-hints/{entity_id}   Set or clear one global hint</code></pre>
         <pre class="code" data-lang="json" data-label="Global hint body"><code>{ "hint": "Garage side door" }   // null clears the hint</code></pre>
@@ -227,7 +228,7 @@ POST    /api/phoenix-mcp/admin/mesa/suggestions/restore    Restore a dismissed s
 { "all": true }                 // or clear every dismissal</code></pre>
 
         <h2 id="agentcli">Agent Chat</h2>
-        <p><a href="agentcli.html">Agent Chat</a> is the in-panel LLM chat that runs an agentic loop against a chosen token. Provider accounts ("instances", since more than one account of the same kind is allowed, for example two Claude keys) are configured through these admin routes and stored in a dedicated secrets file separate from tokens; the chat turn itself streams over Server-Sent Events rather than returning a single JSON body. Every route here, including the chat route, requires the same Home Assistant admin session as the rest of this page.</p>
+        <p><a href="agentcli.html">Agent Chat</a> is the in-panel LLM chat that runs an agentic loop against a chosen access key. Provider accounts ("instances", since more than one account of the same kind is allowed, for example two Claude keys) are configured through these admin routes and stored in a dedicated secrets file separate from access keys; the chat turn itself streams over Server-Sent Events rather than returning a single JSON body. Every route here, including the chat route, requires the same Home Assistant admin session as the rest of this page.</p>
         <pre class="code" data-lang="http" data-label="Agent Chat"><code>GET     /api/phoenix-mcp/admin/agentcli/providers                      List provider accounts
 POST    /api/phoenix-mcp/admin/agentcli/providers                      Add a provider account (validated before it is stored)
 PATCH   /api/phoenix-mcp/admin/agentcli/providers/{instance_id}         Change that account's default model
@@ -248,9 +249,9 @@ POST    /api/phoenix-mcp/agentcli/chat                                  Run one 
         <p>The response is <code>{ "instance": { id, kind, name, model, base_url, endpoint_id } }</code>. <code>GET .../providers</code> returns <code>{ "instances": [...], "provider_types": [...] }</code>; the non-secret catalog contains each provider's <code>kind</code>, translated <code>label_key</code>, and ordered setup <code>fields</code>, including safe endpoint choices. <code>name</code> is a display label the server derives, with a discriminator only when needed. <strong>Probe</strong> accepts the same body as create but stores nothing, so a Settings form can validate a setup and populate a model dropdown before committing; it responds <code>{ "ok": true, "models": [...] }</code> or <code>{ "ok": false, "error": "...", "models": [] }</code> instead of an HTTP error, since a failed probe is an expected outcome, not a server fault.</p>
         <p>Decision accounts use the same probe and model routes. Probe discovers models without requiring a model ID. Creating an account or changing its model requires a nonempty model ID advertised by that provider at save time. Invalid IDs or unavailable catalogs reject the write; a changed account during validation must be reloaded. Conversational accounts retain their existing support for unlisted model IDs. These checks read model metadata and send no inference requests.</p>
         <p>Numeric routing is automatic, with no per-account switch. Local intents retain their recognized values; qualified JEV decisions require independently validated absolute values, native units, bounds and precision. Current options, quoted text literals and typed date/time values use their own validation. See the <a href="operations.html#command-routing">routing guide</a> for supported operation families and testing limits. Unqualified or invalid decisions retain ordinary-provider fallback. Legacy numeric opt-ins remain ignored on load, absent from responses and rejected by PATCH. Old numeric plans without qualified review cannot execute.</p>
-        <p><strong>Chat</strong> takes the token to act as, the provider account to use, the new user message, and the prior turns. The browser holds the transcript and resends it each turn. Local follow-up routing keeps only bounded, expiring history-verification digests in memory, not a server-side transcript.</p>
+        <p><strong>Chat</strong> takes the access key to act as, the provider account to use, the new user message, and the prior turns. The browser holds the transcript and resends it each turn. Local follow-up routing keeps only bounded, expiring history-verification digests in memory, not a server-side transcript.</p>
         <pre class="code" data-lang="json" data-label="Chat turn body"><code>{
-  "token_id": "...",                     // required, the Phoenix MCP token this turn acts as
+  "token_id": "...",                     // required, the Phoenix MCP access key this turn acts as
   "instance_id": "...",                  // required, a stored provider account id
   "model": "claude-opus-4-8",            // optional, overrides the account's saved model
   "user": "turn off the kitchen lights", // required, the new user message
@@ -258,7 +259,7 @@ POST    /api/phoenix-mcp/agentcli/chat                                  Run one 
   "home_focus_bypass": false,            // optional one-turn override; valid only with a new user message
   "options": { "thinking": true, "effort": "high", "show_thinking": false, "temperature": 0.7, "max_tokens": 8192 }
 }</code></pre>
-        <p>The response is <code>text/event-stream</code>, not a single JSON body: named SSE frames (<code>ready</code>, <code>assistant_delta</code>, <code>thinking_delta</code>, <code>tool_call</code>, <code>tool_progress</code> (a live status line from a long-running tool, e.g. a firmware build percentage), <code>tool_result</code>, <code>tool_image</code> (a bounded base64 image for the current browser session), <code>approval_required</code>, <code>approval_resolved</code>, <code>focus_declined</code> (the model used the private Home-focused refusal protocol; the private marker is stripped from streamed and retained provider messages), <code>continue_required</code> (the turn paused at the steps-before-check-in limit; re-POST with <code>"continue": true</code> to resume it, the panel's Continue button), <code>usage</code>, <code>notice</code>, <code>messages</code>, <code>error</code>, <code>done</code>) carry the turn's progress as it streams, with periodic unnamed keepalive comments so an idle stretch (the model thinking, an approval awaiting a decision) does not get dropped by an intermediary. The <code>usage</code> frame reports provider-exact token counts for the turn so far (<code>input_tokens</code>, <code>output_tokens</code>, and <code>context_tokens</code>, the newest model call's input size); it only appears when the provider reports usage. Every tool call the agent makes runs through the same capability gates, MESA checks, and audit log as a real MCP client on that token; a confirm-gated call surfaces as an inline approval card in the panel rather than a plain <code>pending_approval</code> reply.</p>
+        <p>The response is <code>text/event-stream</code>, not a single JSON body: named SSE frames (<code>ready</code>, <code>assistant_delta</code>, <code>thinking_delta</code>, <code>tool_call</code>, <code>tool_progress</code> (a live status line from a long-running tool, e.g. a firmware build percentage), <code>tool_result</code>, <code>tool_image</code> (a bounded base64 image for the current browser session), <code>approval_required</code>, <code>approval_resolved</code>, <code>focus_declined</code> (the model used the private Home-focused refusal protocol; the private marker is stripped from streamed and retained provider messages), <code>continue_required</code> (the turn paused at the steps-before-check-in limit; re-POST with <code>"continue": true</code> to resume it, the panel's Continue button), <code>usage</code>, <code>notice</code>, <code>messages</code>, <code>error</code>, <code>done</code>) carry the turn's progress as it streams, with periodic unnamed keepalive comments so an idle stretch (the model thinking, an approval awaiting a decision) does not get dropped by an intermediary. The <code>usage</code> frame reports provider-exact token counts for the turn so far (<code>input_tokens</code>, <code>output_tokens</code>, and <code>context_tokens</code>, the newest model call's input size); it only appears when the provider reports usage. Every tool call the agent makes runs through the same capability gates, MESA checks, and audit log as a real MCP client on that access key; a confirm-gated call surfaces as an inline approval card in the panel rather than a plain <code>pending_approval</code> reply.</p>
         <p><code>home_focus_bypass</code> is accepted only with a new <code>user</code> message. When true, it suppresses the Agent Chat Home-focused instruction for this turn only. It does not persist, cannot be combined with <code>continue</code>, and changes no permissions or safety checks.</p>
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
@@ -283,12 +284,12 @@ DELETE /api/phoenix-mcp/admin/voice_agent/pipeline      Remove the Phoenix-creat
 GET    /api/phoenix-mcp/admin/ai_task/preferred         Read the "Data generation tasks" default vs Phoenix MCP's entity
 POST   /api/phoenix-mcp/admin/ai_task/preferred         Make Phoenix MCP the default data-gen entity
 DELETE /api/phoenix-mcp/admin/ai_task/preferred         Clear Phoenix MCP as the default
-DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, and settings</code></pre>
+DELETE /api/phoenix-mcp/admin/wipe                      Wipe access keys, audit log, and settings</code></pre>
         <p><code>GET /catalog/{language}</code> returns <code>{ "language": …, "resources": { … } }</code>, the panel's strings as flat dotted keys. Anything that language does not translate comes back in English.</p>
         <p><code>GET /info</code> returns <code>version</code>, <code>min_ha_version</code>, <code>github_url</code>, and <code>tool_count</code>: <code>{ "total": …, "native": …, "additional": … }</code>, counted from the running build's own tool registry. That registry is the single source of truth for the count, so this endpoint is authoritative for the build you are running.</p>
         <p><code>GET /command-routing/statistics</code> returns separate <code>voice</code> and <code>chat</code> totals, outcome counts, provider turns, durations and reported token usage. <code>DELETE /command-routing/statistics</code> accepts <code>{"surface":"voice","confirm":true}</code> or <code>{"surface":"chat","confirm":true}</code>. Reset affects that statistics surface, not the separate decision request budget.</p>
         <p>Settings are described in <a href="operations.html#global-settings">Operations</a>. A PATCH may include any subset of the writable settings. An unknown field rejects the whole request with HTTP 400 and an <code>invalid_request</code> response that names the field. The GET response additionally carries computed, read-only fields (<code>tool_routing_qualified_languages</code>, the <code>*_supported</code> flags, the ESPHome availability fields, and <code>voice_agent_pipeline_id</code>, which is managed through the pipeline routes below, not by PATCH). The <code>voice_agent/pipeline</code> and <code>ai_task/preferred</code> routes back the one-click <a href="connect.html#assist">Assist</a> and <a href="connect.html#ai-task">AI Task</a> setup buttons in the panel: <code>POST</code> a pipeline requires <code>{ "preferred": true|false }</code> and needs the voice agent fully configured; the AI Task routes report and set Home Assistant's single default data-generation entity.</p>
-        <p><code>POST /command-routing/preview</code> requires <code>{"token_id":"...","sentence":"turn on the desk lamp","language":"en"}</code> with an active token and at most 512 sentence characters. Optional <code>language</code> defaults to <code>en</code> and accepts the installed Assist language catalog with supported regional and Chinese script aliases; preview language is independent of the ingress language and routing switches. It returns <code>route</code> (<code>local_candidate</code> or <code>provider</code>), <code>reason</code>, <code>elapsed_ms</code>, an optional scoped <code>proposal</code>, <code>executed: false</code>, and aggregate <code>voice_observations</code>. The preview does not execute or add an observation.</p>
+        <p><code>POST /command-routing/preview</code> requires <code>{"token_id":"...","sentence":"turn on the desk lamp","language":"en"}</code> with an active access key and at most 512 sentence characters. Optional <code>language</code> defaults to <code>en</code> and accepts the installed Assist language catalog with supported regional and Chinese script aliases; preview language is independent of the ingress language and routing switches. It returns <code>route</code> (<code>local_candidate</code> or <code>provider</code>), <code>reason</code>, <code>elapsed_ms</code>, an optional scoped <code>proposal</code>, <code>executed: false</code>, and aggregate <code>voice_observations</code>. The preview does not execute or add an observation.</p>
         <p>Optional <code>"decision":true</code> sends an eligible local miss to the configured decision account and returns an inert <code>decision_shadow</code> result; without it no provider is contacted. Local matches and recognition failures skip this basic comparison. The additional batch and history comparisons below have their own admission checks. It remains an administrator endpoint, not an MCP tool. A malformed combined response may include <code>validation_check</code>, an internal validation label without provider response text or values.</p>
         <p>GET also returns <code>request_budget</code> with <code>limit</code>, <code>used</code>, nullable <code>remaining</code>, Unix <code>reset_at</code> and <code>available</code>. Exhausted or unavailable enabled allowances produce <code>request_budget_exhausted</code> or <code>budget_unavailable</code> before a decision HTTP request. The ledger survives restart and is independent of statistics reset. GET returns Voice counters and mean elapsed time, separate <code>agent_chat</code> local counts, and <code>decision_shadow</code> aggregates since runtime setup. Decision aggregates separate Voice observation, <code>hybrid</code>, Chat observation (<code>agent_chat</code>) and <code>chat_hybrid</code> reasons. The <code>decision_shadow.requests</code> counters distinguish request kind, provider and ingress, including administrator previews; usage reported by the provider is separate from missing usage. A <code>plan_ready</code> count does not establish successful execution, and missing usage is not zero usage. Provider accounts are shared with the account API: <code>GET /agentcli/providers?purpose=decision</code> returns only decision accounts and setup definitions; the default list remains conversational.</p>
         <p>Optional <code>"targets":true</code> additionally requires <code>"decision":true</code>. In the sequential comparison, a supported category leads to a second closed-choice request with scoped, eligible entity identity metadata. Both calls share the configured decision budget. <code>decision_shadow.target_selection</code> contains a reason, nullable <code>entity_id</code>, nullable validated decision and elapsed time. No target is selected when the provider declines, targets change, probabilities tie, or catalog limits are exceeded. Generic catalogs support up to 392 entities and 64 KiB across at most eight complete groups; each question includes a decline choice and obeys the model's advertised capacity, defaulting to 50 choices when unavailable. Other operation-specific and provider context limits also apply. This manual opt-in never enables target sharing for background observations, creates approvals or executes.</p>
@@ -318,14 +319,14 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "conversation_log_max_mb": 25,       // 1 to 250; decimal MB
   "mesa_mode": "advisory",       // off | advisory | enforced
   "mesa_inject_enabled": false,  // experimental in-context MESA buttons; admin-only, off by default
-  "token_presets_enabled": false, // token settings presets; enabling seeds a default preset on every token
+  "token_presets_enabled": false, // access key settings presets; enabling seeds a default preset on every access key
   "agentcli_global": true,        // Agent Chat floats over all of Home Assistant, not just the Phoenix MCP panel (default on)
   "agentcli_scrollback_lines": 100, // Agent Chat history limit: 0-5000 lines, shown in the panel as "Chat history limit"
   "agentcli_max_iterations": 20,  // Agent Chat rounds per turn (3-100) before it pauses to ask whether to continue
   "agentcli_conversation_style": "direct", // direct | warm | calm_guide | lively | technical
   "agentcli_detail_level": "concise", // concise | balanced | detailed
   "agentcli_home_focused": false, // focus preference for Agent Chat, not a security control
-  "assist_bound_token_id": null,  // Assist Tool Provider: token whose tools "Phoenix MCP (scoped)" exposes (null = unbound)
+  "assist_bound_token_id": null,  // Assist Tool Provider: access key whose tools "Phoenix MCP (scoped)" exposes (null = unbound)
   "voice_agent_routing_mode": "off", // off | auto; legacy diagnostics: local_shadow | local | hybrid
   "agentcli_routing_mode": "off", // off | auto; legacy diagnostics: local | hybrid
   "agentcli_routing_shadow_enabled": false, // background observation while Chat execution is off
@@ -335,7 +336,7 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "decision_shadow_enabled": false, // legacy Voice observation; never executes
   "decision_timeout_ms": 5000,     // integer 250 to 30000; independent network budget
   "decision_request_budget": 0,    // integer 0 to 100000 per UTC hour; 0 unlimited
-  "voice_agent_enabled": false,   // Voice Agent: Phoenix MCP as an HA conversation agent, on its own token/provider/model
+  "voice_agent_enabled": false,   // Voice Agent: Phoenix MCP as an HA conversation agent, on its own access key/provider/model
   "voice_agent_token_id": null,
   "voice_agent_provider_id": null, // an Agent Chat provider account id
   "voice_agent_model": null,
@@ -343,7 +344,7 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "voice_agent_detail_level": "concise",
   "voice_agent_home_focused": false,
   "voice_agent_pipeline_id": null, // set by Phoenix MCP when it creates the HA assistant for the voice agent; not set by hand
-  "ai_task_enabled": false,       // AI Task: Phoenix MCP as an HA AI Task entity, on its own token/provider/model
+  "ai_task_enabled": false,       // AI Task: Phoenix MCP as an HA AI Task entity, on its own access key/provider/model
   "ai_task_token_id": null,
   "ai_task_provider_id": null,    // an Agent Chat provider account id
   "ai_task_model": null,
@@ -352,20 +353,20 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
 }</code></pre>
         <p>Style and detail values are closed server-owned enums; invalid PATCH values are rejected. Older storage records load with the defaults shown above. Each surface reads its settings at the start of a model turn, so a PATCH affects the next turn without clearing Agent Chat history. AI Task omits its style and detail prompt additions whenever the task supplies a structured output schema. External MCP clients and the Assist Tool Provider do not use these settings.</p>
         <p>The <a href="operations.html#conversation-log">Conversation Log</a> endpoints require HA administrator authentication and remain separate from agent audit access. Listing returns summaries, total count, recording/storage availability, retained size (<code>bytes</code>), and the configured budget (<code>max_bytes</code>); opening an entry returns sanitized events, payload omission reasons, an omitted-event count, and available prompt/response content. With <code>grouped=true</code>, explicit Agent Chat conversations return <code>turns</code> summaries in chronological order and top-level rows are newest first. Filters select conversations containing a matching turn and include other retained turns as context. Detail requests use each turn ID, including when the first turn has expired. The default list remains flat. The denied and failed filters include mixed turns containing those outcomes. Text search matches retained content values, not envelope field names. A missing or expired entry returns 404. Clear requires exactly <code>{"confirm": true}</code>. Recording is disabled on upgrade and starts with an empty history; old audit rows are not reconstructed into conversations.</p>
-        <p id="wipe">The wipe route is intentionally guarded: it requires an exact confirmation string. It is scoped by three independent flags, so you choose what to delete. <code>wipe_core</code> (default <code>true</code>) clears every token and archived token, all settings back to their defaults, global entity hints, the audit log, the conversation log, and the configuration/version change history, plus in-memory request-tracking state (the rate limiter's windows, per-token request counters, and rate-limit/stale-tools notification markers) and any queued pending approvals (dismissing their notifications). <code>wipe_providers</code> (default <code>true</code>) deletes all Agent Chat and decision-provider accounts, their saved model selections and stored API keys from <code>.storage/phoenix_mcp_agentcli_secrets</code>. <code>wipe_mesa</code> (default <code>false</code>) deletes all MESA profiles from <code>.storage/phoenix_mcp_mesa</code>; it is off by default so a reset keeps hand-authored safety policy unless you ask otherwise. Omitting a flag uses its default (a bare <code>{ "confirm": "WIPE" }</code> clears core data and provider keys but leaves MESA intact). The panel's Data Management card exposes all three as switches.</p>
+        <p id="wipe">The wipe route is intentionally guarded: it requires an exact confirmation string. It is scoped by three independent flags, so you choose what to delete. <code>wipe_core</code> (default <code>true</code>) clears every access key and archived access key, all settings back to their defaults, global entity hints, the audit log, the conversation log, and the configuration/version change history, plus in-memory request-tracking state (the rate limiter's windows, per-access-key request counters, and rate-limit/stale-tools notification markers) and any queued pending approvals (dismissing their notifications). <code>wipe_providers</code> (default <code>true</code>) deletes all Agent Chat and decision-provider accounts, their saved model selections and stored API keys from <code>.storage/phoenix_mcp_agentcli_secrets</code>. <code>wipe_mesa</code> (default <code>false</code>) deletes all MESA profiles from <code>.storage/phoenix_mcp_mesa</code>; it is off by default so a reset keeps hand-authored safety policy unless you ask otherwise. Omitting a flag uses its default (a bare <code>{ "confirm": "WIPE" }</code> clears core data and provider keys but leaves MESA intact). The panel's Data Management card exposes all three as switches.</p>
         <pre class="code" data-lang="json" data-label="Wipe body"><code>{
   "confirm": "WIPE",
-  "wipe_core": true,       // tokens, settings, audit, versions, pending approvals (default true)
+  "wipe_core": true,       // access keys, settings, audit, versions, pending approvals (default true)
   "wipe_providers": true,  // Chat and decision-provider accounts + API keys (default true)
   "wipe_mesa": false       // MESA safety profiles (default false)
 }</code></pre>
 
         <div class="callout warn">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
-          <div class="callout-body"><p class="callout-title">PATCH is read-modify-write under a lock</p><p>Token and record PATCH handlers load, modify, and save atomically, so two admins editing the same token at once cannot clobber each other.</p></div>
+          <div class="callout-body"><p class="callout-title">PATCH is read-modify-write under a lock</p><p>Access key and record PATCH handlers load, modify, and save atomically, so two admins editing the same access key at once cannot clobber each other.</p></div>
         </div>
 
-        <p>The token-facing MCP and skill routes are listed in <a href="operations.html#route-reference">Operations</a>.</p>
+        <p>The access-key-facing MCP and skill routes are listed in <a href="operations.html#route-reference">Operations</a>.</p>
 
         <nav class="pager" id="pager" aria-label="Page navigation"></nav>
       </div>

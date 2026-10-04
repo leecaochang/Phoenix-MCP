@@ -67,7 +67,7 @@ describe("AiTaskSettings", () => {
   it("writes the token and provider selections", async () => {
     const { onChange } = renderCard(settings());
     await waitFor(() => expect(screen.getByRole("option", { name: "ai-token" })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("AI Task token"), { target: { value: "tok-1" } });
+    fireEvent.change(screen.getByLabelText("AI Task access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("ai_task_token_id", "tok-1");
     fireEvent.change(screen.getByLabelText("AI Task provider account"), { target: { value: "i1" } });
     expect(onChange).toHaveBeenCalledWith("ai_task_provider_id", "i1");
@@ -75,7 +75,7 @@ describe("AiTaskSettings", () => {
 
   it("places select help above all three dropdowns without stacking the switch", () => {
     renderCard(settings());
-    for (const label of ["AI Task token", "AI Task provider account", "AI Task model"]) {
+    for (const label of ["AI Task access key", "AI Task provider account", "AI Task model"]) {
       expect(screen.getByLabelText(label).closest(".toggle-row")).toHaveClass("toggle-row-stacked-control");
     }
     expect(screen.getByLabelText("Enable Phoenix MCP AI Task").closest(".toggle-row"))
@@ -107,7 +107,7 @@ describe("AiTaskSettings", () => {
   it("disables everything when the HA seam is unsupported", () => {
     renderCard(settings({ ai_task_supported: false }));
     expect((screen.getByLabelText("Enable Phoenix MCP AI Task") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("AI Task token") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText("AI Task access key") as HTMLSelectElement).disabled).toBe(true);
   });
 
   it("shows a Set-up-default button when the entity exists and is not yet the default", async () => {

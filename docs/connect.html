@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Connect an AI client &middot; Phoenix MCP docs</title>
-  <meta name="description" content="Create a token, point your MCP client at /api/phoenix-mcp, and install the optional Phoenix MCP agent skill." />
+  <meta name="description" content="Create an access key, point your MCP client at /api/phoenix-mcp, and install the optional Phoenix MCP agent skill." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,17 +25,17 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Getting started / Connect an AI client</p>
           <h1>Connect an AI client</h1>
-          <p class="lede">Connect an MCP client that accepts a custom bearer header. Use the Phoenix endpoint and one scoped token.</p>
+          <p class="lede">Connect an MCP client that accepts a custom bearer header. Use the Phoenix endpoint and one scoped access key.</p>
         </header>
 
         <div class="callout tip">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.5.4.9 1 1 1.6h5c.1-.6.5-1.2 1-1.6A6 6 0 0 0 12 3z"/></svg>
-          <div class="callout-body"><p class="callout-title">Choose the shortest setup for you</p><ul><li><strong>First token:</strong> follow the <a href="quickstart.html">guided quick start</a> to grant one device and test it.</li><li><strong>No external client:</strong> use <a href="agentcli.html">Agent Chat</a> inside Home Assistant with the same scope and approvals.</li></ul></div>
+          <div class="callout-body"><p class="callout-title">Choose the shortest setup for you</p><ul><li><strong>First access key:</strong> follow the <a href="quickstart.html">guided quick start</a> to grant one device and test it.</li><li><strong>No external client:</strong> use <a href="agentcli.html">Agent Chat</a> inside Home Assistant with the same scope and approvals.</li></ul></div>
         </div>
 
         <h2 id="credential-handling">Protect the connection credentials</h2>
-        <p>Use an HTTPS Home Assistant URL for remote clients or any network you do not fully trust. Plain HTTP carries bearer credentials without transport encryption. The addresses and <code>phx_...</code> values below are placeholders: enter your own URL and use a separate, narrowly scoped token for each client.</p>
-        <p>Prefer your client's secret store or environment-variable interpolation when supported. Pasting a raw token into a terminal command can retain it in shell history; reading it interactively into a variable avoids typing the value into the command. A client may still save the expanded header in its configuration. Keep such files private, restrict file access, and exclude them from version control. Do not put real tokens in shared project configuration, screenshots or support logs. Rotate a token if its full value was disclosed.</p>
+        <p>Use an HTTPS Home Assistant URL for remote clients or any network you do not fully trust. Plain HTTP carries bearer credentials without transport encryption. The addresses and <code>phx_...</code> values below are placeholders: enter your own URL and use a separate, narrowly scoped access key for each client.</p>
+        <p>Prefer your client's secret store or environment-variable interpolation when supported. Pasting a raw access key into a terminal command can retain it in shell history; reading it interactively into a variable avoids typing the value into the command. A client may still save the expanded header in its configuration. Keep such files private, restrict file access, and exclude them from version control. Do not put real access keys in shared project configuration, screenshots or support logs. Rotate an access key if its full value was disclosed.</p>
         <details class="advanced" id="claude-compatibility">
           <summary>Advanced: Claude web/app (limited beta)</summary>
           <div class="advanced-content">
@@ -44,7 +44,7 @@
           <table>
             <thead><tr><th scope="col">Claude client</th><th scope="col">Status</th><th scope="col">What to do</th></tr></thead>
             <tbody>
-              <tr><td>Claude Code</td><td><span class="badge badge-success">Supported</span></td><td>Use the generated <code>claude mcp add</code> command. It sends the token in the <code>Authorization</code> header.</td></tr>
+              <tr><td>Claude Code</td><td><span class="badge badge-success">Supported</span></td><td>Use the generated <code>claude mcp add</code> command. It sends the access key in the <code>Authorization</code> header.</td></tr>
               <tr><td>Claude web, Desktop remote connectors, mobile, and Cowork</td><td><span class="badge badge-neutral">Limited beta</span></td><td>An organization owner must add the connector with a required <code>Authorization</code> request header. If the dialog has no <strong>Request headers</strong> section, use Claude Code or Agent Chat.</td></tr>
             </tbody>
           </table>
@@ -54,8 +54,8 @@
               <li>Personal plans add connectors under <strong>Customize &gt; Connectors</strong>. Team and Enterprise owners add them for the organization before members connect.</li>
               <li>Users can control connector access and individual tool permissions.</li>
               <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_token_here</code>. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
-              <li>The token is shared by everyone in the organization who uses the connector. Create a dedicated least-privilege Phoenix token for this connector.</li>
-              <li>Do not put the token in the connector URL. Claude sends request-header values exactly as entered and does not add the <code>Bearer</code> prefix for you.</li>
+              <li>The access key is shared by everyone in the organization who uses the connector. Create a dedicated least-privilege Phoenix access key for this connector.</li>
+              <li>Do not put the access key in the connector URL. Claude sends request-header values exactly as entered and does not add the <code>Bearer</code> prefix for you.</li>
             </ul>
             <p>See Anthropic's <a href="https://claude.com/docs/connectors/custom/add-unlisted" target="_blank" rel="noopener">remote connector setup</a> and <a href="https://claude.com/docs/connectors/building/authentication" target="_blank" rel="noopener">connector authentication</a> documentation.</p>
           </div>
@@ -65,23 +65,23 @@
         <div class="steps">
 
           <div class="step"><div class="step-body">
-            <h3>Create a token</h3>
-            <p>In the Phoenix MCP panel, open the <strong>Tokens</strong> tab and click <strong>Create Token</strong>. Give it a name like <code>claude-code</code> and create it.</p>
+            <h3>Create an access key</h3>
+            <p>In the Phoenix MCP panel, open the <strong>Access keys</strong> tab and click <strong>Create Access key</strong>. Give it a name like <code>claude-code</code> and create it.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
-              <div class="callout-body"><p class="callout-title">Copy it now</p><p>The token value is shown exactly once and cannot be retrieved later. Copy it before you close the dialog.</p></div>
+              <div class="callout-body"><p class="callout-title">Copy it now</p><p>The access key value is shown exactly once and cannot be retrieved later. Copy it before you close the dialog.</p></div>
             </div>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Set its permissions</h3>
-            <p>A new token has no access by default. Use the permission tree to grant the domains, devices, and entities you want the client to work with, and enable any <a href="capabilities.html">capability flags</a> it needs.</p>
+            <p>A new access key has no access by default. Use the permission tree to grant the domains, devices, and entities you want the client to work with, and enable any <a href="capabilities.html">capability flags</a> it needs.</p>
             <p><a href="permissions.html">How the permission tree works</a></p>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Add the MCP server</h3>
-            <p>Run this in your terminal, substituting your Home Assistant address and the token you copied. Phoenix MCP derives a distinct server name from each token's name (lowercase, underscores changed to hyphens, with a <code>phx-</code> prefix), so a token named <code>claude-code</code> registers as <code>phx-claude-code</code>.</p>
+            <p>Run this in your terminal, substituting your Home Assistant address and the access key you copied. Phoenix MCP derives a distinct server name from each access key's name (lowercase, underscores changed to hyphens, with a <code>phx-</code> prefix), so an access key named <code>claude-code</code> registers as <code>phx-claude-code</code>.</p>
             <pre class="code" data-lang="bash" data-label="Local address"><code>claude mcp add --transport http phx-claude-code \
   http://your-ha-address:8123/api/phoenix-mcp \
   --header "Authorization: Bearer phx_your_token_here"</code></pre>
@@ -89,7 +89,7 @@
             <pre class="code" data-lang="bash" data-label="Remote address"><code>claude mcp add --transport http phx-claude-code \
   https://your-instance.ui.nabu.casa/api/phoenix-mcp \
   --header "Authorization: Bearer phx_your_token_here"</code></pre>
-            <p>This example uses Claude Code's CLI and registers the server for your current project. Add <code>--scope user</code> to use it across projects. The panel's <strong>Connect</strong> step generates commands or configs for the clients below. Each client must support Streamable HTTP at <code>/api/phoenix-mcp</code> and an <code>Authorization: Bearer</code> header carrying your token.</p>
+            <p>This example uses Claude Code's CLI and registers the server for your current project. Add <code>--scope user</code> to use it across projects. The panel's <strong>Connect</strong> step generates commands or configs for the clients below. Each client must support Streamable HTTP at <code>/api/phoenix-mcp</code> and an <code>Authorization: Bearer</code> header carrying your access key.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -98,23 +98,23 @@
           </div></div>
 
           <div class="step"><div class="step-body">
-            <h3>Adding more tokens as separate profiles</h3>
-            <p>Because each token gets its own server name, you can keep several configured in one client at once, one entry per token, all pointing at the same Phoenix MCP URL with a different bearer token each. To add another, create a second token in the panel, and on the screen shown after it is created choose <strong>Connect an external agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
+            <h3>Adding more access keys as separate profiles</h3>
+            <p>Because each access key gets its own server name, you can keep several configured in one client at once, one entry per access key, all pointing at the same Phoenix MCP URL with a different bearer token each. To add another, create a second access key in the panel, and on the screen shown after it is created choose <strong>Connect an external agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
-              <div class="callout-body"><p class="callout-title">Save each token's command when you first see it</p><p>Phoenix MCP stores only a hash of a token's value, so the panel cannot show a token's config again after you close its creation (or rotation) dialog. If you lose it, rotate the token to get a fresh value and command.</p></div>
+              <div class="callout-body"><p class="callout-title">Save each access key's command when you first see it</p><p>Phoenix MCP stores only a hash of an access key's value, so the panel cannot show an access key's config again after you close its creation (or rotation) dialog. If you lose it, rotate the access key to get a fresh value and command.</p></div>
             </div>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>The agent skill <span class="badge badge-neutral">optional</span></h3>
-            <p>On connection, Phoenix MCP sends a short, token-aware primer that links to the full guide. Optional skill installation makes the guide available locally. Native skill clients discover its name and description first, then load the full guidance when the skill is activated.</p>
+            <p>On connection, Phoenix MCP sends a short, access key-aware primer that links to the full guide. Optional skill installation makes the guide available locally. Native skill clients discover its name and description first, then load the full guidance when the skill is activated.</p>
           </div></div>
 
         </div>
 
         <h2 id="client-setup">Client-specific setup</h2>
-        <p>The examples use a token named <code>home</code>. Replace the address and token before running them. The panel generates these values for your actual token. Terminal commands below use macOS/Linux shell syntax.</p>
+        <p>The examples use an access key named <code>home</code>. Replace the address and access key before running them. The panel generates these values for your actual access key. Terminal commands below use macOS/Linux shell syntax.</p>
 
         <h3 id="gemini-cli">Gemini CLI</h3>
         <pre class="code" data-lang="bash"><code>gemini mcp add phx-home http://your-ha-address:8123/api/phoenix-mcp \
@@ -130,7 +130,7 @@ codex mcp add phx-home --url http://your-ha-address:8123/api/phoenix-mcp \
         <pre class="code" data-lang="toml"><code>[mcp_servers.phx-home]
 url = "http://your-ha-address:8123/api/phoenix-mcp"
 bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
-        <p>Local Codex clients share MCP configuration on the same host. An app launched separately may not inherit shell variables. In that case, use the app's MCP server settings: add a Streamable HTTP server, leave its bearer-token environment field empty, and add <code>Authorization</code> with the value <code>Bearer phx_your_token_here</code>. Save and reconnect. Choose one setup method; see the <a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener">official MCP documentation</a>.</p>
+        <p>Local Codex clients share MCP configuration on the same host. An app launched separately may not inherit shell variables. In that case, use the app's MCP server settings: add a Streamable HTTP server, leave its bearer token environment field empty, and add <code>Authorization</code> with the value <code>Bearer phx_your_token_here</code>. Save and reconnect. Choose one setup method; see the <a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener">official MCP documentation</a>.</p>
 
         <h3 id="cursor">Cursor</h3>
         <p>Add this entry to <code>~/.cursor/mcp.json</code> for all projects or <code>.cursor/mcp.json</code> for one project, preserving any existing servers. Enable it in Cursor's MCP settings.</p>
@@ -150,10 +150,10 @@ bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
         <ol>
           <li>Install and open Harness once, then fully quit the application. Closing its window can leave it running in the background.</li>
           <li>Open <code>~/.dsh/profiles/desktop/cordis.patch.yml</code> in a text editor. Here <code>~</code> means your home directory; on Windows the path is <code>%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml</code>. If you set a custom <code>DSH_HOME</code>, use <code>$DSH_HOME/profiles/desktop/cordis.patch.yml</code>.</li>
-          <li>If the file does not exist, create it with the YAML below. If it already exists, append this entire <code>- insert:</code> block as another top-level list item, preserving existing entries. Replace the address and token; keep the file private.</li>
+          <li>If the file does not exist, create it with the YAML below. If it already exists, append this entire <code>- insert:</code> block as another top-level list item, preserving existing entries. Replace the address and access key; keep the file private.</li>
           <li>Save the file and reopen Harness. Ask it to list your Home Assistant lights and confirm it calls Phoenix tools.</li>
         </ol>
-        <p>Harness uses the token's lowercase name with underscores replaced by hyphens, without the <code>phx-</code> prefix, so a 32-character token name fits its server-name limit.</p>
+        <p>Harness uses the access key's lowercase name with underscores replaced by hyphens, without the <code>phx-</code> prefix, so a 32-character access key name fits its server-name limit.</p>
         <pre class="code" data-lang="yaml"><code>- insert:
     - id: mcp-phx-home
       name: '@deepseek-ai/dsh-mcp-client'
@@ -181,7 +181,7 @@ bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
           <div class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
             <h3>Automatic primer</h3>
-            <p>Phoenix MCP sends a short, token-aware primer in the legacy <code>initialize</code> response and in modern <code>server/discover</code>. It names which of this token's capabilities are approval-gated and links to the full guide. Legacy 2025-03-26 clients complete initialization and keep their session ID; modern 2026-07-28 clients carry protocol metadata on each request and use no session. No install, nothing to maintain.</p>
+            <p>Phoenix MCP sends a short, access key-aware primer in the legacy <code>initialize</code> response and in modern <code>server/discover</code>. It names which of this access key's capabilities are approval-gated and links to the full guide. Legacy 2025-03-26 clients complete initialization and keep their session ID; modern 2026-07-28 clients carry protocol metadata on each request and use no session. No install, nothing to maintain.</p>
           </div>
           <div class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
@@ -194,7 +194,7 @@ bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
   curl -fsSL http://your-ha-address:8123/api/phoenix-mcp/skill \
   -o ~/.claude/skills/phoenix/SKILL.md</code></pre>
 
-        <p>For another native skill client, use its destination from this table with the same <code>mkdir -p</code> and <code>curl -fsSL</code> pattern. The guide is generic and contains no token or entity data.</p>
+        <p>For another native skill client, use its destination from this table with the same <code>mkdir -p</code> and <code>curl -fsSL</code> pattern. The guide is generic and contains no access key or entity data.</p>
         <div class="table-wrap"><table>
           <thead><tr><th scope="col">Client</th><th scope="col">User skill file</th><th scope="col">After installation</th></tr></thead>
           <tbody>
@@ -224,21 +224,21 @@ Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions,
           <summary>Connect Home Assistant Assist or voice</summary>
           <div class="advanced-content">
         <h2 id="assist">Use with Home Assistant Assist and voice</h2>
-        <p>Besides external MCP clients and <a href="agentcli.html">Agent Chat</a>, you can put Phoenix MCP behind Home Assistant's own Assist, so a voice or chat conversation runs through one token's scope, MESA safety, approvals, and audit instead of the unscoped default assistant. There are two ways to do this; pick whichever fits. For generating data inside automations rather than driving a conversation, see <a href="#ai-task">AI Task</a> below.</p>
+        <p>Besides external MCP clients and <a href="agentcli.html">Agent Chat</a>, you can put Phoenix MCP behind Home Assistant's own Assist, so a voice or chat conversation runs through one access key's scope, MESA safety, approvals, and audit instead of the unscoped default assistant. There are two ways to do this; pick whichever fits. For generating data inside automations rather than driving a conversation, see <a href="#ai-task">AI Task</a> below.</p>
 
-        <p>Assist and Voice also check the requesting Home Assistant user. Active administrators can use the token's privileged tools. Other users and unidentified satellites can use scoped household controls and discovery, with the token's existing Confirm and MESA gates. Identified users retain their Home Assistant entity permissions. Logs, configuration, templates, diagnostics and authoring require administrator identity, even with a pass-through token. The Voice Assistant preset denies System log read by default. Removing or changing a user invalidates an active request; approving a queued household action still checks its original requester.</p>
+        <p>Assist and Voice also check the requesting Home Assistant user. Active administrators can use the access key's privileged tools. Other users and unidentified satellites can use scoped household controls and discovery, with the access key's existing Confirm and MESA gates. Identified users retain their Home Assistant entity permissions. Logs, configuration, templates, diagnostics and authoring require administrator identity, even with a pass-through access key. The Voice Assistant preset denies System log read by default. Removing or changing a user invalidates an active request; approving a queued household action still checks its original requester.</p>
 
         <h3 id="assist-tool-provider">Option A: bring your own model</h3>
         <p>Phoenix MCP registers a control API named <strong>Phoenix MCP (scoped)</strong> that hands its scoped tools to a model an LLM conversation integration already supplies (OpenAI, Google, Anthropic, Ollama, and so on). Requires Home Assistant 2026.7 or later, which is also the integration's own minimum.</p>
         <ol>
-          <li>In the Phoenix MCP panel, open <strong>Settings > Assist Tool Provider</strong> and choose the <strong>Bound token</strong>. Only one token can be bound at a time; a least-privilege token (for example the Voice Assistant persona) is recommended.</li>
+          <li>In the Phoenix MCP panel, open <strong>Settings > Assist Tool Provider</strong> and choose the <strong>Bound access key</strong>. Only one access key can be bound at a time; a least-privilege access key (for example the Voice Assistant persona) is recommended.</li>
           <li>In your LLM conversation integration (Settings > Devices &amp; Services), set its <strong>Control Home Assistant</strong> option to <strong>Phoenix MCP (scoped)</strong>, then select that agent in <strong>Settings > Voice assistants</strong>. This applies to LLM-backed conversation agents, not the default template Assist pipeline.</li>
         </ol>
 
         <h3 id="voice-agent">Option B: let Phoenix MCP be the agent (no external software)</h3>
         <p>If you would rather not install a separate LLM app, Phoenix MCP can register itself as a conversation agent and run its own model, using an existing <a href="agentcli.html">Agent Chat</a> provider account.</p>
         <ol>
-          <li>In <strong>Settings > Voice Agent</strong> (the Phoenix MCP panel), enable it and pick a token, a provider account, and a model.</li>
+          <li>In <strong>Settings > Voice Agent</strong> (the Phoenix MCP panel), enable it and pick an access key, a provider account, and a model.</li>
           <li>Choose its <strong>Conversation style</strong> and <strong>Detail</strong>. Optionally enable <strong>Home-focused</strong>, a focus preference rather than a security control. The next request uses any changed setting immediately.</li>
           <li>Let Phoenix MCP set it up for you: on the first enable it offers to create an Assist assistant pointed at Phoenix MCP (and, if you leave the option on, make it your preferred assistant). Or use <strong>Set up Phoenix MCP assistant</strong> in that card any time.</li>
           <li>Prefer to do it by hand? In <strong>Settings > Voice assistants</strong>, set your assistant's conversation agent to <strong>Phoenix MCP</strong>.</li>
@@ -258,15 +258,15 @@ Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions,
           <summary>Generate automation data with AI Task</summary>
           <div class="advanced-content">
         <h2 id="ai-task">Generate data in automations with AI Task</h2>
-        <p>Home Assistant's <strong>AI Task</strong> feature lets an automation, script, or dashboard ask an AI model to produce text or structured data on demand, through the <code>ai_task.generate_data</code> action. Phoenix MCP can be that model: it registers an <strong>Phoenix MCP AI Task</strong> entity that runs Phoenix MCP's own model on a token's scope, so a task reads only what the token can see and every tool call it makes is gated, MESA-checked, and audited like any other. Available on every supported Home Assistant version. Like Agent Chat, the model comes from a provider account, so each task's prompt and the tool results the model sees are sent to that provider; use a local Ollama account to keep tasks fully local.</p>
+        <p>Home Assistant's <strong>AI Task</strong> feature lets an automation, script, or dashboard ask an AI model to produce text or structured data on demand, through the <code>ai_task.generate_data</code> action. Phoenix MCP can be that model: it registers an <strong>Phoenix MCP AI Task</strong> entity that runs Phoenix MCP's own model on an access key's scope, so a task reads only what the access key can see and every tool call it makes is gated, MESA-checked, and audited like any other. Available on every supported Home Assistant version. Like Agent Chat, the model comes from a provider account, so each task's prompt and the tool results the model sees are sent to that provider; use a local Ollama account to keep tasks fully local.</p>
         <p>AI Task always uses household-only authority, including when an administrator starts it. It cannot use privileged tools such as logs, configuration or authoring. Use it for scoped home state and control; use administrator Agent Chat for maintenance tasks. See the <a href="security.html">security boundaries</a>.</p>
         <ol>
-          <li>In <strong>Settings > AI Task</strong> (the Phoenix MCP panel), enable it and pick a token, an <a href="agentcli.html">Agent Chat</a> provider account, and a model. The <strong>Phoenix MCP AI Task</strong> entity appears once all four are set, and disappears again if you disable it or clear one of them.</li>
+          <li>In <strong>Settings > AI Task</strong> (the Phoenix MCP panel), enable it and pick an access key, an <a href="agentcli.html">Agent Chat</a> provider account, and a model. The <strong>Phoenix MCP AI Task</strong> entity appears once all four are set, and disappears again if you disable it or clear one of them.</li>
           <li>Choose a <strong>Conversation style</strong> and <strong>Detail</strong> for free-text results. Structured tasks omit both preferences and follow their output schema exactly.</li>
           <li>Optionally click <strong>Make default</strong> in the AI Task setup section to make Phoenix MCP your default entity for Data generation tasks, so an <code>ai_task.generate_data</code> action that does not name an entity runs through Phoenix MCP. Home Assistant keeps a single default, so the panel confirms before replacing an existing one.</li>
           <li>Point an AI Task action at the <strong>Phoenix MCP AI Task</strong> entity by <code>entity_id</code>, or leave the entity unset to use your default.</li>
         </ol>
-        <p>Here is an example script which asks Phoenix MCP to summarize the home and shows the answer as a notification. Because the task runs Phoenix MCP's scoped tool loop, the model looks up the lights itself, within the token's scope, before it writes the sentence:</p>
+        <p>Here is an example script which asks Phoenix MCP to summarize the home and shows the answer as a notification. Because the task runs Phoenix MCP's scoped tool loop, the model looks up the lights itself, within the access key's scope, before it writes the sentence:</p>
         <pre class="code" data-lang="yaml" data-label="Example: an AI Task script"><code>sequence:
   - action: ai_task.generate_data
     data:
@@ -284,7 +284,7 @@ Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions,
 
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.4" fill="currentColor"/></svg>
-          <div class="callout-body"><p class="callout-title">A confirm-gated task queues for approval</p><p>AI Task is not interactive, so if the model calls a Confirm-gated tool the call is reported as queued; you will need to approve it later in the Phoenix MCP panel. AI Task reuses an <a href="agentcli.html">Agent Chat</a> provider account for its model. Revoking or expiring the token it uses, or deleting that provider account, removes the Phoenix MCP AI Task entity and clears it as your default.</p></div>
+          <div class="callout-body"><p class="callout-title">A confirm-gated task queues for approval</p><p>AI Task is not interactive, so if the model calls a Confirm-gated tool the call is reported as queued; you will need to approve it later in the Phoenix MCP panel. AI Task reuses an <a href="agentcli.html">Agent Chat</a> provider account for its model. Revoking or expiring the access key it uses, or deleting that provider account, removes the Phoenix MCP AI Task entity and clears it as your default.</p></div>
         </div>
 
           </div>

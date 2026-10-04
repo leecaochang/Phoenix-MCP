@@ -174,7 +174,7 @@ async def _tool_restore_configuration(
     current_entry = hass.config_entries.async_get_entry(selected["entry_id"])
     action = "settings" if current_entry is not None else "create"
     if _unwritable_option_entities(options, token, hass, template_type=options["template_type"]):
-        return _tool_error("The Template snapshot references entities outside this token's current write scope."), "denied", tool
+        return _tool_error("The Template snapshot references entities outside this access key's current write scope."), "denied", tool
     context = _helper_mesa_context(
         data, token, [entity_id], action=action,
         service_data={"helper_type": options["template_type"], "config": options},

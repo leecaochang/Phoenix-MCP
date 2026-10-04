@@ -206,7 +206,7 @@ async def async_create_pending_approval(
     )
     if pending_for_token >= MAX_PENDING_APPROVALS_PER_TOKEN:
         raise PendingApprovalCapacityError(
-            f"token {token_id} already has {pending_for_token} pending approvals"
+            f"access key {token_id} already has {pending_for_token} pending approvals"
         )
     from .household_authority import household_authority
 

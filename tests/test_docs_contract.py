@@ -415,7 +415,7 @@ def test_event_reference_covers_runtime_events_and_rate_limit_coalescing() -> No
     documented = set(re.findall(r'<td><code>(phoenix_mcp_\w+)</code></td>', source))
     assert events <= documented, events - documented
     row = re.search(r'<tr><td><code>phoenix_mcp_rate_limited</code>.*?</tr>', source).group(0)
-    assert "at most once per token per minute" in row
+    assert "at most once per access key per minute" in row
     assert "every rejected request" not in row
 
 

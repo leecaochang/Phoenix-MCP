@@ -42,7 +42,7 @@ def _unique_id(token_id: str, sensor_type: str) -> str:
 
 def _device_name(token_name: str) -> str:
     """The device's display name. Sensors inherit it via has_entity_name."""
-    return f"Phoenix MCP Token: {token_name}"
+    return f"Phoenix MCP Access Key: {token_name}"
 
 
 def _make_sensors(
@@ -82,6 +82,8 @@ class PhoenixTokenSensor(SensorEntity):
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = ["active", "expired", "revoked"]
         self._attr_unique_id = _unique_id(token.id, sensor_type)
+        # Keep published entity IDs independent of credential display terminology.
+        self.entity_id = f"sensor.phoenix_mcp_token_{token_name_slug(token.name)}_{sensor_type}"
         # HA resolves the display name from translations/<lang>.json's entity
         # section; the English entries are the title-cased sensor type names.
         self._attr_translation_key = sensor_type
@@ -92,7 +94,7 @@ class PhoenixTokenSensor(SensorEntity):
             identifiers={(DOMAIN, self._token.id)},
             name=_device_name(self._token.name),
             manufacturer="Phoenix MCP",
-            model="Token Telemetry",
+            model="Access Key Telemetry",
         )
 
     @callback

@@ -188,23 +188,19 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "de": frozenset({
-        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # German spells these the same as English: shared loanwords, technical
         # terms, HA concepts, and units. Each is a genuine cognate, not an
         # untranslated string.
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMinimal",        # "Minimal"
-        "panel.agentchat.token",               # "Token"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
         "panel.approvalSummary.view.details",  # "Details"
         "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energySolar",         # "Solar"
         "panel.approvals.metaStatus",          # "Status"
-        "panel.approvals.metaToken",           # "Token"
         "panel.approvals.metaTool",            # "Tool"
-        "panel.audit.rowToken",                # "Token"
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.actionRollback",        # "Rollback"
         "panel.changes.colName",               # "Name"
@@ -218,8 +214,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.perms.colName",                 # "Name"
         "panel.selectBy.integration",          # "Integration"
         "panel.selectBy.label",                # "Label"
-        "panel.settings.token",                # "Token"
-        "panel.shell.tabTokens",               # "Tokens"
         "panel.tokens.cardPersona",            # "Persona"
         "panel.tokens.colName",                # "Name"
         "panel.tokens.colStatus",              # "Status"
@@ -228,8 +222,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.nameLabel",              # "Name"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
-        "panel.wizard.stepToken",              # "Token"
-        "panel.wizard.tokenLabel",             # "Token"
     }),
     "fr": frozenset({
         "panel.conversations.conversation",  # French cognate: Conversation.
@@ -249,17 +241,13 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
-        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "panel.agentchat.announceError",
         "panel.agentchat.approvalReason",
         "panel.agentchat.resultError",
-        "panel.agentchat.token",
         "panel.agentchat.toolResult",
         "panel.approvalSummary.named.kind.script",
         "panel.approvals.energyGas",
         "panel.approvals.energySolar",
-        "panel.approvals.metaToken",
-        "panel.audit.rowToken",
         "panel.changes.typeScript",
         "panel.mesa.archiveNone",
         "panel.mesa.costTrivial",
@@ -269,15 +257,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesaSuggestion.noun.script",
         "panel.settings.experimentalCard",
         "panel.settings.providerOllamaLocal",
-        "panel.settings.token",
-        "panel.shell.tabTokens",
         "panel.tokens.cardPersona",
         "panel.wizard.stepPersona",
-        "panel.wizard.stepToken",
-        "panel.wizard.tokenLabel",
     }),
     "it": frozenset({
-        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "panel.conversations.providerLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # Italian shares these with English as loanwords, HA terms, product
@@ -287,12 +270,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMax",            # "Max", the standard Italian abbreviation
         "panel.agentchat.title",               # "Agent Chat", a product name
-        "panel.agentchat.token",               # "Token"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
         "panel.approvalSummary.named.kind.script",  # "script", the invariant HA entity type
         "panel.approvals.energyGas",           # "Gas"
-        "panel.approvals.metaToken",           # "Token"
-        "panel.audit.rowToken",                # "Token"
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.typeFile",              # "File", the same word in Italian
         "panel.changes.typeScript",            # "Script"
@@ -305,16 +285,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.languageAuto",         # "Auto", HA Italian's own label
         "panel.settings.providerOllamaCloud",  # "Ollama (cloud)", "cloud" is a cognate
         "panel.settings.themeAuto",            # "Auto"
-        "panel.settings.token",                # "Token"
         "panel.shell.agentChat",               # "Agent Chat", a product name
         "panel.tokens.cardPersona",            # "Persona"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
-        "panel.wizard.stepToken",              # "Token"
-        "panel.wizard.tokenLabel",             # "Token"
     }),
     "nl": frozenset({
-        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "panel.conversations.providerLabel",  # Shared technical term or cognate.
         "panel.conversations.modelLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
@@ -327,7 +303,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.provider",            # "Provider"
         "panel.agentchat.resultOk",            # "ok"
         "panel.agentchat.title",               # "Agent Chat", a product name
-        "panel.agentchat.token",               # "Token"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
         "panel.agentchat.usageContext",        # " · context {tokens}", "context" is a cognate
         "panel.approvalSummary.named.kind.helper",  # "helper"
@@ -337,12 +312,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energyWater",         # "Water"
         "panel.approvals.metaStatus",          # "Status"
-        "panel.approvals.metaToken",           # "Token"
         "panel.approvals.metaTool",            # "Tool"
         "panel.audit.resourcePlaceholder",     # "Resource..."
         "panel.audit.rowPayload",              # "Payload"
         "panel.audit.rowResource",             # "Resource"
-        "panel.audit.rowToken",                # "Token"
         "panel.changes.colType",               # "Type"
         "panel.changes.typeBlueprint",         # "Blueprint"
         "panel.changes.typeDashboard",         # "Dashboard"
@@ -357,9 +330,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.languageAuto",         # "Auto"
         "panel.settings.model",                # "Model"
         "panel.settings.providerOllamaCloud",  # "Ollama (cloud)", "cloud" is a cognate
-        "panel.settings.token",                # "Token"
         "panel.shell.agentChat",               # "Agent Chat", a product name
-        "panel.shell.tabTokens",               # "Tokens"
         "panel.tokens.cardPersona",            # "Persona"
         "panel.tokens.colStatus",              # "Status"
         "panel.tokens.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
@@ -370,12 +341,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepProvider",           # "Provider"
         "panel.wizard.stepTest",               # "Test"
-        "panel.wizard.stepToken",              # "Token"
-        "panel.wizard.tokenLabel",             # "Token"
         "voice.provider_error",                # "Sorry, {reason}.", "Sorry" is a cognate
     }),
     "pl": frozenset({
-        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "panel.conversations.modelLabel",  # Shared technical term or cognate.
         # Polish keeps these as shared loanwords, technical terms, and bare
         # separator/template fragments. Each is a genuine cognate or machine
@@ -383,17 +351,13 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.model",               # "Model"
         "panel.agentchat.resultOk",            # "ok"
-        "panel.agentchat.token",               # "Token"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
         "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.metaStatus",          # "Status"
-        "panel.approvals.metaToken",           # "Token"
-        "panel.audit.rowToken",                # "Token"
         "panel.common.diff",                   # "Diff"
         "panel.settings.languageAuto",         # "Auto"
         "panel.settings.model",                # "Model"
         "panel.settings.themeAuto",            # "Auto"
-        "panel.settings.token",                # "Token"
         "panel.tokens.cardPersona",            # "Persona"
         "panel.tokens.colStatus",              # "Status"
         "panel.tokens.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
@@ -401,8 +365,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
-        "panel.wizard.stepToken",              # "Token"
-        "panel.wizard.tokenLabel",             # "Token"
     }),
     "ru": frozenset({
         # A bare separator fragment and a code-span-plus-colon template carry no

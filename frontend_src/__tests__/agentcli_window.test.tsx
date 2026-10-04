@@ -1903,7 +1903,7 @@ describe("AgentCliWindow streaming", () => {
     );
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-a"));
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "m-b" } });
-    fireEvent.change(screen.getByLabelText("Token"), { target: { value: "t2" } });
+    fireEvent.change(screen.getByLabelText("Access Key"), { target: { value: "t2" } });
     fireEvent.click(screen.getByLabelText("Options"));
     fireEvent.click(screen.getByLabelText("Show verbose output"));
 
@@ -1917,7 +1917,7 @@ describe("AgentCliWindow streaming", () => {
                       initialTokenId="t1" onClose={() => {}} />,
     );
     // Restored from persistence, not reset to defaults.
-    await waitFor(() => expect((screen.getByLabelText("Token") as HTMLSelectElement).value).toBe("t2"));
+    await waitFor(() => expect((screen.getByLabelText("Access Key") as HTMLSelectElement).value).toBe("t2"));
     expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-b");
   });
 });

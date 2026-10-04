@@ -35,7 +35,7 @@ _REDACTED = "<redacted>"
 _SECRET = re.compile(
     r"(?i)(\b(?:bearer|basic)\s+)\S+|"
     r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|AKIA[A-Z0-9]{16})\b|"
-    r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
+    r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
 )
 _PRIVATE_KEY = re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|\Z)", re.S)
 _DATA_URI = re.compile(r"data:[^\s\"')<>]+", re.I)
@@ -394,14 +394,22 @@ class ConversationLog:
                 entry["omissions"].append("size_limit")
             self._changed(entry, "omissions")
 
+    def _clean_metadata(self, entry: dict, value: dict) -> dict:
+        """Project scrubbed identity fields, normalizing previously saved names."""
+        value = dict(value)
+        for legacy, canonical in (("token_id", "access_key_id"), ("token_name", "access_key_name")):
+            if legacy in value:
+                value.setdefault(canonical, value.pop(legacy))
+        return {key: self._clean(entry, item, False, limit=512)[0] for key, item in value.items()
+                if key in CONVERSATION_LOG_METADATA and (key != "client_ip" or self._settings.log_client_ip)}
+
     @best_effort
     def assign(self, handle: Any, field: str, value: Any, *, content: bool = True) -> None:
         entry = self.entry(handle)
         if entry is None:
             return
         if field == "metadata" and isinstance(value, dict):
-            entry[field] = {key: self._clean(entry, item, False, limit=512)[0] for key, item in value.items()
-                            if key in CONVERSATION_LOG_METADATA and (key != "client_ip" or self._settings.log_client_ip)}
+            entry[field] = self._clean_metadata(entry, value)
         else:
             entry[field], reason = self._clean(entry, value, content)
             if reason:
@@ -669,8 +677,7 @@ class ConversationLog:
                             entry["field_omissions"][field] = reason
                 metadata = raw.get("metadata")
                 if isinstance(metadata, dict):
-                    entry["metadata"] = {key: self._clean(entry, value, False, limit=512)[0] for key, value in metadata.items()
-                                         if key in CONVERSATION_LOG_METADATA and (key != "client_ip" or self._settings.log_client_ip)}
+                    entry["metadata"] = self._clean_metadata(entry, metadata)
                 for event in entry["events"]:
                     payload = event.get("payload")
                     if event["kind"] == "routing" and isinstance(payload, dict) and payload.get("result") == "running":
@@ -761,8 +768,8 @@ def recorded_exchange(run: Callable) -> Callable:
         own = parent is None
         token = values["token"]
         source = values["client_ip"] if values["client_ip"] in {"agentcli", "assist", "voice", "ai_task", "home_companion"} else "mcp"
-        handle = log.begin(source, metadata={"request_id": values.get("request_id"), "token_id": token.id,
-                                            "token_name": token.name, "client_ip": values["client_ip"], "session_ref": _transport.get()}) if own else parent
+        handle = log.begin(source, metadata={"request_id": values.get("request_id"), "access_key_id": token.id,
+                                            "access_key_name": token.name, "client_ip": values["client_ip"], "session_ref": _transport.get()}) if own else parent
         ctx = _current.set(handle)
         parent_tool_id = _tool.get()
         call_ctx = _tool.set(uuid4().hex)
@@ -836,7 +843,7 @@ def recorded_chat(run: Callable) -> Callable:
         if isinstance(prompt, list) and not all(isinstance(block, dict) and block.get("type") in {
                 "text", "input_text", "image", "image_url", "input_image"} for block in prompt):
             prompt = None
-        handle = log.begin("agentcli", prompt=prompt, metadata={"token_id": kwargs["token"].id, "token_name": kwargs["token"].name})
+        handle = log.begin("agentcli", prompt=prompt, metadata={"access_key_id": kwargs["token"].id, "access_key_name": kwargs["token"].name})
         log.bind_chat(handle, chat_id, kwargs["token"], has_history=len(messages) > 1)
         ctx = _current.set(handle)
         record_identity(token=kwargs["token"], config=getattr(kwargs.get("provider"), "cfg", None))
@@ -925,7 +932,7 @@ def record_identity(*, token: Any = None, config: Any = None) -> None:
         if entry is None:
             return
         metadata = dict(entry["metadata"])
-        values = {"token_id": getattr(token, "id", None), "token_name": getattr(token, "name", None),
+        values = {"access_key_id": getattr(token, "id", None), "access_key_name": getattr(token, "name", None),
                   "provider": getattr(config, "kind", None), "model": getattr(config, "model", None)}
         # Delegated work cannot replace the originating turn's selected identity.
         for key, value in values.items():

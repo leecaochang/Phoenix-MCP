@@ -502,7 +502,7 @@ async def test_written_statistic_must_resolve_but_addressed_one_need_not(
             statistic="sensor.washer_energy", new_statistic="sensor.never_existed",
         )
     assert outcome == "invalid_request"
-    assert "not an entity this token can use" in _text(content)
+    assert "not an entity this access key can use" in _text(content)
     assert saved == []
 
 

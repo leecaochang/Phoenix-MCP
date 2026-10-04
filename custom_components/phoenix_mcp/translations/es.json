@@ -9,7 +9,7 @@
       "already_configured": "La integración Phoenix MCP ya está configurada."
     },
     "create_entry": {
-      "default": "Utilice el panel de Phoenix MCP para gestionar los tokens."
+      "default": "Utilice el panel de Phoenix MCP para gestionar las claves de acceso."
     }
   },
   "issues": {

@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP è già configurato."
     },
     "create_entry": {
-      "default": "Usa il pannello di Phoenix MCP per gestire i tuoi token"
+      "default": "Usa il pannello di Phoenix MCP per gestire i tuoi chiave di accesso"
     },
     "step": {
       "user": {

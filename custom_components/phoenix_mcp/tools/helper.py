@@ -1045,7 +1045,7 @@ async def _scoped_helper_context(
         return None, (
             _tool_error(
                 "Helper not found or one of its relationships is outside this "
-                "token's write scope."
+                "access key's write scope."
             ),
             "not_found",
             f"helper:{helper_type}:{helper_id}",
@@ -1169,7 +1169,7 @@ async def _tool_create_helper(
         if status == "denied":
             return (
                 _tool_error(
-                    "These entities are outside this token's write scope: "
+                    "These entities are outside this access key's write scope: "
                     f"{', '.join(detail)}. A helper may expose or actuate every entity "
                     "it references, so all of them must already be writable."
                 ),
@@ -1263,7 +1263,7 @@ async def _execute_create_helper(
         if status == "denied":
             return (
                 _tool_error(
-                    "These entities are outside this token's write scope: "
+                    "These entities are outside this access key's write scope: "
                     f"{', '.join(detail)}."
                 ),
                 "denied", "create_helper",
@@ -1356,7 +1356,7 @@ async def _execute_create_helper(
                 except WsDispatchError:
                     return (
                         _tool_error(
-                            f"The new {helper_type} did not enter this token's write "
+                            f"The new {helper_type} did not enter this access key's write "
                             "scope, and "
                             "automatic cleanup failed. Remove it in Home Assistant."
                         ),
@@ -1365,7 +1365,7 @@ async def _execute_create_helper(
                     )
             return (
                 _tool_error(
-                    f"The new {helper_type} did not enter this token's write scope, "
+                    f"The new {helper_type} did not enter this access key's write scope, "
                     "so it was removed and nothing changed."
                 ),
                 "denied",
@@ -1519,7 +1519,7 @@ async def _execute_config_flow_helper(
             if denied:
                 return (
                     _tool_error(
-                        "These entities are outside this token's write scope: "
+                        "These entities are outside this access key's write scope: "
                         f"{', '.join(denied)}."
                     ),
                     "denied", "create_helper",
@@ -2541,9 +2541,9 @@ def _config_entry_settings_precheck(
     if denied:
         return (
             _tool_error(
-                f"These entities are outside this token's write scope: {', '.join(denied)}. "
+                f"These entities are outside this access key's write scope: {', '.join(denied)}. "
                 "A helper exposes and can actuate the entity it points at, so it may only be "
-                "pointed at entities this token could already control."
+                "pointed at entities this access key could already control."
             ),
             "denied", tool,
         )
@@ -2596,7 +2596,7 @@ async def _preflight_template_settings(hass, entry, settings, token, *, intended
         options = _template_options_after_form(before["options"], payload, schema)
         denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
         if denied:
-            return _tool_error("Template references are outside this token's write scope."), "denied", "set_helper_settings"
+            return _tool_error("Template references are outside this access key's write scope."), "denied", "set_helper_settings"
         if intended is not None:
             intended.update(before, options=options)
     except HelperScopeError as exc:
@@ -2794,7 +2794,7 @@ async def _apply_config_entry_options(
             denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
             if denied:
                 await _abort_flow(hass, mechanism, flow_id)
-                return _tool_error("Template references are outside this token's write scope."), "denied", tool
+                return _tool_error("Template references are outside this access key's write scope."), "denied", tool
         result = await _configure_settings_flow(
             hass,
             mechanism,

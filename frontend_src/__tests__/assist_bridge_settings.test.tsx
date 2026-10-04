@@ -24,13 +24,13 @@ describe("AssistBridgeSettings", () => {
     const onChange = vi.fn();
     render(<AssistBridgeSettings settings={settings()} onChange={onChange} saving={false} />);
     await waitFor(() => expect(screen.getByRole("option", { name: "voice-token" })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("Assist bound token"), { target: { value: "tok-1" } });
+    fireEvent.change(screen.getByLabelText("Assist bound access key"), { target: { value: "tok-1" } });
     expect(onChange).toHaveBeenCalledWith("assist_bound_token_id", "tok-1");
   });
 
   it("places its help above the token dropdown", () => {
     render(<AssistBridgeSettings settings={settings()} onChange={vi.fn()} saving={false} />);
-    expect(screen.getByLabelText("Assist bound token").closest(".toggle-row"))
+    expect(screen.getByLabelText("Assist bound access key").closest(".toggle-row"))
       .toHaveClass("toggle-row-stacked-control");
   });
 
@@ -38,17 +38,17 @@ describe("AssistBridgeSettings", () => {
     const onChange = vi.fn();
     render(<AssistBridgeSettings settings={settings({ assist_bound_token_id: "tok-1" })} onChange={onChange} saving={false} />);
     await waitFor(() => expect(listTokens).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("Assist bound token"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Assist bound access key"), { target: { value: "" } });
     expect(onChange).toHaveBeenCalledWith("assist_bound_token_id", "");
   });
 
   it("reflects the currently bound token", async () => {
     render(<AssistBridgeSettings settings={settings({ assist_bound_token_id: "tok-1" })} onChange={vi.fn()} saving={false} />);
-    await waitFor(() => expect((screen.getByLabelText("Assist bound token") as HTMLSelectElement).value).toBe("tok-1"));
+    await waitFor(() => expect((screen.getByLabelText("Assist bound access key") as HTMLSelectElement).value).toBe("tok-1"));
   });
 
   it("disables the dropdown when unsupported", () => {
     render(<AssistBridgeSettings settings={settings({ assist_api_supported: false })} onChange={vi.fn()} saving={false} />);
-    expect((screen.getByLabelText("Assist bound token") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Assist bound access key") as HTMLSelectElement).disabled).toBe(true);
   });
 });
