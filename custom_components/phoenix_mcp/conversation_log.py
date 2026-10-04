@@ -17,7 +17,7 @@ import logging
 import math
 import re
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from homeassistant.util.dt import utcnow, parse_datetime
 
@@ -26,7 +26,7 @@ from .const import (
     CONVERSATION_LOG_MAX_NODES, CONVERSATION_LOG_MAX_DEPTH, CONVERSATION_LOG_METADATA,
     CONVERSATION_LOG_ENTRY_BYTES, CONVERSATION_LOG_PAYLOAD_BYTES, CONVERSATION_LOG_SCAN_BYTES,
     CONVERSATION_LOG_MAX_EVENTS, CONVERSATION_LOG_MAX_OPERATIONS, CONVERSATION_LOG_MAX_APPROVALS,
-    CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS,
+    CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS, CONVERSATION_LOG_STATUS_PRIORITY,
 )
 from .helpers import is_sensitive_key, redact_secrets_in_text
 
@@ -449,14 +449,16 @@ class ConversationLog:
                     entry["overflow_outcomes"].append("unknown")
 
     @best_effort
-    def event(self, handle: Any, kind: str, payload: Any = None, **facts: Any) -> None:
+    def event(self, handle: Any, kind: str, payload: Any = None, **facts: Any) -> dict | None:
         entry = self.entry(handle)
         if entry is None:
-            return
+            return None
         if kind != "assistant_text":
             flush_assistant()
         clean, reason = self._clean(entry, payload)
         event = {"kind": kind, "timestamp": utcnow().isoformat(), "tool_id": _tool.get(), "payload": clean}
+        if kind == "tool_call":
+            event["parent_tool_id"] = facts.get("parent_tool_id")
         if reason:
             event["omission"] = reason
         if facts.get("outcome") in CONVERSATION_LOG_OUTCOMES:
@@ -488,6 +490,7 @@ class ConversationLog:
                       "execution_status", "tool_count", "change_count", "first_tool")
         self._bound(entry)
         self.prune()
+        return event if any(item is event for item in entry["events"]) else None
 
     @best_effort
     def finish(self, handle: Any, *, response: Any = None, status: str = "completed", response_status: str | None = None) -> None:
@@ -529,7 +532,26 @@ class ConversationLog:
         finally:
             _current.reset(ctx)
 
-    def query(self, *, limit: int = 25, offset: int = 0, search: str = "", source: str = "", outcome: str = "", since: str = "") -> dict:
+    @best_effort
+    def bind_chat(self, handle: Any, client_id: Any, token: Any, *, has_history: bool) -> None:
+        """Correlate explicit chat identity only, never shared credentials or timing."""
+        entry = self.entry(handle)
+        if entry is None or getattr(token, "persona", None) == "home_companion":
+            return
+        try:
+            identifier = UUID(client_id) if isinstance(client_id, str) and len(client_id) == 36 else None
+        except ValueError:
+            return
+        if identifier is None:
+            return
+        key = hashlib.sha256(f"{token.id}:{identifier}".encode()).hexdigest()
+        previous = next((e for e in reversed(list(self._entries.values()))
+                         if e.get("chat_key") == key and e is not entry), None) if has_history else None
+        entry.update(chat_key=key, thread_id=previous["thread_id"] if previous else entry["id"],
+                     history_missing=bool(has_history and previous is None))
+        self._changed(entry, "chat_key", "thread_id", "history_missing")
+
+    def query(self, *, limit: int = 25, offset: int = 0, search: str = "", source: str = "", outcome: str = "", since: str = "", grouped: bool = False) -> dict:
         self.prune()
         entries = []
         for entry in reversed(list(self._entries.values())):
@@ -547,8 +569,35 @@ class ConversationLog:
                     continue
             entries.append(entry)
         keys = {"id", "source", "started_at", "updated_at", "finished_at", "coverage", "status", "execution_status", "response_status", "tool_count", "change_count", "omissions", "omitted_events", "first_tool"}
-        summaries = [{**{k: deepcopy(v) for k, v in e.items() if k in keys}, "excerpt": prompt_excerpt(e["prompt"])} for e in entries[offset:offset + limit]]
-        return {"entries": summaries, "total": len(entries), "enabled": self._enabled,
+        def summary(e: dict) -> dict:
+            return {**{k: deepcopy(v) for k, v in e.items() if k in keys}, "excerpt": prompt_excerpt(e["prompt"])}
+
+        if grouped:
+            selected = {e.get("thread_id", e["id"]) for e in entries}
+            groups: dict[str, list[dict]] = {}
+            for e in self._entries.values():
+                thread = e.get("thread_id", e["id"])
+                if thread in selected:
+                    groups.setdefault(thread, []).append(e)
+            rows = []
+            for thread, turns in groups.items():
+                turns.sort(key=lambda e: e["started_at"])
+                row = summary(turns[0])
+                row.update(id=thread, updated_at=max(e["updated_at"] for e in turns),
+                           latest_at=turns[-1]["started_at"])
+                if any(e.get("thread_id") for e in turns):
+                    row.update(turns=[summary(e) for e in turns],
+                               history_missing=thread not in self._entries or bool(turns[0].get("history_missing")))
+                for field in ("tool_count", "change_count"):
+                    row[field] = sum(e[field] for e in turns)
+                for field in ("status", "execution_status"):
+                    row[field] = next((value for value in CONVERSATION_LOG_STATUS_PRIORITY if any(e[field] == value for e in turns)), turns[-1][field])
+                rows.append(row)
+            rows.sort(key=lambda e: e["latest_at"], reverse=True)
+            summaries, total = rows[offset:offset + limit], len(rows)
+        else:
+            summaries, total = [summary(e) for e in entries[offset:offset + limit]], len(entries)
+        return {"entries": summaries, "total": total, "enabled": self._enabled,
                 "available": self.available, "bytes": self._size(), "max_bytes": self.budget}
 
     def detail(self, entry_id: str) -> dict | None:
@@ -624,6 +673,8 @@ class ConversationLog:
                                          if key in CONVERSATION_LOG_METADATA and (key != "client_ip" or self._settings.log_client_ip)}
                 for event in entry["events"]:
                     payload = event.get("payload")
+                    if event["kind"] == "routing" and isinstance(payload, dict) and payload.get("result") == "running":
+                        payload["result"] = "interrupted"
                     if "receipts" not in raw:
                         if event["kind"].startswith("approval_") and isinstance(payload, dict):
                             event["approval_id"] = payload.get("approval_id")
@@ -713,9 +764,10 @@ def recorded_exchange(run: Callable) -> Callable:
         handle = log.begin(source, metadata={"request_id": values.get("request_id"), "token_id": token.id,
                                             "token_name": token.name, "client_ip": values["client_ip"], "session_ref": _transport.get()}) if own else parent
         ctx = _current.set(handle)
+        parent_tool_id = _tool.get()
         call_ctx = _tool.set(uuid4().hex)
         params = values["params"]
-        record_event(data, "tool_call", {"name": params.get("name"), "arguments": params.get("arguments", {}), "request_id": values["request_id"]})
+        record_event(data, "tool_call", {"name": params.get("name"), "arguments": params.get("arguments", {}), "request_id": values["request_id"]}, parent_tool_id=parent_tool_id)
         try:
             result = await run(*args, **kwargs)
             record_event(data, "tool_result", result[0], outcome=result[3])
@@ -772,6 +824,7 @@ def recorded_chat(run: Callable) -> Callable:
     """Sanitize assembled visible output, never store individual streaming fragments."""
     @functools.wraps(run)
     async def wrapped(*args: Any, **kwargs: Any) -> Any:
+        chat_id = kwargs.pop("log_conversation_id", None)
         if _current.get() is not None:
             return await run(*args, **kwargs)
         data = kwargs["data"]
@@ -784,6 +837,7 @@ def recorded_chat(run: Callable) -> Callable:
                 "text", "input_text", "image", "image_url", "input_image"} for block in prompt):
             prompt = None
         handle = log.begin("agentcli", prompt=prompt, metadata={"token_id": kwargs["token"].id, "token_name": kwargs["token"].name})
+        log.bind_chat(handle, chat_id, kwargs["token"], has_history=len(messages) > 1)
         ctx = _current.set(handle)
         record_identity(token=kwargs["token"], config=getattr(kwargs.get("provider"), "cfg", None))
         emit = kwargs["emit"]
@@ -889,6 +943,53 @@ def record_current(kind: str, payload: Any = None) -> None:
         handle[0].event(handle, kind, payload)
 
 
+@contextmanager
+def routing_span(route: str, **facts: Any):
+    """Keep one bounded routing receipt, including cancellation and late results."""
+    handle = _current.get()
+    event = None
+    payload = {"route": route, "result": "running", **facts}
+    try:
+        if handle is not None:
+            log = handle[0]
+            entry = log.entry(handle)
+            if entry is not None:
+                event = log.event(handle, "routing", payload)
+    except Exception:
+        _LOGGER.warning("Conversation routing start omitted")
+    try:
+        yield payload
+    except asyncio.CancelledError:
+        payload["result"] = "cancelled"
+        raise
+    except GeneratorExit:
+        if payload["result"] == "running":
+            payload["result"] = "interrupted"
+        raise
+    except BaseException:
+        payload["result"] = "failed"
+        raise
+    else:
+        if payload["result"] == "running":
+            payload["result"] = "completed"
+    finally:
+        if handle is not None and event is not None:
+            try:
+                log = handle[0]
+                entry = log.entry(handle)
+                if entry is not None and any(item is event for item in entry["events"]):
+                    clean, reason = log._clean(entry, payload)
+                    event["payload"] = clean
+                    if reason:
+                        event["omission"] = reason
+                    event["finished_at"] = utcnow().isoformat()
+                    log._changed(entry, "events")
+                    log._bound(entry)
+                    log.prune()
+            except Exception:
+                _LOGGER.warning("Conversation routing evidence omitted")
+
+
 def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
     """Scrub JSON string tokens even when the surrounding arguments are invalid."""
     if len(raw.encode("utf-8")) > CONVERSATION_LOG_SCAN_BYTES:
@@ -928,7 +1029,7 @@ def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
 
 
 def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str,
-                         finish_reason: Any = None, error: json.JSONDecodeError | None = None) -> None:
+                         finish_reason: Any = None, stage: str = "provider_validation", error: json.JSONDecodeError | None = None) -> None:
     """Keep rejected proposals in admin history, never in provider/SSE diagnostics."""
     try:
         handle = _current.get()
@@ -938,7 +1039,7 @@ def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str
         payload = {
             "code": "tool_call_rejected", "message": "Tool call rejected before execution. " + reason,
             "name": name, "call_id": call_id, "executed": False,
-            "stage": "provider_validation", "finish_reason": finish_reason,
+            "stage": stage, "finish_reason": finish_reason,
         }
         if error is not None:
             # Positions refer to received text; redaction can change its length.

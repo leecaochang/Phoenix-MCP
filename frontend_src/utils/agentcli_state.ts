@@ -189,6 +189,7 @@ const CONV_KEY = "phx-agentcli-conversation";
 const MAX_CONV_BYTES = 2_000_000;
 
 interface Conversation {
+  logConversationId: string;
   turns: unknown[];
   draft: string;
   usage: SessionUsage;
@@ -224,7 +225,7 @@ function sanitizeForPersistence(value: unknown): unknown {
 }
 
 function defaultConversation(): Conversation {
-  return { turns: [], draft: "", usage: { input: 0, output: 0, context: 0, noData: false } };
+  return { logConversationId: "", turns: [], draft: "", usage: { input: 0, output: 0, context: 0, noData: false } };
 }
 
 let conversation: Conversation = defaultConversation();
@@ -240,6 +241,7 @@ function load(): Conversation {
       const p = JSON.parse(raw) as Partial<Conversation>;
       const d = defaultConversation();
       conversation = {
+        logConversationId: typeof p.logConversationId === "string" ? p.logConversationId : "",
         turns: Array.isArray(p.turns) ? p.turns : d.turns,
         draft: typeof p.draft === "string" ? p.draft : d.draft,
         usage: { ...d.usage, ...(p.usage || {}) },
@@ -279,6 +281,25 @@ function save(): void {
   } catch {
     /* storage blocked or quota exceeded: the conversation stays in memory only */
   }
+}
+
+/** Explicit identity follows persisted history; an empty request starts a new chat. */
+export function getLogConversationId(hasHistory: boolean, owner = ownerId): string {
+  if (!ownsSession(owner)) return "";
+  const state = load();
+  if (!hasHistory || !state.logConversationId) {
+    state.logConversationId = "";
+    try {
+      // getRandomValues also works on HA installations served over local HTTP.
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 15) | 64;
+      bytes[8] = (bytes[8] & 63) | 128;
+      const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+      state.logConversationId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      save();
+    } catch { /* Optional correlation must never prevent a chat request. */ }
+  }
+  return state.logConversationId;
 }
 
 export function getSessionTurns(): unknown[] {

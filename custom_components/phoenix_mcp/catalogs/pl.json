@@ -2194,7 +2194,6 @@
     },
     "conversations": {
       "title": "Dziennik rozmów",
-      "description": "Czytelny zapis pytań, działań Phoenix i odpowiedzi.",
       "unknown": "Nieznane",
       "fullText": "Pokaż pełny tekst ({count} znaków)",
       "copied": "Skopiowano",
@@ -2215,8 +2214,6 @@
       "technical": "Szczegóły techniczne",
       "loadFailed": "Nie można wczytać historii. Odśwież, aby spróbować ponownie.",
       "clearFailed": "Nie można usunąć historii z pamięci. Spróbuj ponownie.",
-      "recording": "Rejestrowanie włączone",
-      "recordingOff": "Rejestrowanie wyłączone",
       "disabledHelp": "Rejestrowanie jest wyłączone. Włącz je w Ustawieniach, aby zapisywać nowe rozmowy. Istniejące wpisy nadal podlegają limitom przechowywania.",
       "storageUnavailable": "Pamięć historii jest niedostępna. Ostatnia aktywność może zostać utracona po ponownym uruchomieniu.",
       "search": "Szukaj w zapisanym tekście",
@@ -2324,7 +2321,7 @@
       "deliveryUnverified": "Phoenix wygenerował tę odpowiedź. Dostarczenie jej użytkownikowi nie jest potwierdzone.",
       "clientPromptUnavailable": "Ten klient nie przekazał Phoenix wiadomości użytkownika.",
       "routeLocal": "Obsłużono lokalnie",
-      "routeProvider": "Wysłano do modelu AI",
+      "routeProvider": "Wysłano do dostawcy LLM",
       "executionUnknown": "Wynik niepotwierdzony: działanie mogło zostać wykonane. Sprawdź Home Assistant przed ponowną próbą.",
       "omittedEvents": "Osiągnięto limit zdarzeń: nie pokazano {count} zdarzeń. Zapisane wyniki są przechowywane osobno.",
       "loggingDisabled": "Rejestrowanie jest niedostępne, gdy wszystkie dzienniki są wyłączone.",
@@ -2340,7 +2337,17 @@
         "other": "{count} zmian",
         "few": "{count} zmiany",
         "many": "{count} zmian"
-      }
+      },
+      "routeAssist": "Sprawdzono za pomocą Assist",
+      "routeDecision": "Wywołano dostawcę decyzji",
+      "routeDecisionResult": "Wynik routingu decyzji",
+      "routeDecisionLocal": "Obsłużono lokalnie na podstawie decyzji",
+      "observationOnly": "Tylko obserwacja; nie wykonano żadnego działania.",
+      "routingOnly": "Tylko sprawdzenie routingu; wykonanie jest rejestrowane osobno.",
+      "toolResult": "Wynik narzędzia",
+      "conversation": "Rozmowa",
+      "turns": "Tury: {count}",
+      "historyMissing": "Wcześniejsze tury są niedostępne. Mogły powstać przed włączeniem rejestrowania lub zostać usunięte z powodu limitów przechowywania."
     },
     "attention": {
       "title": "Wymaga uwagi",

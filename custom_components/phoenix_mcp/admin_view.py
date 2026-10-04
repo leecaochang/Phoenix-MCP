@@ -1929,7 +1929,7 @@ class PhoenixAdminConversationsView(PhoenixView):
         if since_raw and since is None:
             return _err("invalid_request", "Invalid since timestamp.", 400, rid, key="sinceTimestampInvalid")
         log = recorder(self.hass.data[DOMAIN])
-        return _ok(log.query(limit=paged[0], offset=paged[1],
+        return _ok(log.query(limit=paged[0], offset=paged[1], grouped=request.query.get("grouped") == "true",
                              search=request.query.get("search", "")[:512],
                              source=request.query.get("source", "")[:64],
                              outcome=request.query.get("outcome", "")[:64],

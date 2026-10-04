@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "对话日志",
-      "description": "以易读形式记录收到的请求、Phoenix 的操作及回复。",
       "unknown": "未知",
       "fullText": "显示全文（{count} 个字符）",
       "copied": "已复制",
@@ -2111,8 +2110,6 @@
       "technical": "技术详情",
       "loadFailed": "无法加载对话历史。请刷新重试。",
       "clearFailed": "无法从存储中清除历史。请重试。",
-      "recording": "记录已启用",
-      "recordingOff": "记录已停用",
       "disabledHelp": "记录已关闭。可在设置中开启以记录新对话。现有记录仍受保留限制约束。",
       "storageUnavailable": "历史存储不可用，近期活动可能在重启后丢失。",
       "search": "搜索已记录的文本",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix 已生成此回复，尚未验证用户是否收到。",
       "clientPromptUnavailable": "此客户端未向 Phoenix 提供用户消息。",
       "routeLocal": "由本地处理",
-      "routeProvider": "已发送至 AI 模型",
+      "routeProvider": "已发送至 LLM 提供商",
       "executionUnknown": "结果未确认：操作可能已执行。请先检查 Home Assistant，再决定是否重试。",
       "omittedEvents": "已达事件上限：未显示 {count} 个事件。已记录的结果会单独保留。",
       "loggingDisabled": "开启“禁用所有日志”时无法记录对话。",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "{count} 项更改",
         "other": "{count} 项更改"
-      }
+      },
+      "routeAssist": "已通过 Assist 检查",
+      "routeDecision": "已调用决策提供商",
+      "routeDecisionResult": "决策路由结果",
+      "routeDecisionLocal": "根据决策在本地处理",
+      "observationOnly": "仅观察，未执行任何操作。",
+      "routingOnly": "仅检查路由，执行情况单独记录。",
+      "toolResult": "工具结果",
+      "conversation": "对话",
+      "turns": "轮次：{count}",
+      "historyMissing": "较早的轮次不可用，可能发生于启用记录之前，或已因保留限制而删除。"
     },
     "attention": {
       "title": "需要关注",

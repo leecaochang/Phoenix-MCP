@@ -806,3 +806,100 @@ async def test_rejected_call_recording_obeys_privacy_limits_and_failures(convers
         assert not log.query()["entries"]
     finally:
         history._current.reset(context)
+
+
+def test_explicit_chat_groups_are_oldest_first_and_sessions_stay_separate(conversation_data):
+    from uuid import uuid4
+    data, token = conversation_data
+    log = history.recorder(data)
+    chat, other = str(uuid4()), str(uuid4())
+    first = log.begin('agentcli', prompt='First request')
+    log.bind_chat(first, chat, token, has_history=False)
+    log.finish(first, response='First reply')
+    standalone = log.begin('mcp')
+    log.finish(standalone)
+    second = log.begin('agentcli', prompt='Follow-up')
+    log.bind_chat(second, chat, token, has_history=True)
+    log.finish(second, response='Second reply')
+    different = log.begin('agentcli', prompt='Different chat')
+    log.bind_chat(different, other, token, has_history=False)
+    log.finish(different, response='Other reply')
+    rows = log.query(grouped=True)['entries']
+    assert [row['id'] for row in rows] == [different[1], first[1], standalone[1]]
+    assert [turn['id'] for turn in rows[1]['turns']] == [first[1], second[1]]
+    assert 'events' not in rows[1]['turns'][0]
+    assert log.query(grouped=True, search='Follow-up')['entries'][0]['turns'] == rows[1]['turns']
+    assert log.query(grouped=True, limit=1, offset=1)['entries'][0]['id'] == first[1]
+    reset = log.begin('agentcli', prompt='Reset with same client ID')
+    log.bind_chat(reset, chat, token, has_history=False)
+    assert log.query(grouped=True)['total'] == 4
+    log._remove(first[1])
+    old = next(row for row in log.query(grouped=True)['entries'] if row['id'] == first[1])
+    assert old['history_missing'] and len(old['turns']) == 1
+
+
+@pytest.mark.asyncio
+async def test_chat_grouping_restart_privacy_and_clear(conversation_data):
+    from uuid import uuid4
+    data, token = conversation_data
+    log = history.recorder(data)
+    chat = str(uuid4())
+    first = log.begin('agentcli', prompt='one')
+    log.bind_chat(first, chat, token, has_history=False)
+    log.finish(first, response='done')
+    saved = deepcopy(list(log._entries.values()))
+    log._store = SimpleNamespace(async_load=AsyncMock(return_value={'entries': saved}), async_save=AsyncMock())
+    await log.async_load()
+    follow = log.begin('agentcli', prompt='two')
+    log.bind_chat(follow, chat, token, has_history=True)
+    assert log.query(grouped=True)['total'] == 1
+    await log.async_clear()
+    log.bind_chat(follow, chat, token, has_history=True)
+    assert log.query(grouped=True)['total'] == 0
+    fresh = log.begin('agentcli', prompt='after clear')
+    log.bind_chat(fresh, chat, token, has_history=True)
+    assert log.query(grouped=True)['entries'][0]['history_missing']
+    assert chat not in json.dumps(log.detail(fresh[1]))
+    token.persona = 'home_companion'
+    companion = log.begin('agentcli', prompt='stateless')
+    log.bind_chat(companion, chat, token, has_history=True)
+    assert 'thread_id' not in log.detail(companion[1])
+
+
+@pytest.mark.asyncio
+async def test_routing_receipt_completes_in_place_and_cannot_recreate_cleared_history(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin('voice', prompt='check')
+    ctx = history._current.set(handle)
+    try:
+        with history.routing_span('decision_provider', provider='test', model='test-model', observation_only=True) as receipt:
+            receipt['reason'] = 'password=canary-secret'
+        events = log.detail(handle[1])['events']
+        assert len(events) == 1 and events[0]['payload']['result'] == 'completed'
+        assert events[0]['finished_at']
+        assert 'canary-secret' not in json.dumps(events)
+        with pytest.raises(asyncio.CancelledError):
+            with history.routing_span('provider'):
+                raise asyncio.CancelledError
+        assert log.detail(handle[1])['events'][-1]['payload']['result'] == 'cancelled'
+        with history.routing_span('provider'):
+            await log.async_clear()
+        assert log.query()['total'] == 0
+    finally:
+        history._current.reset(ctx)
+
+
+@pytest.mark.asyncio
+async def test_nested_dispatch_records_parent_operation(conversation_data):
+    data, token = conversation_data
+    @history.recorded_exchange
+    async def dispatch(method, rpc_id, params, token, hass, data, client_ip, base_url, request_id=None):
+        if params['name'] == 'home_request':
+            await dispatch(method, rpc_id, {'name': 'get_state'}, token, hass, data, client_ip, base_url)
+        return {}, '', '', 'allowed'
+    await dispatch('tools/call', 1, {'name': 'home_request'}, token, None, data, 'mcp', '')
+    events = only(data.conversations)['events']
+    assert events[0]['parent_tool_id'] is None
+    assert events[1]['parent_tool_id'] == events[0]['tool_id']
+    assert events[2]['tool_id'] == events[1]['tool_id']

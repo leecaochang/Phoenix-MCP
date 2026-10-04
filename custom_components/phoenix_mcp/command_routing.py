@@ -299,8 +299,14 @@ async def async_evaluate_command(
     No recognized slots, state values, or out-of-scope names are returned.
     """
     start = monotonic()
+    attempted = False
 
     def outcome(reason: str, proposal: dict | None = None) -> dict:
+        from .conversation_log import record_current
+        record_current("routing", {"route": "assist", "attempted": attempted, "reason": reason,
+                                   "matched": proposal is not None, "executed": False,
+                                   "observation_only": preview or effective_routing_mode(data.store.get_settings(), ingress) not in {"local", "hybrid"},
+                                   "elapsed_ms": round((monotonic() - start) * 1000, 2)})
         return {"route": "local_candidate" if proposal else "provider",
                 "reason": reason, "proposal": proposal, "executed": False,
                 "elapsed_ms": round((monotonic() - start) * 1000, 2)}
@@ -319,6 +325,7 @@ async def async_evaluate_command(
         return outcome("busy")
     # Only recognition runs in the background. Projection and disclosure happen
     # synchronously after the authority check, never in a timed-out task.
+    attempted = True
     task = asyncio.create_task(_recognize_command(hass, authority, sentence.strip(), recognition_language, voice_origin))
     runtime.task = task
     task.add_done_callback(runtime._finished)

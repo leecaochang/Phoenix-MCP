@@ -820,6 +820,7 @@ async def test_malformed_planning_after_control_never_requests_correction(hass, 
 @pytest.mark.parametrize('utterance,expected', [
     ("tuen on steve's office light", 'clarification_needed'),
     ('turn on steve lights in the the office doorway', 'completed'),
+    ('turn on steve office doowway light', 'completed'),
     ("tuen on all of steve's office lights", 'completed'),
 ])
 async def test_tied_natural_target_evidence_cannot_be_replaced_with_one_candidate(hass, companion, monkeypatch, utterance, expected):
@@ -1062,3 +1063,46 @@ async def test_invalid_household_proposals_are_withheld_before_write_journaling(
     assert report['execution'] == 'not_attempted'
     service.assert_not_awaited()
     assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+
+
+@pytest.mark.parametrize('utterance,proposed,extra,expected', [
+    ('turn on steve office doowway light', 'doorway', None, False),
+    ('turn on steve office doowway light', 'desk', None, True),
+    ('turn on steve office light', 'doorway', None, True),
+    ('turn on exactly steve office doowway light', 'doorway', None, True),
+    ('turn on steve office doowway light', 'doorway', 'dootway', True),
+])
+async def test_single_typo_corroborates_only_unique_explicit_target(hass, companion, utterance, proposed, extra, expected):
+    _, token, _, _ = companion
+    for part in ['doorway', 'desk'] + ([extra] if extra else []):
+        eid = 'light.steve_office_' + part
+        hass.states.async_set(eid, 'off', {'friendly_name': 'Steve Office Lights ' + part.title()})
+        token.permissions.entities[eid] = PermissionNode('GREEN')
+    context = home._turn.set(home.CompanionTurn(token.id, request=utterance))
+    try:
+        assert home.ambiguous_control(token, hass, 'intent__HassTurnOn', {'name': 'light.steve_office_' + proposed}) is expected
+    finally:
+        home._turn.reset(context)
+
+
+async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(hass, companion, monkeypatch):
+    from custom_components.phoenix_mcp.conversation_log import recorder
+    data, token, _, _ = companion
+    await data.store.async_patch_settings(conversation_log_enabled=True)
+    for part in ('doorway', 'desk'):
+        eid = 'light.office_' + part
+        hass.states.async_set(eid, 'off', {'friendly_name': 'Office light ' + part})
+        token.permissions.entities[eid] = PermissionNode('GREEN')
+    scripted(monkeypatch, [[('intent__HassTurnOn', {'name': 'light.office_doorway'})]])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'Turn on the office light'}))
+    assert report['status'] == 'clarification_needed'
+    service.assert_not_awaited()
+    log = recorder(data)
+    entry = log.detail(log.query()['entries'][0]['id'])
+    error = next(event['payload'] for event in entry['events'] if event['kind'] == 'error')
+    assert error['stage'] == 'target_guard' and error['executed'] is False
+    assert error['arguments'] == {'name': 'light.office_doorway'}
+    route = next(event['payload'] for event in entry['events'] if event['kind'] == 'routing')
+    assert route['route'] == 'provider' and route['provider'] == 'claude' and route['model'] == 'test'
+    assert route['result'] == 'completed'

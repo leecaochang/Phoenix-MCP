@@ -12,6 +12,7 @@ import { render, fireEvent, screen, waitFor } from "@testing-library/react";
 // language row, and the cards have their own suites.
 vi.mock("../api", () => ({
   api: {
+    getConversations: () => Promise.resolve({ bytes: 0, max_bytes: 25000000 }),
     getInfo: () => Promise.resolve({ version: "1.0.0", min_ha_version: "2024.5.0", github_url: "#" }),
     getSettings: () => Promise.resolve({}),
     patchSettings: () => Promise.resolve({}),

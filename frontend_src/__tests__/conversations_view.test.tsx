@@ -108,12 +108,13 @@ describe("ConversationsView", () => {
   });
 });
 
-it("shows mixed outcomes, tool titles and storage without zero counts", async () => {
+it("shows mixed outcomes and tool titles without the redundant intro or storage line", async () => {
   vi.mocked(api.getConversations).mockResolvedValue({ ...list([{ ...summary, first_tool: "call_service", execution_status: "partial", tool_count: 2 }]), bytes: 500000, max_bytes: 25000000 });
   const view = render(<ConversationsView />);
   await view.findByText("call_service");
   expect(view.container.querySelector(".conversation-status")?.textContent).toBe("Mixed outcomes");
-  expect(view.getByText("Storage: 0.5 of 25 MB")).toBeTruthy();
+  expect(view.queryByText("Storage: 0.5 of 25 MB")).toBeNull();
+  expect(view.queryByText("Recording enabled")).toBeNull();
   expect(view.getByText(/2 tool calls/)).toBeTruthy();
   expect(view.queryByText(/0 changes/)).toBeNull();
 });
@@ -137,4 +138,51 @@ it("keeps narration, tool activity and reply in order with omissions explained",
   expect(view.getByText(/entity-name logging is disabled/)).toBeTruthy();
   expect(view.getByText(/3 events are not shown/)).toBeTruthy();
   expect(rows[0].querySelector("time")?.textContent).not.toBe("00:00:00");
+});
+
+
+it("opens grouped turns in chronological order and preserves reading position on refresh", async () => {
+  const first = { ...summary, id: "first", source: "agentcli", excerpt: "First question" };
+  const second = { ...first, id: "second", excerpt: "Follow-up question", started_at: "2026-10-03T01:00:00Z" };
+  vi.mocked(api.getConversations).mockResolvedValue(list([{ ...first, turns: [first, second], history_missing: true }]));
+  vi.mocked(api.getConversation).mockImplementation(async id => ({ ...detail, ...(id === "first" ? first : second), prompt: id === "first" ? "First question" : "Follow-up question", response: `${id} reply`, events: [] }));
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("First question")).closest("summary")!);
+  await view.findByText("second reply");
+  const turns = view.container.querySelectorAll(".conversation-turn");
+  expect(turns[0].textContent).toContain("First question");
+  expect(turns[1].textContent).toContain("Follow-up question");
+  expect(view.getByText(/Earlier turns are unavailable/)).toBeTruthy();
+  expect(api.getConversations).toHaveBeenCalledWith(expect.objectContaining({ grouped: true }));
+  const firstNode = turns[0];
+  fireEvent.click(view.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(api.getConversations).toHaveBeenCalledTimes(2));
+  expect(view.container.querySelectorAll(".conversation-turn")[0]).toBe(firstNode);
+});
+
+it("combines a delegated operation with routing and pairs its result without hiding rejected proposals", async () => {
+  vi.mocked(api.getConversation).mockResolvedValue({ ...detail, events: [
+    { ...detail.events[0], tool_id: "outer", payload: { name: "home_request", arguments: { request: "Turn on the light" } } },
+    { kind: "routing", timestamp: summary.started_at, tool_id: "outer", payload: { route: "provider", provider: "example", model: "model-one", result: "completed" } },
+    { ...detail.events[0], parent_tool_id: "outer" },
+    detail.events[1],
+    { kind: "error", timestamp: summary.updated_at, tool_id: "outer", payload: { message: "Target ambiguous; not executed.", name: "intent__HassTurnOn" } },
+    { ...detail.events[1], tool_id: "outer" },
+  ] });
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  await view.findByText("home_request");
+  expect(view.getByText("Sent to LLM provider: example").closest(".conversation-route-inline")).toBeTruthy();
+  expect(view.container.querySelectorAll(".conversation-detail > section > .conversation-timeline > li")).toHaveLength(1);
+  expect(view.getByText("Target ambiguous; not executed.")).toBeVisible();
+  expect(view.getAllByText("Tool result")).toHaveLength(2);
+});
+
+
+it("does not label a missing tool receipt as still running after interruption", async () => {
+  vi.mocked(api.getConversation).mockResolvedValue({ ...detail, status: "interrupted", response_status: "interrupted", events: [detail.events[0]] });
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  await view.findByText("get_state");
+  expect(view.container.querySelector(".conversation-event-body > .conversation-outcome")?.textContent).toBe("Outcome unknown");
 });

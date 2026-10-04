@@ -235,6 +235,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.tokenLabel",             # "Token"
     }),
     "fr": frozenset({
+        "panel.conversations.conversation",  # French cognate: Conversation.
         "panel.conversations.sourceLabel",  # Shared technical term or cognate.
         "panel.settings.agentcliSite",  # French cognate: Site.
         "panel.approvalSummary.named.kind.script",  # HA entity type: "script"

@@ -238,7 +238,7 @@ export const api = {
   getAudit: (params?: AuditQueryParams) =>
     req<AuditListResponse>("GET", `/audit${buildQuery(params)}`),
 
-  getConversations: (params: { limit?: number; offset?: number; search?: string; source?: string; outcome?: string; since?: string } = {}) => {
+  getConversations: (params: { grouped?: boolean; limit?: number; offset?: number; search?: string; source?: string; outcome?: string; since?: string } = {}) => {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
     return req<ConversationListResponse>("GET", `/conversations?${query}`);
@@ -474,6 +474,7 @@ export const api = {
 // parse event:/data: frames, invoking onEvent for each. Returns when the stream
 // ends (the server's final `done` event) or is aborted.
 export interface AgentCliChatBody {
+  log_conversation_id?: string;
   token_id: string;
   instance_id: string;
   model?: string;

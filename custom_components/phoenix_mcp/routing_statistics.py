@@ -171,25 +171,30 @@ def decision_usage(scope: str, body: Any) -> None:
     end_decision(begin_decision(scope), body)
 
 
-async def provider_events(events):
+async def provider_events(events, *, config=None):
     """Replace cumulative usage within each actual request, then add requests once."""
-    from .conversation_log import record_current
-    record_current("routing", {"route": "provider"})
+    from .conversation_log import routing_span
     turn = _current.get()
     usage = None
     if turn is not None:
         turn.provider_used = True
         turn.route = "provider"
         turn.provider_usage["requests"] += 1
-    try:
-        async for event in events:
-            if event.get("type") == "usage_update":
-                usage = event
-            yield event
-    finally:
-        await events.aclose()
-        if turn is not None:
-            turn.usage("provider_usage", usage, started=True)
+    with routing_span("provider", provider=getattr(config, "kind", None), model=getattr(config, "model", None)) as receipt:
+        try:
+            async for event in events:
+                if event.get("type") == "usage_update":
+                    usage = event
+                if event.get("type") == "message_done":
+                    receipt["result"] = "completed"
+                if event.get("type") == "error":
+                    receipt["result"] = "failed"
+                    receipt["reason"] = event.get("code", "provider_error")
+                yield event
+        finally:
+            await events.aclose()
+            if turn is not None:
+                turn.usage("provider_usage", usage, started=True)
 
 
 def tracked_turn(surface: str):

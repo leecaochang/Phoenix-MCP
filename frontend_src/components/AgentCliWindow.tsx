@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
 import {
-  getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns,
+  getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns, getLogConversationId,
   getSessionDraft, setSessionDraft,
   getSessionUsage, setSessionUsage, type SessionUsage,
   AGENTCLI_TEXT_SIZE_MIN_PT, AGENTCLI_TEXT_SIZE_MAX_PT, AGENTCLI_TEXT_SIZE_STEP_PT,
@@ -1129,6 +1129,7 @@ export function AgentCliWindow({
           instance_id: instanceId,
           model: model || undefined,
           messages: sentMessages,
+          log_conversation_id: getLogConversationId(sentMessages.length > 0, persistenceOwner),
           ...(mode === "continue" ? { continue: true } : { user: text }),
           ...(mode === "bypass" ? { home_focus_bypass: true } : {}),
           options: buildOptions(kind, options, caps),

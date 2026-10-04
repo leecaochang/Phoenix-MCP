@@ -2519,6 +2519,7 @@ HOME_COMPANION_CONTEXT_PATTERNS = {
     'ja': r'それら|あれら|それ|あれ|これ|前の',
     'ko': r'그것|이것|저것|이전',
 }
+HOME_COMPANION_TYPO_MIN_LENGTH = 5
 HOME_COMPANION_GENERIC_TARGET_WORDS = HOME_COMPANION_GROUP_WORDS | frozenset({
     "climate", "thermostat", "cover", "blind", "shade", "valve", "media", "player", "speaker", "vacuum",
     "humidifier", "timer", "heater", "input", "boolean", "temperature", "volume", "position", "set",
@@ -2612,6 +2613,10 @@ CONVERSATION_LOG_OUTCOMES = frozenset({
     "allowed", "denied", "invalid_request", "not_found", "not_implemented", "rate_limited",
     "pending_approval", "running", "unknown", "approved", "rejected", "expired", "cancelled",
 })
+CONVERSATION_LOG_STATUS_PRIORITY = (
+    "running", "failed", "denied", "invalid_request", "pending_approval", "unknown",
+    "interrupted", "cancelled", "partial", "paused",
+)
 CONVERSATION_LOG_METADATA = frozenset({
     "request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref", "provider", "model",
 })

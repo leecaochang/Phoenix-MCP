@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "Gesprächsprotokoll",
-      "description": "Eine verständliche Aufzeichnung der Anfrage, der Aktionen von Phoenix und seiner Antwort.",
       "unknown": "Unbekannt",
       "fullText": "Vollständigen Text anzeigen ({count} Zeichen)",
       "copied": "Kopiert",
@@ -2111,8 +2110,6 @@
       "technical": "Technische Details",
       "loadFailed": "Der Verlauf konnte nicht geladen werden. Aktualisieren Sie die Ansicht.",
       "clearFailed": "Der Verlauf konnte nicht aus dem Speicher gelöscht werden. Versuchen Sie es erneut.",
-      "recording": "Aufzeichnung aktiviert",
-      "recordingOff": "Aufzeichnung deaktiviert",
       "disabledHelp": "Die Aufzeichnung ist aus. Aktiviere sie in den Einstellungen für neue Gespräche. Bestehende Einträge unterliegen weiterhin den Aufbewahrungsgrenzen.",
       "storageUnavailable": "Der Verlaufsspeicher ist nicht verfügbar. Neue Aktivitäten gehen bei einem Neustart möglicherweise verloren.",
       "search": "Aufgezeichneten Text durchsuchen",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix hat diese Antwort erzeugt. Die Zustellung an den Benutzer ist nicht bestätigt.",
       "clientPromptUnavailable": "Dieser Client hat Phoenix die Nachricht des Benutzers nicht übermittelt.",
       "routeLocal": "Lokal verarbeitet",
-      "routeProvider": "An das KI-Modell gesendet",
+      "routeProvider": "An LLM-Anbieter gesendet",
       "executionUnknown": "Ergebnis unbestätigt: Die Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant vor einem erneuten Versuch.",
       "omittedEvents": "Ereignisgrenze erreicht: {count} Ereignisse werden nicht angezeigt. Aufgezeichnete Ergebnisse bleiben separat erhalten.",
       "loggingDisabled": "Die Aufzeichnung ist nicht verfügbar, solange alle Protokolle deaktiviert sind.",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "{count} Änderung",
         "other": "{count} Änderungen"
-      }
+      },
+      "routeAssist": "Mit Assist geprüft",
+      "routeDecision": "Entscheidungsanbieter aufgerufen",
+      "routeDecisionResult": "Ergebnis der Entscheidungsweiterleitung",
+      "routeDecisionLocal": "Anhand einer Entscheidung lokal verarbeitet",
+      "observationOnly": "Nur Beobachtung; es wurde keine Aktion ausgeführt.",
+      "routingOnly": "Nur Prüfung der Weiterleitung; die Ausführung wird separat protokolliert.",
+      "toolResult": "Werkzeugergebnis",
+      "conversation": "Unterhaltung",
+      "turns": "Gesprächsrunden: {count}",
+      "historyMissing": "Frühere Gesprächsrunden sind nicht verfügbar. Sie liegen möglicherweise vor dem Aufzeichnungsbeginn oder wurden aufgrund der Aufbewahrungsgrenzen gelöscht."
     },
     "attention": {
       "title": "Handlungsbedarf",

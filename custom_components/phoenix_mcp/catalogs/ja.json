@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "会話ログ",
-      "description": "依頼内容、Phoenix の操作、応答を読みやすく記録します。",
       "unknown": "不明",
       "fullText": "全文を表示（{count} 文字）",
       "copied": "コピーしました",
@@ -2111,8 +2110,6 @@
       "technical": "技術的な詳細",
       "loadFailed": "会話履歴を読み込めませんでした。更新して再試行してください。",
       "clearFailed": "ストレージから履歴を消去できませんでした。再試行してください。",
-      "recording": "記録は有効です",
-      "recordingOff": "記録は無効です",
       "disabledHelp": "記録はオフです。新しい会話を記録するには設定で有効にしてください。既存の記録には引き続き保存制限が適用されます。",
       "storageUnavailable": "履歴のストレージを利用できません。最近のアクティビティは再起動時に失われる可能性があります。",
       "search": "記録されたテキストを検索",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix がこの応答を生成しました。ユーザーへの配信は確認されていません。",
       "clientPromptUnavailable": "このクライアントはユーザーのメッセージを Phoenix に送信しませんでした。",
       "routeLocal": "ローカルで処理",
-      "routeProvider": "AI モデルに送信",
+      "routeProvider": "LLM プロバイダーに送信",
       "executionUnknown": "結果未確認：操作が実行された可能性があります。再試行前に Home Assistant を確認してください。",
       "omittedEvents": "イベント数の上限に達しました：{count} 件のイベントは表示されません。記録済みの結果は別途保持されます。",
       "loggingDisabled": "すべてのログが無効になっている間は記録できません。",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "変更 {count} 件",
         "other": "変更 {count} 件"
-      }
+      },
+      "routeAssist": "Assist で確認",
+      "routeDecision": "判断プロバイダーを呼び出し",
+      "routeDecisionResult": "判断によるルーティング結果",
+      "routeDecisionLocal": "判断に基づきローカルで処理",
+      "observationOnly": "観察のみ。操作は実行されていません。",
+      "routingOnly": "ルーティングの確認のみ。実行内容は別途記録されます。",
+      "toolResult": "ツールの結果",
+      "conversation": "会話",
+      "turns": "ターン数：{count}",
+      "historyMissing": "以前のターンは利用できません。記録開始前のものか、保持制限によって削除された可能性があります。"
     },
     "attention": {
       "title": "確認が必要",

@@ -3133,7 +3133,7 @@ async def _stream_turn_resilient(
         retry = False
         events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
-        )), cancel)
+        ), config=getattr(provider, "cfg", None)), cancel)
         async with aclosing(events):
             async for ev in events:
                 etype = ev.get("type")
@@ -4021,6 +4021,9 @@ async def _run_headless_turn(
             provider.append_assistant(messages, assistant_msg)
             turn_output_bytes = prospective
         if final_round and tool_calls:
+            for proposed in tool_calls:
+                record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
+                                     reason="No tools are permitted in the final response round.", stage="round_limit")
             # A provider ignoring the final-round instruction cannot dispatch
             # another batch and leave no round for reporting its outcome.
             return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
@@ -4052,6 +4055,9 @@ async def _run_headless_turn(
 
         from .home_companion import preflight_control_calls, incomplete_proposal
         if validation_results := preflight_control_calls(token, tool_calls):
+            for proposed, validation in zip(tool_calls, validation_results):
+                record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
+                                     reason=validation["result_text"], stage="companion_preflight")
             if write_started:
                 incomplete_proposal(token)
                 return _HeadlessTurnResult(json.dumps({'status': 'refused', 'message': 'A later control proposal was invalid and was not run.'}), review_urls)
@@ -4080,6 +4086,8 @@ async def _run_headless_turn(
             name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
             dispatch_token = _current_dispatch_token(data, token_id)
             if dispatch_token is None:
+                record_rejected_tool(tc.get("id"), name, tc.get("input"),
+                                     reason="This token is no longer authorized; the tool was not run.", stage="authority_guard")
                 authority_lost = True
                 results.append({
                     "tool_use_id": tc.get("id"), "tool_name": name,
@@ -4088,7 +4096,9 @@ async def _run_headless_turn(
                 })
                 continue
             dispatch_request_id = generate_request_id()
-            if ambiguous_control(dispatch_token, hass, name):
+            if ambiguous_control(dispatch_token, hass, name, tc.get("input")):
+                record_rejected_tool(tc.get("id"), name, tc.get("input"),
+                                     reason="The target is ambiguous; no action was executed.", stage="target_guard")
                 return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), review_urls)
             dispatch_started = True
             write_started = write_started or not tool_is_read_only(name)
@@ -4643,6 +4653,7 @@ class PhoenixAgentCliChatView(PhoenixView):
             await async_run_agent_turn(
                 hass=self.hass, data=data, token=token, provider=provider,
                 session=session, messages=messages, options=options or {},
+                log_conversation_id=body.get("log_conversation_id"),
                 client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
                 max_iterations=settings.agentcli_max_iterations,
                 conversation_style=settings.agentcli_conversation_style,

@@ -838,6 +838,9 @@ export type ConversationResponseOutcome = "produced" | "unavailable" | "client_u
 export type ConversationOmission = "privacy" | "sanitization" | "size_limit";
 
 export interface ConversationSummary {
+  turns?: ConversationSummary[];
+  history_missing?: boolean;
+  latest_at?: string;
   id: string;
   source: string;
   started_at: string;
@@ -856,6 +859,7 @@ export interface ConversationSummary {
 }
 
 export interface ConversationEvent {
+  parent_tool_id?: string | null;
   kind: string;
   timestamp: string;
   tool_id: string | null;

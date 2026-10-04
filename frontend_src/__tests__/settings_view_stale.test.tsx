@@ -6,6 +6,7 @@ const patchSettings = vi.fn();
 
 vi.mock("../api", () => ({
   api: {
+    getConversations: () => Promise.resolve({ bytes: 0, max_bytes: 25000000 }),
     getInfo: () => Promise.resolve({ version: "1.0.0", min_ha_version: "2025.2.0", github_url: "#" }),
     getSettings: (...args: unknown[]) => getSettings(...args),
     patchSettings: (...args: unknown[]) => patchSettings(...args),

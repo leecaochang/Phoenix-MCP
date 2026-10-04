@@ -134,6 +134,10 @@ class DecisionShadow:
 
         started = monotonic()
         def result(reason: str, decision: dict | None = None) -> dict:
+            from .conversation_log import record_current
+            record_current("routing", {"route": "decision_result", "reason": reason,
+                                       "choice": decision.get("choice") if decision else None,
+                                       "observation_only": not prepare, "executed": False})
             return {"reason": reason, "decision": decision, "executed": False,
                     "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 

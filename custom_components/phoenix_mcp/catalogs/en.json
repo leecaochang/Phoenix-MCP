@@ -2094,7 +2094,6 @@
     },
     "conversations": {
       "title": "Conversation Log",
-      "description": "A readable record of what was asked, what Phoenix did, and what it replied.",
       "unknown": "Unknown",
       "fullText": "Show full text ({count} characters)",
       "copied": "Copied",
@@ -2115,8 +2114,6 @@
       "technical": "Technical details",
       "loadFailed": "Conversation history could not be loaded. Refresh to try again.",
       "clearFailed": "History could not be cleared from storage. Try again.",
-      "recording": "Recording enabled",
-      "recordingOff": "Recording disabled",
       "disabledHelp": "Recording is off. Turn it on in Settings to record new conversations. Existing entries remain subject to retention limits.",
       "storageUnavailable": "History storage is unavailable. Recent activity may not survive a restart.",
       "search": "Search recorded text",
@@ -2224,7 +2221,7 @@
       "deliveryUnverified": "Phoenix produced this reply. Delivery to the user is not verified.",
       "clientPromptUnavailable": "This client did not provide the user's message to Phoenix.",
       "routeLocal": "Handled locally",
-      "routeProvider": "Sent to the AI model",
+      "routeProvider": "Sent to LLM provider",
       "executionUnknown": "Result unconfirmed: the action may have run. Check Home Assistant before retrying.",
       "omittedEvents": "Event limit reached: {count} events are not shown. Recorded outcomes are retained separately.",
       "loggingDisabled": "Recording is unavailable while Disable all logging is on.",
@@ -2236,7 +2233,17 @@
       "changeCount": {
         "one": "{count} change",
         "other": "{count} changes"
-      }
+      },
+      "routeAssist": "Checked with Assist",
+      "routeDecision": "Called decision provider",
+      "routeDecisionResult": "Decision routing result",
+      "routeDecisionLocal": "Handled locally using a decision",
+      "observationOnly": "Observation only; no action was executed.",
+      "routingOnly": "Routing check only; execution is recorded separately.",
+      "toolResult": "Tool result",
+      "conversation": "Conversation",
+      "turns": "Turns: {count}",
+      "historyMissing": "Earlier turns are unavailable. They may predate recording or have been removed by retention limits."
     },
     "attention": {
       "title": "Needs attention",

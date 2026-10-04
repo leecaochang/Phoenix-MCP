@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "Registro de conversaciones",
-      "description": "Un registro legible de lo que se pidió, lo que hizo Phoenix y lo que respondió.",
       "unknown": "Desconocido",
       "fullText": "Mostrar texto completo ({count} caracteres)",
       "copied": "Copiado",
@@ -2111,8 +2110,6 @@
       "technical": "Detalles técnicos",
       "loadFailed": "No se pudo cargar el historial. Actualiza para reintentar.",
       "clearFailed": "No se pudo borrar el historial del almacenamiento. Reintenta.",
-      "recording": "Registro activado",
-      "recordingOff": "Registro desactivado",
       "disabledHelp": "La grabación está desactivada. Actívala en Ajustes para registrar nuevas conversaciones. Las entradas existentes siguen sujetas a los límites de conservación.",
       "storageUnavailable": "El almacenamiento del historial no está disponible. La actividad reciente podría perderse al reiniciar.",
       "search": "Buscar texto registrado",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix generó esta respuesta. No se ha verificado su entrega al usuario.",
       "clientPromptUnavailable": "Este cliente no proporcionó a Phoenix el mensaje del usuario.",
       "routeLocal": "Procesado localmente",
-      "routeProvider": "Enviado al modelo de IA",
+      "routeProvider": "Enviado al proveedor de LLM",
       "executionUnknown": "Resultado sin confirmar: la acción podría haberse ejecutado. Comprueba Home Assistant antes de reintentar.",
       "omittedEvents": "Límite de eventos alcanzado: no se muestran {count} eventos. Los resultados registrados se conservan por separado.",
       "loggingDisabled": "No se puede grabar mientras esté activada la opción de desactivar todos los registros.",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "{count} cambio",
         "other": "{count} cambios"
-      }
+      },
+      "routeAssist": "Comprobado con Assist",
+      "routeDecision": "Se llamó al proveedor de decisiones",
+      "routeDecisionResult": "Resultado del enrutamiento de decisiones",
+      "routeDecisionLocal": "Procesado localmente según una decisión",
+      "observationOnly": "Solo observación; no se ejecutó ninguna acción.",
+      "routingOnly": "Solo comprobación de enrutamiento; la ejecución se registra por separado.",
+      "toolResult": "Resultado de la herramienta",
+      "conversation": "Conversación",
+      "turns": "Turnos: {count}",
+      "historyMissing": "Los turnos anteriores no están disponibles. Pueden ser anteriores al inicio del registro o haberse eliminado por los límites de retención."
     },
     "attention": {
       "title": "Requiere atención",

@@ -230,38 +230,43 @@ class DecisionProvider:
         parsed = None
         from .routing_statistics import begin_decision, end_decision
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
-        try:
-            async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
-                                       json=payload, allow_redirects=False,
-                                       timeout=ClientTimeout(total=timeout_ms / 1000)) as response:
-                if response.status != 200:
-                    raise DecisionError(await self._http_error_reason(response))
-                raw = bytearray()
-                async for chunk in response.content.iter_chunked(8192):
-                    raw.extend(chunk)
-                    if len(raw) > DECISION_MAX_RESPONSE_BYTES:
-                        raise DecisionError("response_too_large")
-                parsed = json.loads(raw, object_pairs_hook=_object)
-                if not isinstance(parsed, dict):
-                    raise DecisionError("malformed")
-                return parsed
-        except TimeoutError:
-            raise DecisionError("timeout") from None
-        except ClientError:
-            raise DecisionError("unavailable") from None
-        except (UnicodeError, json.JSONDecodeError, RecursionError):
-            raise DecisionError("malformed") from None
-        finally:
-            end_decision(statistics, parsed)
-            if self.metrics is not None and method == "POST" and payload is not None:
-                questions = set(payload.get("questions", {}))
-                operation = ("tool" if any(q.startswith("tool_") for q in questions) else
-                             "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
-                             "batch" if {"route", "target"} <= questions else
-                             "context" if questions == set(DECISION_CONTEXT_CHECKS) else
-                             "target" if "target" in questions else "classify")
-                self.metrics.record(self.metric_scope, operation, size, (monotonic() - started) * 1000, parsed,
-                                    provider_kind=self.cfg.kind)
+        from .conversation_log import routing_span
+        with routing_span("decision_provider", provider=self.cfg.kind, model=self.cfg.model,
+                          scope=self.metric_scope, observation_only="shadow" in self.metric_scope,
+                          method=method) as receipt:
+            try:
+                async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
+                                           json=payload, allow_redirects=False,
+                                           timeout=ClientTimeout(total=timeout_ms / 1000)) as response:
+                    if response.status != 200:
+                        raise DecisionError(await self._http_error_reason(response))
+                    raw = bytearray()
+                    async for chunk in response.content.iter_chunked(8192):
+                        raw.extend(chunk)
+                        if len(raw) > DECISION_MAX_RESPONSE_BYTES:
+                            raise DecisionError("response_too_large")
+                    parsed = json.loads(raw, object_pairs_hook=_object)
+                    if not isinstance(parsed, dict):
+                        raise DecisionError("malformed")
+                    return parsed
+            except TimeoutError:
+                raise DecisionError("timeout") from None
+            except ClientError:
+                raise DecisionError("unavailable") from None
+            except (UnicodeError, json.JSONDecodeError, RecursionError):
+                raise DecisionError("malformed") from None
+            finally:
+                receipt["response_received"] = parsed is not None
+                end_decision(statistics, parsed)
+                if self.metrics is not None and method == "POST" and payload is not None:
+                    questions = set(payload.get("questions", {}))
+                    operation = ("tool" if any(q.startswith("tool_") for q in questions) else
+                                 "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
+                                 "batch" if {"route", "target"} <= questions else
+                                 "context" if questions == set(DECISION_CONTEXT_CHECKS) else
+                                 "target" if "target" in questions else "classify")
+                    self.metrics.record(self.metric_scope, operation, size, (monotonic() - started) * 1000, parsed,
+                                        provider_kind=self.cfg.kind)
 
     async def list_models(self, session: ClientSession) -> list[str]:
         body = await self._request(session, "GET", "models", DECISION_TIMEOUT_DEFAULT_MS)

@@ -2095,7 +2095,6 @@
     },
     "conversations": {
       "title": "對話記錄",
-      "description": "以易讀形式記錄收到的請求、Phoenix 的操作及回覆。",
       "unknown": "未知",
       "fullText": "顯示全文（{count} 個字元）",
       "copied": "已複製",
@@ -2116,8 +2115,6 @@
       "technical": "技術詳情",
       "loadFailed": "無法載入對話歷史。請重新整理後重試。",
       "clearFailed": "無法從儲存空間清除歷史。請重試。",
-      "recording": "記錄已啟用",
-      "recordingOff": "記錄已停用",
       "disabledHelp": "記錄已關閉。可在設定中開啟以記錄新對話。現有記錄仍受保留限制約束。",
       "storageUnavailable": "歷史儲存空間無法使用，近期活動可能在重新啟動後遺失。",
       "search": "搜尋已記錄的文字",
@@ -2225,7 +2222,7 @@
       "deliveryUnverified": "Phoenix 已產生此回覆，尚未驗證使用者是否收到。",
       "clientPromptUnavailable": "此用戶端未向 Phoenix 提供使用者訊息。",
       "routeLocal": "由本機處理",
-      "routeProvider": "已傳送至 AI 模型",
+      "routeProvider": "已傳送至 LLM 提供者",
       "executionUnknown": "結果未確認：操作可能已執行。請先檢查 Home Assistant，再決定是否重試。",
       "omittedEvents": "已達事件上限：未顯示 {count} 個事件。已記錄的結果會另外保留。",
       "loggingDisabled": "開啟「停用所有日誌」時無法記錄對話。",
@@ -2237,7 +2234,17 @@
       "changeCount": {
         "one": "{count} 項變更",
         "other": "{count} 項變更"
-      }
+      },
+      "routeAssist": "已透過 Assist 檢查",
+      "routeDecision": "已呼叫決策提供者",
+      "routeDecisionResult": "決策路由結果",
+      "routeDecisionLocal": "根據決策在本機處理",
+      "observationOnly": "僅觀察，未執行任何操作。",
+      "routingOnly": "僅檢查路由，執行情況另行記錄。",
+      "toolResult": "工具結果",
+      "conversation": "對話",
+      "turns": "回合：{count}",
+      "historyMissing": "較早的回合無法取得，可能發生於啟用記錄之前，或已因保留限制而刪除。"
     },
     "attention": {
       "title": "需要關注",

@@ -2947,15 +2947,13 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .diff-line-marker { display: inline-block; width: 1.25em; user-select: none; }
 
 /* Conversation evidence: readable prose with progressively disclosed details. */
-.conversation-intro, .conversation-event-heading, .conversation-footer {
+.conversation-event-heading, .conversation-footer {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
 }
-.conversation-intro h2 { margin: 0 0 6px; font-size: 20px; }
-.conversation-intro p { margin: 0 0 20px; max-width: 70ch; }
 .conversation-secondary, .conversation-event time { color: var(--phx-text-2); font-size: 13px; }
 .conversation-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .conversation-toolbar .input { width: auto; min-width: 140px; flex: 1; }
@@ -3001,12 +2999,23 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .conversation-footer { margin-top: 16px; }
 .conversation-empty { padding: 32px 24px; }
 .conversation-empty h3 { margin: 0 0 8px; }
+.conversation-turn + .conversation-turn { border-top: 1px solid var(--phx-border); }
+.conversation-turn-heading { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 24px 0; font-size: 13px; color: var(--phx-text-2); }
+.conversation-route-inline { list-style: none; padding: 0; margin: 0; }
+.conversation-route-inline > .conversation-event { padding: 4px 0; border: 0; }
+.conversation-route-inline > .conversation-event > .conversation-icon { display: none; }
+.conversation-route-inline .conversation-event-heading time { display: none; }
+.conversation-route-inline .conversation-event-heading strong { font-weight: 400; font-size: 13px; }
+.conversation-nested { padding-left: 12px; }
 .conversation-limit { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 10px; margin: 12px 0; }
 @media (max-width: 600px) {
   .conversation-entry > summary { padding: 14px 12px; gap: 8px; flex-wrap: wrap; }
   .conversation-summary { flex-basis: calc(100% - 24px); }
   .conversation-status { margin-left: 16px; }
   .conversation-detail { padding: 0 14px 20px; }
+  .conversation-nested { padding-left: 0; list-style: none; }
+  .conversation-nested .conversation-event { padding-right: 0; padding-left: 24px; }
+  .conversation-nested .conversation-event > .conversation-icon { left: 0; }
   .conversation-toolbar .input { min-width: 0; flex-basis: 40%; }
   .conversation-toolbar input[type="search"] { flex-basis: 100%; }
 }

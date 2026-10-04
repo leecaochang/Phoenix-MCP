@@ -2168,7 +2168,6 @@
     },
     "conversations": {
       "title": "Gesprekslogboek",
-      "description": "Een leesbaar overzicht van de vraag, wat Phoenix deed en het antwoord.",
       "unknown": "Onbekend",
       "fullText": "Volledige tekst tonen ({count} tekens)",
       "copied": "Gekopieerd",
@@ -2189,8 +2188,6 @@
       "technical": "Technische details",
       "loadFailed": "De gespreksgeschiedenis kon niet worden geladen. Vernieuw om het opnieuw te proberen.",
       "clearFailed": "De geschiedenis kon niet uit de opslag worden gewist. Probeer het opnieuw.",
-      "recording": "Registratie ingeschakeld",
-      "recordingOff": "Registratie uitgeschakeld",
       "disabledHelp": "Opnemen staat uit. Schakel het in bij Instellingen om nieuwe gesprekken vast te leggen. Bestaande vermeldingen blijven onder de bewaarlimieten vallen.",
       "storageUnavailable": "De opslag voor geschiedenis is niet beschikbaar. Recente activiteit kan na een herstart verloren gaan.",
       "search": "Opgenomen tekst doorzoeken",
@@ -2298,7 +2295,7 @@
       "deliveryUnverified": "Phoenix heeft dit antwoord gemaakt. Aflevering aan de gebruiker is niet geverifieerd.",
       "clientPromptUnavailable": "Deze client heeft het bericht van de gebruiker niet aan Phoenix doorgegeven.",
       "routeLocal": "Lokaal afgehandeld",
-      "routeProvider": "Naar het AI-model gestuurd",
+      "routeProvider": "Naar LLM-provider verzonden",
       "executionUnknown": "Resultaat onbevestigd: de actie kan zijn uitgevoerd. Controleer Home Assistant voordat je het opnieuw probeert.",
       "omittedEvents": "Gebeurtenislimiet bereikt: {count} gebeurtenissen worden niet getoond. Vastgelegde resultaten blijven apart bewaard.",
       "loggingDisabled": "Opnemen is niet beschikbaar als alle logboeken zijn uitgeschakeld.",
@@ -2310,7 +2307,17 @@
       "changeCount": {
         "one": "{count} wijziging",
         "other": "{count} wijzigingen"
-      }
+      },
+      "routeAssist": "Gecontroleerd met Assist",
+      "routeDecision": "Beslissingsprovider aangeroepen",
+      "routeDecisionResult": "Resultaat van beslissingsroutering",
+      "routeDecisionLocal": "Lokaal afgehandeld op basis van een beslissing",
+      "observationOnly": "Alleen observatie; er is geen actie uitgevoerd.",
+      "routingOnly": "Alleen routeringscontrole; uitvoering wordt apart vastgelegd.",
+      "toolResult": "Toolresultaat",
+      "conversation": "Gesprek",
+      "turns": "Beurten: {count}",
+      "historyMissing": "Eerdere beurten zijn niet beschikbaar. Ze kunnen van vóór het vastleggen zijn of door de bewaarlimieten zijn verwijderd."
     },
     "attention": {
       "title": "Aandacht nodig",

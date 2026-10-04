@@ -692,3 +692,36 @@ async def test_unsupported_accounts_cannot_enter_any_provider_surface(hass, deci
     # Stored credentials remain recoverable only through the existing admin delete/wipe owner.
     await store.delete(legacy)
     assert store.get(legacy) is None
+
+
+@pytest.mark.parametrize('status', [200, 500])
+async def test_decision_request_records_identity_and_outcome_without_request_envelope(status, socket_enabled):
+    from custom_components.phoenix_mcp import conversation_log as history
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    log = history.ConversationLog()
+    log.configure(GlobalSettings(conversation_log_enabled=True))
+    handle = log.begin('agentcli', prompt='Safe visible prompt')
+    ctx = history._current.set(handle)
+    async def handler(request):
+        return web.json_response(response(), status=status)
+    app = web.Application()
+    app.router.add_post('/systemone', handler)
+    try:
+        async with TestServer(app) as server, ClientSession() as session:
+            cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'canary-api-secret')
+            provider = DecisionProvider(cfg, 'systemone', metric_scope='chat_shadow')
+            if status == 200:
+                await provider.classify(session, 'private request envelope', 1000)
+            else:
+                with pytest.raises(DecisionError):
+                    await provider.classify(session, 'private request envelope', 1000)
+        events = log.detail(handle[1])['events']
+        assert len(events) == 1
+        assert events[0]['payload']['result'] == ('completed' if status == 200 else 'failed')
+        assert events[0]['payload']['observation_only'] is True
+        assert events[0]['payload']['provider'] == 'typesafe'
+        assert events[0]['payload']['model'] == 'jev-latest'
+        assert 'private request envelope' not in json.dumps(events)
+        assert 'canary-api-secret' not in json.dumps(events)
+    finally:
+        history._current.reset(ctx)

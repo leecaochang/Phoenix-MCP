@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "Journal des conversations",
-      "description": "Un historique lisible des demandes, des actions de Phoenix et de ses réponses.",
       "unknown": "Inconnu",
       "fullText": "Afficher le texte intégral ({count} caractères)",
       "copied": "Copié",
@@ -2111,8 +2110,6 @@
       "technical": "Détails techniques",
       "loadFailed": "Impossible de charger l’historique. Actualisez pour réessayer.",
       "clearFailed": "Impossible d’effacer l’historique du stockage. Réessayez.",
-      "recording": "Enregistrement activé",
-      "recordingOff": "Enregistrement désactivé",
       "disabledHelp": "L'enregistrement est désactivé. Activez-le dans les paramètres pour les nouvelles conversations. Les entrées existantes restent soumises aux limites de conservation.",
       "storageUnavailable": "Le stockage de l’historique est indisponible. Les activités récentes risquent d’être perdues au redémarrage.",
       "search": "Rechercher dans le texte enregistré",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix a produit cette réponse. Sa remise à l’utilisateur n’est pas vérifiée.",
       "clientPromptUnavailable": "Ce client n'a pas transmis le message de l'utilisateur à Phoenix.",
       "routeLocal": "Traité localement",
-      "routeProvider": "Envoyé au modèle d'IA",
+      "routeProvider": "Envoyé au fournisseur LLM",
       "executionUnknown": "Résultat non confirmé : l'action a peut-être été exécutée. Vérifiez Home Assistant avant de réessayer.",
       "omittedEvents": "Limite d'événements atteinte : {count} événements ne sont pas affichés. Les résultats enregistrés sont conservés séparément.",
       "loggingDisabled": "L'enregistrement est indisponible lorsque tous les journaux sont désactivés.",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "{count} modification",
         "other": "{count} modifications"
-      }
+      },
+      "routeAssist": "Vérifié avec Assist",
+      "routeDecision": "Fournisseur de décisions appelé",
+      "routeDecisionResult": "Résultat du routage par décision",
+      "routeDecisionLocal": "Traité localement selon une décision",
+      "observationOnly": "Observation uniquement ; aucune action exécutée.",
+      "routingOnly": "Vérification du routage uniquement ; l’exécution est consignée séparément.",
+      "toolResult": "Résultat de l’outil",
+      "conversation": "Conversation",
+      "turns": "Tours : {count}",
+      "historyMissing": "Les tours précédents ne sont pas disponibles. Ils peuvent précéder l’activation du journal ou avoir été supprimés selon les limites de conservation."
     },
     "attention": {
       "title": "À vérifier",

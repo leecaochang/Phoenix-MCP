@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
-  getSessionTurns, setSessionTurns,
+  getSessionTurns, setSessionTurns, getLogConversationId,
   getSessionDraft, setSessionDraft,
   getSessionUsage, setSessionUsage,
   agentCliOpenPatch, getDurable, patchDurable,
@@ -208,4 +208,25 @@ describe("HA user isolation", () => {
     expect(JSON.parse(localStorage.getItem(CONV_KEY)!)).toMatchObject({ draft: "abcd" });
     vi.useRealTimers();
   });
+});
+
+
+it("keeps explicit log identity through reload and changes it for an empty-history request", () => {
+  const first = getLogConversationId(false);
+  expect(first).toMatch(/^[0-9a-f-]{36}$/);
+  __reloadFromStorage();
+  expect(getLogConversationId(true)).toBe(first);
+  expect(getLogConversationId(false)).not.toBe(first);
+  expect(getLogConversationId(true, "another-user")).toBe("");
+});
+
+
+it("supports local HTTP without randomUUID and never blocks chat when randomness fails", () => {
+  vi.spyOn(crypto, "randomUUID").mockImplementation(() => { throw new Error("Secure context required"); });
+  const original = getLogConversationId(false);
+  expect(original).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(() => { throw new Error("Unavailable"); });
+  expect(getLogConversationId(false)).toBe("");
+  random.mockRestore();
+  expect(getLogConversationId(true)).not.toBe(original);
 });

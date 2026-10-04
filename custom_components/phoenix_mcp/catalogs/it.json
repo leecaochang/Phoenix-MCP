@@ -2090,7 +2090,6 @@
     },
     "conversations": {
       "title": "Registro conversazioni",
-      "description": "Un registro leggibile delle richieste, delle azioni di Phoenix e delle sue risposte.",
       "unknown": "Sconosciuto",
       "fullText": "Mostra testo completo ({count} caratteri)",
       "copied": "Copiato",
@@ -2111,8 +2110,6 @@
       "technical": "Dettagli tecnici",
       "loadFailed": "Impossibile caricare la cronologia. Aggiorna per riprovare.",
       "clearFailed": "Impossibile eliminare la cronologia dall'archivio. Riprova.",
-      "recording": "Registrazione attivata",
-      "recordingOff": "Registrazione disattivata",
       "disabledHelp": "La registrazione è disattivata. Attivala nelle Impostazioni per le nuove conversazioni. Le voci esistenti restano soggette ai limiti di conservazione.",
       "storageUnavailable": "L'archivio della cronologia non è disponibile. Le attività recenti potrebbero andare perse al riavvio.",
       "search": "Cerca nel testo registrato",
@@ -2220,7 +2217,7 @@
       "deliveryUnverified": "Phoenix ha generato questa risposta. La consegna all'utente non è verificata.",
       "clientPromptUnavailable": "Questo client non ha fornito a Phoenix il messaggio dell'utente.",
       "routeLocal": "Gestito localmente",
-      "routeProvider": "Inviato al modello IA",
+      "routeProvider": "Inviato al fornitore LLM",
       "executionUnknown": "Risultato non confermato: l'azione potrebbe essere stata eseguita. Controlla Home Assistant prima di riprovare.",
       "omittedEvents": "Limite di eventi raggiunto: {count} eventi non sono mostrati. I risultati registrati sono conservati separatamente.",
       "loggingDisabled": "La registrazione non è disponibile quando tutti i registri sono disattivati.",
@@ -2232,7 +2229,17 @@
       "changeCount": {
         "one": "{count} modifica",
         "other": "{count} modifiche"
-      }
+      },
+      "routeAssist": "Verificato con Assist",
+      "routeDecision": "Chiamato il fornitore di decisioni",
+      "routeDecisionResult": "Risultato dell’instradamento decisionale",
+      "routeDecisionLocal": "Gestito localmente in base a una decisione",
+      "observationOnly": "Solo osservazione; nessuna azione eseguita.",
+      "routingOnly": "Solo verifica dell’instradamento; l’esecuzione viene registrata separatamente.",
+      "toolResult": "Risultato dello strumento",
+      "conversation": "Conversazione",
+      "turns": "Turni: {count}",
+      "historyMissing": "I turni precedenti non sono disponibili. Potrebbero precedere l’attivazione del registro o essere stati eliminati dai limiti di conservazione."
     },
     "attention": {
       "title": "Richiede attenzione",

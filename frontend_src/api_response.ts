@@ -31,14 +31,15 @@ export function validApiResponse(path: string, method: string, value: unknown): 
     if (field === "approvals" && !value[field].every(row => typeof row.id === "string" && object(row.args) && object(row.diff))) return false;
   }
   if (route === "/conversations" && method === "GET") {
+    const summary = (row: Record<string, unknown>) => typeof row.id === "string" && typeof row.excerpt === "string"
+      && typeof row.started_at === "string" && typeof row.updated_at === "string"
+      && typeof row.source === "string" && typeof row.status === "string"
+      && typeof row.execution_status === "string" && typeof row.coverage === "string"
+      && typeof row.tool_count === "number" && typeof row.change_count === "number"
+      && Array.isArray(row.omissions) && row.omissions.every(v => typeof v === "string");
     return records(value.entries) && Number.isSafeInteger(value.total) && (value.total as number) >= 0
       && typeof value.enabled === "boolean" && typeof value.available === "boolean"
-      && value.entries.every(row => typeof row.id === "string" && typeof row.excerpt === "string"
-        && typeof row.started_at === "string" && typeof row.updated_at === "string"
-        && typeof row.source === "string" && typeof row.status === "string"
-        && typeof row.execution_status === "string" && typeof row.coverage === "string"
-        && typeof row.tool_count === "number" && typeof row.change_count === "number"
-        && Array.isArray(row.omissions) && row.omissions.every(v => typeof v === "string"));
+      && value.entries.every(row => summary(row) && (row.turns === undefined || records(row.turns) && row.turns.every(summary)));
   }
   if (route.startsWith("/conversations/") && method === "GET") {
     return typeof value.id === "string" && typeof value.response_status === "string" && object(value.metadata)

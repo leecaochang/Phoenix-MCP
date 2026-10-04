@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { BusyButton, BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
+import { api } from "../api";
+import { localeNumber } from "../i18n/format";
 import { t } from "../i18n";
 
 interface Props {
@@ -17,6 +19,12 @@ const LIMITS = [
 ] as const;
 
 export function ConversationSettings({ settings, saving, onChange, onSave }: Props) {
+  const [storage, setStorage] = useState<{ bytes: number; max_bytes?: number } | null>(null);
+  useEffect(() => {
+    let active = true;
+    api.getConversations({ limit: 1 }).then(value => { if (active) setStorage(value); }).catch(() => { if (active) setStorage(null); });
+    return () => { active = false; };
+  }, [settings.conversation_log_max_entries, settings.conversation_log_max_days, settings.conversation_log_max_mb, saving]);
   const entries = settings.conversation_log_max_entries ?? 100;
   const days = settings.conversation_log_max_days ?? 7;
   const mb = settings.conversation_log_max_mb ?? 25;
@@ -36,6 +44,7 @@ export function ConversationSettings({ settings, saving, onChange, onSave }: Pro
     </div>
     {settings.disable_all_logging && <p className="conversation-secondary">{t("conversations.loggingDisabled")}</p>}
     {!settings.log_entity_names && <p className="conversation-secondary">{t("conversations.omission.privacy")}</p>}
+    {!!storage?.max_bytes && <p className="conversation-secondary">{t("conversations.storage", { used: localeNumber(Math.round(storage!.bytes / 10000) / 100), limit: localeNumber(storage!.max_bytes! / 1000000) })}</p>}
     <p className="conversation-secondary">{t("conversations.retentionHelp")}</p>
     {LIMITS.map(([field, , min, max, key], index) => <div className="conversation-limit" key={field}>
       <label htmlFor={field}>{t(key)}</label>
