@@ -734,7 +734,6 @@
       "restoreNote": "将<strong>{side}</strong>的配置重新应用到 <code>{type}</code> <strong>{name}</strong>，覆盖其当前配置（若已不存在则重新创建），并记录一条新的<em>回滚</em>条目，您可以还原该条目来撤销此次操作。",
       "restoreThis": "还原此配置",
       "restoring": "还原中…",
-      "subtitle": "查看并还原智能体对自动化、脚本、场景、辅助元素和仪表盘所做的更改。",
       "timelineAria": "版本时间线",
       "title": "配置变更",
       "toCodeOff": "切换到纯文本行差异",
@@ -768,7 +767,11 @@
       "typeConfigEntry": "集成/助手设置",
       "typeEnergy": "能源仪表盘",
       "typeArea": "区域",
-      "typeFloor": "楼层"
+      "typeFloor": "楼层",
+      "search": "搜索已加载的更改...",
+      "allTypes": "所有类型",
+      "allActions": "所有操作",
+      "emptySearch": "已加载的更改中没有符合筛选条件的记录。"
     },
     "perms": {
       "addHint": "添加提示",

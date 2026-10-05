@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ApprovalDiff, ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { api } from "../api";
-import { Loading, ErrorMsg } from "../index";
+import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
+import { BusyButton } from "../components/BusyButton";
 import { Modal } from "../components/Modal";
 import { BeforeAfter, RemovedPane } from "../components/DiffView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, wrapCardPreviewConfig } from "../components/DashboardPreview";
@@ -11,6 +12,7 @@ import { clearReasonDraft, getReasonDraft, setReasonDraft } from "../utils/appro
 import { localizedApprovalReason } from "../utils/approval_reason";
 import { friendlyApprovalSummary, rememberApprovalView, storedApprovalView, type ApprovalView } from "../utils/approval_summary";
 import { useLatestRequest } from "../utils/latest_request";
+import { matchesListSearch } from "../utils/list_search";
 import {
   notifyAgentChatReviewClosed,
   notifyAgentChatReviewDecided,
@@ -412,12 +414,9 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   }
 
   const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q || tab === "pending") return records;
-    return records.filter((r) =>
-      `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`.toLowerCase().includes(q),
-    );
-  }, [records, search, tab]);
+    return records.filter(r => matchesListSearch(
+      `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`, search));
+  }, [records, search]);
 
   const selectedIndex = selected ? shown.findIndex((record) => record.id === selected.id) : -1;
   const navigateSelected = useCallback((offset: -1 | 1) => {
@@ -493,7 +492,8 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
 
 
   return (
-    <div className="approvals-view">
+    <div className="view-root approvals-view">
+      <div className="card approvals-list-card">
       <div className="approvals-toolbar">
       <div className="approvals-tabs" role="tablist" aria-label={t("approvals.tablist")} onKeyDown={handleTopTabKeyDown}>
         {/* No aria-controls on these two: only the active panel is mounted. */}
@@ -531,36 +531,33 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
       />
       </div>
 
+      <div className={`filter-row approvals-filters approvals-filters-${tab}`}>
+        <input type="search" className="input" placeholder={t("approvals.searchPlaceholder")}
+          value={search} onChange={e => setSearch(e.target.value)} aria-label={t("approvals.searchAria")} />
+        {tab === "history" && <select className="input input-auto" value={histFilter}
+          onChange={e => setHistFilter(e.target.value as ApprovalStatus | "all")} aria-label={t("approvals.filterGroup")}>
+          {HISTORY_FILTERS.map(f => <option key={f} value={f}>{t(FILTER_LABEL_KEYS[f])}</option>)}
+        </select>}
+        <BusyButton type="button" className="btn btn-ghost btn-sm btn-icon" busy={loading || loadingMore || batchBusy}
+          title={t("common.refresh")} aria-label={t("common.refresh")} onClick={() => {
+            setLoading(true);
+            if (tab === "pending") void loadPending(); else void loadHistory(0);
+          }}><RefreshIcon /></BusyButton>
+      </div>
+
       <div
         id={`approval-panel-${tab}`}
         role="tabpanel"
         aria-labelledby={`approval-tab-${tab}`}
       >
-      {tab === "history" && (
-        <div className="mesa-controls">
-          <div className="mesa-summary" role="group" aria-label={t("approvals.filterGroup")}>
-            {HISTORY_FILTERS.map((f) => (
-              <button key={f}
-                className={`mesa-chip${histFilter === f ? " mesa-chip-active" : ""}`}
-                aria-pressed={histFilter === f}
-                onClick={() => setHistFilter(f)}>
-                {t(FILTER_LABEL_KEYS[f])}
-              </button>
-            ))}
-          </div>
-          <input className="input mesa-search" placeholder={t("approvals.searchPlaceholder")}
-            value={search} onChange={(e) => setSearch(e.target.value)} aria-label={t("approvals.searchAria")} />
-        </div>
-      )}
-
       {loading && <Loading />}
       {error && <ErrorMsg msg={error} />}
 
       {shown.length === 0 && !loading && !error && (
         <div className="approvals-empty">
-          {tab === "pending"
+          {search.trim() ? t("approvals.emptySearch") : tab === "pending"
             ? t("approvals.emptyPending")
-            : search.trim() ? t("approvals.emptySearch") : t("approvals.emptyHistory")}
+            : t("approvals.emptyHistory")}
         </div>
       )}
 
@@ -606,7 +603,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
         </>
       ) : (
         shown.length > 0 && (
-          <div className="card approval-history">
+          <div className="approval-history">
             {shown.map((r) => (
               <HistoryRow key={r.id} record={r} view={defaultView} onClick={() => setSelected(r)} />
             ))}
@@ -614,7 +611,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
         )
       )}
 
-      {hasMore && !search.trim() && (
+      {hasMore && (
         <div className="approval-history-more">
           <button className="btn btn-ghost btn-sm" aria-disabled={loadingMore}
             onClick={() => { if (loadingMore) return; setLoadingMore(true); if (tab === "pending") loadPending(rawOffset); else loadHistory(rawOffset); }}>
@@ -646,6 +643,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
           onReviewAll={dismissRecord}
         />
       )}
+      </div>
       </div>
     </div>
   );

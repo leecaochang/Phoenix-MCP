@@ -630,7 +630,6 @@
       "restoring": "Restoring...",
       "snapshotTooLarge": "(snapshot too large to display)",
       "snapshotTooLargeBytes": "(snapshot too large to display, {bytes} bytes)",
-      "subtitle": "Review and restore agent changes to automations, scripts, scenes, helpers, and dashboards.",
       "timelineAria": "Version timeline",
       "title": "Configuration changes",
       "toCodeOff": "Switch to the plain line diff",
@@ -651,7 +650,11 @@
       "typeScript": "Script",
       "typeYamlConfig": "YAML config",
       "typeArea": "Area",
-      "typeFloor": "Floor"
+      "typeFloor": "Floor",
+      "search": "Search loaded changes...",
+      "allTypes": "All types",
+      "allActions": "All actions",
+      "emptySearch": "No loaded changes match these filters."
     },
     "audit": {
       "outcomeAllowed": "Allowed",

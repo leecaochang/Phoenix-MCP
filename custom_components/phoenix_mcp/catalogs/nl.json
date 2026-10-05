@@ -311,7 +311,6 @@
       "restoring": "Herstellen...",
       "snapshotTooLarge": "(momentopname te groot om weer te geven)",
       "snapshotTooLargeBytes": "(momentopname te groot om weer te geven, {bytes} bytes)",
-      "subtitle": "Bekijk en herstel agentwijzigingen aan automatiseringen, scripts, scènes, helpers en dashboards.",
       "timelineAria": "Versietijdlijn",
       "title": "Configuratiewijzigingen",
       "toCodeOff": "Schakel over naar de eenvoudige regel-diff",
@@ -332,7 +331,11 @@
       "typeScript": "Script",
       "typeYamlConfig": "YAML-configuratie",
       "typeArea": "Ruimte",
-      "typeFloor": "Verdieping"
+      "typeFloor": "Verdieping",
+      "search": "Geladen wijzigingen doorzoeken...",
+      "allTypes": "Alle typen",
+      "allActions": "Alle acties",
+      "emptySearch": "Geen geladen wijzigingen komen overeen met deze filters."
     },
     "audit": {
       "allOutcomes": "Alle uitkomsten",

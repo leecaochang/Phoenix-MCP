@@ -319,7 +319,6 @@
       "restoring": "Przywracanie...",
       "snapshotTooLarge": "(migawka zbyt duża do wyświetlenia)",
       "snapshotTooLargeBytes": "(migawka zbyt duża do wyświetlenia, {bytes} bajtów)",
-      "subtitle": "Przeglądaj i przywracaj zmiany agenta w automatyzacjach, skryptach, scenach, pomocnikach i panelach.",
       "timelineAria": "Oś czasu wersji",
       "title": "Zmiany konfiguracji",
       "toCodeOff": "Przełącz na zwykły diff wierszy",
@@ -340,7 +339,11 @@
       "typeScript": "Skrypt",
       "typeYamlConfig": "Konfiguracja YAML",
       "typeArea": "Obszar",
-      "typeFloor": "Piętro"
+      "typeFloor": "Piętro",
+      "search": "Szukaj we wczytanych zmianach...",
+      "allTypes": "Wszystkie typy",
+      "allActions": "Wszystkie działania",
+      "emptySearch": "Żadna wczytana zmiana nie pasuje do tych filtrów."
     },
     "audit": {
       "allOutcomes": "Wszystkie wyniki",

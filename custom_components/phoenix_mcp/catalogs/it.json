@@ -1580,7 +1580,6 @@
       "restoring": "Ripristino...",
       "snapshotTooLarge": "(istantanea troppo grande per essere visualizzata)",
       "snapshotTooLargeBytes": "(istantanea troppo grande per essere visualizzata, {bytes} byte)",
-      "subtitle": "Rivedi e ripristina le modifiche dell'agente ad automazioni, script, scene, aiutanti e plance.",
       "timelineAria": "Cronologia delle versioni",
       "title": "Modifiche di configurazione",
       "toCodeOff": "Passa alle differenze riga per riga",
@@ -1601,7 +1600,11 @@
       "typeScript": "Script",
       "typeYamlConfig": "Configurazione YAML",
       "typeArea": "Zona",
-      "typeFloor": "Piano"
+      "typeFloor": "Piano",
+      "search": "Cerca nelle modifiche caricate...",
+      "allTypes": "Tutti i tipi",
+      "allActions": "Tutte le azioni",
+      "emptySearch": "Nessuna modifica caricata corrisponde a questi filtri."
     },
     "shell": {
       "agentChat": "Agent Chat",

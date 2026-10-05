@@ -867,7 +867,6 @@
       "restoring": "還原中…",
       "snapshotTooLarge": "（快照過大，無法顯示）",
       "snapshotTooLargeBytes": "（快照過大，無法顯示，共 {bytes} 位元組）",
-      "subtitle": "檢視並還原智慧體對自動化、腳本、場景、輔助項目和儀表板所做的更改。",
       "timelineAria": "版本時間線",
       "title": "設定變更",
       "toCodeOff": "切換到純文本行差異",
@@ -888,7 +887,11 @@
       "typeScript": "腳本",
       "typeYamlConfig": "YAML 設定",
       "typeArea": "區域",
-      "typeFloor": "樓層"
+      "typeFloor": "樓層",
+      "search": "搜尋已載入的變更...",
+      "allTypes": "所有類型",
+      "allActions": "所有操作",
+      "emptySearch": "已載入的變更中沒有符合篩選條件的記錄。"
     },
     "common": {
       "after": "更改後",

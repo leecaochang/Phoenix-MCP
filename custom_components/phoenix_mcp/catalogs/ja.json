@@ -439,7 +439,6 @@
       "restoring": "復元中...",
       "snapshotTooLarge": "（スナップショットが大きすぎるため表示できません）",
       "snapshotTooLargeBytes": "（スナップショットが大きすぎるため表示できません。{bytes} バイト）",
-      "subtitle": "エージェントによるオートメーション、スクリプト、シーン、ヘルパー、ダッシュボードの変更を確認して復元します。",
       "timelineAria": "バージョンのタイムライン",
       "title": "設定変更",
       "toCodeOff": "通常の行単位差分に切り替え",
@@ -460,7 +459,11 @@
       "typeScript": "スクリプト",
       "typeYamlConfig": "YAML 設定",
       "typeArea": "エリア",
-      "typeFloor": "フロア"
+      "typeFloor": "フロア",
+      "search": "読み込み済みの変更を検索...",
+      "allTypes": "すべての種類",
+      "allActions": "すべての操作",
+      "emptySearch": "読み込み済みの変更に、このフィルターに一致するものはありません。"
     },
     "audit": {
       "outcomeAllowed": "許可",

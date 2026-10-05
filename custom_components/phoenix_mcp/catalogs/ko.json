@@ -370,7 +370,6 @@
       "restoring": "복원 중...",
       "snapshotTooLarge": "(표시하기에 스냅샷이 너무 큼)",
       "snapshotTooLargeBytes": "(표시하기에 스냅샷이 너무 큼, {bytes}바이트)",
-      "subtitle": "자동화, 스크립트, 장면, 도우미, 대시보드의 에이전트 변경 사항을 검토하고 복원합니다.",
       "timelineAria": "버전 타임라인",
       "title": "구성 변경 내역",
       "toCodeOff": "일반 줄 단위 diff 보기로 전환",
@@ -391,7 +390,11 @@
       "typeScript": "스크립트",
       "typeYamlConfig": "YAML 구성",
       "typeArea": "구역",
-      "typeFloor": "층"
+      "typeFloor": "층",
+      "search": "불러온 변경 사항 검색...",
+      "allTypes": "모든 유형",
+      "allActions": "모든 작업",
+      "emptySearch": "이 필터와 일치하는 불러온 변경 사항이 없습니다."
     },
     "perms": {
       "addHint": "힌트 추가",

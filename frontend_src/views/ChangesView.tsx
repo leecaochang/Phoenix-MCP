@@ -1,6 +1,6 @@
 import { BusyButton } from "../components/BusyButton";
 /** Configuration version history view. */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import type { VersionRecord, VersionSummary } from "../types";
 import { api } from "../api";
 import { toYaml } from "../components/YamlView";
@@ -10,7 +10,8 @@ import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedTo
 import { Loading, ErrorMsg, RefreshIcon } from "../index";
 import { formatDateTime } from "../utils";
 import { useLatestRequest } from "../utils/latest_request";
-import { hasMessage, t } from "../i18n";
+import { matchesListSearch } from "../utils/list_search";
+import { compareStrings, hasMessage, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
 // Resource types whose before/after payload is a raw text blob ({content, ...})
@@ -120,6 +121,7 @@ async function subscribeConfigChanged(hass: unknown, cb: () => void): Promise<Un
 }
 
 const CHANGES_PAGE = 100;
+type ChangeSort = "action" | "resource_type" | "name" | "author" | "timestamp";
 
 /** A version record's one-line change summary, localized when the backend
  *  supplied a catalog key and this bundle knows it. Same fallback ladder as the
@@ -139,6 +141,11 @@ export function ChangesView({ hass }: { hass: unknown }) {
   const [accessKeyNames, setAccessKeyNames] = useState<Map<string, string>>(new Map());
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [search, setSearch] = useState("");
+  const [resourceType, setResourceType] = useState("");
+  const [action, setAction] = useState("");
+  const [sortKey, setSortKey] = useState<ChangeSort>("timestamp");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
 
@@ -217,6 +224,34 @@ export function ChangesView({ hass }: { hass: unknown }) {
     return () => clearInterval(id);
   }, [selected, loadFeed]);
 
+  const shown = useMemo(() => {
+    const value = (v: VersionSummary, key: ChangeSort): string => {
+      if (key === "name") return label(v);
+      if (key === "author") return whoNow(v, accessKeyNames);
+      if (key === "resource_type") return resourceTypeLabel(v.resource_type);
+      if (key === "action") return t(ACTION_LABEL_KEYS[v.action]);
+      return v.timestamp;
+    };
+    return feed.filter(v => (!resourceType || v.resource_type === resourceType)
+      && (!action || v.action === action)
+      && matchesListSearch(`${label(v)} ${v.resource_id} ${v.resource_type} ${resourceTypeLabel(v.resource_type)} ${v.action} ${t(ACTION_LABEL_KEYS[v.action])} ${whoNow(v, accessKeyNames)} ${versionSummary(v)}`, search))
+      .sort((a, b) => compareStrings(value(a, sortKey), value(b, sortKey)) * (sortDir === "asc" ? 1 : -1));
+  }, [feed, search, resourceType, action, accessKeyNames, sortKey, sortDir]);
+
+  function sortHeader(key: ChangeSort, text: string, className = "") {
+    const active = key === sortKey;
+    return <th className={`sortable ${className}${active ? " sort-active" : ""}`}
+      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className="table-sort-btn" onClick={() => {
+        if (active) setSortDir(dir => dir === "asc" ? "desc" : "asc");
+        else { setSortKey(key); setSortDir("asc"); }
+      }}>{text}<svg className={`sort-arrow${active ? " active" : ""}`} width="8" height="12" viewBox="0 0 8 12" fill="currentColor" aria-hidden="true">
+        {(!active || sortDir === "asc") && <path d="M4 0 8 4H0Z" />}
+        {(!active || sortDir === "desc") && <path d="m4 12 4-4H0Z" />}
+      </svg></button>
+    </th>;
+  }
+
   if (selected) {
     return (
       <ChangeDetail
@@ -236,45 +271,52 @@ export function ChangesView({ hass }: { hass: unknown }) {
   }
 
   return (
-    <div className="view-root">
-      <div className="changes-header">
-        <div className="changes-header-text">
-          <h3 className="changes-title">{t("changes.title")}</h3>
-          <p className="changes-subtitle">
-            {t("changes.subtitle")}
-          </p>
-        </div>
-        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { loadFeed(0); loadAccessKeys(); }} title={t("common.refresh")} aria-label={t("changes.refreshAria")}>
+    <div className="view-root changes-view">
+      <div className="card">
+      <div className="filter-row changes-toolbar">
+        <input type="search" className="input" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder={t("changes.search")} aria-label={t("changes.search")} />
+        <select className="input input-auto" value={resourceType} onChange={e => setResourceType(e.target.value)} aria-label={t("changes.colType")}>
+          <option value="">{t("changes.allTypes")}</option>
+          {Object.keys(RESOURCE_TYPE_LABEL_KEYS).map(type => <option key={type} value={type}>{resourceTypeLabel(type)}</option>)}
+        </select>
+        <select className="input input-auto" value={action} onChange={e => setAction(e.target.value)} aria-label={t("changes.colAction")}>
+          <option value="">{t("changes.allActions")}</option>
+          {Object.keys(ACTION_LABEL_KEYS).map(value => <option key={value} value={value}>{t(ACTION_LABEL_KEYS[value])}</option>)}
+        </select>
+        <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading || loadingMore} onClick={() => { loadFeed(0); loadAccessKeys(); }} title={t("common.refresh")} aria-label={t("changes.refreshAria")}>
           <RefreshIcon />
-        </button>
+        </BusyButton>
       </div>
       {error && <ErrorMsg msg={error} />}
-      {loading ? <Loading /> : feed.length === 0 ? (
-        <div className="banner banner-info">
-          {t("changes.empty")}
-        </div>
+      {loading ? <Loading /> : shown.length === 0 ? (
+        <p className="audit-empty">
+          {feed.length ? t("changes.emptySearch") : t("changes.empty")}
+        </p>
       ) : (
-        <div className="changes-table" aria-label={t("changes.title")}>
-          <div className="changes-row changes-row-head" aria-hidden="true">
-            <span>{t("changes.colAction")}</span>
-            <span className="changes-col-type">{t("changes.colType")}</span>
-            <span>{t("changes.colName")}</span>
-            <span className="changes-col-who">{t("changes.colBy")}</span>
-            <span className="changes-col-when">{t("changes.colWhen")}</span>
-          </div>
-          {feed.map((v) => (
-            <button key={v.id} type="button" className="changes-row" onClick={() => setSelected(v.id)}>
-              <span><ActionBadge action={v.action} /></span>
-              <span className="changes-col-type"><code>{resourceTypeLabel(v.resource_type)}</code></span>
-              <span className="changes-name">
-                {label(v)}
-                {versionSummary(v) ? <span className="changes-summary">{versionSummary(v)}</span> : null}
-              </span>
-              <span className="changes-col-who">{whoNow(v, accessKeyNames)}</span>
-              <span className="changes-col-when">{formatDateTime(v.timestamp)}</span>
-            </button>
-          ))}
-        </div>
+        <table className="data-table changes-table" aria-label={t("changes.title")}>
+          <thead><tr>
+            {sortHeader("action", t("changes.colAction"))}
+            {sortHeader("resource_type", t("changes.colType"), "changes-col-type")}
+            {sortHeader("name", t("changes.colName"))}
+            {sortHeader("author", t("changes.colBy"), "changes-col-who")}
+            {sortHeader("timestamp", t("changes.colWhen"), "changes-col-when")}
+          </tr></thead>
+          <tbody>{shown.map((v) => (
+            <tr key={v.id} className="clickable" onClick={() => setSelected(v.id)}>
+              <td><ActionBadge action={v.action} /></td>
+              <td className="changes-col-type">{resourceTypeLabel(v.resource_type)}</td>
+              <td className="changes-name">
+                <button type="button" className="row-link-btn row-link-btn-stack" onClick={e => { e.stopPropagation(); setSelected(v.id); }}>
+                  <span>{label(v)}</span>
+                  {versionSummary(v) ? <span className="changes-summary">{versionSummary(v)}</span> : null}
+                </button>
+              </td>
+              <td className="changes-col-who">{whoNow(v, accessKeyNames)}</td>
+              <td className="changes-col-when">{formatDateTime(v.timestamp)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
       )}
       {hasMore && (
         <div className="approval-history-more">
@@ -283,6 +325,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
           </BusyButton>
         </div>
       )}
+      </div>
     </div>
   );
 }

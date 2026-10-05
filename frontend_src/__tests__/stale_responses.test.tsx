@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 const listApprovals = vi.fn();
 const getApproval = vi.fn();
@@ -131,17 +131,23 @@ describe("ChangesView discards a superseded response", () => {
       .mockReturnValueOnce(slowFirst.promise)
       .mockReturnValueOnce(fastSecond.promise);
 
-    render(<ChangesView hass={null} />);
+    const onChange = vi.fn<() => void>();
+    const subscribeEvents = vi.fn(async (callback: () => void) => {
+      onChange.mockImplementation(callback);
+      return () => {};
+    });
+    render(<ChangesView hass={{ connection: { subscribeEvents } }} />);
     await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByLabelText("Refresh changes"));
+    await waitFor(() => expect(subscribeEvents).toHaveBeenCalled());
+    onChange();
     await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(2));
 
     fastSecond.resolve({ resource_type: null, resource_id: null, versions: [version("fresh")], total: 1 });
-    await screen.findByText("fresh", { selector: ".changes-name" });
+    await screen.findByText("fresh");
     slowFirst.resolve({ resource_type: null, resource_id: null, versions: [version("stale")], total: 1 });
 
-    await waitFor(() => expect(screen.queryByText("fresh", { selector: ".changes-name" })).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText("fresh")).not.toBeNull());
     expect(screen.queryByText(/stale/)).toBeNull();
   });
 });

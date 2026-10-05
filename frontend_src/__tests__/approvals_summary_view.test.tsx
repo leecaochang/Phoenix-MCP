@@ -49,6 +49,21 @@ describe("approval Summary modal", () => {
     localStorage.clear();
   });
 
+  it("filters pending rows from the list header and refreshes without remounting its controls", async () => {
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
+    const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+    await view.findByText("Restart Home Assistant");
+    const search = view.getByRole("searchbox");
+    fireEvent.change(search, { target: { value: "rst hm" } });
+    expect(view.getByText("Restart Home Assistant")).toBeVisible();
+    fireEvent.change(search, { target: { value: "unmatched-value" } });
+    expect(view.queryByText("Restart Home Assistant")).toBeNull();
+    expect(view.getByText("No approvals match your search.")).toBeVisible();
+    fireEvent.click(view.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(api.listApprovals).toHaveBeenCalledTimes(2));
+    expect(view.getByRole("searchbox")).toBe(search);
+  });
+
   it("opens uncluttered and mounts technical Details only on request", async () => {
     const view = await open();
     expect(await view.findByText("Home Assistant will be briefly unavailable while it restarts.")).toBeTruthy();

@@ -1,9 +1,10 @@
-import { mdiRefresh, mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
+import { mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
 import type { AccessKeyRecord, ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
 import { BusyButton } from "../components/BusyButton";
+import { RefreshIcon } from "../components/common";
 import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
 
@@ -414,7 +415,7 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
       <select className="input input-auto" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
         <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>
       </select>
-      <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={mdiRefresh} /></svg></BusyButton>
+      <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>
     </div>
     <div className="conversation-list" aria-busy={loading}>
       {!entries.length && !loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}

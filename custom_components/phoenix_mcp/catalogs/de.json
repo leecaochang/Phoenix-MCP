@@ -1893,7 +1893,6 @@
       "restoring": "Wird wiederhergestellt...",
       "snapshotTooLarge": "(Momentaufnahme zu groß zum Anzeigen)",
       "snapshotTooLargeBytes": "(Momentaufnahme zu groß zum Anzeigen, {bytes} Bytes)",
-      "subtitle": "Agentenänderungen an Automationen, Skripten, Szenen, Helfern und Dashboards prüfen und wiederherstellen.",
       "timelineAria": "Versionsverlauf",
       "title": "Konfigurationsänderungen",
       "toCodeOff": "Zum einfachen Zeilendiff wechseln",
@@ -1914,7 +1913,11 @@
       "typeScript": "Skript",
       "typeYamlConfig": "YAML-Konfiguration",
       "typeArea": "Bereich",
-      "typeFloor": "Etage"
+      "typeFloor": "Etage",
+      "search": "Geladene Änderungen durchsuchen...",
+      "allTypes": "Alle Typen",
+      "allActions": "Alle Aktionen",
+      "emptySearch": "Keine geladenen Änderungen entsprechen diesen Filtern."
     },
     "audit": {
       "outcomeAllowed": "Erlaubt",

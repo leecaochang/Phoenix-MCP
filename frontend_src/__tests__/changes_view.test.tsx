@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
+import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import { ChangesView } from "../views/ChangesView";
 import { api } from "../api";
 import type { VersionListResponse, VersionSummary } from "../types";
@@ -48,6 +48,23 @@ function stubMatchMedia() {
 
 describe("ChangesView", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("fuzzy-filters loaded changes, sorts names, and keeps pagination reachable", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue({ resource_type: null, resource_id: null,
+      versions: [version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], total: 3 });
+    const view = render(<ChangesView hass={null} />);
+    await view.findByText("Zebra lamp");
+    fireEvent.click(view.getByRole("button", { name: "Name" }));
+    expect(within(view.getByRole("table")).getAllByRole("row")[1]).toHaveTextContent("Alpha lamp");
+    fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
+    expect(view.queryByText("Alpha lamp")).toBeNull();
+    expect(view.getByText("Zebra lamp")).toBeVisible();
+    expect(view.getByText("Load more")).toBeVisible();
+    fireEvent.change(view.getByLabelText("Action"), { target: { value: "edit" } });
+    expect(view.queryByText("Zebra lamp")).toBeNull();
+    expect(view.getByText("No loaded changes match these filters.")).toBeVisible();
+    expect(view.getByText("Load more")).toBeVisible();
+  });
 
   it("loads the first page and shows Load more only while more rows remain", async () => {
     vi.mocked(api.listVersions).mockResolvedValue({
@@ -133,7 +150,7 @@ describe("ChangesView", () => {
 
     refreshed.resolve({ resource_type: null, resource_id: null, versions: [rollback, original], total: 2 });
     await waitFor(() => expect(view.queryByText("Back to changes")).toBeNull());
-    expect(await view.findByText("Rollback")).toBeTruthy();
+    expect(await within(view.getByRole("table")).findByText("Rollback")).toBeTruthy();
     expect(api.listVersions).toHaveBeenCalledTimes(3);
   });
 

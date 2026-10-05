@@ -304,7 +304,6 @@
       "restoring": "Restaurando...",
       "snapshotTooLarge": "(instantánea demasiado grande para mostrarse)",
       "snapshotTooLargeBytes": "(instantánea demasiado grande para mostrarse, {bytes} bytes)",
-      "subtitle": "Revisa y restaura los cambios realizados por agentes en automatizaciones, scripts, escenas, ayudantes y paneles de control.",
       "timelineAria": "Línea de tiempo de versiones",
       "title": "Cambios de configuración",
       "toCodeOff": "Cambiar al diff de líneas simple",
@@ -325,7 +324,11 @@
       "typeScript": "Script",
       "typeYamlConfig": "Configuración YAML",
       "typeArea": "Área",
-      "typeFloor": "Planta"
+      "typeFloor": "Planta",
+      "search": "Buscar en los cambios cargados...",
+      "allTypes": "Todos los tipos",
+      "allActions": "Todas las acciones",
+      "emptySearch": "Ningún cambio cargado coincide con estos filtros."
     },
     "selectBy": {
       "apply": "Aplicar",

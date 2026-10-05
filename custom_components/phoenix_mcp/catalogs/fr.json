@@ -628,7 +628,6 @@
       "restoring": "Restauration...",
       "snapshotTooLarge": "(instantané trop volumineux pour être affiché)",
       "snapshotTooLargeBytes": "(instantané trop volumineux pour être affiché, {bytes} octets)",
-      "subtitle": "Révisez et restaurez les modifications apportées par l'agent aux automatisations, scripts, scènes, entrées et tableaux de bord.",
       "timelineAria": "Chronologie des versions",
       "title": "Modifications de configuration",
       "toCodeOff": "Passer au diff de lignes simple",
@@ -649,7 +648,11 @@
       "typeScript": "Script",
       "typeYamlConfig": "Configuration YAML",
       "typeArea": "Zone",
-      "typeFloor": "Étage"
+      "typeFloor": "Étage",
+      "search": "Rechercher dans les modifications chargées...",
+      "allTypes": "Tous les types",
+      "allActions": "Toutes les actions",
+      "emptySearch": "Aucune modification chargée ne correspond à ces filtres."
     },
     "audit": {
       "outcomeAllowed": "Autorisé",
