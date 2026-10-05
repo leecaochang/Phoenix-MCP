@@ -1,8 +1,8 @@
-import { mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { mdiRefresh, mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
-import type { ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
+import type { AccessKeyRecord, ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
 import { BusyButton } from "../components/BusyButton";
 import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
@@ -281,7 +281,7 @@ function TimelineRow({ item, finalIndex, running, responseStatus }: { item: Time
   </li>;
 }
 
-function EntryDetail({ id, revision }: { id: string; revision: string }) {
+function EntryDetail({ id, revision, accessKeyNames }: { id: string; revision: string; accessKeyNames: Record<string, string> }) {
   const [entry, setEntry] = useState<ConversationEntry | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -294,8 +294,9 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
   if (error) return <div role="alert">{error} <button className="btn btn-text" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
   if (!entry) return <p role="status">{t("common.loading")}</p>;
   const finalTextIndex = entry.events.reduce((last, event, index) => event.kind === "assistant_text" && event.payload === entry.response ? index : last, -1);
+  const accessKeyName = accessKeyNames[String(entry.metadata.access_key_id ?? "")] ?? entry.metadata.access_key_name;
   const identityFields = [
-    { key: "access_key_name", title: "conversations.accessKeyLabel", value: entry.metadata.access_key_name },
+    { key: "access_key_name", title: "conversations.accessKeyLabel", value: accessKeyName },
     { key: "provider", title: "conversations.providerLabel", value: entry.metadata.provider },
     { key: "model", title: "conversations.modelLabel", value: entry.metadata.model },
   ];
@@ -322,27 +323,28 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
       {entry.response !== null ? <TextEvidence value={entry.response} /> : <p className="conversation-secondary">{unavailable(entry, "response")}</p>}
     </section>}
     <details className="conversation-technical"><summary>{t("conversations.technical")}</summary><p className="conversation-secondary">{t("conversations.deliveryUnverified")}</p><TextEvidence value={{
-      entry_id: entry.id, source: entry.source, ...entry.metadata, started_at: entry.started_at, updated_at: entry.updated_at,
+      entry_id: entry.id, source: entry.source, ...entry.metadata, access_key_name: accessKeyName, started_at: entry.started_at, updated_at: entry.updated_at,
       coverage: entry.coverage, status: entry.status, execution_outcome: entry.execution_status, response_outcome: entry.response_status,
       tool_count: entry.tool_count, change_count: entry.change_count, omissions: entry.omissions,
     }} code /></details>
   </div>;
 }
 
-function ConversationDetail({ entry }: { entry: ConversationSummary }) {
+function ConversationDetail({ entry, accessKeyNames }: { entry: ConversationSummary; accessKeyNames: Record<string, string> }) {
   const [visible, setVisible] = useState(25);
   const turns = entry.turns ?? [entry];
   return <div className="conversation-turns">
     {entry.history_missing && <p className="banner banner-warning">{t("conversations.historyMissing")}</p>}
     {turns.slice(0, visible).map(turn => <section className="conversation-turn" key={turn.id} aria-label={turn.excerpt || t("conversations.prompt")}>
       <div className="conversation-turn-heading"><time dateTime={turn.started_at}>{localeDateTime(turn.started_at)}</time><span className={`conversation-signal-${outcomeSignal(rowStatus(turn))}`}>{label("outcome", rowStatus(turn))}</span></div>
-      <EntryDetail id={turn.id} revision={turn.updated_at} />
+      <EntryDetail id={turn.id} revision={turn.updated_at} accessKeyNames={accessKeyNames} />
     </section>)}
     {visible < turns.length && <button className="btn btn-ghost" onClick={() => setVisible(n => n + 25)}>{t("common.loadMore")}</button>}
   </div>;
 }
 
-export function ConversationsView() {
+export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyRecord[] }) {
+  const accessKeyNames = useMemo(() => Object.fromEntries(accessKeys.map(key => [key.id, key.name])), [accessKeys]);
   const [entries, setEntries] = useState<ConversationSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(25);
@@ -397,21 +399,22 @@ export function ConversationsView() {
     {!enabled && <p className="banner">{t("conversations.disabledHelp")}</p>}
     {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
-    <div className="conversation-toolbar">
+    <div className="card">
+    <div className="filter-row conversation-toolbar">
       <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
         onChange={e => { setSearch(e.target.value); resetPage(); }} />
-      <select className="input" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
+      <select className="input input-auto" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
         <option value="">{t("conversations.allSources")}</option>
         {["agentcli", "voice", "ai_task", "assist", "mcp", "home_companion"].map(value => <option key={value} value={value}>{label("source", value)}</option>)}
       </select>
-      <select className="input" aria-label={t("conversations.outcomeFilter")} value={outcome} onChange={e => { setOutcome(e.target.value); resetPage(); }}>
+      <select className="input input-auto" aria-label={t("conversations.outcomeFilter")} value={outcome} onChange={e => { setOutcome(e.target.value); resetPage(); }}>
         <option value="">{t("conversations.allOutcomes")}</option>
         {["completed", "failed", "denied", "pending_approval", "cancelled", "interrupted", "unknown", "running"].map(value => <option key={value} value={value}>{label("outcome", value)}</option>)}
       </select>
-      <select className="input" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
+      <select className="input input-auto" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
         <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>
       </select>
-      <BusyButton className="btn btn-ghost" busy={loading} onClick={() => void load()}>{t("common.refresh")}</BusyButton>
+      <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={mdiRefresh} /></svg></BusyButton>
     </div>
     <div className="conversation-list" aria-busy={loading}>
       {!entries.length && !loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
@@ -427,13 +430,14 @@ export function ConversationsView() {
           </span>
           <span className={`conversation-status conversation-signal-${outcomeSignal(rowStatus(entry))}`}><SignalIcon path={outcomeIcon(rowStatus(entry))} signal={outcomeSignal(rowStatus(entry))} />{label("outcome", rowStatus(entry))}</span>
         </summary>
-        {open.has(entry.id) && (entry.turns ? <ConversationDetail entry={entry} /> : <EntryDetail id={entry.id} revision={entry.updated_at} />)}
+        {open.has(entry.id) && (entry.turns ? <ConversationDetail entry={entry} accessKeyNames={accessKeyNames} /> : <EntryDetail id={entry.id} revision={entry.updated_at} accessKeyNames={accessKeyNames} />)}
       </details>)}
     </div>
     <div className="conversation-footer">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
       {entries.length < total && <BusyButton busy={loading} className="btn btn-ghost" onClick={() => setLimit(n => n + 25)}>{t("common.loadMore")}</BusyButton>}
       <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>
+    </div>
     </div>
     {confirmClear && <div className="banner banner-warning">
       <p>{t("conversations.clearConfirm")}</p>

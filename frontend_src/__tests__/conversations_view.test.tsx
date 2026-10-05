@@ -3,7 +3,7 @@ import { render, fireEvent, waitFor, act } from "@testing-library/react";
 import { ConversationsView } from "../views/ConversationsView";
 import { api } from "../api";
 import { validApiResponse } from "../api_response";
-import type { ConversationEntry, ConversationListResponse, ConversationSummary } from "../types";
+import type { AccessKeyRecord, ConversationEntry, ConversationListResponse, ConversationSummary } from "../types";
 
 vi.mock("../api", () => ({ api: { getConversations: vi.fn(), getConversation: vi.fn(), clearConversations: vi.fn() } }));
 const summary: ConversationSummary = {
@@ -26,6 +26,22 @@ beforeEach(() => {
 });
 
 describe("ConversationsView", () => {
+  it("resolves renamed access keys without changing retained evidence or collapsing the turn", async () => {
+    const stored = { ...detail, metadata: { access_key_id: "key-1", access_key_name: "Old_name" } };
+    vi.mocked(api.getConversation).mockResolvedValue(stored);
+    const keys = [{ id: "key-1", name: "Current_name" }] as AccessKeyRecord[];
+    const view = render(<ConversationsView accessKeys={keys} />);
+    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+    await view.findByText("Current_name");
+    expect(view.queryByText("Old_name")).toBeNull();
+    view.rerender(<ConversationsView accessKeys={[{ ...keys[0], name: "Renamed_again" }]} />);
+    await view.findByText("Renamed_again");
+    expect(view.container.querySelector(".conversation-entry")?.hasAttribute("open")).toBe(true);
+    expect(stored.metadata.access_key_name).toBe("Old_name");
+    view.rerender(<ConversationsView accessKeys={[]} />);
+    await view.findByText("Old_name");
+  });
+
   it("loads details only on expansion and renders untrusted content as inert text", async () => {
     const view = render(<ConversationsView />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
@@ -68,10 +84,10 @@ describe("ConversationsView", () => {
     fireEvent.click(title.closest("summary")!);
     await view.findByText("Prompt");
     vi.mocked(api.getConversations).mockRejectedValueOnce(new Error("unavailable"));
-    fireEvent.click(view.getByText("Refresh"));
+    fireEvent.click(view.getByRole("button", { name: "Refresh" }));
     await view.findByRole("alert");
     expect(view.getByText("Prompt")).toBeTruthy();
-    fireEvent.click(view.getByText("Refresh"));
+    fireEvent.click(view.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(view.queryByRole("alert")).toBeNull());
     expect(title.closest("details")?.open).toBe(true);
   });

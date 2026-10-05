@@ -630,7 +630,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         )}
         {tab === "mesa" && <MesaView />}
         {tab === "audit" && <AuditView accessKeys={accessKeys} />}
-        {tab === "conversations" && <ConversationsView />}
+        {tab === "conversations" && <ConversationsView accessKeys={accessKeys} />}
         {tab === "changes" && <ChangesView hass={hass} />}
         {tab === "settings" && (
           <SettingsView
