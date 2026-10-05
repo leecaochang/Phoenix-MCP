@@ -1959,7 +1959,7 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
     with patch.object(authoring, "_validate_automation_config", _boom):
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
-            {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
+            {"name": "create_automation", "arguments": {"config": {"alias": "x", "triggers": [], "actions": []}}},
             access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 
@@ -1986,13 +1986,14 @@ async def test_authoring_invalid_config_still_gets_the_domain_guidance():
     with patch.object(authoring, "_validate_automation_config", _invalid):
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
-            {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
+            {"name": "create_automation", "arguments": {"config": {"alias": "x", "triggers": [], "actions": []}}},
             access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 
     assert outcome == "invalid_request"
     text = result["result"]["content"][0]["text"]
-    assert "trigger, condition, and action fields" in text
+    assert "Automation config failed validation" in text
+    assert "Expected shape" in text
     assert "Internal error" not in text
 
 
@@ -2020,7 +2021,7 @@ async def test_authoring_write_failure_is_not_audited_as_denied():
          patch.object(hass, "async_add_executor_job", _fail):
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
-            {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
+            {"name": "create_automation", "arguments": {"config": {"alias": "x", "triggers": [], "actions": []}}},
             access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 

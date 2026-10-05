@@ -28,7 +28,7 @@ import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
-from traceback import format_exc
+from traceback import format_exc, format_tb
 from typing import Any, Literal
 
 import voluptuous as vol
@@ -41,6 +41,7 @@ from homeassistant.util.yaml import dump as _yaml_dump, load_yaml as _load_yaml
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
+from ..authoring_validation import authoring_input_error, validation_message
 from ..const import CAP_DENY, DOMAIN
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
@@ -300,8 +301,8 @@ async def _tool_get_automation(
 
 # The guidance an agent gets when its own config does not validate, one per
 # authored domain. Agent-facing error text is deliberately English.
-_AUTOMATION_INVALID_MESSAGE = "Automation config failed validation. Check trigger, condition, and action fields."
-_SCRIPT_INVALID_MESSAGE = "Script config failed validation. Check sequence, mode, and field definitions."
+_AUTOMATION_INVALID_MESSAGE = validation_message("automation")
+_SCRIPT_INVALID_MESSAGE = validation_message("script")
 
 
 async def _config_validation_error(
@@ -317,7 +318,7 @@ async def _config_validation_error(
 
     HA's automation and script validators raise vol.Invalid or HomeAssistantError
     for a config the caller got wrong: the routine case, logged at debug and
-    answered with the domain's own guidance. Any other exception is HA drift or a
+    answered with bounded field paths and value-free guidance. Any other exception is HA drift or a
     Phoenix bug, so it is logged with a traceback and reported as an internal
     error; calling it a validation failure would send the agent to rewrite a
     config that was never the problem.
@@ -325,31 +326,36 @@ async def _config_validation_error(
     try:
         if await validator(hass, config_key, config) is None:
             return _tool_error(invalid_message), "invalid_request", tool_name
-    except (vol.Invalid, HomeAssistantError) as exc:
-        _LOGGER.debug("%s config validation rejected the config: %s", tool_name, exc)
+    except vol.Invalid as exc:
+        domain = "automation" if "automation" in tool_name else "script"
+        return _tool_error(validation_message(domain, exc)), "invalid_request", tool_name
+    except HomeAssistantError:
         return _tool_error(invalid_message), "invalid_request", tool_name
-    except Exception:
-        _LOGGER.exception("%s config validation raised an unexpected error", tool_name)
+    except Exception as exc:
+        _LOGGER.error("%s config validation raised an unexpected error:\n%s", tool_name, "".join(format_tb(exc.__traceback__)))
         return _tool_error("Internal error validating this config."), "invalid_request", tool_name
     return None
 
 
 def _automation_argument_error(args: dict, *, create: bool) -> str | None:
     """Reject malformed or conflicting identity inputs on every ingress."""
+    findings = []
     aid = args.get("automation_id")
     if "automation_id" in args and (not isinstance(aid, str) or not aid.strip()):
-        return "automation_id must be a non-empty stored automation ID."
+        findings.append("automation_id must be a non-empty stored automation ID.")
     if not create and aid is None:
-        return "automation_id is required."
+        findings.append("automation_id is required.")
     config = args.get("config")
-    if not isinstance(config, dict):
-        return "config must be an object."
-    if "id" in config and (aid is None or config["id"] != aid.strip()):
-        return "config.id must match automation_id; omit config.id when creating a new automation."
+    if error := authoring_input_error(args, "automation"):
+        findings.append(error)
+    if isinstance(config, dict) and "id" in config and (
+        not isinstance(aid, str) or config["id"] != aid.strip()
+    ):
+        findings.append("config.id must match automation_id; omit config.id when creating a new automation.")
     expected = args.get("expected_hash")
     if "expected_hash" in args and (not isinstance(expected, str) or not expected):
-        return "expected_hash must be a non-empty content_hash from get_automation."
-    return None
+        findings.append("expected_hash must be a non-empty content_hash from get_automation.")
+    return " ".join(findings) if findings else None
 
 
 def _automation_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[dict, str, str]:
@@ -659,6 +665,19 @@ async def _tool_get_script(
     return _config_read_response("script_id", script_id, config, f"script:{script_id}")
 
 
+def _script_argument_error(args: dict) -> str | None:
+    """Combine script identity and config errors without inventing IDs."""
+    findings = []
+    script_id = args.get("script_id")
+    if not isinstance(script_id, str) or not script_id.strip():
+        findings.append("script_id is required and must be a non-empty string.")
+    elif not _SCRIPT_ID_RE.fullmatch(script_id.strip()):
+        findings.append("script_id must contain only lowercase letters, digits, and underscores.")
+    if error := authoring_input_error(args, "script"):
+        findings.append(error)
+    return " ".join(findings) if findings else None
+
+
 async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for script writes; None means OK to proceed.
 
@@ -666,14 +685,10 @@ async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str
     before a pending approval is created. The executor re-validates at apply
     time.
     """
-    script_id = str(args.get("script_id") or "").strip()
-    if not script_id:
-        return _tool_error("script_id is required."), "invalid_request", tool_name
-    if not _SCRIPT_ID_RE.match(script_id):
-        return _tool_error("script_id must contain only lowercase letters, digits, and underscores."), "invalid_request", tool_name
-    config = args.get("config")
-    if not isinstance(config, dict):
-        return _tool_error("config must be an object."), "invalid_request", tool_name
+    if error := _script_argument_error(args):
+        return _tool_error(error), "invalid_request", tool_name
+    script_id = args["script_id"].strip()
+    config = args["config"]
     return await _config_validation_error(
         _validate_script_config, hass, script_id, config,
         tool_name=tool_name, invalid_message=_SCRIPT_INVALID_MESSAGE,
@@ -707,15 +722,10 @@ async def _tool_create_script(
 async def _execute_create_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    script_id = args.get("script_id", "").strip()
-    if not script_id:
-        return _tool_error("script_id is required."), "invalid_request", "create_script"
-    if not _SCRIPT_ID_RE.match(script_id):
-        return _tool_error("script_id must contain only lowercase letters, digits, and underscores."), "invalid_request", "create_script"
-
-    config = args.get("config")
-    if not isinstance(config, dict):
-        return _tool_error("config must be an object."), "invalid_request", "create_script"
+    if error := _script_argument_error(args):
+        return _tool_error(error), "invalid_request", "create_script"
+    script_id = args["script_id"].strip()
+    config = args["config"]
 
     invalid = await _config_validation_error(
         _validate_script_config, hass, script_id, config,
@@ -791,15 +801,10 @@ async def _tool_edit_script(
 async def _execute_edit_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    script_id = args.get("script_id", "").strip()
-    if not script_id:
-        return _tool_error("script_id is required."), "invalid_request", "edit_script"
-    if not _SCRIPT_ID_RE.match(script_id):
-        return _tool_error("script_id must contain only lowercase letters, digits, and underscores."), "invalid_request", "edit_script"
-
-    config = args.get("config")
-    if not isinstance(config, dict):
-        return _tool_error("config must be an object."), "invalid_request", "edit_script"
+    if error := _script_argument_error(args):
+        return _tool_error(error), "invalid_request", "edit_script"
+    script_id = args["script_id"].strip()
+    config = args["config"]
 
     # Re-checked here (not just pre-gate) so a change made during the approval
     # window is caught before the write lands.

@@ -2441,6 +2441,10 @@ UNKNOWN_ARGUMENT_ALIASES = {
 UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 
+# Value-free authoring error projection budgets.
+AUTHORING_MAX_ERRORS = 8
+AUTHORING_MAX_PATH_DEPTH = 8
+
 # Tool advice has separate qualification from direct-command execution.
 TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})
 TOOL_ROUTING_SETTINGS = {

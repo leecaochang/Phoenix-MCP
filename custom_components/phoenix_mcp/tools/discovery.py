@@ -43,6 +43,10 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
+import voluptuous as vol
+from homeassistant.exceptions import HomeAssistantError
+
+from ..authoring_validation import authoring_input_error, validation_message
 from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
@@ -2853,9 +2857,18 @@ async def _tool_validate_config(
 
     cfg_type = args.get("type")
     config = args.get("config")
-    if cfg_type not in ("automation", "script") or not isinstance(config, dict):
+    if cfg_type not in ("automation", "script"):
         return _tool_error("Provide type ('automation' or 'script') and a config object."), "invalid_request", "validate_automation_or_script"
 
+    input_error = authoring_input_error(args, cfg_type)
+    if input_error:
+        if not isinstance(config, dict) or input_error.startswith("Internal error"):
+            return _tool_error(input_error), "invalid_request", "validate_automation_or_script"
+        body = {"type": cfg_type, "valid": False, "errors": [input_error], "referenced_entities": []}
+        return _tool_success(json.dumps(body)), "allowed", "validate_automation_or_script"
+
+    if not isinstance(config, dict):
+        return _tool_error("config must be an object."), "invalid_request", "validate_automation_or_script"
     valid = True
     errors: list[str] = []
     referenced: set[str] = set()
@@ -2874,9 +2887,15 @@ async def _tool_validate_config(
         if result is None:
             valid = False
             errors.append("Config failed schema validation.")
-    except Exception as exc:  # noqa: BLE001 - HA validators raise various types
+    except vol.Invalid as exc:
         valid = False
-        errors.append(str(exc))
+        errors.append(validation_message(cfg_type, exc))
+    except HomeAssistantError:
+        valid = False
+        errors.append(validation_message(cfg_type))
+    except Exception:
+        _LOGGER.error("Config validation raised an unexpected internal error")
+        return _tool_error("Internal error validating this config."), "invalid_request", "validate_automation_or_script"
 
     # Never reveal existence for entities the access key cannot access: a hidden real
     # entity must be indistinguishable from a typo (no existence oracle). Since

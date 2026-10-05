@@ -71,6 +71,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.components.automation.config": {
         "async_validate_config_item": "0.0.0",
+        # Structural schema export verified in the 2024.5.0 source.
+        "PLATFORM_SCHEMA": "0.0.0",
     },
     "homeassistant.components.frontend": {
         "add_extra_js_url": "0.0.0",
@@ -106,6 +108,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.components.script.config": {
         "async_validate_config_item": "0.0.0",
+        # Structural schema export verified in the 2024.5.0 source.
+        "SCRIPT_ENTITY_SCHEMA": "0.0.0",
     },
     "homeassistant.components.sensor": {
         "SensorDeviceClass": "0.0.0",
