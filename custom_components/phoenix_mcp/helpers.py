@@ -1020,14 +1020,20 @@ _LONG_HEX_RE = re.compile(r"\b[0-9a-f]{32,}\b", re.IGNORECASE)
 _ENTITY_ID_TEXT_RE = re.compile(r"(?<![\w.])([a-z0-9_]+\.[a-z0-9_]+)(?!\w|\.\w)")
 
 
-def redact_inaccessible_entity_ids_in_text(
-    text: str,
-    access_key: AccessKeyRecord,
-    hass: HomeAssistant,
-    *,
-    sentinel: str = "<redacted-entity>",
-) -> str:
-    """Redact inaccessible entity IDs embedded in otherwise free-form text."""
+def visible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> frozenset[str]:
+    """Every live or registered entity ID this access key may read.
+
+    Computed on the event loop, so a worker thread can redact against it without
+    taking scope decisions (the Assist-exposure lookup is loop-only).
+    """
+    candidates = {state.entity_id for state in hass.states.async_all()}
+    candidates.update(er.async_get(hass).entities.keys())
+    return frozenset(eid for eid in candidates
+                     if resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE))
+
+
+def _redact_entity_ids(text: str, hass: HomeAssistant, is_visible: Callable[[str], bool], sentinel: str) -> str:
+    """Replace each entity ID that `is_visible` rejects; decimal literals are not entity IDs."""
     def _replacement(match: re.Match[str]) -> str:
         try:
             entity_id = match.group(1)
@@ -1037,14 +1043,30 @@ def redact_inaccessible_entity_ids_in_text(
                     and hass.states.get(entity_id) is None
                     and er.async_get(hass).async_get(entity_id) is None):
                 return entity_id
-            permission = resolve(entity_id, access_key, hass)
+            return entity_id if is_visible(entity_id) else sentinel
         except Exception:
             return sentinel
-        if permission in (Permission.READ, Permission.WRITE):
-            return match.group(1)
-        return sentinel
 
     return _ENTITY_ID_TEXT_RE.sub(_replacement, text)
+
+
+def redact_inaccessible_entity_ids_in_text(
+    text: str,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    *,
+    sentinel: str = "<redacted-entity>",
+) -> str:
+    """Redact inaccessible entity IDs embedded in otherwise free-form text. Event loop only."""
+    return _redact_entity_ids(
+        text, hass, lambda eid: resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE), sentinel)
+
+
+def redact_entity_ids_outside(
+    text: str, visible: frozenset[str], hass: HomeAssistant, *, sentinel: str = "<redacted-entity>",
+) -> str:
+    """The worker-thread form: redact against visible_entity_ids computed on the loop."""
+    return _redact_entity_ids(text, hass, lambda eid: eid.lower() in visible, sentinel)
 
 
 def _logger_prefix_matches(logger_name: str, prefix: str) -> bool:

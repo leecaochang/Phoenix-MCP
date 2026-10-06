@@ -1653,7 +1653,7 @@
       "archivedDeleteFailed": "Eliminazione non riuscita.",
       "archivedEmpty": "Nessuna chiave di accesso archiviata.",
       "archivedTitle": "Chiavi di accesso archiviate",
-      "assistExposureHelp": "Per le chiavi di accesso pass-through, mostra solo le entità esposte ad Assist di Home Assistant. Le chiavi di accesso limitate usano invece l'albero delle autorizzazioni.",
+      "assistExposureHelp": "Per le chiavi di accesso pass-through, limita lettura e controllo alle entità esposte ad Assist di Home Assistant. Le chiavi di accesso limitate usano invece l'albero delle autorizzazioni.",
       "assistExposureLabel": "Limita alle entità esposte ad Assist",
       "back": "Indietro",
       "cancel": "Annulla",

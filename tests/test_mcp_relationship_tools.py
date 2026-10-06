@@ -195,7 +195,7 @@ class TestGetRelationships:
         })
 
         references, not_searched = await hass.async_add_executor_job(
-            _forward_references_details, hass, _access_key(), "script.greet",
+            _forward_references_details, hass, "script.greet",
         )
         assert references == ["light.kitchen"]
         assert not not_searched

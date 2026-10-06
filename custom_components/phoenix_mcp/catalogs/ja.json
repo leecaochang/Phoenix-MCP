@@ -520,7 +520,7 @@
       "archivedDeleteFailed": "削除できませんでした。",
       "archivedEmpty": "アーカイブ済みのアクセスキーはありません。",
       "archivedTitle": "アーカイブ済みアクセスキー",
-      "assistExposureHelp": "パススルーアクセスキーでは、Home Assistant Assist に公開されたエンティティだけを表示します。スコープ付きアクセスキーでは代わりに権限ツリーを使用します。",
+      "assistExposureHelp": "パススルーアクセスキーでは、読み取りと操作を Home Assistant Assist に公開されたエンティティに限定します。スコープ付きアクセスキーでは代わりに権限ツリーを使用します。",
       "assistExposureLabel": "Assist に公開されたエンティティに制限",
       "back": "戻る",
       "cancel": "キャンセル",

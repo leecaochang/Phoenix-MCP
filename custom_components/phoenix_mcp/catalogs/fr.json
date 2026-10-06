@@ -318,7 +318,7 @@
       "archivedDeleteFailed": "Échec de la suppression.",
       "archivedEmpty": "Aucune clé d’accès archivée.",
       "archivedTitle": "Clés d’accès archivées",
-      "assistExposureHelp": "Pour les clés d’accès en transmission directe, n'afficher que les entités exposées à Home Assistant Assist. Les clés d’accès limitées utilisent plutôt l'arbre des autorisations.",
+      "assistExposureHelp": "Pour les clés d’accès en transmission directe, limiter la lecture et le contrôle aux entités exposées à Home Assistant Assist. Les clés d’accès limitées utilisent plutôt l'arbre des autorisations.",
       "assistExposureLabel": "Limiter aux entités exposées à Assist",
       "back": "Retour",
       "cancel": "Annuler",

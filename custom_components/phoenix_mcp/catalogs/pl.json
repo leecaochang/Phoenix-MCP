@@ -1180,7 +1180,7 @@
       "archivedDeleteFailed": "Usunięcie nie powiodło się.",
       "archivedEmpty": "Brak zarchiwizowanych kluczy dostępu.",
       "archivedTitle": "Zarchiwizowane klucze dostępu",
-      "assistExposureHelp": "Dla kluczy dostępu pass-through pokazuj tylko encje udostępnione Home Assistant Assist. Klucze dostępu ograniczone używają zamiast tego drzewa uprawnień.",
+      "assistExposureHelp": "Dla kluczy dostępu pass-through ograniczaj odczyt i sterowanie do encji udostępnionych Home Assistant Assist. Klucze dostępu ograniczone używają zamiast tego drzewa uprawnień.",
       "assistExposureLabel": "Ogranicz do encji udostępnionych Assist",
       "back": "Wstecz",
       "cancel": "Anuluj",

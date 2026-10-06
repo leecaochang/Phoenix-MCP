@@ -382,13 +382,9 @@ class TestListDevices:
             pass_through=True,
             use_assist_exposure=True,
         )
-        exposed = lambda entity_id: entity_id == reg_env["light_kitchen"]
         with patch(
-            "custom_components.phoenix_mcp.policy_engine.assist_expose_check",
-            return_value=exposed,
-        ), patch(
-            "custom_components.phoenix_mcp.tools.discovery.assist_expose_check",
-            return_value=exposed,
+            "custom_components.phoenix_mcp.policy_engine._assist_exposed",
+            lambda _hass, entity_id: entity_id == reg_env["light_kitchen"],
         ):
             content, _, _ = await _call("list_devices", {}, access_key, hass)
         assert [row["device_id"] for row in _result_json(content)["devices"]] == [

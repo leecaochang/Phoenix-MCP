@@ -1899,7 +1899,7 @@
       "archivedDeleteFailed": "삭제에 실패했습니다.",
       "archivedEmpty": "보관된 액세스 키가 없습니다.",
       "archivedTitle": "보관된 액세스 키",
-      "assistExposureHelp": "패스스루 액세스 키의 경우 Home Assistant Assist에 노출된 엔티티만 표시합니다. 범위 제한 액세스 키는 대신 권한 트리를 사용합니다.",
+      "assistExposureHelp": "패스스루 액세스 키의 경우 읽기와 제어를 Home Assistant Assist에 노출된 엔티티로 제한합니다. 범위 제한 액세스 키는 대신 권한 트리를 사용합니다.",
       "assistExposureLabel": "Assist 노출 엔티티로 제한",
       "back": "뒤로",
       "cancel": "취소",

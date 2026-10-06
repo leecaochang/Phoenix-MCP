@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import datetime, timedelta
 from enum import Enum
 from collections.abc import Callable, Mapping
@@ -158,8 +159,13 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
                 or (domain == "sensor" and state.attributes.get("device_class") not in HOME_COMPANION_SENSOR_CLASSES)):
             return Permission.NO_ACCESS
 
-    # Pass-through bypasses all entity permission resolution
+    # Pass-through bypasses the permission tree. With the Assist filter on, an
+    # unexposed entity is out of reach for every read and every action, as it is
+    # for HA's own Assist. The ID is canonical and not a ghost here, so HA's
+    # exposure lookup never records a stray one.
     if access_key.pass_through:
+        if access_key.use_assist_exposure and not _assist_exposed(hass, entity_id):
+            return Permission.NO_ACCESS
         return Permission.WRITE
 
     permissions = access_key.permissions
@@ -536,50 +542,53 @@ def scrub_state_dict(d: dict) -> dict:
     return {**d, "attributes": attrs}
 
 
-def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
-    """Return the Assist-exposure predicate for a pass-through access key, or None.
+_off_loop_reported = False
 
-    Non-None only for pass_through access keys with use_assist_exposure; scoped access keys
-    are filtered by their permission tree alone. This is the one shared
-    implementation for every entity-filter path (filter_entities_for_access_key,
-    build_permitted_states/entity_ids, resolve_intent_entities) and for
-    single-entity reads through resolve_read. The rest of the
-    filter predicate (domain blocklist, Phoenix-platform sensors, pass-through
-    WRITE) lives in resolve() itself, so those paths need only this plus resolve().
+
+def _assist_exposed(hass: HomeAssistant, entity_id: str) -> bool:
+    """HA's conversation exposure for one canonical, existing entity ID.
+
+    HA's lookup writes its own records on first sight, so it runs on the event
+    loop only. Off the loop it fails closed and reports the caller once; a
+    worker thread must take its scope decisions from the loop instead.
     """
-    if not (access_key.pass_through and access_key.use_assist_exposure):
-        return None
+    global _off_loop_reported
+    if threading.get_ident() != hass.loop_thread_id:
+        if not _off_loop_reported:
+            _off_loop_reported = True
+            _LOGGER.error("Assist exposure was checked off the event loop; the entity was treated as unexposed")
+        return False
     from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
         async_should_expose,
     )
 
-    def _exposed(entity_id: str) -> bool:
-        return async_should_expose(hass, "conversation", entity_id)
+    return bool(async_should_expose(hass, "conversation", entity_id))
 
-    return _exposed
+
+def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
+    """Return the Assist-exposure predicate for a pass-through access key, or None.
+
+    Non-None only for pass_through access keys with use_assist_exposure; scoped
+    access keys are filtered by their permission tree alone. resolve() applies the
+    same predicate itself, so every read, control path and redaction already
+    honors it; listing filters also call this to skip unexposed states early, and
+    callers use `is None` to ask whether a key is exposure-limited.
+    """
+    if not (access_key.pass_through and access_key.use_assist_exposure):
+        return None
+    return lambda entity_id: _assist_exposed(hass, entity_id)
 
 
 def resolve_read(
     entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, registry: bool = False
 ) -> Permission:
-    """Read permission for one named entity: the resolver, then the Assist-exposure filter.
+    """Read permission for one named entity.
 
-    Every tool that discloses one caller-named entity's state, attributes, history
-    or relationships goes through this, so a pass-through access key with the
-    Assist filter on gets the same answer for an unexposed entity as for a missing
-    one. `registry=True` starts from resolve_registry_access for tools that also
-    describe registry-only entities. The predicate runs only after the resolver
-    found the entity, and on its canonical ID: HA's exposure lookup records an
-    unregistered ID it has not seen, so a ghost or differently cased ID must never
-    reach it. Must run on the event loop for the same reason.
+    resolve() applies the Assist-exposure filter, so an unexposed entity answers
+    like a missing one. `registry=True` starts from resolve_registry_access for
+    tools that also describe registry-only entities. Must run on the event loop.
     """
-    permission = (resolve_registry_access if registry else resolve)(entity_id, access_key, hass)
-    if permission not in (Permission.READ, Permission.WRITE):
-        return permission
-    expose = assist_expose_check(access_key, hass)
-    if expose is not None and not expose(canonical_entity_id(entity_id, hass)):
-        return Permission.NO_ACCESS
-    return permission
+    return (resolve_registry_access if registry else resolve)(entity_id, access_key, hass)
 
 
 def filter_entities_for_access_key(

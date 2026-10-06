@@ -1170,7 +1170,7 @@
       "archivedDeleteFailed": "Verwijderen mislukt.",
       "archivedEmpty": "Geen gearchiveerde toegangssleutels.",
       "archivedTitle": "Gearchiveerde toegangssleutels",
-      "assistExposureHelp": "Voor pass-through-toegangssleutels: toon alleen entiteiten die zijn blootgesteld aan Home Assistant Assist. Afgebakende toegangssleutels gebruiken in plaats daarvan de machtigingsboom.",
+      "assistExposureHelp": "Voor pass-through-toegangssleutels: beperk lezen en bedienen tot entiteiten die zijn blootgesteld aan Home Assistant Assist. Afgebakende toegangssleutels gebruiken in plaats daarvan de machtigingsboom.",
       "assistExposureLabel": "Beperken tot aan Assist blootgestelde entiteiten",
       "back": "Terug",
       "cancel": "Annuleren",

@@ -1085,7 +1085,7 @@
       "archivedDeleteFailed": "删除失败。",
       "archivedEmpty": "没有已归档的访问密钥。",
       "archivedTitle": "已归档的访问密钥",
-      "assistExposureHelp": "对于直通访问密钥，仅显示已向 Home Assistant Assist 公开的实体。限定范围的访问密钥则使用权限树。",
+      "assistExposureHelp": "对于直通访问密钥，读取和控制仅限于已向 Home Assistant Assist 公开的实体。限定范围的访问密钥则使用权限树。",
       "assistExposureLabel": "仅限 Assist 已公开的实体",
       "back": "返回",
       "cancel": "取消",

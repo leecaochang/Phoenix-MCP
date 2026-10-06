@@ -1764,7 +1764,7 @@
       "archivedDeleteFailed": "刪除失敗。",
       "archivedEmpty": "沒有已歸檔的存取金鑰。",
       "archivedTitle": "已歸檔的存取金鑰",
-      "assistExposureHelp": "對於直通存取金鑰，僅顯示已向 Home Assistant Assist 公開的實體。限定範圍的存取金鑰則使用權限樹。",
+      "assistExposureHelp": "對於直通存取金鑰，讀取和控制僅限於已向 Home Assistant Assist 公開的實體。限定範圍的存取金鑰則使用權限樹。",
       "assistExposureLabel": "僅限 Assist 已公開的實體",
       "back": "返回",
       "cancel": "取消",

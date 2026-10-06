@@ -111,7 +111,8 @@ async def test_hidden_and_missing_have_identical_results(hass, immediate_authori
     elif visibility == "assist":
         access_key.pass_through = True
         access_key.use_assist_exposure = True
-    with patch.object(observation, "assist_expose_check", return_value=(lambda _: False) if visibility == "assist" else None):
+    with patch.object(observation, "assist_expose_check", return_value=(lambda _: False) if visibility == "assist" else None), \
+            patch("custom_components.phoenix_mcp.policy_engine._assist_exposed", lambda _hass, _eid: visibility != "assist"):
         hidden = await observation.async_observe_registration(hass, access_key, "script", "stored")
     assert hidden == missing
 

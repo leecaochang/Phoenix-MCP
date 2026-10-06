@@ -261,15 +261,15 @@ class TestConfigEntryRegistryPolicy:
         access_key = _make_access_key(pass_through=True)
         access_key.use_assist_exposure = True
         with patch(
-            "custom_components.phoenix_mcp.policy_engine.assist_expose_check",
-            return_value=lambda _entity_id: False,
+            "custom_components.phoenix_mcp.policy_engine._assist_exposed",
+            lambda _hass, _entity_id: False,
         ):
             assert resolve_config_entry_registry_access(
                 config_entry.entry_id, access_key, hass
             ) == Permission.NO_ACCESS
         with patch(
-            "custom_components.phoenix_mcp.policy_engine.assist_expose_check",
-            return_value=lambda _entity_id: True,
+            "custom_components.phoenix_mcp.policy_engine._assist_exposed",
+            lambda _hass, _entity_id: True,
         ):
             assert resolve_config_entry_registry_access(
                 config_entry.entry_id, access_key, hass

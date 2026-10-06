@@ -319,7 +319,7 @@
       "archivedDeleteFailed": "Delete failed.",
       "archivedEmpty": "No archived access keys.",
       "archivedTitle": "Archived access keys",
-      "assistExposureHelp": "For pass-through access keys, show only entities exposed to Home Assistant Assist. Scoped access keys use the permission tree instead.",
+      "assistExposureHelp": "For pass-through access keys, limit reading and control to entities exposed to Home Assistant Assist. Scoped access keys use the permission tree instead.",
       "assistExposureLabel": "Limit to Assist-exposed entities",
       "back": "Back",
       "cancel": "Cancel",

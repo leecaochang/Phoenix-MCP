@@ -8,7 +8,7 @@ returned, so a listing never becomes an oracle for entities the access key canno
     overview / describe family.
   - Relationship analysis: which automations, scripts and scenes reference an
     entity (`_references_for_entity`) and what it drives in turn
-    (`_forward_references`), both walked out of the stored YAML configs.
+    (`_forward_references_details`), both walked out of the stored YAML configs.
   - Preview tools: whatif, dry_run_service, validate_automation_or_script,
     find_available_actions. They run the same gates a real call would and report
     the verdict without actuating, so dry_run_service and find_available_actions
@@ -66,7 +66,7 @@ from ..helpers import effective_cap, parse_time_param as _parse_time_param, reda
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -627,14 +627,14 @@ def _scan_relationships(
 
 
 def _forward_references_details(
-    hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str,
+    hass: HomeAssistant, entity_id: str,
 ) -> tuple[list[str], list[dict]]:
-    """Entities referenced by entity_id when it is an automation or script.
+    """Entities referenced by entity_id when it is an automation or script, UNSCOPED.
 
-    Scoped to entities the access key can access, so an automation never reveals
-    targets outside the access key's permission tree. The second return value names
-    unreadable configuration branches rather than making an incomplete [] look
-    like proof that the automation or script has no dependencies.
+    Runs in a worker thread, so it takes no scope decision: the caller filters
+    the result on the event loop, where the Assist-exposure lookup may run. The
+    second return value names unreadable configuration branches rather than
+    making an incomplete [] look like proof that there are no dependencies.
     """
     domain = entity_id.split(".")[0]
     found: set[str] = set()
@@ -659,15 +659,7 @@ def _forward_references_details(
         cfg = scripts.get(script_id)
         if isinstance(cfg, dict):
             _collect_entity_id_values(cfg, found)
-    return (
-        sorted(e for e in found if resolve(e, access_key, hass) in (Permission.READ, Permission.WRITE)),
-        not_searched,
-    )
-
-
-def _forward_references(hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str) -> list[str]:
-    """Forward references only, without the not-searched gaps."""
-    return _forward_references_details(hass, access_key, entity_id)[0]
+    return sorted(found), not_searched
 
 
 def _accessible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
@@ -2322,10 +2314,10 @@ async def _tool_get_relationships(
     if selector == "entity_id":
         # Only meaningful for a single automation or script: what IT references.
         references, references_not_searched = await hass.async_add_executor_job(
-            _forward_references_details, hass, access_key, value,
+            _forward_references_details, hass, value,
         )
-        # The worker thread applies the resolver; Assist exposure is asked here,
-        # on the loop, because HA's exposure lookup can write its own records.
+        # The worker returns every reference; scope, including Assist exposure,
+        # is decided here on the loop, where HA's exposure lookup may run.
         body["references"] = [
             eid for eid in references
             if resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)

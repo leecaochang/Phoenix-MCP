@@ -526,7 +526,7 @@
       "archivedDeleteFailed": "Löschen fehlgeschlagen.",
       "archivedEmpty": "Keine archivierten Zugriffsschlüssel.",
       "archivedTitle": "Archivierte Zugriffsschlüssel",
-      "assistExposureHelp": "Zeigt bei Durchreichungs-Zugriffsschlüssel nur Entitäten an, die für Home Assistant Assist freigegeben sind. Beschränkte Zugriffsschlüssel verwenden stattdessen den Berechtigungsbaum.",
+      "assistExposureHelp": "Beschränkt bei Durchreichungs-Zugriffsschlüsseln Lesen und Steuern auf Entitäten, die für Home Assistant Assist freigegeben sind. Beschränkte Zugriffsschlüssel verwenden stattdessen den Berechtigungsbaum.",
       "assistExposureLabel": "Auf Assist-freigegebene Entitäten beschränken",
       "back": "Zurück",
       "cancel": "Abbrechen",

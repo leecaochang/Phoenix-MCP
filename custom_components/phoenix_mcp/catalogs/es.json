@@ -1002,7 +1002,7 @@
       "archivedDeleteFailed": "Error al eliminar.",
       "archivedEmpty": "No hay claves de acceso archivadas.",
       "archivedTitle": "Claves de acceso archivadas",
-      "assistExposureHelp": "Para las claves de acceso de paso directo, muestra solo las entidades expuestas a Home Assistant Assist. Las claves de acceso con ámbito usan el árbol de permisos.",
+      "assistExposureHelp": "Para las claves de acceso de paso directo, limita la lectura y el control a las entidades expuestas a Home Assistant Assist. Las claves de acceso con ámbito usan el árbol de permisos.",
       "assistExposureLabel": "Limitar a entidades expuestas a Assist",
       "back": "Atrás",
       "cancel": "Cancelar",

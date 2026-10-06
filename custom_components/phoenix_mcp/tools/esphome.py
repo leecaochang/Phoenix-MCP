@@ -60,7 +60,7 @@ from ..tool_contracts import normalize_tool_args
 from ..mesa import entity_control_mode
 from ..helpers import (
     diff_summary_fields as _summary, content_hash, effective_cap,
-    redact_inaccessible_entity_ids_in_text, redact_diagnostics,
+    redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics, visible_entity_ids,
 )
 from ..request_authority import check_request_authority
 from ..policy_engine import (
@@ -536,8 +536,12 @@ def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel
     )
 
 
-def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[dict]:
-    """Recursively list jailed device YAML, without following directory symlinks."""
+def _esphome_files(hass: HomeAssistant) -> list[dict]:
+    """Recursively list jailed device YAML, without following directory symlinks.
+
+    UNSCOPED: runs in a worker thread, so the caller filters the rows with
+    _esphome_file_in_scope on the event loop (_esphome_listing).
+    """
     root = os.path.join(hass.config.config_dir, _ESPHOME_DIR)
     try:
         names: list[str] = []
@@ -560,8 +564,6 @@ def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[d
         full, name = resolved
         if not os.path.isfile(full):
             continue
-        if not _esphome_file_in_scope(hass, access_key, name, write=False):
-            continue
         entry = _esphome_device_for_file(hass, name)
         device = getattr(getattr(entry, "runtime_data", None), "device_info", None)
         try:
@@ -577,16 +579,26 @@ def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[d
     return rows
 
 
+async def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[dict]:
+    """The device YAML files this access key may read; scope is decided on the loop."""
+    rows = await hass.async_add_executor_job(_esphome_files, hass)
+    return [row for row in rows if _esphome_file_in_scope(hass, access_key, row["file"], write=False)]
+
+
 def _esphome_search(
-    hass: HomeAssistant, access_key: AccessKeyRecord, query: str, case_sensitive: bool, context: int
+    hass: HomeAssistant, rows: list[dict], visible: frozenset[str],
+    query: str, case_sensitive: bool, context: int,
 ) -> dict:
-    """Search only masked, authorized files within a total byte budget."""
+    """Search only masked, authorized files within a total byte budget.
+
+    Runs in a worker thread over rows and visible entity IDs the loop decided.
+    """
     values, _keys = _read_esphome_secrets(hass)
     needle = query if case_sensitive else query.casefold()
     matches = []
     scanned = 0
     incomplete = False
-    for row in _esphome_listing(hass, access_key):
+    for row in rows:
         resolved = _resolve_esphome_path(hass, row["file"])
         if resolved is None:
             continue
@@ -597,7 +609,7 @@ def _esphome_search(
             raw = _read_text_capped(resolved[0])
             scanned += len(raw.encode("utf-8"))
             masked, _paths = redact_esphome_text(raw, values)
-            masked = redact_inaccessible_entity_ids_in_text(masked, access_key, hass)
+            masked = redact_entity_ids_outside(masked, visible, hass)
         except (OSError, ValueError, yaml_includes.YamlParseError):
             incomplete = True
             continue
@@ -652,7 +664,10 @@ async def _tool_search_esphome_yaml(
         return _tool_error("Provide a nonempty query of at most 200 characters, a boolean "
                            "case_sensitive, and context_lines between 0 and 3."), "invalid_request", resource
     try:
-        result = await hass.async_add_executor_job(_esphome_search, hass, access_key, query, sensitive, context)
+        rows = await _esphome_listing(hass, access_key)
+        visible = visible_entity_ids(access_key, hass)
+        result = await hass.async_add_executor_job(
+            _esphome_search, hass, rows, visible, query, sensitive, context)
     except (OSError, ValueError):
         return _tool_error("ESPHome configuration search could not complete."), "invalid_request", resource
     rows = [row for row in result["matches"]
@@ -674,7 +689,7 @@ async def _tool_get_esphome_yaml(
 
     if file_arg is None or (isinstance(file_arg, str) and not file_arg.strip()):
         try:
-            rows = await hass.async_add_executor_job(_esphome_listing, hass, access_key)
+            rows = await _esphome_listing(hass, access_key)
         except ValueError:
             return _tool_error("ESPHome configuration inventory exceeds the scan budget."), "invalid_request", "get_esphome_yaml"
         body: dict = {"count": len(rows), "files": rows}
