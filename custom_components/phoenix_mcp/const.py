@@ -56,6 +56,26 @@ TOOL_INPUT_MAX_DEPTH = 64
 TOOL_INPUT_MAX_NODES = 32768
 SERVICE_TARGET_MAX_GROUPS = 32
 SERVICE_TARGET_MAX_IDS = 1024
+# One get_state call reads at most this many explicit entity IDs.
+GET_STATE_MAX_IDS = 1024
+# Offset-paged registry and calendar reads.
+DEVICE_LIST_DEFAULT_LIMIT = 100
+DEVICE_LIST_MAX_LIMIT = 500
+INTEGRATION_LIST_DEFAULT_LIMIT = 100
+INTEGRATION_LIST_MAX_LIMIT = 500
+CALENDAR_EVENTS_DEFAULT_LIMIT = 100
+# find_available_actions include_fields bounds per service.
+SERVICE_FIELDS_MAX = 40
+SERVICE_FIELD_MAX_OPTIONS = 30
+SERVICE_FIELD_MAX_DESCRIPTION = 160
+# An unknown label or category refusal lists at most this many valid IDs.
+REGISTRY_ID_HINT_MAX = 50
+# Integration INFO/DEBUG records kept in memory for get_logs source=integration_debug.
+DEBUG_CAPTURE_CAPACITY = 1000
+DEBUG_CAPTURE_MAX_CHARS = 2000
+LOG_DETAIL_STALE_MESSAGE = "Invalid or stale log detail reference. Restart the query."
+# call_service reports at most this many target states after the call.
+SERVICE_RESULT_STATES_MAX = 20
 TEMPLATE_WORKER_TIMEOUT_SECONDS = 5
 TEMPLATE_WORKER_CPU_SECONDS = 2
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
@@ -610,7 +630,7 @@ SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
 # disarming the write guard.
 REDACTION_SENTINEL = "<redacted>"
 
-# Domain-aware "lean" view for get_state / get_states. When a caller passes no
+# Domain-aware "lean" view for get_state. When a caller passes no
 # explicit `fields` and does not set `detailed`, the state is narrowed to the base
 # fields (entity_id, state) plus LEAN_ALWAYS_ATTRS plus the domain's important
 # attributes below, to cut token cost on the common read path. Field selection
@@ -2500,7 +2520,7 @@ TOOL_ROUTING_REASONS = frozenset({
 # The delegated persona has a bounded household catalog, narrowed by capabilities.
 HOME_COMPANION_TOOLS = frozenset({
     "get_capability_summary", "search_entities", "describe_entity", "describe_area",
-    "get_state", "get_states", "get_history", "get_statistics", "compare_states",
+    "get_state", "get_history", "get_statistics", "compare_states",
     "compare_entities", "get_calendar_events", "get_overview", "get_relationships",
     "recent_activity", "list_areas", "list_floors", "list_devices", "get_device",
     "homeassistant__GetLiveContext", "llm__GetDateTime", "intent__HassTurnOn", "intent__HassTurnOff",

@@ -14,6 +14,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
 from typing import Any, Literal, cast
 
 import voluptuous as vol
@@ -52,13 +53,13 @@ from .template_render import TemplateRenderError, async_render_template_for_acce
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
-from .tool_common import _create_registry_mesa_approval
+from .tool_common import _create_registry_mesa_approval, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import decode_container_strings, tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args, unknown_argument_error
-from .const import CALL_SERVICE_NO_TARGET_CAPS, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -68,9 +69,10 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
+    newest_page,
     STATISTIC_PERIOD_LIMITS,
     recorder_envelope,
     retention_metadata,
@@ -781,7 +783,7 @@ _STALE_CATALOG_ADVISORY = (
 
 
 def _normalize_fields(fields: Any) -> list[str]:
-    """Coerce the get_state/get_states `fields` arg to a list of field names.
+    """Coerce the get_state `fields` arg to a list of field names.
 
     Accepts a list of strings or a single comma-separated string (a common agent
     mistake); anything else yields an empty list, which selects the lean default.
@@ -846,44 +848,51 @@ def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
     return _lean_state(scrubbed)
 
 
+def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant,
+                    expose: Callable[[str], bool] | None) -> tuple[Any, Permission]:
+    """Return (state, permission) for one requested ID, or (None, ...) when unreadable."""
+    perm = resolve(entity_id, access_key, hass)
+    if perm not in (Permission.READ, Permission.WRITE):
+        return None, perm
+    state = hass.states.get(entity_id)
+    if state is not None and expose is not None and not expose(state.entity_id):
+        return None, Permission.NO_ACCESS
+    return state, perm
+
+
 async def _tool_get_state(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
+    """MCP tool: one entity's state, or several in request order."""
     args, error = normalize_tool_args("get_state", args)
     if error:
         return _tool_error(error), "invalid_request", "get_state"
-    entity_id = str_arg(args.get("entity_id"))
+    requested = args.get("entity_id")
+    expose = assist_expose_check(access_key, hass)
+    fields, detailed = args.get("fields"), bool(args.get("detailed"))
+    if isinstance(requested, list):
+        if not 1 <= len(requested) <= GET_STATE_MAX_IDS or not all(isinstance(item, str) for item in requested):
+            return _tool_error(f"entity_id must be a string or a list of 1 to {GET_STATE_MAX_IDS} entity ID strings."), "invalid_request", "get_state"
+        rows: list[dict] = []
+        not_found: list[str] = []
+        for entity_id in dict.fromkeys(item.strip() for item in requested):
+            state, _ = _readable_state(entity_id, access_key, hass, expose)
+            if state is None:
+                not_found.append(entity_id)
+            else:
+                rows.append(_project_state(scrub_sensitive_attributes(state), fields, detailed))
+        body = {"count": len(rows), "states": rows, "not_found": not_found}
+        return _tool_success(json.dumps(body, default=str)), "allowed", f"entities:{len(rows)}"
+    entity_id = str_arg(requested)
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_state"
-
-    perm = resolve(entity_id, access_key, hass)
-    if perm == Permission.NOT_FOUND:
-        return _tool_error("Entity not found."), "not_found", entity_id
-    if perm in (Permission.NO_ACCESS, Permission.DENY):
-        return _tool_error("Entity not found."), "denied", entity_id
-
-    state = hass.states.get(entity_id)
+    state, perm = _readable_state(entity_id, access_key, hass, expose)
     if state is None:
-        return _tool_error("Entity not found."), "not_found", entity_id
-
-    scrubbed = scrub_sensitive_attributes(state)
-    result = _project_state(scrubbed, args.get("fields"), bool(args.get("detailed")))
+        # Audit-only distinction; the reply is identical for missing and hidden.
+        outcome = "denied" if perm in (Permission.NO_ACCESS, Permission.DENY) else "not_found"
+        return _tool_error("Entity not found."), outcome, entity_id
+    result = _project_state(scrub_sensitive_attributes(state), fields, detailed)
     return _tool_success(json.dumps(result, default=str)), "allowed", entity_id
-
-
-async def _tool_get_states(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
-) -> tuple[dict, str, str]:
-    """MCP tool: return all entities accessible to the access key."""
-    args, error = normalize_tool_args("get_states", args)
-    if error:
-        return _tool_error(error), "invalid_request", "get_states"
-    states = hass.states.async_all()
-    filtered = filter_entities_for_access_key(states, access_key, hass)
-    fields = args.get("fields")
-    detailed = bool(args.get("detailed"))
-    projected = [_project_state(d, fields, detailed) for d in filtered]
-    return _tool_success(json.dumps(projected, default=str)), "allowed", "get_states"
 
 
 async def _tool_get_history(
@@ -905,6 +914,11 @@ async def _tool_get_history(
         return _tool_error(
             "Invalid mode. Must be one of: state_changes, significant_states."
         ), "invalid_request", entity_id
+    order = str(args.get("order") or "oldest_first").strip().lower()
+    if order not in ("oldest_first", "newest_first"):
+        return _tool_error(
+            "Invalid order. Must be one of: oldest_first, newest_first."
+        ), "invalid_request", entity_id
     try:
         window = parse_recorder_window(args, default_range=timedelta(hours=24))
     except ValueError as err:
@@ -913,6 +927,11 @@ async def _tool_get_history(
         return _tool_error(
             "significant_states supports at most 7 days per request because Home Assistant cannot bound this query in the database. Use state_changes for longer ranges."
         ), "invalid_request", entity_id
+    newest = order == "newest_first"
+    # A cursor continues where the previous page stopped: forward it is the new
+    # lower bound, backward it is the new exclusive upper bound.
+    lower = window.start if newest else window.page_start
+    upper = (window.page_start if args.get("cursor") else window.end) if newest else window.end
 
     try:
         from homeassistant.components.recorder import get_instance
@@ -920,43 +939,42 @@ async def _tool_get_history(
 
         instance = get_instance(hass)
         keep_days = instance.keep_days
-        fn: functools.partial[Any]
-        if mode == "state_changes":
-            fn = functools.partial(
-                rec_history.state_changes_during_period,
-                hass,
-                window.page_start,
-                window.end,
-                entity_id,
-                True,
-                False,
-                window.limit + 1,
-                False,
-            )
+
+        async def fetch(after: datetime, before: datetime, count: int | None) -> list[Any]:
+            fn: functools.partial[Any]
+            if mode == "state_changes":
+                fn = functools.partial(
+                    rec_history.state_changes_during_period,
+                    hass, after, before, entity_id, True, False, count, False,
+                )
+            else:
+                fn = functools.partial(
+                    rec_history.get_significant_states,
+                    hass, after, before, [entity_id], None, False, True, False, False,
+                )
+            result = cast(dict[str, list[Any]], await instance.async_add_executor_job(fn))
+            return result.get(entity_id, [])
+
+        if not newest:
+            states_list = await fetch(lower, upper, window.limit + 1)
+            has_more = len(states_list) > window.limit
+            states_list = states_list[:window.limit]
+        elif mode == "state_changes":
+            states_list, has_more = await newest_page(fetch, lower, upper, window.limit)
         else:
-            fn = functools.partial(
-                rec_history.get_significant_states,
-                hass,
-                window.page_start,
-                window.end,
-                [entity_id],
-                None,
-                False,
-                True,
-                False,
-                False,
-            )
-        result = cast(dict[str, list[Any]], await instance.async_add_executor_job(fn))
+            # Significant states are already bounded to 7 days and read whole.
+            states_list = await fetch(lower, upper, None)
+            has_more = len(states_list) > window.limit
+            states_list = states_list[-window.limit:]
     except Exception:
         _LOGGER.warning("MCP history call failed for entity %s", entity_id, exc_info=True)
         return _tool_error("History call failed."), "denied", entity_id
 
-    states_list = result.get(entity_id, [])
-    dicts: list[dict[str, Any]] = [
+    page_dicts: list[dict[str, Any]] = [
         dict(s.as_dict()) if hasattr(s, "as_dict") else dict(s) for s in states_list
     ]
-    has_more = len(dicts) > window.limit
-    page_dicts = dicts[:window.limit]
+    if newest:
+        page_dicts.reverse()
     if mode == "significant_states":
         history = [_scrub_state_dict(d) for d in page_dicts]
         for row in history:
@@ -975,12 +993,17 @@ async def _tool_get_history(
     if has_more and last_timestamp is None:
         _LOGGER.warning("MCP history row for entity %s has no usable timestamp", entity_id)
         return _tool_error("History call returned an invalid timestamp."), "invalid_request", entity_id
-    covered_end = last_timestamp if has_more and last_timestamp is not None else window.end
+    if newest:
+        covered_start = last_timestamp if has_more and last_timestamp is not None else window.start
+        covered_end = upper
+    else:
+        covered_start = window.page_start
+        covered_end = last_timestamp if has_more and last_timestamp is not None else window.end
     warnings = retention_warnings("short_term", window.start, keep_days, utcnow())
     body = recorder_envelope(
         entity_id=entity_id,
         window=window,
-        covered_start=window.page_start,
+        covered_start=covered_start,
         covered_end=covered_end,
         rows=history,
         timestamp_getter=(
@@ -995,6 +1018,7 @@ async def _tool_get_history(
         warnings=warnings,
         result_key="history",
     )
+    body["order"] = order
     body["mode"] = mode
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
@@ -1130,8 +1154,12 @@ async def _tool_get_calendar_events(
         start, end = _calendar_window(args, defaults=True)
         events = await _calendar_events(entity, hass, start, end)
         _calendar_entity(args.get("entity_id"), access_key, hass)
-        body = {"calendar_id": args["entity_id"], "events": [
-            {**event, "content_hash": content_hash(event)} for event in events]}
+        paged = offset_page(events, args, default_limit=CALENDAR_EVENTS_DEFAULT_LIMIT, max_limit=CALENDAR_MAX_EVENTS)
+        if isinstance(paged, str):
+            raise ValueError(paged)
+        page, envelope = paged
+        body = {"calendar_id": args["entity_id"], **envelope, "events": [
+            {**event, "content_hash": content_hash(event)} for event in page]}
         return _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass))), "allowed", args["entity_id"]
     except AuthorityChangedError:
         raise
@@ -1610,11 +1638,41 @@ async def _execute_call_service(
     filtered_response = filter_service_response(svc_response, access_key, hass) if svc_response is not None else None
     if filtered_response is not None:
         body["service_response"] = filtered_response
+    try:
+        body["targets"] = _service_call_targets(permitted_entities, access_key, hass)
+    except Exception:  # noqa: BLE001 - the effect already happened; the report is optional
+        _LOGGER.debug("Could not describe call_service targets", exc_info=True)
     if mesa_outcome.warnings:
         body["mesa_advisory"] = mesa_outcome.warnings
         _mesa_advisory_ctx.set(True)
 
     return _tool_success(json.dumps(body, default=str)), "allowed", resource
+
+
+def _service_call_targets(entity_ids: list[str], access_key: AccessKeyRecord, hass: HomeAssistant) -> dict[str, Any]:
+    """Name what the call acted on and how each target reads right after it.
+
+    These are the entities the access key was already permitted to write, so
+    nothing hidden is revealed. Home Assistant skips an unavailable target
+    without failing the call, which is why those are listed separately.
+    """
+    states: list[dict[str, Any]] = []
+    unavailable: list[str] = []
+    for entity_id in entity_ids:
+        if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+            continue
+        state = hass.states.get(entity_id)
+        value = state.state if state is not None else None
+        if value in (None, "unavailable"):
+            unavailable.append(entity_id)
+        if len(states) < SERVICE_RESULT_STATES_MAX:
+            states.append({"entity_id": entity_id, "state": value})
+    result: dict[str, Any] = {"count": len(entity_ids), "states_after_call": states}
+    if len(entity_ids) > len(states):
+        result["states_omitted"] = len(entity_ids) - len(states)
+    if unavailable:
+        result["unavailable"] = unavailable[:SERVICE_RESULT_STATES_MAX]
+    return result
 
 
 async def _execute_call_service_mesa_approved(
@@ -1814,12 +1872,16 @@ async def _tool_get_logs(
     """MCP tool: read the system ring or protected fault-dump blocks."""
     if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_logs"
+    if any(key in args for key in _LOG_DETAIL_KEYS):
+        return _tool_error("Fetch a bucket's full text with get_log_detail and its detail_ref."), "invalid_request", "get_logs"
     source = args.get("source", "system_log")
     if source == "fault_log":
         from .fault_log import async_fault_log_query
         return await async_fault_log_query(args, access_key, hass)
+    if source == "integration_debug":
+        return _integration_debug_query(args, access_key, hass)
     if source != "system_log":
-        return _tool_error("source must be system_log or fault_log."), "invalid_request", "get_logs"
+        return _tool_error("source must be system_log, fault_log or integration_debug."), "invalid_request", "get_logs"
     if "order" in args:
         return _tool_error("order is supported only for fault_log."), "invalid_request", "get_logs"
     return await _tool_log_query(
@@ -1827,10 +1889,91 @@ async def _tool_get_logs(
     )
 
 
+_LOG_DETAIL_KEYS = ("detail_ref", "detail_field", "message_index", "detail_offset")
+
+
+def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """Read captured INFO/DEBUG records of the integrations this access key can see."""
+    from .debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, integration_domain  # noqa: PLC0415
+
+    tool = "get_logs"
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", tool
+    unsupported = [key for key in ("level", "logger", "since", "until", "order") if key in args]
+    if unsupported:
+        return _tool_error("integration_debug accepts integration, search, limit and cursor only."), "invalid_request", tool
+    malformed = [key for key in ("integration", "search", "cursor") if args.get(key) is not None and not isinstance(args[key], str)]
+    if malformed:
+        return _tool_error(f"{', '.join(malformed)} must be a string."), "invalid_request", tool
+    limit = args.get("limit", 50)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LOG_ENTRIES:
+        return _tool_error(f"limit must be an integer from 1 to {MAX_LOG_ENTRIES}."), "invalid_request", tool
+    cursor = (args.get("cursor") or "").strip()
+    if cursor and not cursor.isdigit():
+        return _tool_error("Invalid cursor for integration_debug."), "invalid_request", tool
+    search = (args.get("search") or "").strip()
+    domains = _visible_logger_domains(access_key, hass)
+    if integration := (args.get("integration") or "").strip():
+        domains = domains & {integration}
+    capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
+    source: dict[str, Any] = {"kind": "integration_debug_capture",
+                              "levels": ["INFO", "DEBUG"], "capacity": DEBUG_CAPTURE_CAPACITY}
+    if capture is None:
+        return _tool_success(json.dumps({"source": {**source, "status": "unavailable"}, "count": 0,
+                                         "has_more": False, "next_cursor": None, "entries": []})), "allowed", tool
+    entries: list[dict[str, Any]] = []
+    has_more = False
+    for sequence, created, level, logger, message, truncated in capture.newest(domains, int(cursor) if cursor else None):
+        safe = _strict_phoenix_log_text(message, access_key, hass)
+        # Search sees only scrubbed text, so it can never probe a redacted value.
+        if search and search.casefold() not in safe.casefold():
+            continue
+        if len(entries) == limit:
+            has_more = True
+            break
+        entries.append({"sequence": sequence, "time": datetime.fromtimestamp(created, timezone.utc).isoformat(),
+                        "level": level, "integration": integration_domain(logger), "logger": logger,
+                        "message": safe, "truncated": truncated})
+    body = {
+        "source": {**source, "status": "available", "retained": len(capture.records),
+                   "capturing_since": capture.attached_at.isoformat(),
+                   "note": "Only records below WARNING from integrations whose level was raised appear here; "
+                           "WARNING and above are in source system_log."},
+        "count": len(entries), "has_more": has_more,
+        "next_cursor": str(entries[-1]["sequence"]) if has_more and entries else None,
+        "entries": entries,
+    }
+    return _tool_success(json.dumps(body, default=str)), "allowed", tool
+
+
+async def _tool_get_log_detail(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """MCP tool: one bounded scrubbed text chunk of a log bucket by its detail_ref."""
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", "get_log_detail"
+    if "detail_ref" not in args:
+        return _tool_error("Missing required argument: detail_ref"), "invalid_request", "get_log_detail"
+    detail_args = {key: args[key] for key in _LOG_DETAIL_KEYS if key in args}
+    # A reference is bound to its namespace, so it can only match where it was
+    # minted; Phoenix's own diagnostics are tried only with Diagnostics allowed.
+    namespaces = [False] + ([True] if effective_cap(access_key, "cap_diagnostics") != CAP_DENY else [])
+    result: tuple[dict, str, str] = _tool_error(LOG_DETAIL_STALE_MESSAGE), "invalid_request", "get_log_detail"
+    for phoenix_only in namespaces:
+        result = await _tool_log_query(detail_args, access_key, hass, tool_name="get_log_detail", phoenix_only=phoenix_only)
+        if result[1] != "invalid_request" or result[0]["content"][0]["text"] != LOG_DETAIL_STALE_MESSAGE:
+            return result
+    return result
+
+
 async def _tool_get_phoenix_diagnostics(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read aggressively scrubbed Phoenix warning/error diagnostics."""
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY or effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", "get_phoenix_diagnostics"
+    if any(key in args for key in _LOG_DETAIL_KEYS):
+        return _tool_error("Fetch a bucket's full text with get_log_detail and its detail_ref."), "invalid_request", "get_phoenix_diagnostics"
     return await _tool_log_query(
         args,
         access_key,
@@ -2598,7 +2741,7 @@ def _set_entity_value_error(
         if field == "add_labels":
             missing = [label_id for label_id in parsed if lr.async_get(hass).async_get_label(label_id) is None]
             if missing:
-                return f"Unknown label id: {missing[0]}."
+                return unknown_label_message(hass, missing[0])
     if restoring and "labels" in args:
         labels = args["labels"]
         if not isinstance(labels, list) or not all(
@@ -2611,7 +2754,7 @@ def _set_entity_value_error(
             if lr.async_get(hass).async_get_label(label_id) is None
         ]
         if missing:
-            return f"Unknown label id: {missing[0]}."
+            return unknown_label_message(hass, missing[0])
 
     if "categories" in args:
         categories = args["categories"]
@@ -2626,7 +2769,7 @@ def _set_entity_value_error(
             if category_id is not None and category_registry.async_get_category(
                 scope=scope, category_id=category_id
             ) is None:
-                return f"Unknown category id {category_id!r} in scope {scope!r}."
+                return unknown_category_message(hass, scope, category_id)
 
     if restoring:
         enum_fields = (
@@ -2985,7 +3128,7 @@ def _set_device_value_error(
                 if lr.async_get(hass).async_get_label(label_id) is None
             ]
             if missing:
-                return f"Unknown label id: {missing[0]}."
+                return unknown_label_message(hass, missing[0])
     if restoring and "labels" in args:
         labels = args["labels"]
         if not isinstance(labels, list) or not all(
@@ -2998,7 +3141,7 @@ def _set_device_value_error(
             if lr.async_get(hass).async_get_label(label_id) is None
         ]
         if missing:
-            return f"Unknown label id: {missing[0]}."
+            return unknown_label_message(hass, missing[0])
     if restoring and "disabled_by" in args and args["disabled_by"] is not None:
         try:
             dr.DeviceEntryDisabler(args["disabled_by"])
@@ -5645,6 +5788,9 @@ def _clamp_timeout(value: Any) -> int:
     return max(1, min(seconds, MAX_SUBSCRIPTION_SECONDS))
 
 
+_WATCH_TIMED_OUT = object()
+
+
 async def _tool_watch_entity(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -5658,24 +5804,41 @@ async def _tool_watch_entity(
     if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
 
+    until_state = args.get("until_state")
+    if until_state is not None and not isinstance(until_state, str):
+        return _tool_error("until_state must be a string."), "invalid_request", entity_id
     timeout = _clamp_timeout(args.get("timeout", MAX_SUBSCRIPTION_SECONDS))
     future: asyncio.Future = hass.loop.create_future()
 
     @callback
     def _on_change(event: Any) -> None:
+        new_state = event.data.get("new_state")
+        if until_state is not None and new_state is not None and new_state.state != until_state:
+            return
         if not future.done():
-            future.set_result(event.data.get("new_state"))
+            future.set_result(new_state)
 
     unsub = async_track_state_change_event(hass, [entity_id], _on_change)
+    current = hass.states.get(entity_id)
+    if until_state is not None and current is not None and current.state == until_state and not future.done():
+        # The awaited state may already hold: an action verified after it landed.
+        future.set_result(current)
     try:
         new_state = await asyncio.wait_for(future, timeout)
     except TimeoutError:
-        return (
-            _tool_success(json.dumps({"entity_id": entity_id, "changed": False, "timeout_seconds": timeout})),
-            "allowed", entity_id,
-        )
+        new_state = _WATCH_TIMED_OUT
     finally:
         unsub()
+    # Authority and scope may have changed during the wait.
+    check_request_authority()
+    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+        return _tool_error("Entity not found."), "not_found", entity_id
+    if new_state is _WATCH_TIMED_OUT:
+        timed_out: dict[str, Any] = {"entity_id": entity_id, "changed": False, "timeout_seconds": timeout}
+        if until_state is not None:
+            timed_out["reached"] = False
+            timed_out["state"] = current_state.state if (current_state := hass.states.get(entity_id)) else None
+        return _tool_success(json.dumps(timed_out)), "allowed", entity_id
 
     if new_state is None:
         body = {"entity_id": entity_id, "changed": True, "removed": True}
@@ -5683,11 +5846,13 @@ async def _tool_watch_entity(
         scrubbed = scrub_sensitive_attributes(new_state)
         body = {
             "entity_id": entity_id,
-            "changed": True,
+            "changed": new_state is not current,
             "state": scrubbed.get("state"),
             "attributes": scrubbed.get("attributes"),
             "when": getattr(new_state, "last_changed", None),
         }
+        if until_state is not None:
+            body["reached"] = True
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
@@ -6273,8 +6438,15 @@ async def _tool_list_integrations(
         and effective_cap(access_key, "cap_integration_reconfigure") == CAP_DENY
     ):
         return _tool_error("Forbidden."), "denied", "list_integrations"
+    domain_filter, query = args.get("domain"), args.get("query")
+    if any(value is not None and not isinstance(value, str) for value in (domain_filter, query)):
+        return _tool_error("domain and query must be strings."), "invalid_request", "list_integrations"
+    domain_filter = (domain_filter or "").strip().lower()
+    query = (query or "").strip().lower()
     integrations: list[dict[str, Any]] = []
     for entry in hass.config_entries.async_entries():
+        if domain_filter and entry.domain != domain_filter:
+            continue
         access = resolve_config_entry_registry_access(entry.entry_id, access_key, hass)
         if access not in (Permission.READ, Permission.WRITE):
             continue
@@ -6323,8 +6495,15 @@ async def _tool_list_integrations(
             "accessible_entity_count": accessible_entities,
             "accessible_device_count": accessible_devices,
         })
+    if query:
+        integrations = [row for row in integrations
+                        if query in f"{row['domain']} {row['title'] or ''}".lower()]
     integrations.sort(key=lambda e: (e["domain"], e["title"] or ""))
-    return _tool_success(json.dumps({"count": len(integrations), "integrations": integrations}, default=str)), "allowed", "list_integrations"
+    paged = offset_page(integrations, args, default_limit=INTEGRATION_LIST_DEFAULT_LIMIT, max_limit=INTEGRATION_LIST_MAX_LIMIT)
+    if isinstance(paged, str):
+        return _tool_error(paged), "invalid_request", "list_integrations"
+    page, envelope = paged
+    return _tool_success(json.dumps({**envelope, "integrations": page}, default=str)), "allowed", "list_integrations"
 
 
 def _reconfigure_args_error(args: dict[str, Any]) -> str | None:
@@ -9910,7 +10089,6 @@ _register_executor(MESA_APPROVED_EXECUTOR, _execute_call_service_mesa_approved)
 # ---------------------------------------------------------------------------
 
 _register_tool("get_state", _tool_get_state)
-_register_tool("get_states", _tool_get_states)
 _register_tool("get_camera_image", _tool_get_camera_image)
 _register_tool("get_history", _tool_get_history)
 _register_tool("get_statistics", _tool_get_statistics)
@@ -9954,6 +10132,7 @@ _register_tool("HassVacuumReturnToBase", _tool_hass_vacuum_return_to_base)
 _register_tool("HassVacuumCleanArea", _tool_hass_vacuum_clean_area)
 _register_tool("HassBroadcast", _tool_hass_broadcast)
 _register_tool("get_logs", _tool_get_logs)
+_register_tool("get_log_detail", _tool_get_log_detail)
 _register_tool("get_phoenix_diagnostics", _tool_get_phoenix_diagnostics)
 _register_tool("get_logbook", _tool_get_logbook)
 _register_tool("list_integration_log_levels", _tool_list_integration_log_levels)

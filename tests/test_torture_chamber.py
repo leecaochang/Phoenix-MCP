@@ -21,6 +21,7 @@ Invariants checked on every (tool, attack) pair:
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from copy import deepcopy
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -198,10 +199,15 @@ def _attacks(tool_def: dict) -> list[tuple[str, dict]]:
             name: _hostile_values(props.get(name, {}).get("type"))[0] for name in required
         }))
     for name, spec in props.items():
-        for value in _hostile_values(spec.get("type")):
-            cases.append((f"{name}={type(value).__name__}", {**base, name: value}))
-        for label, value in _nested_attacks(spec):
-            cases.append((f"{name}.{label}", {**deepcopy(base), name: value}))
+        # A typeless union is attacked through each of its branches.
+        branches = [spec] if spec.get("type") else [
+            choice for key in ("oneOf", "anyOf") for choice in spec.get(key, []) or []
+        ] or [spec]
+        for branch in branches:
+            for value in _hostile_values(branch.get("type")):
+                cases.append((f"{name}={type(value).__name__}", {**base, name: value}))
+            for label, value in _nested_attacks(branch):
+                cases.append((f"{name}.{label}", {**deepcopy(base), name: value}))
     return cases
 
 
@@ -301,7 +307,6 @@ def test_every_adversarial_baseline_normalizes(tool_def):
     "tool_name",
     [
         "get_state",
-        "get_states",
         "call_service",
         "dry_run_service",
         "get_relationships",
@@ -337,17 +342,21 @@ async def test_structured_get_state_seed_reaches_permission_resolution(
     _assert_contract(result, outcome, resource, "get_state/positive-control")
 
 
-async def test_structured_get_states_seed_reaches_scope_filter(
+async def test_structured_get_state_list_seed_reaches_permission_resolution(
     hass: HomeAssistant,
 ):
-    tool_def = next(item for item in ALL_DEFS if item["name"] == "get_states")
-    seed = _placeholder("arguments", tool_def["inputSchema"])
-    scope_filter = MagicMock(return_value=[])
+    """Positive control for the list form: every requested ID reaches the resolver."""
+    resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
 
-    with patch.object(mcp_view, "filter_entities_for_access_key", scope_filter):
-        await _call_tool("get_states", seed, _access_key("allow"), hass, _data())
+    with patch.object(mcp_view, "resolve", resolver):
+        result, outcome, _ = await _call_tool(
+            "get_state", {"entity_id": ["light.a", "light.b"], "projection": {"kind": "compact"}},
+            _access_key("allow"), hass, _data(),
+        )
 
-    scope_filter.assert_called_once()
+    assert [call.args[0] for call in resolver.call_args_list] == ["light.a", "light.b"]
+    assert outcome == "allowed"
+    assert json.loads(result["content"][0]["text"])["not_found"] == ["light.a", "light.b"]
 
 
 async def test_structured_call_service_seed_reaches_executor(hass: HomeAssistant):
@@ -517,11 +526,12 @@ async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant)
     access_key, data = _access_key("allow"), _data()
     hass.states.async_set("light.kitchen", "on")
     clean, _, _ = await _call_tool(
-        "get_states", {"projection": {"kind": "compact"}}, access_key, hass, data
+        "get_state", {"entity_id": ["light.kitchen"], "projection": {"kind": "compact"}}, access_key, hass, data
     )
     dirty, outcome, _ = await _call_tool(
-        "get_states",
+        "get_state",
         {
+            "entity_id": ["light.kitchen"],
             "projection": {"kind": "compact"},
             f"{MARKER}_unknown": MARKER,
             "nonsense": [1, 2],

@@ -32,6 +32,7 @@ import hmac
 import json
 import logging
 import math
+import re
 
 from homeassistant.components.automation.config import async_validate_config_item as _validate_automation_config
 from homeassistant.components.script.config import async_validate_config_item as _validate_script_config
@@ -47,7 +48,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -63,7 +64,7 @@ from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import effective_cap, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
-from ..tool_common import _resolve_area_id, _tool_error, _tool_success
+from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
@@ -672,7 +673,7 @@ def _forward_references(hass: HomeAssistant, access_key: AccessKeyRecord, entity
 def _accessible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
     """Return the set of entity IDs the access key can read.
 
-    Uses the same scoping/scrubbing path as get_states so registry views never
+    Uses the same scoping/scrubbing path as listing tools so registry views never
     reveal entities, areas, or devices outside the access key's permission tree.
     """
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
@@ -936,6 +937,11 @@ async def _tool_list_floors(
         floor = floor_reg.async_get_floor(floor_id)
         if floor is None:
             continue
+        areas = sorted(
+            ({"area_id": area.id, "name": area.name}
+             for area_id in floor_area_ids[floor_id] if (area := area_reg.async_get_area(area_id)) is not None),
+            key=lambda row: (row["name"] or row["area_id"]).lower(),
+        )
         floors.append({
             "floor_id": floor.floor_id,
             "name": floor.name,
@@ -944,6 +950,7 @@ async def _tool_list_floors(
             "aliases": sorted(getattr(floor, "aliases", ())),
             "accessible_area_count": len(floor_area_ids[floor_id]),
             "accessible_entity_count": count,
+            "areas": areas,
         })
     floors.sort(key=lambda f: (f["level"] if f["level"] is not None else 0, (f["name"] or f["floor_id"]).lower()))
     return _tool_success(json.dumps({"count": len(floors), "floors": floors}, default=str)), "allowed", "list_floors"
@@ -988,6 +995,14 @@ async def _tool_list_devices(
             "list_devices",
         )
 
+    filters = {key: args.get(key) for key in ("area", "integration", "query")}
+    if any(value is not None and not isinstance(value, str) for value in filters.values()):
+        return _tool_error("area, integration and query must be strings."), "invalid_request", "list_devices"
+    area = (filters["area"] or "").strip().lower()
+    integration = (filters["integration"] or "").strip().lower()
+    query = (filters["query"] or "").strip().lower()
+    area_ids = _search_area_ids(hass, area) if area else None
+
     device_snapshot = device_registry_snapshot(hass)
     devices: list[dict] = []
     for device in device_snapshot.entries:
@@ -999,9 +1014,25 @@ async def _tool_list_devices(
             device.id, access_key, hass, snapshot=device_snapshot
         ) not in (Permission.READ, Permission.WRITE):
             continue
-        devices.append(_device_list_projection(device, access_key, hass, device_snapshot))
+        if area_ids is not None and device_snapshot.effective_area_id(device.id) not in area_ids:
+            continue
+        if integration and not any(
+            (entry := hass.config_entries.async_get_entry(entry_id)) is not None and entry.domain == integration
+            for entry_id in device_config_entry_ids(device)
+        ):
+            continue
+        row = _device_list_projection(device, access_key, hass, device_snapshot)
+        if query and query not in " ".join(
+            str(row.get(key) or "") for key in ("name", "original_name", "manufacturer", "model")
+        ).lower():
+            continue
+        devices.append(row)
     devices.sort(key=lambda d: ((d["name"] or d["device_id"]).lower()))
-    return _tool_success(json.dumps({"count": len(devices), "devices": devices}, default=str)), "allowed", "list_devices"
+    paged = offset_page(devices, args, default_limit=DEVICE_LIST_DEFAULT_LIMIT, max_limit=DEVICE_LIST_MAX_LIMIT)
+    if isinstance(paged, str):
+        return _tool_error(paged), "invalid_request", "list_devices"
+    page, envelope = paged
+    return _tool_success(json.dumps({**envelope, "devices": page}, default=str)), "allowed", "list_devices"
 
 
 async def _tool_get_device(
@@ -1118,6 +1149,19 @@ def _device_config_entry_summaries(device: Any, hass: HomeAssistant) -> list[dic
     return summaries
 
 
+def _search_area_ids(hass: HomeAssistant, wanted: str) -> set[str]:
+    """Area ids named by an area id/name/alias, or every area on a matching floor."""
+    def named(item_id: str, name: str | None, aliases: Any) -> bool:
+        return wanted in {item_id.lower(), (name or "").lower(), *(str(a).lower() for a in (aliases or ()))}
+
+    areas = ar.async_get(hass).async_list_areas()
+    ids = {area.id for area in areas if named(area.id, area.name, area.aliases)}
+    floors = {floor.floor_id for floor in fr.async_get(hass).async_list_floors()
+              if named(floor.floor_id, floor.name, floor.aliases)}
+    ids.update(area.id for area in areas if area.floor_id in floors)
+    return ids
+
+
 def _area_name_for_entity(eid: str, registry: Any, dev_reg: Any, area_reg: Any) -> str | None:
     """Return the area NAME for an entity, or None if it has no area."""
     area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
@@ -1138,7 +1182,7 @@ def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
     access_keys = [t for t in query.split() if t]
     if not access_keys:
         return matches
-    docs = [f"{m['entity_id']} {(m.get('friendly_name') or '')}".lower() for m in matches]
+    docs = [f"{m['entity_id']} {(m.get('friendly_name') or '')} {' '.join(m.get('_aliases', ()))}".lower() for m in matches]
     n = len(docs) or 1
     df = {t: sum(1 for d in docs if t in d) for t in set(access_keys)}
     full = " ".join(access_keys)
@@ -1149,14 +1193,15 @@ def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
         eid = m["entity_id"].lower()
         obj = eid.split(".")[-1]
         fname = (m.get("friendly_name") or "").lower()
+        aliases = [alias.lower() for alias in m.get("_aliases", ())]
         score = 0.0
         for t in access_keys:
             score += math.log(1 + n / (1 + df.get(t, 0)))
-            if t == eid or t == fname:
+            if t == eid or t == fname or t in aliases:
                 score += 5.0
-            elif obj.startswith(t) or any(w.startswith(t) for w in fname.split()):
+            elif obj.startswith(t) or any(w.startswith(t) for name in (fname, *aliases) for w in name.split()):
                 score += 2.0
-        if full in (eid, fname, obj):
+        if full in (eid, fname, obj, *aliases):
             score += 10.0
         scored.append((score, m["entity_id"], m))
     scored.sort(key=lambda s: (-s[0], s[1]))
@@ -1181,6 +1226,7 @@ def _fuzzy_search_matches(matches: list[dict], query: str) -> list[dict]:
             difflib.SequenceMatcher(None, query, eid).ratio(),
             difflib.SequenceMatcher(None, query, obj).ratio(),
             difflib.SequenceMatcher(None, query, fname).ratio() if fname else 0.0,
+            *(difflib.SequenceMatcher(None, query, alias.lower()).ratio() for alias in m.get("_aliases", ())),
         )
         if ratio >= SEARCH_FUZZY_MATCH_CUTOFF:
             scored.append((ratio, m["entity_id"], m))
@@ -1205,6 +1251,7 @@ class _SearchFilters:
     want_unavailable: bool
     stale_threshold: float | None
     limit: int
+    offset: int
     registry_state: str
 
 
@@ -1236,6 +1283,10 @@ def _parse_search_args(args: dict) -> _SearchFilters:
         limit = int(args.get("limit", 100))
     except (TypeError, ValueError):
         limit = 100
+    try:
+        offset = int(args.get("offset", 0))
+    except (TypeError, ValueError):
+        offset = 0
 
     return _SearchFilters(
         query=query,
@@ -1246,6 +1297,7 @@ def _parse_search_args(args: dict) -> _SearchFilters:
         want_unavailable=bool(args.get("unavailable")),
         stale_threshold=stale_threshold,
         limit=max(1, min(limit, 500)),
+        offset=max(0, offset),
         registry_state=str(args.get("registry_state") or "enabled").strip().lower(),
     )
 
@@ -1395,6 +1447,7 @@ async def _tool_search_entities(
     now = utcnow()
 
     expose = assist_expose_check(access_key, hass)
+    area_ids = _search_area_ids(hass, f.area) if f.area else None
     matches: list[dict] = []
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
@@ -1428,12 +1481,8 @@ async def _tool_search_entities(
         if f.want_unavailable and state_val not in ("unavailable", "unknown"):
             continue
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg)
-        if f.area:
-            area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
-            if not area_id:
-                continue
-            if f.area != area_id.lower() and f.area != (area_name or "").lower():
-                continue
+        if area_ids is not None and _resolve_area_id(entry, dev_reg) not in area_ids:
+            continue
         if f.stale_threshold is not None:
             # State.as_dict() (scrub_sensitive_attributes' input) serializes
             # last_changed as an ISO string, not a datetime, so parse it before
@@ -1454,6 +1503,11 @@ async def _tool_search_entities(
                 "disabled" if entry.disabled_by is not None else "enabled"
             )
             row["state_available"] = state is not None
+        if entry is not None and entry.hidden_by is not None:
+            row["hidden"] = True
+        aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
+        if aliases:
+            row["_aliases"] = aliases
         matches.append(row)
 
     fuzzy_fallback = False
@@ -1473,8 +1527,11 @@ async def _tool_search_entities(
     matches = [row for row in matches
                if resolve_registry_access(row["entity_id"], access_key, hass) in (Permission.READ, Permission.WRITE)
                and (expose is None or expose(row["entity_id"]))]
-    truncated = len(matches) > f.limit
-    results = matches[:f.limit]
+    end = f.offset + f.limit
+    has_more = len(matches) > end
+    results = matches[f.offset:end]
+    for row in results:
+        row.pop("_aliases", None)
 
     _annotate_search_rows(results, registry, data, access_key)
     if include_membership:
@@ -1482,7 +1539,10 @@ async def _tool_search_entities(
         for row in results:
             row.update(_search_membership(row["entity_id"], access_key, hass, expose, budget))
 
-    body = {"count": len(results), "total": len(matches), "truncated": truncated, "entities": results}
+    body = {"count": len(results), "total": len(matches), "offset": f.offset, "truncated": has_more,
+            "has_more": has_more, "entities": results}
+    if has_more:
+        body["next_offset"] = end
     if fuzzy_fallback:
         # Signal that these are approximate (typo-tolerant) matches, not exact,
         # so the agent knows the query did not match any entity literally.
@@ -1583,6 +1643,65 @@ async def _tool_describe_area(
     return _tool_success(json.dumps(body, default=str)), "allowed", target.id
 
 
+def _field_applies(field: dict, state: Any) -> bool:
+    """Mirror the Home Assistant frontend's per-entity field filter."""
+    rule = field.get("filter")
+    if not isinstance(rule, dict) or state is None:
+        return True
+    features = rule.get("supported_features")
+    if isinstance(features, list) and features:
+        supported = state.attributes.get("supported_features") or 0
+        if not isinstance(supported, int) or not any(isinstance(bit, int) and supported & bit for bit in features):
+            return False
+    attributes = rule.get("attribute")
+    if isinstance(attributes, dict):
+        for name, wanted in attributes.items():
+            value = state.attributes.get(name)
+            values = value if isinstance(value, (list, tuple, set)) else [value]
+            if not isinstance(wanted, list) or not any(item in wanted for item in values):
+                return False
+    return True
+
+
+def _service_fields(description: Any, state: Any) -> list[dict]:
+    """Compact, bounded field schemas for one service, as this entity can use them."""
+    raw = description.get("fields") if isinstance(description, dict) else None
+    flat: list[tuple[str, dict]] = []
+    for key, field in (raw or {}).items():
+        if isinstance(field, dict) and isinstance(field.get("fields"), dict):
+            flat.extend((child_key, child) for child_key, child in field["fields"].items() if isinstance(child, dict))
+        elif isinstance(field, dict):
+            flat.append((key, field))
+    fields: list[dict] = []
+    for key, field in flat:
+        if len(fields) >= SERVICE_FIELDS_MAX or not _field_applies(field, state):
+            continue
+        row: dict[str, Any] = {"field": key}
+        if field.get("required"):
+            row["required"] = True
+        selector = field.get("selector")
+        if isinstance(selector, dict) and selector:
+            kind, config = next(iter(selector.items()))
+            row["type"] = kind
+            if isinstance(config, dict):
+                row.update({name: config[name] for name in ("min", "max", "step", "unit_of_measurement", "multiple")
+                            if name in config})
+                options = config.get("options")
+                if isinstance(options, list):
+                    values = [item.get("value") if isinstance(item, dict) else item for item in options]
+                    row["options"] = values[:SERVICE_FIELD_MAX_OPTIONS]
+                    if len(values) > SERVICE_FIELD_MAX_OPTIONS:
+                        row["options_truncated"] = True
+        for name in ("example", "default"):
+            if name in field:
+                row[name] = field[name]
+        description_text = field.get("description")
+        if isinstance(description_text, str) and description_text:
+            row["description"] = description_text[:SERVICE_FIELD_MAX_DESCRIPTION]
+        fields.append(row)
+    return fields
+
+
 async def _tool_find_available_actions(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1598,11 +1717,25 @@ async def _tool_find_available_actions(
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "find_available_actions"
+    include_fields = args.get("include_fields", False)
+    if not isinstance(include_fields, bool):
+        return _tool_error("include_fields must be a boolean."), "invalid_request", "find_available_actions"
 
     perm = resolve(entity_id, access_key, hass)
     if perm not in (Permission.READ, Permission.WRITE):
         # Nonexistent and inaccessible give the same response, so no existence oracle.
         return _tool_error("Entity not found."), "not_found", entity_id
+    descriptions: dict = {}
+    fields_unavailable = False
+    if include_fields:
+        try:
+            from homeassistant.helpers.service import async_get_all_descriptions  # noqa: PLC0415
+            descriptions = (await async_get_all_descriptions(hass)).get(entity_id.split(".")[0], {}) or {}
+        except Exception:  # noqa: BLE001 - descriptions are documentation, never required
+            _LOGGER.debug("Service descriptions unavailable for %s", entity_id, exc_info=True)
+            fields_unavailable = True
+        check_request_authority()
+    state = hass.states.get(entity_id)
 
     domain = entity_id.split(".")[0]
     writable = access_key.pass_through or perm == Permission.WRITE
@@ -1637,6 +1770,8 @@ async def _tool_find_available_actions(
             entry["description"] = "Run this script and wait for completion; pass inputs directly in service data. Target this exact entity."
         if reason:
             entry["reason"] = reason
+        if include_fields and not fields_unavailable:
+            entry["fields"] = _service_fields(descriptions.get(svc), state)
         actions.append(entry)
 
     # An ESPHome device's user-defined actions live in the esphome domain, not the
@@ -1650,6 +1785,8 @@ async def _tool_find_available_actions(
         "writable": writable,
         "actions": actions,
     }
+    if fields_unavailable:
+        body["warnings"] = ["Home Assistant's service descriptions could not be read; fields are omitted."]
 
     # Purpose-built automation triggers/conditions for this entity, with worked
     # config examples. HA-level authoring data (independent of MESA), so it is
@@ -1870,6 +2007,17 @@ def _requires_unavailable_reason(tool_def: dict) -> str:
 
 
 
+_CHECK_LOCATION_RE = re.compile(r" at (?P<file>[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}\.ya?ml), line (?P<line>\d{1,7})")
+_CHECK_REQUIRED_KEY_RE = re.compile(r"required key '([a-z_][a-z0-9_]{0,63})' not provided")
+
+
+def _safe_config_relpath(path: str) -> bool:
+    """A config-relative YAML path that names nothing beyond its own location."""
+    parts = path.split("/")
+    return ".." not in parts and "" not in parts and parts[-1] != "secrets.yaml" and not any(
+        part.startswith(".") for part in parts)
+
+
 async def _tool_check_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -1884,10 +2032,27 @@ async def _tool_check_config(
         _LOGGER.warning("MCP check_config failed", exc_info=True)
         return _tool_error("Config check failed."), "invalid_request", "check_ha_config"
 
+    # File and line only for a key that could open the file itself.
+    show_location = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
+
     def project(messages: list, label: str) -> list[dict]:
-        return [{"message": label, "domain": e.domain if isinstance(e.domain, str)
-                 and e.domain in hass.config.components else None}
-                for e in messages[:MAX_CONFIG_CHECK_MESSAGES]]
+        rows = []
+        for e in messages[:MAX_CONFIG_CHECK_MESSAGES]:
+            row: dict[str, Any] = {"message": label, "domain": e.domain if isinstance(e.domain, str)
+                                   and e.domain in hass.config.components else None}
+            text = e.message if isinstance(getattr(e, "message", None), str) else ""
+            located = _CHECK_LOCATION_RE.search(text)
+            if show_location and located and _safe_config_relpath(located["file"]):
+                row["file"], row["line"] = located["file"], int(located["line"])
+            # A reason class only: messages can echo the offending value.
+            if required := _CHECK_REQUIRED_KEY_RE.search(text):
+                row["reason"] = f"required key '{required[1]}' is missing"
+            elif "is an invalid option" in text or "extra keys not allowed" in text:
+                row["reason"] = "contains an option this integration does not support"
+            elif text:
+                row["reason"] = "has an invalid value or structure"
+            rows.append(row)
+        return rows
 
     errors = project(result.errors, "Configuration validation failed; review the Home Assistant configuration check.")
     warnings = project(result.warnings, "Configuration warning; review the Home Assistant configuration check.")

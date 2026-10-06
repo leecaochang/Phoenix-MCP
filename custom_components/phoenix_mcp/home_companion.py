@@ -410,7 +410,7 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
                            recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(access_key.id))
         if result.review_urls or turn.evidence.pending:
             return _result("pending_approval", outcomes=turn.outcomes, review_urls=result.review_urls)
-        if turn.evidence.accepted and turn.calls < HOME_COMPANION_MAX_CALLS:
+        if turn.evidence.accepted and turn.evidence.targets and turn.calls < HOME_COMPANION_MAX_CALLS:
             from .agent_recovery import dispatch_agent_tool
             from .mcp_view import _dispatch_mcp
             from .audit import generate_request_id
@@ -418,8 +418,9 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
             try:
                 async with asyncio.timeout_at(deadline):
                     await dispatch_agent_tool(
-                        _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="get_states",
-                        arguments={"projection": {"kind": "full"}}, tool_id="companion_readback", client_ip=HOME_COMPANION_CLIENT_IP,
+                        _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="get_state",
+                        arguments={"entity_id": sorted(turn.evidence.targets), "projection": {"kind": "full"}},
+                        tool_id="companion_readback", client_ip=HOME_COMPANION_CLIENT_IP,
                         base_url="", request_id=generate_request_id(),
                     )
             except AuthorityChangedError:

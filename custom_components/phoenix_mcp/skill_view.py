@@ -52,7 +52,9 @@ grain of the model gives the smoothest results and avoids dead ends.
   entities; pass `registry_state: disabled` for disabled registry entries or
   `registry_state: all` to include registry entries with no live state. Those
   registry-only rows require inherited device/domain permission. This is
-  keyword/attribute search.
+  keyword/attribute search over names and Assist aliases; `area` also accepts a
+  floor. Page with `offset` while `has_more` is true. To read several known
+  entities at once, pass `get_state` a list of entity IDs.
 - `recognize_intent`: diagnose how Home Assistant's default voice grammar reads
   one sentence without executing it. A match includes parsed slots and only
   entity targets in this access key's read scope; an incomplete match includes the
@@ -333,7 +335,8 @@ the allowed directories. There is no restore-backup tool by design.
 `watch_entity` opens a short, time-boxed wait (capped at a few tens of seconds)
 for an accessible entity's next state change. It is for catching an imminent
 change, not long-lived monitoring. Expect it to end on its own; call it again if
-you still need to watch.
+you still need to watch. To verify an action you just took, pass `until_state`
+with the state you expect: a change that landed before the call still counts.
 
 ## If a tool is not listed, you do not have it
 

@@ -888,7 +888,6 @@ async def test_tools_list_includes_read_tools_always():
     tool_names = [t["name"] for t in result["result"]["tools"]]
     for name in (
         "get_state",
-        "get_states",
         "get_history",
         "get_statistics",
         "homeassistant__GetLiveContext",
@@ -1278,7 +1277,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
     assert nf_text == denied_text
 
 
-# --- get_state / get_states field projection ---
+# --- get_state field projection ---
 
 from custom_components.phoenix_mcp.mcp_view import (  # noqa: E402
     _normalize_fields,

@@ -187,3 +187,24 @@ async def test_mesa_deny_for_is_honored_without_control_mode_gate(hass) -> None:
     assert result["content"][0]["text"] == "Entity not found."
     get_image.assert_not_awaited()
     runtime.enforcer.privacy.evaluate.assert_called_once()
+
+
+async def test_metadata_reports_actual_pixel_size_and_retrieval_time(hass) -> None:
+    import io
+    import json
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (320, 180)).save(buffer, "JPEG")
+    hass.states.async_set("camera.front", "idle")
+    camera = _camera_module()
+    image = SimpleNamespace(content=buffer.getvalue(), content_type="image/jpeg")
+    with patch.object(camera, "async_get_image", AsyncMock(return_value=image)):
+        content, outcome, _ = await _call_tool(
+            "get_camera_image", {"entity_id": "camera.front", "width": 640}, _access_key(), hass, _data(),
+        )
+    assert outcome == "allowed"
+    metadata = json.loads(content["content"][0]["text"])
+    assert (metadata["width"], metadata["height"], metadata["requested_width"]) == (320, 180, 640)
+    assert metadata["retrieved_at"].endswith("+00:00")

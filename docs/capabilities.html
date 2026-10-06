@@ -177,7 +177,7 @@
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
           <div class="callout-body">
             <p class="callout-title">The tree is a cost control, not only an access control</p>
-            <p>Because pass-through skips the tree, every context-bearing read (<code>get_states</code>, <code>homeassistant__GetLiveContext</code>, the initial snapshot, an unfiltered search) returns <em>all</em> entities. On a large install that is a recurring token and context cost: every discovery call ships the whole house into the model. A Phoenix MCP scoped access key returns only what you granted and can
+            <p>Because pass-through skips the tree, every context-bearing read (<code>homeassistant__GetLiveContext</code>, the initial snapshot, an unfiltered search) returns <em>all</em> entities. On a large install that is a recurring token and context cost: every discovery call ships the whole house into the model. A Phoenix MCP scoped access key returns only what you granted and can
             reduce access key burn significantly.</p>
           </div>
         </div>

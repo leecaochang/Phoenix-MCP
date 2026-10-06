@@ -26,6 +26,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.util.dt import parse_datetime, utcnow
 
 from .const import (
+    LOG_DETAIL_STALE_MESSAGE,
     CATALOGS_DIR,
     DIFF_SUMMARY_TEMPLATES,
     NOTIFICATION_TEMPLATES,
@@ -1397,7 +1398,7 @@ def collect_log_entries(
                 if log_result_size(detail_page.as_dict()) > SYSTEM_LOG_MAX_RESPONSE_BYTES:
                     raise SystemLogDegradedError("system_log metadata exceeds the response budget")
                 return detail_page
-        raise ValueError("Invalid or stale log detail reference. Restart the query.")
+        raise ValueError(LOG_DETAIL_STALE_MESSAGE)
 
     def page(items: list[tuple[tuple[float, str], dict]], *, byte_limited: bool = False) -> LogEntryPage:
         has_more = len(entries_with_keys) > len(items)

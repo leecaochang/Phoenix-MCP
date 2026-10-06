@@ -361,8 +361,8 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     arguments: dict[str, Any]
     if proposal['intent'] == 'PhoenixStateSummary':
-        name = 'get_states'
-        arguments = {'projection': {'kind': 'fields', 'fields': ['entity_id', 'state']}}
+        name = 'get_state'
+        arguments = {'entity_id': list(proposal['entity_ids']), 'projection': {'kind': 'fields', 'fields': ['state']}}
     elif read:
         name = "get_state"
         field = "state" if proposal["intent"] == "HassGetState" else "attr." + proposal["value"]
@@ -412,7 +412,8 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
                 continue
     if proposal['intent'] == 'PhoenixStateSummary':
         from .command_summary import summary_text
-        summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, access_key) else None
+        rows = payload.get('states') if isinstance(payload, dict) else None
+        summary_reply = summary_text(proposal, rows, language) if plan_is_current(plan, hass, data, access_key) else None
         return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), outcome='ok' if summary_reply is not None else 'failed', allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")

@@ -651,7 +651,7 @@ async def test_unexpected_variant_count_is_explicit_and_omitted_variants_remain_
     body, _result, _outcome = await _call("get_logs", {"search": "variant 7"}, access_key=access_key, hass=hass, data=data)
     preview = body["entries"][0]
     assert len(preview["messages"]) == 5 and preview["truncation"]["omitted_message_variants"] == 3
-    detail, _result, outcome = await _call("get_logs", {"detail_ref": preview["detail_ref"], "message_index": 7},
+    detail, _result, outcome = await _call("get_log_detail", {"detail_ref": preview["detail_ref"], "message_index": 7},
                                           access_key=access_key, hass=hass, data=data)
     assert outcome == "allowed" and detail["detail"]["text"] == "variant 7"
 
@@ -664,10 +664,10 @@ async def test_detail_boundaries_reject_missing_variants_and_out_of_range_offset
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
     reference = body["entries"][0]["detail_ref"]
     for arguments in ({"message_index": 1}, {"detail_offset": 6}):
-        error, result, outcome = await _call("get_logs", {"detail_ref": reference, **arguments},
+        error, result, outcome = await _call("get_log_detail", {"detail_ref": reference, **arguments},
                                             access_key=access_key, hass=hass, data=data)
         assert outcome == "invalid_request" and result["isError"] and "short" not in error
-    empty, _result, outcome = await _call("get_logs", {"detail_ref": reference, "detail_field": "exception"},
+    empty, _result, outcome = await _call("get_log_detail", {"detail_ref": reference, "detail_field": "exception"},
                                           access_key=access_key, hass=hass, data=data)
     assert outcome == "allowed" and empty["detail"]["text"] == "" and not empty["detail"]["has_more"]
 
@@ -709,7 +709,7 @@ async def test_all_retained_variants_and_exception_can_be_reassembled_in_bounded
         parts = []
         offset = 0
         while True:
-            chunk, result, outcome = await _call("get_logs", {**arguments, "detail_offset": offset},
+            chunk, result, outcome = await _call("get_log_detail", {**arguments, "detail_offset": offset},
                                                  access_key=access_key, hass=hass, data=data)
             assert outcome == "allowed"
             detail = chunk["detail"]
@@ -723,7 +723,7 @@ async def test_all_retained_variants_and_exception_can_be_reassembled_in_bounded
             assert detail["next_offset"] == detail["end_offset"] > offset
             offset = detail["next_offset"]
         assert ''.join(parts) == expected
-        end, _result, outcome = await _call("get_logs", {**arguments, "detail_offset": len(expected)},
+        end, _result, outcome = await _call("get_log_detail", {**arguments, "detail_offset": len(expected)},
                                             access_key=access_key, hass=hass, data=data)
         assert outcome == "allowed" and end["detail"]["text"] == ""
         assert end["detail"]["has_more"] is False
@@ -774,13 +774,27 @@ async def test_detail_references_are_bound_to_access_key_namespace_and_current_b
     args = {"detail_ref": body["entries"][0]["detail_ref"]}
     other, _ = _make_access_key(cap_log_read="allow")
     data.store.get_access_key_by_hash.side_effect = lambda value: access_key if value == access_key.access_key_hash else other if value == other.access_key_hash else None
-    for tool, caller in (("get_logs", other), ("get_phoenix_diagnostics", access_key)):
-        error, result, outcome = await _call(tool, args, access_key=caller, hass=hass, data=data)
-        assert outcome == "invalid_request" and result["isError"]
-        assert "must-not-disclose" not in json.dumps(error)
+    error, result, outcome = await _call("get_log_detail", args, access_key=other, hass=hass, data=data)
+    assert outcome == "invalid_request" and result["isError"]
+    assert "must-not-disclose" not in json.dumps(error)
     entry.message.append("new variant")
-    error, result, outcome = await _call("get_logs", args, access_key=access_key, hass=hass, data=data)
+    error, result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
     assert outcome == "invalid_request" and "stale" in error and result["isError"]
+
+
+@pytest.mark.asyncio
+async def test_a_phoenix_detail_reference_needs_diagnostics_at_use():
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    access_key.cap_diagnostics = "allow"
+    entry = make_log_entry(name="custom_components.phoenix_mcp", message="phoenix-only text")
+    hass, data = _hass_with_entries(access_key, [entry])
+    body, _result, _outcome = await _call("get_phoenix_diagnostics", {}, access_key=access_key, hass=hass, data=data)
+    args = {"detail_ref": body["entries"][0]["detail_ref"]}
+    chunk, _result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
+    assert outcome == "allowed" and "phoenix-only text" in chunk["detail"]["text"]
+    access_key.cap_diagnostics = "deny"
+    error, result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
+    assert outcome == "invalid_request" and "stale" in error and "phoenix-only" not in json.dumps(error)
 
 
 @pytest.mark.asyncio
@@ -795,17 +809,17 @@ async def test_phoenix_detail_uses_current_strong_scrubbing_and_scope():
     with patch("custom_components.phoenix_mcp.helpers.resolve", side_effect=permission):
         body, _result, _outcome = await _call("get_phoenix_diagnostics", {}, access_key=access_key, hass=hass, data=data)
         args = {"detail_ref": body["entries"][0]["detail_ref"]}
-        chunk, _result, outcome = await _call("get_phoenix_diagnostics", args, access_key=access_key, hass=hass, data=data)
+        chunk, _result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
     assert outcome == "allowed" and "sensor.allowed" in chunk["detail"]["text"]
     for hidden in ("sensor.hidden", "nas.local", "192.168.1.55", "/config", ACCESS_KEY_PREFIX + "a" * 64):
         assert hidden not in chunk["detail"]["text"]
     with patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.NO_ACCESS):
-        error, result, outcome = await _call("get_phoenix_diagnostics", args, access_key=access_key, hass=hass, data=data)
+        error, result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
     assert outcome == "invalid_request" and result["isError"] and "stale" in error
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("tool", ["get_logs", "get_phoenix_diagnostics"])
+@pytest.mark.parametrize("tool", ["get_logs", "get_phoenix_diagnostics", "get_log_detail"])
 async def test_detail_capability_denial_precedes_argument_validation_even_in_pass_through(tool):
     access_key, _ = _make_access_key(cap_log_read="deny")
     access_key.pass_through = True
@@ -861,7 +875,7 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
             access_key.cap_log_read = "deny"
         return page
     with patch("custom_components.phoenix_mcp.mcp_view._collect_log_entries", side_effect=changed_collection):
-        error, result, outcome = await _call("get_logs", {"detail_ref": body["entries"][0]["detail_ref"]},
+        error, result, outcome = await _call("get_log_detail", {"detail_ref": body["entries"][0]["detail_ref"]},
                                              access_key=access_key, hass=hass, data=data)
     assert outcome == "denied" and result["isError"]
     assert "must-not-disclose" not in json.dumps(error)

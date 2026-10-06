@@ -2799,7 +2799,7 @@ def build_provider(cfg: ProviderConfig) -> ClaudeProvider | OpenAICompatProvider
 # provider prompt cache.
 _TOOL_PRIORITY = (
     "get_capability_summary", "get_overview", "search_entities", "recognize_intent",
-    "describe_entity", "describe_area", "get_state", "get_states",
+    "describe_entity", "describe_area", "get_state",
     "call_service", "dry_run_service", "find_available_actions",
 )
 
@@ -2902,7 +2902,6 @@ def _flatten_text(content: list[dict]) -> str:
 
 _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_state": frozenset({"last_changed", "last_updated", "last_reported"}),
-    "get_states": frozenset({"last_changed", "last_updated", "last_reported"}),
     "get_history": frozenset({
         "start", "end", "when", "last_changed", "last_updated", "last_reported",
     }),

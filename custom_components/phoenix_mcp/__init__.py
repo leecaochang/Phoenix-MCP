@@ -388,6 +388,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     from .logger_control import async_get_logger_override_manager
     data.logger_control = await async_get_logger_override_manager(hass)
+    from .debug_capture import async_attach_debug_capture
+    async_attach_debug_capture(hass)
 
     # Build the MESA runtime unconditionally (even under the kill switch): the
     # admin profile API must work regardless, and the enforcement gate is never
@@ -876,6 +878,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         await _async_shutdown_mesa_workers()
+        from .debug_capture import async_detach_debug_capture
+        async_detach_debug_capture(hass)
         if data is not None:
             for label, save in (("usage", data.store.async_flush_last_used), ("audit", data.audit.async_save)):
                 try:

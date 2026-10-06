@@ -293,3 +293,20 @@ async def test_analysis_omits_hidden_consumer_identity_but_reaches_visible_match
     assert len(matches) == 1
     assert matches[0].get("id", matches[0].get("automation_id")) == "hidden-auto"
     assert matches[0]["name"] == "hidden-name"
+
+
+async def test_config_check_locates_errors_only_for_a_key_that_can_open_the_file(hass):
+    hass.config.components.add("sensor")
+    text = ("Invalid config for 'sensor' at packages/climate.yaml, line 14: required key 'platform' not provided, "
+            "please check the docs at https://example.invalid")
+    extra = "Invalid config for 'sensor' at configuration.yaml, line 3: 'p4ssw0rd-opt' is an invalid option for 'sensor'"
+    hidden = "Invalid config for 'sensor' at ../outside.yaml, line 2: expected int for 'port', got 'secret-value'"
+    result = SimpleNamespace(errors=[SimpleNamespace(message=m, domain="sensor") for m in (text, extra, hidden)], warnings=[])
+    with patch("homeassistant.helpers.check_config.async_check_ha_config_file", AsyncMock(return_value=result)):
+        editor = body(await discovery._tool_check_config({}, access_key(cap_diagnostics="allow", cap_yaml_edit="allow"), hass))
+        reader = body(await discovery._tool_check_config({}, access_key(cap_diagnostics="allow"), hass))
+    first, second, third = editor["errors"]
+    assert (first["file"], first["line"], first["reason"]) == ("packages/climate.yaml", 14, "required key 'platform' is missing")
+    assert second["reason"] == "contains an option this integration does not support" and "p4ssw0rd" not in json.dumps(editor)
+    assert "file" not in third and "secret-value" not in json.dumps(editor)
+    assert all("file" not in row for row in reader["errors"])

@@ -30,7 +30,7 @@ from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _approved_exec_ctx, _create_registry_mesa_approval, _gate, _record_version,
-    _restore_ctx, _tool_error, _tool_success,
+    _restore_ctx, _tool_error, _tool_success, unknown_label_message,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -160,9 +160,10 @@ def _prepare(
                    for field in ("labels", "add_labels", "remove_labels") if field in changes}
     if collections:
         labels = lr.async_get(hass)
-        if any(labels.async_get_label(label_id) is None
-               for values in collections.values() for label_id in values):
-            raise LocationRefusal("A referenced label ID is unavailable.")
+        missing = sorted(label_id for values in collections.values() for label_id in values
+                         if labels.async_get_label(label_id) is None)
+        if missing:
+            raise LocationRefusal(unknown_label_message(hass, missing[0]))
         added, removed = collections.get("add_labels", set()), collections.get("remove_labels", set())
         if added & removed:
             raise LocationRefusal("A label cannot be both added and removed.")

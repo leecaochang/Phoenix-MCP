@@ -28,6 +28,7 @@ from .const import (
     MAX_FILE_BYTES,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     REDACTION_SENTINEL,
+    REGISTRY_ID_HINT_MAX,
 )
 from .data import PhoenixData
 from .device_semantics import (
@@ -63,6 +64,47 @@ def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
     import voluptuous_serialize  # noqa: PLC0415
 
     return voluptuous_serialize.convert(schema, custom_serializer=custom_serializer)
+
+
+def unknown_label_message(hass: HomeAssistant, label_id: str) -> str:
+    """Refuse an unknown label and name the label IDs that do exist."""
+    from homeassistant.helpers import label_registry as lr  # noqa: PLC0415
+
+    known = sorted(lr.async_get(hass).async_list_labels(), key=lambda label: label.label_id)
+    listed = ", ".join(f"{label.label_id} ({label.name})" for label in known[:REGISTRY_ID_HINT_MAX])
+    more = f" and {len(known) - REGISTRY_ID_HINT_MAX} more" if len(known) > REGISTRY_ID_HINT_MAX else ""
+    return f"Unknown label id: {label_id}. " + (
+        f"Existing label ids: {listed}{more}." if known else "No labels exist yet; create one in Home Assistant first.")
+
+
+def unknown_category_message(hass: HomeAssistant, scope: str, category_id: str) -> str:
+    """Refuse an unknown category and name the categories of that scope."""
+    from homeassistant.helpers import category_registry as cr  # noqa: PLC0415
+
+    known = sorted(cr.async_get(hass).async_list_categories(scope=scope), key=lambda item: item.category_id)
+    listed = ", ".join(f"{item.category_id} ({item.name})" for item in known[:REGISTRY_ID_HINT_MAX])
+    more = f" and {len(known) - REGISTRY_ID_HINT_MAX} more" if len(known) > REGISTRY_ID_HINT_MAX else ""
+    return f"Unknown category id {category_id!r} in scope {scope!r}. " + (
+        f"Categories in this scope: {listed}{more}." if known else "This scope has no categories yet.")
+
+
+def offset_page(rows: list, args: dict, *, default_limit: int, max_limit: int) -> tuple[list, dict] | str:
+    """Slice one offset page; returns (page, envelope) or a caller-facing error.
+
+    The envelope matches search_entities: total before paging, the offset used,
+    has_more, and next_offset only when another page exists.
+    """
+    limit, offset = args.get("limit", default_limit), args.get("offset", 0)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= max_limit:
+        return f"limit must be an integer from 1 to {max_limit}."
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        return "offset must be a non-negative integer."
+    page = rows[offset:offset + limit]
+    envelope: dict[str, Any] = {"count": len(page), "total": len(rows), "offset": offset,
+                                "has_more": offset + limit < len(rows)}
+    if envelope["has_more"]:
+        envelope["next_offset"] = offset + limit
+    return page, envelope
 
 
 def _tool_success(text: str) -> dict:

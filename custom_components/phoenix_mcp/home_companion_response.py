@@ -152,8 +152,8 @@ class ResponseEvidence:
         if name not in {'get_capability_summary'}:
             self.successful_reads += 1
         self.last_read_failed = False
-        rows = ([body] if name == 'get_state' and isinstance(body, dict) else
-                body if name == 'get_states' and isinstance(body, list) else
+        rows = (body['states'] if name == 'get_state' and isinstance(body, dict) and isinstance(body.get('states'), list) else
+                [body] if name == 'get_state' and isinstance(body, dict) else
                 body.get('entities', []) if name == 'search_entities' and isinstance(body, dict) else [])
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get('entity_id'), str):
@@ -165,9 +165,9 @@ class ResponseEvidence:
                 label = eid
             if len(self.candidates) < HOME_COMPANION_MAX_REPORT_ENTITIES:
                 self.candidates[eid] = label
-            if name in {'get_state', 'get_states'} and eid in self.targets:
+            if name == 'get_state' and eid in self.targets:
                 self.observed[eid] = {**attrs, 'state': row.get('state')}
-            if name in {'get_state', 'get_states', 'search_entities'} and isinstance(row.get('state'), str) and len(self.readings) < HOME_COMPANION_MAX_REPORT_ENTITIES:
+            if name in {'get_state', 'search_entities'} and isinstance(row.get('state'), str) and len(self.readings) < HOME_COMPANION_MAX_REPORT_ENTITIES:
                 unit = attrs.get('unit_of_measurement', '')
                 self.readings[eid] = f"{label}: {row['state']}" + (f" {unit}" if isinstance(unit, str) and unit else '')
 

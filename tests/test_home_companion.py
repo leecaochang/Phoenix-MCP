@@ -361,7 +361,7 @@ async def test_invalid_final_reply_after_control_reports_possible_effects_withou
     assert result['status'] == 'completed'
     assert result['execution'] == 'accepted' and result['verification'] == 'not_verified'
     assert len(calls) == 1 and hass.states.get('light.selected').state == 'on'
-    assert result['tool_outcomes'] == [{'tool':'light__HassLightSet','outcome':'allowed'}, {'tool':'get_states','outcome':'allowed'}]
+    assert result['tool_outcomes'] == [{'tool':'light__HassLightSet','outcome':'allowed'}, {'tool':'get_state','outcome':'allowed'}]
     assert 'accepted' in result['message']
     assert 'Check in Home Assistant' in result['message']
     assert 'do not resend' in result['message']
@@ -452,7 +452,7 @@ async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(
     assert result['status'] == ('completed' if write_first else 'provider_error')
     if not write_first:
         assert 'No device command was attempted' in result['message']
-    assert result['tool_outcomes'][-1] == {'tool':'get_states' if write_first else 'get_state','outcome':'allowed'}
+    assert result['tool_outcomes'][-1] == {'tool':'get_state','outcome':'allowed'}
     assert len(catalogs) == (3 if write_first else 2)
     assert len(calls) == int(write_first)
     assert not companion[0].agent_recovery.blocks(companion[1].id)
@@ -890,7 +890,7 @@ async def test_room_targets_follow_registry_area_even_when_names_suggest_other_r
     await companion[0].store.async_patch_settings(voice_agent_detail_level='concise')
     scripted(monkeypatch, [
         [('intent__HassTurnOff', {'area': area.name, 'domain': ['light']})],
-        [('get_states', {'entity_ids': targets})],
+        [('get_state', {'entity_id': targets, 'projection': {'kind': 'full'}})],
         json.dumps({'status': 'completed', 'message': 'All done.'}),
     ])
     report = payload(await rpc(hass, companion, args={'request': 'turn off lights in steve office'}))

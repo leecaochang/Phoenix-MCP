@@ -15,16 +15,16 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
         "type": "string", "pattern": "^[0-9a-f]{64}$",
-        "description": "system_log only. Access-key-bound detail_ref from a returned bucket. Fetch one bounded scrubbed text chunk; omit query filters, limit and cursor. Stale references require a fresh query.",
+        "description": "The detail_ref of one bucket from get_logs or get_phoenix_diagnostics.",
     },
     "detail_field": {
         "type": "string", "enum": ["message", "exception"], "default": "message",
-        "description": "Detail retrieval only. Select a retained message variant or the exception traceback.",
+        "description": "message for a retained message variant, exception for the traceback.",
     },
     "message_index": {
         "type": "integer", "minimum": 0, "default": 0,
@@ -32,7 +32,7 @@ _SYSTEM_LOG_DETAIL_PROPERTIES = {
     },
     "detail_offset": {
         "type": "integer", "minimum": 0, "default": 0,
-        "description": "Detail retrieval only. Character offset in the full scrubbed text. Continue with detail.next_offset; detail.has_more reports remaining text.",
+        "description": "Character offset in the full scrubbed text. Continue with detail.next_offset; detail.has_more reports remaining text.",
     },
 }
 
@@ -70,34 +70,24 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_state",
         "description": (
-            "Get the current state of a Home Assistant entity. Required projection.kind selects compact "
-            "(state plus domain-specific key attributes), full, or fields with fields=[...] for exact fields "
-            "(e.g. \"state\", \"attr.brightness\"). For everything "
+            "Get the current state of one Home Assistant entity, or of several in one call by passing a list of "
+            "entity IDs. Required projection.kind selects compact (state plus domain-specific key attributes), "
+            "full, or fields with fields=[...] for exact fields (e.g. \"state\", \"attr.brightness\"). A list "
+            "returns states in request order plus not_found for IDs that do not exist or are outside this access "
+            "key's scope. To find entities by name, domain, area or state use search_entities; for everything "
             "about one entity, use describe_entity."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "Entity ID, e.g. light.living_room."},
+                "entity_id": {"oneOf": [
+                    {"type": "string", "description": "One entity ID, e.g. light.living_room."},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": GET_STATE_MAX_IDS,
+                     "description": "Several entity IDs, read in one call."},
+                ], "description": "Entity ID, e.g. light.living_room, or a list of entity IDs."},
                 "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
             },
             "required": ["entity_id", "projection"],
-        },
-    },
-    {
-        "name": "get_states",
-        "description": (
-            "Get the current state of every entity this access key can access (may be a large response). "
-            "To find specific entities or filter by domain, area, or state use search_entities; "
-            "for a counts-only orientation use get_overview. Returns a compact, domain-aware view per "
-            "entity when projection.kind is compact; choose full or fields for another projection."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "projection": {"type": "object", "description": "Required output projection for every state.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
-            },
-            "required": ["projection"],
         },
     },
     {
@@ -119,13 +109,13 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2048,
-                    "description": "Optional requested image width in pixels.",
+                    "description": "Optional width in pixels. Home Assistant rescales only when both width and height are given and the camera serves JPEG; otherwise the camera's own size is returned.",
                 },
                 "height": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2048,
-                    "description": "Optional requested image height in pixels.",
+                    "description": "Optional height in pixels; give width too, or no rescaling happens.",
                 },
             },
             "required": ["entity_id"],
@@ -134,11 +124,12 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_history",
         "description": (
-            "Get a bounded, chronological page of Recorder history for one accessible entity. "
-            "Defaults to state_changes, which returns compact attribute-free state transitions and "
+            "Get a bounded page of Recorder history for one accessible entity. Pages run oldest first by "
+            "default; set order to newest_first for the most recent changes (for example when something last "
+            "happened). Defaults to state_changes, which returns compact attribute-free state transitions and "
             "supports arbitrary time ranges. significant_states returns scrubbed full state records "
             "that Home Assistant considers significant, not every sample, and is limited to 7 days. "
-            "Follow has_more with next_cursor; there is intentionally no estimated total."
+            "Follow has_more with next_cursor and the same order; there is intentionally no estimated total."
         ),
         "inputSchema": {
             "type": "object",
@@ -164,6 +155,12 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "maximum": 1000,
                     "default": 100,
                     "description": "Maximum rows in this page.",
+                },
+                "order": {
+                    "type": "string",
+                    "enum": ["oldest_first", "newest_first"],
+                    "default": "oldest_first",
+                    "description": "oldest_first pages forward from start_time; newest_first pages backward from end_time.",
                 },
                 "cursor": {
                     "type": "string",
@@ -384,7 +381,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "name": "get_calendar_events",
         "description": (
             "List events from an accessible calendar entity within a time window (defaults to the next 7 "
-            "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity."
+            "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity. "
+            "Events are paged in start order (total, has_more, next_offset)."
         ),
         "inputSchema": {
             "type": "object",
@@ -398,6 +396,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "ISO timestamp or relative string. Defaults to 7 days after start.",
                 },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum events to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Events to skip; pass next_offset from the previous page."},
             },
             "required": ["entity_id"],
         },
@@ -415,7 +415,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "unless stop_actions=false), script.turn_on (start, inputs in data.variables), "
             "script.turn_off (stop all runs), or scene.turn_on (activate). Named script services "
             "require the exact script entity target and wait for completion; their inputs go directly "
-            "in data. Use create/edit tools for configuration and set_entity for registry disabling."
+            "in data. Use create/edit tools for configuration and set_entity for registry disabling. "
+            "The result's targets reports how many entities were called, each one's state right after the call, "
+            "and any that were unavailable, which Home Assistant skips without failing the call. Use "
+            "find_available_actions with include_fields to learn a service's data fields first."
         ),
         "inputSchema": {
             "type": "object",
@@ -828,7 +831,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "pagination. This is not a continuous raw log: repeated records share one bucket and "
             "live bucket updates can move records between pages. Search matches full scrubbed text before compaction. "
             "Response byte limits can return fewer buckets than limit; continue with next_cursor. "
-            "Use a bucket's detail_ref with detail_field, message_index and detail_offset for bounded detail chunks. "
+            "Pass a bucket's detail_ref to get_log_detail for its full scrubbed text. "
+            "Set source=integration_debug to read the INFO and DEBUG records of integrations whose level was "
+            "raised with set_integration_log_level (Home Assistant's system log never keeps them); it also requires "
+            "Diagnostics and accepts integration, search, limit and cursor. "
             "Set source=fault_log for a protected "
             "bounded tail of home-assistant.log.fault, requiring both Log read and Diagnostics. "
             "Fault dumps preserve all thread lines within each block, support scrubbed search, "
@@ -839,11 +845,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                **_SYSTEM_LOG_DETAIL_PROPERTIES,
                 "source": {
-                    "type": "string", "enum": ["system_log", "fault_log"],
+                    "type": "string", "enum": ["system_log", "fault_log", "integration_debug"],
                     "default": "system_log",
-                    "description": "system_log reads the HA ring; fault_log reads native fault dumps and also requires Diagnostics.",
+                    "description": "system_log reads the HA ring; fault_log reads native fault dumps; integration_debug reads captured INFO/DEBUG records. fault_log and integration_debug also require Diagnostics.",
                 },
                 "order": {
                     "type": "string", "enum": ["newest_first", "oldest_first"],
@@ -852,12 +857,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "level": {
                     "type": "string",
                     "enum": ["WARNING", "ERROR"],
-                    "description": "system_log only. Minimum log level. WARNING returns WARNING+ERROR; ERROR returns ERROR only. Defaults to WARNING. Home Assistant's system log holds WARNING and above only, so INFO and DEBUG entries never enter it and cannot be read through this tool; asking for one is an error rather than a WARNING result.",
+                    "description": "system_log only. Minimum log level. WARNING returns WARNING+ERROR; ERROR returns ERROR only. Defaults to WARNING. Home Assistant's system log holds WARNING and above only, so INFO and DEBUG entries never enter it; read those with source integration_debug. Asking for INFO or DEBUG here is an error rather than a WARNING result.",
                 },
                 "integration": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "system_log only. Optional integration name to filter by (e.g. 'hue', 'mqtt'). Matches homeassistant.components.<name> and custom_components.<name>.",
+                    "description": "system_log and integration_debug. Optional integration name to filter by (e.g. 'hue', 'mqtt'). Matches homeassistant.components.<name> and custom_components.<name>.",
                 },
                 "logger": {
                     "type": "string",
@@ -897,13 +902,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "redaction for credentials, topology, paths, opaque identifiers, and inaccessible "
             "entities. Uses the same bounded source-status, coverage, filter, and cursor contract "
             "as get_logs, including compact previews, explicit truncation, full scrubbed search, "
-            "byte-bounded pages and access-key-bound detail_ref text chunks. Requires both Diagnostics and Log read capabilities."
+            "byte-bounded pages and access-key-bound detail_ref values for get_log_detail. Requires both Diagnostics and Log read capabilities."
         ),
         "caps": ["cap_diagnostics", "cap_log_read"],
         "inputSchema": {
             "type": "object",
             "properties": {
-                **_SYSTEM_LOG_DETAIL_PROPERTIES,
                 "level": {
                     "type": "string",
                     "enum": ["WARNING", "ERROR"],
@@ -940,6 +944,21 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Opaque next_cursor from the previous page. Reuse the same filters.",
                 },
             },
+        },
+    },
+    {
+        "name": "get_log_detail",
+        "description": (
+            "Fetch one bounded, scrubbed text chunk of a log bucket returned by get_logs (system_log) or "
+            "get_phoenix_diagnostics, by the bucket's detail_ref. A reference works only for the access key "
+            "that received it and only while the bucket is unchanged; a stale one needs a fresh query. "
+            "Continue long text with detail.next_offset while detail.has_more is true."
+        ),
+        "cap": "cap_log_read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {**_SYSTEM_LOG_DETAIL_PROPERTIES},
+            "required": ["detail_ref"],
         },
     },
     {
@@ -1751,7 +1770,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "list_floors",
         "description": (
             "List Home Assistant floors that contain at least one entity this access key can access, "
-            "with a count of accessible areas and entities on each floor."
+            "with a count of accessible areas and entities on each floor and the accessible areas themselves "
+            "(area_id and name)."
         ),
         "cap": "cap_registry_read",
         "inputSchema": {"type": "object", "properties": {}},
@@ -1769,7 +1789,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "enabled devices; set registry_state to disabled or all to include disabled entries. A device "
             "is visible through an explicit device grant or an accessible attached entity. Rows include "
             "effective/original/user names, area, disabled state, labels, manufacturer/model, accessible "
-            "entity count, owner count, and the visible parent device id. Sensitive device identity is omitted."
+            "entity count, owner count, and the visible parent device id. Sensitive device identity is omitted. "
+            "Filter by area, owning integration or a name/manufacturer/model query; results are paged "
+            "(total, has_more, next_offset)."
         ),
         "cap": "cap_registry_read",
         "inputSchema": {
@@ -1781,6 +1803,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "default": "enabled",
                     "description": "Filter by device-registry disabled state.",
                 },
+                "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias for every area on it."},
+                "integration": {"type": "string", "description": "Owning integration domain, e.g. zha or hue."},
+                "query": {"type": "string", "description": "Case-insensitive text matched against name, manufacturer and model."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum rows to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Rows to skip; pass next_offset from the previous page."},
             },
         },
     },
@@ -1810,25 +1837,27 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "whose integration currently publishes no state. Registry-only access is inherited from "
             "the entity's device or domain. "
             "For semantic/profile-based discovery (tags, classification, control mode) use mesa_query_profiles instead. "
-            "A multi-word query matches entities containing all the words (in entity_id or friendly_name), and "
-            "results are ranked by relevance so the best matches lead. Filters combine with AND. Returns a compact "
-            "list (entity_id, state, friendly_name, domain, area); each "
+            "A multi-word query matches entities containing all the words (in entity_id, friendly_name, or the "
+            "entity's Assist aliases), and results are ranked by relevance so the best matches lead. Filters combine "
+            "with AND. Returns a compact list (entity_id, state, friendly_name, domain, area); each "
             "result also carries control_mode when its MESA nature is non-default (read_only, confirm, prohibited), "
             "so you can spot restricted entities without a follow-up describe_entity call, and entity_category "
-            "(config or diagnostic) when the entity is a setup/health entity rather than a primary control. "
-            "total counts all scoped matching entities before the row limit; count is the number returned. "
+            "(config or diagnostic) when the entity is a setup/health entity rather than a primary control, and "
+            "hidden true when it is hidden in Home Assistant's UI. "
+            "total counts all scoped matching entities before paging; count is the number returned. When has_more "
+            "is true, call again with offset set to next_offset for the next page. "
             "For counts alone, use limit=1 to avoid enumerating the full list."
         ),
         "cap": "cap_search",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Substring matched against entity_id and friendly name (case-insensitive)."},
+                "query": {"type": "string", "description": "Words matched against entity_id, friendly name and Assist aliases (case-insensitive)."},
                 "domain": {
                     "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
                     "description": "Restrict to one or more domains, e.g. light or [light, switch].",
                 },
-                "area": {"type": "string", "description": "Area name (case-insensitive) or area_id."},
+                "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias, which matches every area on that floor (case-insensitive)."},
                 "device_class": {"type": "string", "description": "Exact device_class attribute, e.g. motion, temperature."},
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},
                 "unavailable": {"type": "boolean", "description": "If true, only entities in state unavailable or unknown."},
@@ -1844,6 +1873,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Add is_group and visible direct member_entity_ids. Lists may be incomplete; hidden HA entities remain visible when permitted. is_group false means no valid explicit membership, not proof of a leaf; null means no live state or resource bounds prevented inspection. Discovery only, not execution or approval scope.",
                 },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum matching entities to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Number of ranked matches to skip; pass next_offset from the previous page."},
             },
         },
     },
@@ -1914,6 +1944,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "native trigger/condition rather than a generic equivalent. Includes the entity's MESA "
             "control_mode when MESA is active. Runtime controls include descriptions explaining start, "
             "stop, enable and trigger behavior. Named script services are listed only for this entity. "
+            "Set include_fields to get each service's data fields (required, type, range, options, example) "
+            "limited to the ones this entity supports, before calling call_service. "
             "Returns 'not found' if the entity is not accessible."
         ),
         "cap": "cap_search",
@@ -1921,6 +1953,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "entity_id": {"type": "string", "description": "The entity to find actions for."},
+                "include_fields": {"type": "boolean", "default": False, "description": "Add each service's data fields, as this entity can use them."},
             },
             "required": ["entity_id"],
         },
@@ -2474,7 +2507,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "check_ha_config",
-        "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Detailed messages are withheld; inspect the Home Assistant configuration check and logs.",
+        "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Each error carries a value-free reason (for example a missing required key), and, for an access key with YAML editing, the config-relative file and line to fix. Messages that could echo configured values are withheld.",
         "cap": "cap_diagnostics",
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -2813,8 +2846,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "watch_entity",
         "description": (
             "Wait (up to timeout seconds, max 30) for an accessible entity to change state, then return "
-            "the new state. Use to verify the effect of an action you just took. Returns changed=false if "
-            "nothing changed within the window. Blocks the call until a change or the timeout."
+            "the new state. Returns changed=false if nothing changed within the window. Blocks the call until "
+            "a change or the timeout. To verify an action you just took, pass until_state with the state you "
+            "expect: it returns at once with reached=true when the entity is already there, so a change that "
+            "landed before this call is not missed."
         ),
         "cap": "cap_config_read",
         "inputSchema": {
@@ -2822,6 +2857,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "entity_id": {"type": "string", "description": "Accessible entity to watch for a state change."},
                 "timeout": {"type": "integer", "minimum": 1, "maximum": 30, "default": 30, "description": "Maximum seconds to wait for a change."},
+                "until_state": {"type": "string", "description": "Return only once the state equals this value, immediately if it already does; reached reports whether it did."},
             },
             "required": ["entity_id"],
         },
@@ -3050,10 +3086,16 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "devices. Returns safe registry metadata, normalized state and disabled reason, scrubbed setup "
             "failure reason, feature support (null when probing is inconclusive), preferences, and accessible "
             "entity/device counts. Never returns config-entry data, options, unique IDs, discovery identity, "
-            "URLs, credentials, or network identity. Use entry_id with integration management tools."
+            "URLs, credentials, or network identity. Use entry_id with integration management tools. Filter by "
+            "domain or a title query; results are paged (total, has_more, next_offset)."
         ),
         "caps_any": ["cap_integration_write", "cap_integration_reconfigure"],
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Exact integration domain, e.g. mqtt."},
+                "query": {"type": "string", "description": "Case-insensitive text matched against domain and title."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum rows to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Rows to skip; pass next_offset from the previous page."},
+        }},
     },
     {
         "name": "set_integration",
@@ -3833,7 +3875,6 @@ def _annot(read_only: bool, destructive: bool, idempotent: bool, open_world: boo
 _TOOL_ANNOTATIONS: dict[str, dict] = {
     # Entity reads and the approval/report tools.
     "get_state": _annot(True, False, True),
-    "get_states": _annot(True, False, True),
     "get_camera_image": _annot(True, False, True),
     "get_history": _annot(True, False, True),
     "get_statistics": _annot(True, False, True),
@@ -3862,6 +3903,7 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_script": _annot(True, False, True),
     "get_logs": _annot(True, False, True),
     "get_phoenix_diagnostics": _annot(True, False, True),
+    "get_log_detail": _annot(True, False, True),
     "get_logbook": _annot(True, False, True),
     "list_integration_log_levels": _annot(True, False, True),
     "set_integration_log_level": _annot(False, True, True),

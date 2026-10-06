@@ -21,10 +21,6 @@ _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
         "detailed": 'projection: {"kind":"full"} (or {"kind":"compact"})',
         "fields": 'projection: {"kind":"fields","fields":[...]}',
     },
-    "get_states": {
-        "detailed": 'projection: {"kind":"full"} (or {"kind":"compact"})',
-        "fields": 'projection: {"kind":"fields","fields":[...]}',
-    },
     "get_calendar_events": {"calendar_id": "entity_id"},
     "wait_for_approval": {"approval_id": 'approval_ids: ["<approval_id>"]'},
     "call_service": {
@@ -216,7 +212,7 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
     nested_error = nested_argument_error(tool, args)
     if nested_error and tool not in {"call_service", "dry_run_service"}:
         return out, nested_error
-    if tool in {"get_state", "get_states"}:
+    if tool == "get_state":
         projection = out.pop("projection", None)
         if not isinstance(projection, dict):
             return out, "projection is required and must be an object."

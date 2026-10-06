@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant, valid_entity_id
+from homeassistant.util import dt as dt_util
 
 from ..const import CAP_ALLOW, MESA_MODE_OFF
 from ..data import PhoenixData
@@ -30,6 +31,29 @@ _MAX_CAMERA_DIMENSION = 2048
 _MAX_CAMERA_IMAGE_BYTES = 4 * 1024 * 1024
 _CAMERA_FETCH_TIMEOUT_SECONDS = 30
 _ALLOWED_CAMERA_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/gif"})
+
+
+def _image_size(data: bytes, mime_type: str) -> tuple[int, int] | None:
+    """Read pixel dimensions from a PNG, GIF or JPEG header; None when unreadable."""
+    if mime_type == "image/png" and len(data) >= 24 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if mime_type == "image/gif" and len(data) >= 10 and data[:4] == b"GIF8":
+        return int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")
+    if mime_type == "image/jpeg" and data[:2] == b"\xff\xd8":
+        index = 2
+        while index + 9 <= len(data):
+            if data[index] != 0xFF:
+                return None
+            marker = data[index + 1]
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+                index += 2
+                continue
+            length = int.from_bytes(data[index + 2:index + 4], "big")
+            # Start-of-frame markers carry height then width.
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return int.from_bytes(data[index + 7:index + 9], "big"), int.from_bytes(data[index + 5:index + 7], "big")
+            index += 2 + length
+    return None
 
 
 def _camera_denied(resource: str, outcome: str = "denied") -> tuple[dict, str, str]:
@@ -118,11 +142,14 @@ async def _tool_get_camera_image(
         return _tool_error("The camera returned an unsupported image format."), "invalid_request", entity_id
 
     encoded = base64.b64encode(image_bytes).decode("ascii")
-    metadata = {
+    metadata: dict[str, Any] = {
         "entity_id": entity_id,
         "mime_type": content_type,
         "bytes": len(image_bytes),
+        "retrieved_at": dt_util.utcnow().isoformat(),
     }
+    if (size := _image_size(image_bytes, content_type)) is not None:
+        metadata["width"], metadata["height"] = size
     if width is not None:
         metadata["requested_width"] = width
     if height is not None:

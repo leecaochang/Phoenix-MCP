@@ -89,6 +89,37 @@ def parse_recorder_window(
     return RecorderWindow(start=start, end=end, page_start=page_start, limit=raw_limit)
 
 
+NEWEST_PAGE_MAX_PROBES = 40
+
+
+async def newest_page(fetch: Any, start: datetime, end: datetime, limit: int) -> tuple[list[Any], bool]:
+    """Return the newest rows in (start, end), oldest first, without unbounded reads.
+
+    `fetch(lower, end, n)` returns at most n ascending rows strictly after lower.
+    Recorder can only bound a query from its oldest end, so this narrows the lower
+    bound by bisection until the window holds no more than `limit` rows. Every
+    probe is limited to limit + 1 rows. Returns (rows, has_more); has_more means
+    older rows remain before the returned ones.
+    """
+    rows = await fetch(start, end, limit + 1)
+    if len(rows) <= limit:
+        return rows, False
+    too_wide, fits = start, end
+    best: list[Any] = []
+    for _ in range(NEWEST_PAGE_MAX_PROBES):
+        middle = too_wide + (fits - too_wide) / 2
+        if middle in (too_wide, fits):
+            break
+        rows = await fetch(middle, end, limit + 1)
+        if len(rows) > limit:
+            too_wide = middle
+        else:
+            fits, best = middle, rows
+            if len(rows) == limit:
+                break
+    return best, True
+
+
 def iso_utc(value: datetime) -> str:
     return dt_util.as_utc(value).isoformat()
 

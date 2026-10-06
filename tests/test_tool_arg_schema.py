@@ -168,7 +168,6 @@ def test_catalog_v2_removes_retired_flat_public_fields():
     defs = _tool_defs()
     retired = {
         "get_state": {"detailed", "fields"},
-        "get_states": {"detailed", "fields"},
         "get_calendar_events": {"calendar_id"},
         "wait_for_approval": {"approval_id"},
         "get_relationships": {"entity_id", "device_id", "integration", "area", "label"},

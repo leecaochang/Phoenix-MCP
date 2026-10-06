@@ -103,7 +103,7 @@ def test_evidence_overflow_never_silently_becomes_verified():
     evidence=ResponseEvidence()
     ids=tuple('light.e'+str(i) for i in range(HOME_COMPANION_MAX_REPORT_ENTITIES+1))
     evidence.observe('intent__HassTurnOn','allowed',receipt(ids),{})
-    evidence.observe('get_states','allowed',result([{'entity_id':eid,'state':'on'} for eid in ids]))
+    evidence.observe('get_state','allowed',result({'states': [{'entity_id':eid,'state':'on'} for eid in ids]}))
     assert len(evidence.targets)==HOME_COMPANION_MAX_REPORT_ENTITIES
     assert not evidence.verified
     assert build_report('completed','',evidence,'en')['status']=='partial'
@@ -196,8 +196,8 @@ def test_room_readback_distinguishes_confirmed_lights_from_unavailable_exception
     evidence.observe('intent__HassTurnOff', 'allowed', receipt(ids), {})
     evidence.targets[ids[-1]] = 'Garage Switch Qwerty Lights'
     evidence.areas = dict.fromkeys(ids, 'Steve Office')
-    evidence.observe('get_states', 'allowed', result([
-        {'entity_id': eid, 'state': 'unavailable' if eid == ids[-1] else 'off'} for eid in ids]))
+    evidence.observe('get_state', 'allowed', result({'states': [
+        {'entity_id': eid, 'state': 'unavailable' if eid == ids[-1] else 'off'} for eid in ids]}))
     report = build_report('completed', 'Everything worked.', evidence, 'en', style='warm', detail=detail)
     assert report['execution'] == 'accepted' and report['verification'] == 'not_verified'
     assert report['next_step'] == 'check_state' and report['retry_policy'] == 'no_replay'
@@ -215,7 +215,7 @@ def test_room_summary_requires_a_shared_canonical_area_for_every_summarized_targ
     evidence = ResponseEvidence()
     ids = ('light.one', 'light.two')
     evidence.observe('intent__HassTurnOn', 'allowed', receipt(ids), {})
-    evidence.observe('get_states', 'allowed', result([{'entity_id': eid, 'state': 'on'} for eid in ids]))
+    evidence.observe('get_state', 'allowed', result({'states': [{'entity_id': eid, 'state': 'on'} for eid in ids]}))
     for areas in [{}, {ids[0]: 'Office'}, {ids[0]: 'Office', ids[1]: 'Hallway'}]:
         evidence.areas = areas
         message = build_report('completed', '', evidence, 'en', detail='concise')['message']
