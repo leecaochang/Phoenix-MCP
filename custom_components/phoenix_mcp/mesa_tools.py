@@ -30,7 +30,7 @@ from .mesa import async_semantic_moments, build_caller_context
 from .mesa_core import InheritanceResolver, ProfileQueryResult, ProfileStore
 from .mesa_core.mcp.schemas import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
 from .mesa_core.mcp.tools import MesaToolHandlers
-from .policy_engine import Permission, resolve
+from .policy_engine import Permission, resolve, resolve_read
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -428,9 +428,11 @@ async def async_call_mesa_tool(
     get_semantic_moments = None
     if tool_name in _ENTITY_TARGETED:
         entity_id = args.get("entity_id")
-        # An out-of-scope or ghost entity must look exactly like a nonexistent
-        # one. resolve() also enforces the phx-domain blocklist.
-        if entity_id and not _is_visible(entity_id, access_key, hass):
+        # An out-of-scope, unexposed or ghost entity must look exactly like a
+        # nonexistent one. resolve() also enforces the phx-domain blocklist. The
+        # scoped store keeps the plain resolver: hiding an addressable entity's
+        # layer there would relax the policy it resolves.
+        if entity_id and resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
             return (
                 _tool_success(json.dumps(_not_found_envelope(entity_id))),
                 "not_found",

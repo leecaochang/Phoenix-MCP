@@ -333,7 +333,7 @@ async def test_structured_get_state_seed_reaches_permission_resolution(
     seed = {name: _placeholder(name, spec) for name, spec in properties.items()}
     resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
 
-    with patch.object(mcp_view, "resolve", resolver):
+    with patch.object(mcp_view, "resolve_read", resolver):
         result, outcome, resource = await _call_tool(
             "get_state", seed, _access_key("allow"), hass, _data(), "req", "1.2.3.4"
         )
@@ -348,7 +348,7 @@ async def test_structured_get_state_list_seed_reaches_permission_resolution(
     """Positive control for the list form: every requested ID reaches the resolver."""
     resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
 
-    with patch.object(mcp_view, "resolve", resolver):
+    with patch.object(mcp_view, "resolve_read", resolver):
         result, outcome, _ = await _call_tool(
             "get_state", {"entity_id": ["light.a", "light.b"], "projection": {"kind": "compact"}},
             _access_key("allow"), hass, _data(),
@@ -428,7 +428,7 @@ async def test_get_state_attack_reaches_deliberately_broken_resolver(
         if str(args.get("entity_id", "")).startswith("../../../etc/")
     )
 
-    with patch.object(mcp_view, "resolve", side_effect=RuntimeError("mutation reached")):
+    with patch.object(mcp_view, "resolve_read", side_effect=RuntimeError("mutation reached")):
         with pytest.raises(RuntimeError, match="mutation reached"):
             await _call_tool(
                 "get_state", attack, _access_key("allow"), hass, _data(), "req", "1.2.3.4"

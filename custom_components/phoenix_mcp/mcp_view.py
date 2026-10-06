@@ -14,7 +14,6 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from collections.abc import Callable
 from typing import Any, Literal, cast
 
 import voluptuous as vol
@@ -236,7 +235,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -848,16 +847,12 @@ def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
     return _lean_state(scrubbed)
 
 
-def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant,
-                    expose: Callable[[str], bool] | None) -> tuple[Any, Permission]:
+def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[Any, Permission]:
     """Return (state, permission) for one requested ID, or (None, ...) when unreadable."""
-    perm = resolve(entity_id, access_key, hass)
+    perm = resolve_read(entity_id, access_key, hass)
     if perm not in (Permission.READ, Permission.WRITE):
         return None, perm
-    state = hass.states.get(entity_id)
-    if state is not None and expose is not None and not expose(state.entity_id):
-        return None, Permission.NO_ACCESS
-    return state, perm
+    return hass.states.get(entity_id), perm
 
 
 async def _tool_get_state(
@@ -868,7 +863,6 @@ async def _tool_get_state(
     if error:
         return _tool_error(error), "invalid_request", "get_state"
     requested = args.get("entity_id")
-    expose = assist_expose_check(access_key, hass)
     fields, detailed = args.get("fields"), bool(args.get("detailed"))
     if isinstance(requested, list):
         if not 1 <= len(requested) <= GET_STATE_MAX_IDS or not all(isinstance(item, str) for item in requested):
@@ -876,7 +870,7 @@ async def _tool_get_state(
         rows: list[dict] = []
         not_found: list[str] = []
         for entity_id in dict.fromkeys(item.strip() for item in requested):
-            state, _ = _readable_state(entity_id, access_key, hass, expose)
+            state, _ = _readable_state(entity_id, access_key, hass)
             if state is None:
                 not_found.append(entity_id)
             else:
@@ -886,7 +880,7 @@ async def _tool_get_state(
     entity_id = str_arg(requested)
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_state"
-    state, perm = _readable_state(entity_id, access_key, hass, expose)
+    state, perm = _readable_state(entity_id, access_key, hass)
     if state is None:
         # Audit-only distinction; the reply is identical for missing and hidden.
         outcome = "denied" if perm in (Permission.NO_ACCESS, Permission.DENY) else "not_found"
@@ -903,7 +897,7 @@ async def _tool_get_history(
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_history"
 
-    perm = resolve(entity_id, access_key, hass)
+    perm = resolve_read(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
         return _tool_error("Entity not found."), "not_found", entity_id
     if perm in (Permission.NO_ACCESS, Permission.DENY):
@@ -1031,7 +1025,7 @@ async def _tool_get_statistics(
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_statistics"
 
-    perm = resolve(entity_id, access_key, hass)
+    perm = resolve_read(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
         return _tool_error("Entity not found."), "not_found", entity_id
     if perm in (Permission.NO_ACCESS, Permission.DENY):
@@ -2024,7 +2018,7 @@ def _logbook_entry_visible(
             return False
         permission = entity_permissions.get(entity_id)
         if permission is None:
-            permission = entity_permissions[entity_id] = resolve(entity_id, access_key, hass)
+            permission = entity_permissions[entity_id] = resolve_read(entity_id, access_key, hass)
         return permission in (Permission.READ, Permission.WRITE)
 
     device_id = entry.get("device_id")
@@ -2116,7 +2110,7 @@ async def _tool_get_logbook(
         ), "invalid_request", "get_logbook"
 
     requested_permissions: list[Permission] = [
-        resolve(entity_id, access_key, hass) for entity_id in entity_ids
+        resolve_read(entity_id, access_key, hass) for entity_id in entity_ids
     ]
     requested_permissions.extend(
         resolve_device_registry_access(device_id, access_key, hass)
@@ -5801,7 +5795,7 @@ async def _tool_watch_entity(
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "watch_entity"
-    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+    if resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
 
     until_state = args.get("until_state")
@@ -5829,9 +5823,9 @@ async def _tool_watch_entity(
         new_state = _WATCH_TIMED_OUT
     finally:
         unsub()
-    # Authority and scope may have changed during the wait.
+    # Authority, scope and Assist exposure may have changed during the wait.
     check_request_authority()
-    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+    if resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
     if new_state is _WATCH_TIMED_OUT:
         timed_out: dict[str, Any] = {"entity_id": entity_id, "changed": False, "timeout_seconds": timeout}

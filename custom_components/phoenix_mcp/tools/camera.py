@@ -21,7 +21,7 @@ from ..data import PhoenixData
 from ..helpers import effective_cap, str_arg
 from ..mesa import build_caller_context
 from ..mesa_audit import request_context
-from ..policy_engine import Permission, canonical_entity_id, resolve
+from ..policy_engine import Permission, canonical_entity_id, resolve_read
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 
@@ -91,7 +91,7 @@ async def _tool_get_camera_image(
     if not valid_entity_id(entity_id) or not entity_id.startswith("camera."):
         return _camera_denied(entity_id, "not_found")
 
-    permission = resolve(entity_id, access_key, hass)
+    permission = resolve_read(entity_id, access_key, hass)
     if permission == Permission.NOT_FOUND:
         return _camera_denied(entity_id, "not_found")
     if permission not in (Permission.READ, Permission.WRITE):

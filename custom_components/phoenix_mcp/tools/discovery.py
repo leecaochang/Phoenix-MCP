@@ -66,7 +66,7 @@ from ..helpers import effective_cap, parse_time_param as _parse_time_param, reda
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -1721,7 +1721,7 @@ async def _tool_find_available_actions(
     if not isinstance(include_fields, bool):
         return _tool_error("include_fields must be a boolean."), "invalid_request", "find_available_actions"
 
-    perm = resolve(entity_id, access_key, hass)
+    perm = resolve_read(entity_id, access_key, hass)
     if perm not in (Permission.READ, Permission.WRITE):
         # Nonexistent and inaccessible give the same response, so no existence oracle.
         return _tool_error("Entity not found."), "not_found", entity_id
@@ -2122,7 +2122,7 @@ def _relationship_scope(
 
     scope = {
         eid for eid in candidates
-        if resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
+        if resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
     }
     if not scope:
         # Byte-identical for "does not exist" and "not in your tree"; the
@@ -2324,7 +2324,12 @@ async def _tool_get_relationships(
         references, references_not_searched = await hass.async_add_executor_job(
             _forward_references_details, hass, access_key, value,
         )
-        body["references"] = references
+        # The worker thread applies the resolver; Assist exposure is asked here,
+        # on the loop, because HA's exposure lookup can write its own records.
+        body["references"] = [
+            eid for eid in references
+            if resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
+        ]
         if references_not_searched:
             body["references_not_searched"] = references_not_searched
     return _tool_success(json.dumps(body, default=str)), "allowed", f"{selector}:{value}"
@@ -2346,7 +2351,7 @@ async def _tool_describe_entity(
     if entry is not None:
         entity_id = entry.entity_id
 
-    perm = resolve_registry_access(entity_id, access_key, hass)
+    perm = resolve_read(entity_id, access_key, hass, registry=True)
     if perm not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
     state = hass.states.get(entity_id)
@@ -2509,7 +2514,7 @@ async def _tool_whatif(
     if not entity_id or hypothetical is None:
         return _tool_error("Missing required arguments: entity_id and hypothetical_state"), "invalid_request", "whatif"
     hypothetical = str(hypothetical)
-    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+    if resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
 
     current = hass.states.get(entity_id)
@@ -2618,7 +2623,7 @@ async def _tool_compare_state(
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "compare_states"
     if len(ids) > 100:
         return _tool_error("entity_id accepts at most 100 entities."), "invalid_request", "compare_states"
-    accessible = [e for e in ids if resolve(e, access_key, hass) in (Permission.READ, Permission.WRITE)]
+    accessible = [e for e in ids if resolve_read(e, access_key, hass) in (Permission.READ, Permission.WRITE)]
     if not args.get("t1"):
         return _tool_error("Missing required argument: t1"), "invalid_request", "compare_states"
     try:
@@ -2770,7 +2775,7 @@ async def _tool_compare_entities(
         # Both sides answer with the same body whether the entity is absent or
         # merely out of scope, and the resource names the tool rather than the
         # id, so a refusal is not an existence oracle.
-        if resolve(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
+        if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
             return _tool_error("Entity not found."), "not_found", "compare_entities"
         state = hass.states.get(eid)
         if state is None:
@@ -3040,7 +3045,7 @@ def reference_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_typ
         refs = config_entity_references(hass, cfg_type, config)
     except Exception:  # noqa: BLE001 - a warning must never fail a saved write
         return []
-    missing = sorted(eid for eid in refs if resolve(eid, access_key, hass) not in (Permission.READ, Permission.WRITE))
+    missing = sorted(eid for eid in refs if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE))
     if not missing:
         return []
     listed = ", ".join(missing[:REFERENCE_WARNING_MAX])
@@ -3093,13 +3098,14 @@ async def _tool_validate_config(
         _LOGGER.error("Config validation raised an unexpected internal error")
         return _tool_error("Internal error validating this config."), "invalid_request", "validate_automation_or_script"
 
-    # Never reveal existence for entities the access key cannot access: a hidden real
-    # entity must be indistinguishable from a typo (no existence oracle). Since
-    # resolve() ghost-checks, READ/WRITE already implies the entity exists, so
-    # exists is reported as the accessible flag and collapses for everything else.
+    # Never reveal existence for entities the access key cannot access: a hidden or
+    # unexposed real entity must be indistinguishable from a typo (no existence
+    # oracle). Since resolve() ghost-checks, READ/WRITE already implies the entity
+    # exists, so exists is reported as the accessible flag and collapses for
+    # everything else.
     refs = []
     for eid in sorted(referenced):
-        accessible = resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
+        accessible = resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
         refs.append({"entity_id": eid, "exists": accessible, "accessible": accessible})
     body = {"type": cfg_type, "valid": valid, "errors": errors, "referenced_entities": refs}
     return _tool_success(json.dumps(body, default=str)), "allowed", "validate_automation_or_script"

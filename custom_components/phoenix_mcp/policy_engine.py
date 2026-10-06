@@ -542,7 +542,8 @@ def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Cal
     Non-None only for pass_through access keys with use_assist_exposure; scoped access keys
     are filtered by their permission tree alone. This is the one shared
     implementation for every entity-filter path (filter_entities_for_access_key,
-    build_permitted_states/entity_ids, resolve_intent_entities). The rest of the
+    build_permitted_states/entity_ids, resolve_intent_entities) and for
+    single-entity reads through resolve_read. The rest of the
     filter predicate (domain blocklist, Phoenix-platform sensors, pass-through
     WRITE) lives in resolve() itself, so those paths need only this plus resolve().
     """
@@ -556,6 +557,29 @@ def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Cal
         return async_should_expose(hass, "conversation", entity_id)
 
     return _exposed
+
+
+def resolve_read(
+    entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, registry: bool = False
+) -> Permission:
+    """Read permission for one named entity: the resolver, then the Assist-exposure filter.
+
+    Every tool that discloses one caller-named entity's state, attributes, history
+    or relationships goes through this, so a pass-through access key with the
+    Assist filter on gets the same answer for an unexposed entity as for a missing
+    one. `registry=True` starts from resolve_registry_access for tools that also
+    describe registry-only entities. The predicate runs only after the resolver
+    found the entity, and on its canonical ID: HA's exposure lookup records an
+    unregistered ID it has not seen, so a ghost or differently cased ID must never
+    reach it. Must run on the event loop for the same reason.
+    """
+    permission = (resolve_registry_access if registry else resolve)(entity_id, access_key, hass)
+    if permission not in (Permission.READ, Permission.WRITE):
+        return permission
+    expose = assist_expose_check(access_key, hass)
+    if expose is not None and not expose(canonical_entity_id(entity_id, hass)):
+        return Permission.NO_ACCESS
+    return permission
 
 
 def filter_entities_for_access_key(

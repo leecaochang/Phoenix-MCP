@@ -1141,7 +1141,7 @@ async def test_tools_call_get_state_denied_entity_not_accessible():
     data = _make_data(access_key)
     hass = _make_hass(data)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.NO_ACCESS
 
@@ -1175,7 +1175,7 @@ async def test_tools_call_get_state_success():
     hass = _make_hass(data)
     hass.states.get.return_value = state_mock
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
@@ -1243,7 +1243,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
     data = _make_data(access_key)
     hass = _make_hass(data)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.NOT_FOUND
 
@@ -1258,7 +1258,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
             base_url="http://homeassistant.local"
         )
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
         mock_resolve.return_value = Permission.DENY
 
         result_denied, _m, _r, outcome_denied = await _dispatch_mcp(
@@ -1433,7 +1433,7 @@ async def test_tools_call_get_state_lean_default_and_detailed():
         "last_updated": "t",
         "context": {"id": "c"},
     }
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
         with patch("custom_components.phoenix_mcp.mcp_view.scrub_sensitive_attributes", return_value=full):
@@ -1487,10 +1487,10 @@ async def test_get_logbook_scopes_to_accessible_entities():
         {"entity_id": "light.secret", "message": "turned off", "when": 2.0},
         {"name": "Some event", "message": "no entity id", "when": 3.0},
     ]
-    # _logbook_entry_visible (mcp_view.resolve) does the scoping under test; the
+    # _logbook_entry_visible (mcp_view.resolve_read) does the scoping under test; the
     # extra filter_service_response redaction pass is tested elsewhere, so stub it
     # to identity here (it would otherwise hit a real entity registry on the mock).
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve", side_effect=_res), \
+    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read", side_effect=_res), \
          patch("custom_components.phoenix_mcp.mcp_view.filter_service_response", side_effect=lambda d, t, h: d), \
          patch("custom_components.phoenix_mcp.mcp_view.async_ws_command", new=AsyncMock(return_value=entries)):
         res, _m, _r, outcome = await _dispatch_mcp(
@@ -1515,7 +1515,7 @@ async def test_get_calendar_events_returns_events_for_accessible_calendar():
     hass.data[DATA_COMPONENT] = MagicMock()
     hass.data[DATA_COMPONENT].get_entity.return_value = entity
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},
@@ -1533,7 +1533,7 @@ async def test_get_calendar_events_rejects_non_calendar_entity():
     data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "light.kitchen"}},
@@ -1548,7 +1548,7 @@ async def test_get_calendar_events_not_found_when_inaccessible():
     data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.NO_ACCESS):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.NO_ACCESS):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},

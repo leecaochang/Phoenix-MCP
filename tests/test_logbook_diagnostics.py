@@ -118,7 +118,7 @@ async def test_resource_lists_are_deduplicated_and_capped_at_100_unique_values()
     entries = [{"entity_id": "light.one", "when": 1.0, "state": "on"}]
     command = AsyncMock(return_value=entries)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
@@ -183,7 +183,7 @@ async def test_context_cannot_be_combined_with_entity_or_device_narrowing():
 )
 async def test_invalid_or_oversized_ranges_are_rejected_before_ha(args):
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
@@ -200,7 +200,7 @@ async def test_invalid_or_oversized_ranges_are_rejected_before_ha(args):
 async def test_narrowed_31_day_window_and_combined_resource_payload_are_allowed():
     command = AsyncMock(return_value=[])
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         return_value=Permission.READ,
     ) as entity_resolve, patch(
         "custom_components.phoenix_mcp.mcp_view.resolve_device_registry_access",
@@ -234,7 +234,7 @@ async def test_inaccessible_and_missing_requested_resources_are_wire_identical()
     responses = []
     for permission in (Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY):
         with patch(
-            "custom_components.phoenix_mcp.mcp_view.resolve",
+            "custom_components.phoenix_mcp.mcp_view.resolve_read",
             return_value=permission,
         ), patch(
             "custom_components.phoenix_mcp.mcp_view.async_ws_command",
@@ -277,7 +277,7 @@ async def test_any_inaccessible_resource_rejects_the_whole_combined_request():
         return Permission.READ if entity_id == "light.ok" else Permission.NO_ACCESS
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         side_effect=entity_permission,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.resolve_device_registry_access",
@@ -324,7 +324,7 @@ async def test_entity_permission_takes_precedence_and_device_only_rows_use_devic
         return Permission.READ if device_id == "device-ok" else Permission.NO_ACCESS
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         side_effect=entity_permission,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.resolve_device_registry_access",
@@ -361,7 +361,7 @@ async def test_redaction_precedes_search_and_only_safe_fields_are_searchable():
 
     async def run(search):
         with patch(
-            "custom_components.phoenix_mcp.mcp_view.resolve",
+            "custom_components.phoenix_mcp.mcp_view.resolve_read",
             return_value=Permission.READ,
         ), patch(
             "custom_components.phoenix_mcp.mcp_view.filter_service_response",
@@ -388,7 +388,7 @@ async def test_total_and_truncated_are_computed_before_most_recent_limit():
         {"entity_id": "light.ok", "message": "second", "when": 2.0},
     ]
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
@@ -437,7 +437,7 @@ def test_published_resource_lists_describe_the_normalized_bound():
 @pytest.mark.asyncio
 async def test_visible_entry_shape_drift_is_an_error_not_false_chronology():
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve",
+        "custom_components.phoenix_mcp.mcp_view.resolve_read",
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",

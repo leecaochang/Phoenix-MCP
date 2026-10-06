@@ -28,7 +28,7 @@ from ..helpers import (
     redact_structure,
 )
 from ..mesa import async_apply_mesa_to_call
-from ..policy_engine import Permission, resolve
+from ..policy_engine import Permission, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
@@ -130,8 +130,11 @@ def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssi
     """Authorize before inspecting the integration or its feature flags."""
     if not isinstance(entity_id, str) or not valid_entity_id(entity_id):
         raise ValueError("entity_id must be a calendar entity ID.")
+    # Reads also honor the pass-through Assist-exposure filter; a write addresses
+    # an explicit target exactly as call_service does.
+    permission = resolve(entity_id, access_key, hass) if write else resolve_read(entity_id, access_key, hass)
     allowed = (Permission.WRITE,) if write else (Permission.READ, Permission.WRITE)
-    if resolve(entity_id, access_key, hass) not in allowed:
+    if permission not in allowed:
         raise PermissionError("Calendar not found.")
     if not entity_id.startswith("calendar."):
         raise ValueError("entity_id must be a calendar entity ID.")

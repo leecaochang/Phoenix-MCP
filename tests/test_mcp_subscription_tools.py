@@ -128,7 +128,7 @@ class TestWatchUntilState:
         from custom_components.phoenix_mcp.policy_engine import Permission
         hass.states.async_set("light.kitchen", "on", {})
         calls = iter([Permission.READ, Permission.NO_ACCESS])
-        with patch.object(mcp_view, "resolve", side_effect=lambda *a: next(calls)):
+        with patch.object(mcp_view, "resolve_read", side_effect=lambda *a: next(calls)):
             content, outcome, _ = await _call(
                 "watch_entity", {"entity_id": "light.kitchen", "timeout": 1}, _access_key(), hass)
         assert outcome == "not_found"
