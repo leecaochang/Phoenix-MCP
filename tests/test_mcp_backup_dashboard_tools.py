@@ -268,7 +268,10 @@ class TestDashboard:
         assert outcome == "invalid_request"
 
     async def test_delete(self, hass):
-        with _patch_lovelace_ws(None) as m:
+        # An auto-generated dashboard has no stored layout to retain.
+        with _patch_lovelace_ws(None) as m, patch(
+            "custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=None),
+        ):
             content, outcome, _ = await _call("delete_dashboard", {"dashboard_id": "d1"}, _access_key(), hass)
         assert outcome == "allowed"
         calls = [call.args for call in m.await_args_list]

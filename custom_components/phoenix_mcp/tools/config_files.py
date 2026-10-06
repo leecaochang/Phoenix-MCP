@@ -101,6 +101,7 @@ async def _recoverable_file_write(
     """Persist the file-family before image, dispatch once, and verify readback."""
     recovery = data.config_recovery
     resource = f"authored_file:{rel}"
+    dispatched = False
     try:
         before = await hass.async_add_executor_job(_authored_file_snapshot, rel, before_exists, before_content, snapshot_type)
         expected = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, content, snapshot_type)
@@ -122,6 +123,7 @@ async def _recoverable_file_write(
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The file changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", operation
                 check_request_authority()
+                dispatched = True
                 try:
                     await hass.async_add_executor_job(_write_text_atomic, path, content)
                 except (WriteError, OSError):
@@ -158,6 +160,8 @@ async def _recoverable_file_write(
         return _tool_error(str(err)), "invalid_request", operation
     except (OSError, WriteError):
         _LOGGER.exception("%s recovery write failed for %s", operation, rel)
+        if not dispatched:
+            return _tool_error("The recovery snapshot could not be saved, so nothing was written."), "invalid_request", operation
         return _tool_error("The file write or its recovery readback failed; inspect configuration recovery before retrying."), "invalid_request", operation
     return None
 

@@ -58,7 +58,7 @@ from .tool_input import decode_container_strings, tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args, unknown_argument_error
-from .const import UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import CALL_SERVICE_NO_TARGET_CAPS, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -347,6 +347,13 @@ def _tool_caps(tool_def: dict) -> tuple[str, ...]:
     return _tool_required_caps(tool_def) + _tool_any_caps(tool_def)
 
 
+def _write_gate_open(internal_name: str, access_key: AccessKeyRecord, has_write: bool) -> bool:
+    """Whether a write-gated tool can do anything for this access key."""
+    return has_write or (internal_name == "call_service" and any(
+        effective_cap(access_key, cap) != CAP_DENY for cap in CALL_SERVICE_NO_TARGET_CAPS
+    ))
+
+
 def _tool_is_announced(
     tool_def: dict, access_key: AccessKeyRecord, has_write: bool, hass: HomeAssistant
 ) -> bool:
@@ -371,7 +378,9 @@ def _tool_is_announced(
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(
         tool_def["name"], tool_def["name"]
     )
-    if not caps and not any_caps and internal_name in _WRITE_GATED_TOOLS and not has_write:
+    if not caps and not any_caps and internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(
+        internal_name, access_key, has_write
+    ):
         return False
     return _requires_satisfied(tool_def, hass)
 
@@ -433,7 +442,7 @@ def _tool_gate_map(
             else:
                 usable.append(name)
         elif internal_name in _WRITE_GATED_TOOLS:
-            (usable if has_write else unavailable).append(name)
+            (usable if _write_gate_open(internal_name, access_key, has_write) else unavailable).append(name)
         else:
             usable.append(name)
     result: dict[str, Any] = {
@@ -1392,6 +1401,9 @@ async def _execute_call_service(
     # DUAL_GATE_SERVICES have no entities in hass.states; routing them through
     # resolve_service_targets always produces an empty list and a spurious 403.
     # The cap_restart gate above is the only permission check required.
+    if service_key == "homeassistant/restart" and not service_data:
+        # One restart path, so every restart leaves the durable restart receipt.
+        return await _execute_restart_ha({}, access_key, hass, data)
     if service_key in DUAL_GATE_SERVICES:
         return await _dispatch_no_target_tool_call(
             hass, access_key, domain=domain, service=service, service_data=service_data,
@@ -1678,6 +1690,11 @@ async def _tool_log_query(
     # caller that asked for INFO would hide the dropped level. Safe to surface
     # because the cap check above already ran, so a denied access key never reaches
     # a message about its own argument.
+    # A non-string filter would otherwise read as no filter and widen the page.
+    malformed = [key for key in ("integration", "logger", "search")
+                 if args.get(key) is not None and not isinstance(args[key], str)]
+    if malformed:
+        return _tool_error(f"{', '.join(malformed)} must be a string."), "invalid_request", tool_name
     raw_level = str_arg(args.get("level"), "WARNING").strip().upper() or "WARNING"
     if raw_level not in LOG_LEVELS:
         return _tool_error(LOG_LEVEL_ERROR_MESSAGE), "invalid_request", tool_name
@@ -1896,6 +1913,9 @@ async def _tool_get_logbook(
             "invalid_request",
             "get_logbook",
         )
+    if ("entity_ids" in args or "device_ids" in args) and not (entity_ids or device_ids):
+        # An empty resource selector is a mistake, not a request for the whole home.
+        return _tool_error("A resources target needs at least one entity_ids or device_ids value."), "invalid_request", "get_logbook"
 
     raw_context = args.get("context_id")
     context_id = None
@@ -7621,6 +7641,8 @@ async def _tool_create_backup(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a backup (Confirm-gated)."""
+    if effective_cap(access_key, "cap_backup") != CAP_DENY and (refusal := _backup_agent_refusal(args)):
+        return refusal
     blocked = await _gate(
         "cap_backup", access_key, hass, data,
         tool_name="create_backup", args=args, request_id=request_id,
@@ -7631,11 +7653,22 @@ async def _tool_create_backup(
     return await _execute_create_backup(args, access_key, hass, data)
 
 
+def _backup_agent_refusal(args: dict) -> tuple[dict, str, str] | None:
+    """Refuse a malformed agent_ids instead of silently choosing a local agent."""
+    agent_ids = args.get("agent_ids")
+    if agent_ids is None or (isinstance(agent_ids, list) and agent_ids
+                             and all(isinstance(item, str) and item for item in agent_ids)):
+        return None
+    return _tool_error("agent_ids must be a non-empty array of backup agent IDs; omit it to use a local agent."), "invalid_request", "create_backup"
+
+
 async def _execute_create_backup(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    if refusal := _backup_agent_refusal(args):
+        return refusal
     agent_ids = args.get("agent_ids")
-    if not isinstance(agent_ids, list) or not agent_ids:
+    if agent_ids is None:
         # Auto-detect: the default agent is install-type dependent (hassio.local on
         # HAOS/supervised, backup.local on Core). Prefer a local one.
         try:

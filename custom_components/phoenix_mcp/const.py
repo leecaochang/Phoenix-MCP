@@ -684,6 +684,9 @@ DUAL_GATE_SERVICES = frozenset({
     "homeassistant/restart",
     "homeassistant/stop",
 })
+# call_service reaches these no-target services by capability alone, so it is
+# announced to an access key holding one of them even without entity write scope.
+CALL_SERVICE_NO_TARGET_CAPS = ("cap_restart", "cap_yaml_edit")
 
 SCRIPT_ENTITY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
 RUNTIME_SERVICE_GUIDANCE = {

@@ -564,3 +564,69 @@ async def test_pre_dispatch_refusal_does_not_leave_uncertain_barrier(hass):
     assert result[1] == "invalid_request"
     assert d.config_recovery.records()[0]["phase"] == "not_applied"
     await d.config_recovery.begin("dashboard_layout:lovelace", "next", t.id, {})
+
+
+async def test_deleting_a_dashboard_keeps_a_restorable_layout(hass, hass_admin_user):
+    """HA deletes the stored layout with the registry row; its cards must not be lost."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    from custom_components.phoenix_mcp.tools.lovelace import _execute_create_dashboard, _execute_delete_dashboard
+    from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
+    created = await _execute_create_dashboard({"config": {"url_path": "audit-cards", "title": "Cards"}}, t, hass, d)
+    row = body(created)["dashboard"]
+    layout = {"views": [{"title": "Home", "cards": [{"type": "markdown", "content": "keep me"}]}]}
+    saved = await _execute_set_dashboard_config({"url_path": "audit-cards", "config": layout}, t, hass, d)
+    assert saved[1] == "allowed", saved
+    deleted = await _execute_delete_dashboard({"dashboard_id": row["id"]}, t, hass, d)
+    assert deleted[1] == "allowed", deleted
+    record = d.config_recovery.get(body(deleted)["layout_recovery_id"])
+    assert record["phase"] == "verified" and record["before"]["config"] == layout
+    recreated = await _execute_create_dashboard({"config": {"url_path": "audit-cards", "title": "Cards"}}, t, hass, d)
+    assert recreated[1] == "allowed", recreated
+    args = {"recovery_id": body(deleted)["layout_recovery_id"], "side": "before"}
+    receipt = await _tool_restore_configuration(args, t, hass, d)
+    args.update({k: body(receipt)[k] for k in ("snapshot_digest", "target_fingerprint")})
+    restored = await _tool_restore_configuration(args, t, hass, d)
+    assert restored[1] == "allowed", restored
+    assert await async_get_lovelace_config(hass, "audit-cards") == layout
+
+
+async def test_dashboard_delete_is_refused_when_its_layout_cannot_be_retained(hass, hass_admin_user):
+    from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    from custom_components.phoenix_mcp.tools.lovelace import _execute_create_dashboard, _execute_delete_dashboard
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
+    created = await _execute_create_dashboard({"config": {"url_path": "audit-kept", "title": "Kept"}}, t, hass, d)
+    row = body(created)["dashboard"]
+    await _execute_set_dashboard_config({"url_path": "audit-kept", "config": {"views": [{"cards": []}]}}, t, hass, d)
+    with patch.object(d.config_recovery, "begin", AsyncMock(side_effect=ConfigurationRecoveryError("store unavailable"))):
+        refused = await _execute_delete_dashboard({"dashboard_id": row["id"]}, t, hass, d)
+    assert refused[1] == "invalid_request" and "nothing was deleted" in refused[0]["content"][0]["text"]
+    rows = await async_ws_command(hass, "lovelace/dashboards/list", {})
+    assert any(r["id"] == row["id"] for r in rows)
+
+
+async def test_admin_energy_version_restore_keeps_a_durable_pre_image(hass):
+    from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
+    from custom_components.phoenix_mcp.tools.energy import async_restore_energy_prefs
+    t, d = access_key(cap_energy_write="allow"), runtime()
+    original = {"energy_sources": [], "device_consumption": [{"stat_consumption": "sensor.kettle_energy"}]}
+    prefs = json.loads(json.dumps(original))
+
+    async def dispatch(host, command, payload, **kw):
+        if command == "energy/get_prefs":
+            return json.loads(json.dumps(prefs))
+        prefs.update(json.loads(json.dumps(payload)))
+        return json.loads(json.dumps(prefs))
+
+    rollback = {"device_consumption": [{"stat_consumption": "sensor.oven_energy"}]}
+    with patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", AsyncMock(side_effect=dispatch)):
+        result = await async_restore_energy_prefs(rollback, t, hass, d)
+        assert result[1] == "allowed", result
+        record = d.config_recovery.records()[0]
+        assert record["phase"] == "verified"
+        assert record["before"]["preferences"]["device_consumption"] == original["device_consumption"]
+        saved = dict(prefs)
+        with patch.object(d.config_recovery, "begin", AsyncMock(side_effect=ConfigurationRecoveryError("store unavailable"))):
+            refused = await async_restore_energy_prefs({"device_consumption": []}, t, hass, d)
+    assert refused[1] == "invalid_request" and prefs == saved

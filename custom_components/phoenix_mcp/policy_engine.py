@@ -1038,6 +1038,10 @@ class IntentSelectors(NamedTuple):
     floor: str | None
     domains: list[str] | None
     device_classes: list[str] | None
+    # Selectors the caller supplied in a shape that cannot be used. Any one makes
+    # the whole selection unusable: dropping it would let the remaining selectors
+    # match more than the caller asked for.
+    malformed: tuple[str, ...] = ()
 
     @property
     def none_usable(self) -> bool:
@@ -1067,13 +1071,19 @@ def normalize_intent_selectors(
     be left with no selector at all call it first to answer the caller properly,
     so there is no second copy of the coercion to drift out of agreement.
     """
-    return IntentSelectors(
+    selectors = IntentSelectors(
         name=name if isinstance(name, str) else None,
         area=area if isinstance(area, str) else None,
         floor=floor if isinstance(floor, str) else None,
         domains=_selector_list(domains),
         device_classes=_selector_list(device_classes),
     )
+    supplied = (("name", name, selectors.name), ("area", area, selectors.area),
+                ("floor", floor, selectors.floor), ("domain", domains, selectors.domains),
+                ("device_class", device_classes, selectors.device_classes))
+    malformed = tuple(label for label, raw, usable in supplied
+                      if raw is not None and raw != "" and raw != [] and usable is None)
+    return selectors._replace(malformed=malformed) if malformed else selectors
 
 
 def resolve_intent_entities(
@@ -1104,14 +1114,17 @@ def resolve_intent_entities(
     # A model does not always follow the tool schema (for example a list for name
     # where a string was declared). HA's async_match_targets assumes name/area/floor
     # are plain strings and calls .strip() on them, so a list raises AttributeError;
-    # it likewise iterates the LIST selectors. A wrong-shaped value degrades to "not
-    # provided" and falls through to the zero-selector fail-closed check below.
-    # The coercion lives in normalize_intent_selectors so the native tools can ask
-    # whether anything usable was given without a second copy of these rules.
+    # it likewise iterates the LIST selectors. Any wrong-shaped selector matches
+    # nothing: treating it as absent would let the other selectors widen the
+    # target set beyond the request. The coercion lives in
+    # normalize_intent_selectors so the native tools can explain the refusal
+    # without a second copy of these rules.
     selectors = normalize_intent_selectors(
         name=name, area=area, floor=floor,
         domains=domains, device_classes=device_classes,
     )
+    if selectors.malformed:
+        return []
     name, area, floor = selectors.name, selectors.area, selectors.floor
     domains, device_classes = selectors.domains, selectors.device_classes
 

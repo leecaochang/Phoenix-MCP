@@ -1471,17 +1471,17 @@ class TestResolveIntentEntities:
         result = resolve_intent_entities(hass, access_key, device_classes=["garage"])
         assert result == ["cover.garage"]
 
-    def test_list_typed_name_degrades_to_other_selectors_not_a_crash(self, hass, basic_env):
+    def test_list_typed_name_matches_nothing_rather_than_widening(self, hass, basic_env):
         # A model targeting several locks may send name=["Front Door Lock", "Rear
         # door lock"] (a list) instead of a string. HA's own async_match_targets
         # assumes name is str | None and raises AttributeError on anything else, so
-        # a list name must degrade to "not provided" rather than crash, and a real
-        # domain selector given alongside it still resolves.
+        # it must not crash; and dropping the name would let the domain selector
+        # alone act on every lock, so the whole selection matches nothing.
         access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(
             hass, access_key, domains=["lock"], name=["Front Door Lock", "Rear door lock"]
         )
-        assert result == ["lock.front_door"]
+        assert result == []
 
     def test_list_typed_name_with_no_other_selector_fails_closed(self, hass, basic_env):
         # No domain/device_class alongside the malformed name: degrading name to
@@ -1490,12 +1490,13 @@ class TestResolveIntentEntities:
         access_key = _make_access_key(pass_through=True)
         assert resolve_intent_entities(hass, access_key, name=["a", "b"]) == []
 
-    def test_list_typed_area_and_floor_do_not_crash(self, hass, basic_env):
+    def test_list_typed_area_and_floor_do_not_crash_or_widen(self, hass, basic_env):
         access_key = _make_access_key(pass_through=True)
         result = resolve_intent_entities(
             hass, access_key, domains=["light"], area=["Kitchen"], floor=["Ground"]
         )
-        assert result == ["light.kitchen"]
+        assert result == []
+        assert resolve_intent_entities(hass, access_key, domains=["light"], name="") == ["light.kitchen"]
 
     def test_domain_selector_excludes_config_diagnostic_hidden(self, hass, category_env):
         # Native Hass* tools bypass Assist exposure, so the entity_category/hidden

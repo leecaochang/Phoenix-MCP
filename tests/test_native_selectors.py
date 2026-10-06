@@ -142,7 +142,9 @@ def test_normalizer_never_stringifies_a_wrong_shape():
 async def test_no_usable_selector_is_reported_as_a_bad_argument(handler, args):
     response, outcome, _resource = await handler(args, _access_key(), MagicMock(), MagicMock())
     assert outcome == "invalid_request"
-    assert _text(response) == _NO_SELECTOR_MESSAGE
+    # A malformed selector is named; an absent one gets the generic message.
+    assert _text(response) == _NO_SELECTOR_MESSAGE if "name" not in args else _text(response).startswith(
+        "No usable targeting parameter was given: name has an unusable shape")
     # It must name the parameters and their shapes: the commonest way to land
     # here is a shape error, and "give me a selector" does not fix that.
     for param in ("name", "area", "floor", "domain", "device_class"):
@@ -417,3 +419,31 @@ async def test_light_set_empty_or_wrong_domain_cannot_expand_implicit_selection(
     assert outcome == "invalid_request"
     assert response["isError"]
     resolver.assert_not_called()
+
+
+@pytest.mark.parametrize("args", [
+    {"name": ["Kitchen Light"], "domain": ["light"]},
+    {"name": {"item": "Kitchen Light"}, "domain": ["light"]},
+    {"name": "Kitchen Light", "domain": "light"},
+    {"area": ["Kitchen"], "domain": ["light"]},
+    {"name": "Kitchen Light", "device_class": [3]},
+])
+async def test_one_malformed_selector_never_lets_the_others_widen_the_target(hass, args):
+    """A malformed selector beside a valid one must refuse, not fall back to the valid one."""
+    for eid, name in (("light.kitchen", "Kitchen Light"), ("light.hall", "Hall Light")):
+        hass.states.async_set(eid, "on", {"friendly_name": name})
+    action = AsyncMock(return_value=({}, "allowed", "x"))
+    with patch(f"{NATIVE}._tool_intent_action", action):
+        response, outcome, _ = await _tool_hass_turn_off(args, _access_key(), hass, MagicMock())
+    assert outcome == "invalid_request"
+    assert "has an unusable shape" in _text(response)
+    action.assert_not_awaited()
+
+
+async def test_cancel_all_timers_refuses_a_malformed_area(hass):
+    from custom_components.phoenix_mcp.tools.native import _tool_hass_cancel_all_timers
+    hass.states.async_set("timer.kitchen", "active", {})
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        _, outcome, _ = await _tool_hass_cancel_all_timers({"area": ["Kitchen"]}, _access_key(), hass)
+    assert outcome == "invalid_request"
+    call.assert_not_called()

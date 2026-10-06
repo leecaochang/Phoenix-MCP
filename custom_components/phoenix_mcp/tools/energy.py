@@ -1073,9 +1073,32 @@ async def async_restore_energy_prefs(
     payload = {key: snapshot[key] for key in _PREFS_KEYS if isinstance(snapshot.get(key), list)}
     if not payload:
         return _tool_error("This version holds no Energy configuration to restore."), "invalid_request", tool
+    recovery = data.config_recovery
+    resource = "energy:preferences"
     try:
-        before = await _read_prefs_raw(hass)
-        await async_ws_command(hass, "energy/save_prefs", payload)
+        async with recovery.resource(resource):
+            before = await _read_prefs_raw(hass)
+            # A durable pre-image is taken before the wholesale save, so even an
+            # administrator's rollback can itself be rolled back.
+            rid = await recovery.begin(resource, "energy_version_restore", access_key.id,
+                                       _energy_recovery_snapshot(before),
+                                       expected=_energy_recovery_snapshot({**before, **payload}))
+            try:
+                await recovery.mark(rid, "dispatching")
+                await async_ws_command(hass, "energy/save_prefs", payload)
+                observed = await _read_prefs_raw(hass)
+                if observed != {**before, **payload}:
+                    await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
+                else:
+                    await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                    await recovery.set_source(rid, _energy_recovery_snapshot(observed))
+            except WsDispatchError:
+                await recovery.mark(rid, "unknown", error="save_or_readback_failed")
+                raise
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(f"Energy configuration was not restored: {err}"), "invalid_request", tool
     except WsDispatchError as err:
         _LOGGER.exception("restore energy preferences failed")
         return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool

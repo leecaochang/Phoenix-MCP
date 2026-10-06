@@ -499,9 +499,8 @@ _DOMAIN_TARGET_SELECTORS = (*_BASIC_TARGET_SELECTORS, "domain")
 _ALL_TARGET_SELECTORS = (*_DOMAIN_TARGET_SELECTORS, "device_class")
 
 
-def _selector_refusal_message(selector_names: tuple[str, ...]) -> str:
-    """Describe the targeting fields one native tool actually accepts."""
-    joined = ", ".join(selector_names[:-1]) + f" or {selector_names[-1]}"
+def _selector_shapes(selector_names: tuple[str, ...]) -> str:
+    """State the accepted shape of each targeting field one native tool takes."""
     scalar = [name for name in selector_names if name in _BASIC_TARGET_SELECTORS]
     arrays = [name for name in selector_names if name not in _BASIC_TARGET_SELECTORS]
     shapes: list[str] = []
@@ -509,9 +508,15 @@ def _selector_refusal_message(selector_names: tuple[str, ...]) -> str:
         shapes.append(f"{', '.join(scalar)} must each be a single string")
     if arrays:
         shapes.append(f"{', '.join(arrays)} must each be an array of strings")
+    return "; ".join(shapes) + "."
+
+
+def _selector_refusal_message(selector_names: tuple[str, ...]) -> str:
+    """Describe the targeting fields one native tool actually accepts."""
+    joined = ", ".join(selector_names[:-1]) + f" or {selector_names[-1]}"
     return (
         f"No usable targeting parameter was given. Provide at least one of {joined}. "
-        + "; ".join(shapes) + "."
+        + _selector_shapes(selector_names)
     )
 
 
@@ -543,6 +548,15 @@ def _no_selector_refusal(
             args.get("device_class") if "device_class" in selector_names else None
         ),
     )
+    if selectors.malformed:
+        return (
+            _tool_error(
+                f"No usable targeting parameter was given: {', '.join(selectors.malformed)} has an unusable shape; "
+                + _selector_shapes(selector_names)
+            ),
+            "invalid_request",
+            tool_name,
+        )
     if selectors.none_usable:
         return (
             _tool_error(_selector_refusal_message(selector_names)),
@@ -1606,6 +1620,9 @@ async def _tool_hass_media_player_unmute(
 async def _tool_hass_cancel_all_timers(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
+    # No area is a legitimate "every timer"; a malformed area is not.
+    if normalize_intent_selectors(area=args.get("area")).malformed:
+        return _tool_error("Input validation error: area must be a single string."), "invalid_request", "HassCancelAllTimers"
     entities = resolve_intent_entities(
         hass, access_key,
         domains=["timer"],

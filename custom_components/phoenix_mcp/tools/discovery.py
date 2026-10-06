@@ -1377,6 +1377,12 @@ async def _tool_search_entities(
     if not isinstance(include_membership, bool):
         return _tool_error("include_membership must be a boolean."), "invalid_request", "search_entities"
 
+    raw_domain = args.get("domain")
+    if raw_domain not in (None, "") and not isinstance(raw_domain, str) and not (
+        isinstance(raw_domain, list) and all(isinstance(item, str) for item in raw_domain)
+    ):
+        # Dropping a malformed filter would silently search every domain.
+        return _tool_error("domain must be a string or an array of strings."), "invalid_request", "search_entities"
     f = _parse_search_args(args)
     if f.registry_state not in {"enabled", "disabled", "all"}:
         return _tool_error(

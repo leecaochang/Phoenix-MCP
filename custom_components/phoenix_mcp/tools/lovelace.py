@@ -163,6 +163,7 @@ async def _recoverable_dashboard_save(
     resource_id = url_path or "lovelace"
     resource = f"dashboard_layout:{resource_id}"
     recovery = data.config_recovery
+    dispatched = False
     try:
         before_snapshot = _dashboard_layout_snapshot(url_path, before)
         async with recovery.resource(resource):
@@ -180,6 +181,7 @@ async def _recoverable_dashboard_save(
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard layout changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "dashboard"
                 check_request_authority()
+                dispatched = True
                 try:
                     await async_save_lovelace_config(hass, url_path, after)
                 except WsDispatchError as exc:
@@ -207,6 +209,8 @@ async def _recoverable_dashboard_save(
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", "dashboard"
     except Exception:  # noqa: BLE001 - keep uncertain writes in the recovery store
+        if not dispatched:
+            return _tool_error("The recovery snapshot could not be saved, so the dashboard was not changed."), "invalid_request", "dashboard"
         return _tool_error("Dashboard layout outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "dashboard"
     return None
 
@@ -522,11 +526,59 @@ async def _execute_delete_dashboard(
             return _tool_error("No dashboard found with that dashboard_id."), "invalid_request", "delete_dashboard"
     except (WsDispatchError, ConfigurationRecoveryError) as exc:
         return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "delete_dashboard"
-    return await _recoverable_dashboard_registry_write(
-        dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
-        command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
-        access_key=access_key, hass=hass, data=data,
-    )
+    # Home Assistant deletes the dashboard's stored layout with its registry row,
+    # so the views and cards need their own durable pre-image before anything is
+    # dispatched; an auto-generated dashboard has none to lose.
+    url_path = (before.get("dashboard") or {}).get("url_path")
+    try:
+        layout = await async_get_lovelace_config(hass, url_path) if isinstance(url_path, str) else None
+    except WsDashboardNotFoundError:
+        layout = None
+    except WsDispatchError as exc:
+        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", "delete_dashboard"
+    if layout is None:
+        return await _recoverable_dashboard_registry_write(
+            dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
+            command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
+            access_key=access_key, hass=hass, data=data,
+        )
+    recovery = data.config_recovery
+    resource = f"dashboard_layout:{url_path}"
+    try:
+        async with recovery.resource(resource):
+            layout_rid = await recovery.begin(
+                resource, "dashboard_layout_delete", access_key.id, _dashboard_layout_snapshot(url_path, layout),
+                expected=_dashboard_layout_snapshot(url_path, None))
+            try:
+                await recovery.mark(layout_rid, "dispatching")
+                result = await _recoverable_dashboard_registry_write(
+                    dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
+                    command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
+                    access_key=access_key, hass=hass, data=data,
+                )
+                try:
+                    remaining = await async_get_lovelace_config(hass, url_path)
+                except WsDashboardNotFoundError:
+                    remaining = None
+                if remaining is None:
+                    await recovery.mark(layout_rid, "verified", observed_hash=content_hash({}))
+                    await recovery.set_source(layout_rid, _dashboard_layout_snapshot(url_path, None))
+                else:
+                    await recovery.mark(layout_rid, "not_applied" if remaining == layout else "partial",
+                                        observed_hash=content_hash(remaining))
+            finally:
+                recovery.leave(layout_rid)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", "delete_dashboard"
+    payload, outcome, resource_id = result
+    try:
+        body = json.loads(payload["content"][0]["text"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return result
+    if isinstance(body, dict) and not payload.get("isError"):
+        body["layout_recovery_id"] = layout_rid
+        return _tool_success(json.dumps(body, default=str)), outcome, resource_id
+    return result
 
 
 def _no_stored_config_message(url_path: str | None) -> str:
@@ -558,6 +610,9 @@ async def _tool_get_dashboard_config(
     error = unknown_argument_error("get_dashboard_config", args)
     if error:
         return _tool_error(error), "invalid_request", "get_dashboard_config"
+    refusal = _url_path_refusal(args, "get_dashboard_config")
+    if refusal is not None:
+        return refusal
     url_path = str(args.get("url_path") or "").strip() or None
     try:
         config = await async_get_lovelace_config(hass, url_path)
@@ -596,6 +651,14 @@ async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyReco
     }
 
 
+def _url_path_refusal(args: dict, tool_name: str) -> tuple[dict, str, str] | None:
+    """Refuse a non-string url_path rather than let it select the default dashboard."""
+    value = args.get("url_path")
+    if value is None or isinstance(value, str):
+        return None
+    return _tool_error("url_path must be a string; omit it for the default dashboard."), "invalid_request", tool_name
+
+
 def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for dashboard writes; None means OK to proceed.
 
@@ -603,6 +666,9 @@ def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, st
     so a doomed or destructive request is rejected before a pending approval is
     created. The executor re-validates both at apply time.
     """
+    refusal = _url_path_refusal(args, tool_name)
+    if refusal is not None:
+        return refusal
     config = args.get("config")
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", tool_name
@@ -814,6 +880,9 @@ async def _dashboard_card_current(
     mismatch (expected_hash supplied and stale) is refused here too. Used both
     pre-gate and by the executors.
     """
+    refusal = _url_path_refusal(args, tool_name)
+    if refusal is not None:
+        return refusal
     url_path = str(args.get("url_path") or "").strip() or None
     try:
         current = await async_get_lovelace_config(hass, url_path)
