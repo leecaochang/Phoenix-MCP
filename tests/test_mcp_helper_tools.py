@@ -118,6 +118,43 @@ class TestCreateHelper:
 
 
 class TestConfigFlowHelperCreation:
+    async def test_forms_carry_ha_help_and_rejections_return_the_form_to_fix(
+        self, hass: HomeAssistant, hass_admin_user,
+    ):
+        """HA's own field help reaches the caller; a rejected step comes back with its errors."""
+        for entity_id in ("sensor.a", "sensor.b", "sensor.c"):
+            hass.states.async_set(entity_id, "1")
+        content, outcome, _ = await _call(
+            "create_helper", {"helper_type": "mold_indicator", "flow_steps": []}, _access_key(), hass,
+        )
+        assert outcome == "allowed"
+        fields = {field["name"]: field for field in _json(content)["step"]["schema"]}
+        assert fields["calibration_factor"]["help"] == "Needs to be calibrated to the critical point in the room."
+        assert fields["indoor_temp_sensor"]["help"] == "The entity ID of the indoor temperature sensor."
+
+        final = {"name": "Probe", "indoor_temp_sensor": "sensor.a", "indoor_humidity_sensor": "sensor.b",
+                 "outdoor_temp_sensor": "sensor.c", "calibration_factor": "not a number"}
+        content, outcome, _ = await _call(
+            "create_helper", {"helper_type": "mold_indicator", "flow_steps": [{"step_id": "user", "data": final}]},
+            _access_key(), hass,
+        )
+        body = _json(content)
+        assert outcome == "allowed" and body["status"] == "needs_input"
+        assert body["step"]["step_id"] == "user" and "calibration_factor" in body["step"]["errors"]
+        assert "flow_steps[0]" in body["note"] and "replace" in body["note"]
+        assert {field["name"] for field in body["step"]["schema"]} >= {"calibration_factor"}
+        assert not hass.config_entries.async_entries("mold_indicator")
+
+        content, outcome, _ = await _call(
+            "create_helper",
+            {"helper_type": "statistics", "flow_steps": [{"step_id": "user", "data": {"name": "Stats"}}]},
+            _access_key(), hass,
+        )
+        body = _json(content)
+        assert outcome == "allowed" and body["step"]["step_id"] == "user"
+        assert "entity_id" in body["step"]["errors"] and "flow_steps[0]" in body["note"]
+        assert not hass.config_entries.flow.async_progress_by_handler("statistics")
+
     async def test_mold_indicator_schema_create_and_remove(
         self, hass: HomeAssistant, hass_admin_user,
     ):

@@ -2503,6 +2503,10 @@ AUTHORING_MAX_ERRORS = 8
 AUTHORING_MAX_PATH_DEPTH = 8
 # Trace scoping replaces anything nested deeper than this with a sentinel.
 TRACE_SCOPE_MAX_DEPTH = 32
+# Longest HA field help (data_description or label) attached to a helper flow field.
+HELPER_FIELD_HELP_MAX = 300
+# Longest HA step description attached to a helper flow form.
+HELPER_STEP_HELP_MAX = 600
 
 # Tool advice has separate qualification from direct-command execution.
 TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})

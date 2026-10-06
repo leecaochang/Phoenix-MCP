@@ -322,6 +322,65 @@ async def test_deleted_tag_restore_honors_orphan_read_only_but_accepts_confirm(
     await async_ws_command(hass, "tag/delete", {"tag_id": helper_id})
 
 
+async def _approved_tag_create(hass, data, config: dict) -> tuple[dict, str]:
+    """Run a Confirm-gated tag create through approval and return (content, outcome)."""
+    gate = AsyncMock(return_value=({}, "pending_approval", "approval-1"))
+    access_key = _access_key("tag")
+    with patch("custom_components.phoenix_mcp.tools.helper._gate", gate):
+        _content, outcome, _resource = await _call_tool(
+            "create_helper", {"helper_type": "tag", "config": config}, access_key, hass, data,
+        )
+    assert outcome == "pending_approval", _content
+    content, outcome, _resource = await async_execute_approved_tool(
+        "create_helper", gate.await_args.kwargs["args"], access_key, hass, data
+    )
+    return content, outcome
+
+
+@pytest.mark.parametrize(("config", "occupied", "expected"), [
+    ({"tag_id": "sticker-01", "name": "Front door"}, None, "tag.front_door"),
+    ({"tag_id": "sticker-01", "name": "Front door"}, "tag.front_door", "tag.front_door_2"),
+    ({"tag_id": "Sticker 01"}, None, "tag.sticker_01"),
+])
+async def test_confirmed_tag_create_predicts_the_entity_ha_creates(
+    hass: HomeAssistant, hass_admin_user, config, occupied, expected
+):
+    """HA names a tag's entity from its name, not its tag_id, and avoids taken IDs."""
+    assert await async_setup_component(hass, "tag", {"tag": {}})
+    if occupied:
+        hass.states.async_set(occupied, "unknown")
+    data = await _data(hass)
+    data.mesa.store.set_domain_profile("tag", _profile("tag", "confirm"))
+    content, outcome = await _approved_tag_create(hass, data, config)
+    assert outcome == "allowed", content
+    assert er.async_get(hass).async_get_entity_id("tag", "tag", config["tag_id"]) == expected
+    await async_ws_command(hass, "tag/delete", {"tag_id": config["tag_id"]})
+
+
+async def test_restored_tag_is_checked_against_its_returning_entity(
+    hass: HomeAssistant, hass_admin_user
+):
+    """A recreated tag gets its deleted entity ID back, so MESA must judge that entity."""
+    assert await async_setup_component(hass, "tag", {"tag": {}})
+    await async_ws_command(hass, "tag/create", {"tag_id": "sticker-01", "name": "Front door"})
+    er.async_get(hass).async_update_entity("tag.front_door", new_entity_id="tag.porch_sticker")
+    await async_ws_command(hass, "tag/delete", {"tag_id": "sticker-01"})
+    data = await _data(hass)
+    data.mesa.store.set("tag.porch_sticker", _profile("tag.porch_sticker", "read_only"))
+    record = SimpleNamespace(resource_type="helper", resource_id="tag:sticker-01",
+                             before={"name": "Front door"}, after=None)
+    ws = AsyncMock(wraps=async_ws_command)
+    with patch("custom_components.phoenix_mcp.tools.helper.async_ws_command", ws):
+        content, outcome, _resource = await async_restore_version(record, hass_admin_user.id, hass, data)
+    assert outcome == "denied" and "read_only" in content["content"][0]["text"]
+    assert not any(call.args[1] == "tag/create" for call in ws.await_args_list)
+    data.mesa.store.set("tag.porch_sticker", _profile("tag.porch_sticker", "confirm"))
+    content, outcome, _resource = await async_restore_version(record, hass_admin_user.id, hass, data)
+    assert outcome == "allowed", content
+    assert er.async_get(hass).async_get_entity_id("tag", "tag", "sticker-01") == "tag.porch_sticker"
+    await async_ws_command(hass, "tag/delete", {"tag_id": "sticker-01"})
+
+
 async def test_read_only_blocks_config_flow_helper_settings_before_approval(
     hass: HomeAssistant, hass_admin_user
 ):

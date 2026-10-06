@@ -159,6 +159,10 @@ class TestRead:
         # agent pick a valid replacement without guessing.
         assert fields["entity_id"]["selector"]["entity"]["domain"] == ["sensor"]
         assert fields["hysteresis"]["default"] == 0.0
+        # HA's own strings: the label where no data_description exists, and the
+        # step text that explains how the limits combine.
+        assert fields["entity_id"]["help"] == "Input sensor"
+        assert "lower limit" in body["help"]
 
     async def test_editable_options_is_the_set_a_caller_sends_back(self, hass, helper_entry, as_helper):
         """editable_settings is the intersection of stored settings and flow fields.

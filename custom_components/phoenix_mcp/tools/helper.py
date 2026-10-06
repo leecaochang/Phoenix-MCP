@@ -38,6 +38,8 @@ from homeassistant.util import slugify
 
 from ..const import (
     CAP_DENY,
+    HELPER_FIELD_HELP_MAX,
+    HELPER_STEP_HELP_MAX,
     STORAGE_HELPER_MERGING_TYPES,
     STORAGE_HELPER_REQUEST_FIELDS,
     STORAGE_HELPER_TYPES as HELPER_TYPES,
@@ -374,6 +376,28 @@ def _enforce_helper_mesa_context(
     return context
 
 
+# HA-COUPLING POINT. Mirrors tag._create_entry and EntityRegistry.async_get_or_create
+# (HA 2026.9): the tag's unique_id is its tag_id, but its entity ID comes from the name.
+def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -> str:
+    """The entity ID Home Assistant will give a tag created with this id and name.
+
+    An existing registry entry keeps its ID, and a recently deleted one gets its ID
+    back while that is free. Otherwise the slugified name, or the tag_id when
+    unnamed, takes the next free ID. A deleted entry whose ID is now taken renames
+    from its old name and area, which is not predicted here; the post-create MESA
+    check then removes the tag and refuses, as it does for any wrong prediction.
+    """
+    registry = er.async_get(hass)
+    if existing := registry.async_get_entity_id("tag", "tag", tag_id):
+        return existing
+    deleted = getattr(registry, "deleted_entities", {}).get(("tag", "tag", tag_id))
+    if (deleted is not None and registry.async_get(deleted.entity_id) is None
+            and hass.states.async_available(deleted.entity_id)):
+        return str(deleted.entity_id)
+    available = getattr(registry, "async_get_available_entity_id", None) or registry.async_generate_entity_id
+    return str(available("tag", slugify(name) if name else tag_id))
+
+
 def _helper_create_mesa_entity(
     helper_type: str, args: dict, hass: HomeAssistant
 ) -> str:
@@ -393,16 +417,16 @@ def _helper_create_mesa_entity(
             if isinstance(selected, str) and selected in TEMPLATE_RECOVERY_TYPES:
                 helper_type = selected
                 break
+    config = args.get("config")
+    if helper_type == "tag" and isinstance(config, dict) and isinstance(config.get("tag_id"), str) and config["tag_id"]:
+        name = config.get("name")
+        return _predict_tag_entity_id(hass, config["tag_id"], name if isinstance(name, str) and name else None)
     restore_id = args.get(_HELPER_RESTORE_ID)
     if isinstance(restore_id, str) and restore_id.strip():
         return f"{helper_type}.{slugify(restore_id)}"
-    config = args.get("config")
     suggestion: str | None = None
-    if isinstance(config, dict):
-        if helper_type == "tag" and isinstance(config.get("tag_id"), str):
-            suggestion = config["tag_id"]
-        elif isinstance(config.get("name"), str):
-            suggestion = config["name"]
+    if isinstance(config, dict) and isinstance(config.get("name"), str):
+        suggestion = config["name"]
     if suggestion is None:
         steps = args.get("flow_steps")
         if isinstance(steps, list):
@@ -567,6 +591,67 @@ def _flow_step_body(helper_type: str, result: Any) -> dict[str, Any] | None:
     }
 
 
+def _rejected_step_body(body: dict[str, Any], index: int, errors: dict[str, Any]) -> dict[str, Any]:
+    """The form HA rejected, with its errors, telling the caller to replace that step."""
+    rejected = copy.deepcopy(body)
+    rejected["step"]["errors"] = errors
+    rejected["note"] = (
+        f"Home Assistant rejected flow_steps[{index}]. Keep the earlier steps, replace "
+        "this step's data to fix the errors, and call create_helper again."
+    )
+    return rejected
+
+
+def _invalid_form_errors(err: vol.Invalid) -> dict[str, Any]:
+    """Per-field messages for a schema rejection, keyed as HA's form errors are."""
+    mapped = getattr(err, "schema_errors", None)
+    if isinstance(mapped, dict) and mapped:
+        return {key: "; ".join(map(str, value)) if isinstance(value, list) else value
+                for key, value in mapped.items()}
+    errors: dict[str, Any] = {}
+    for item in err.errors if isinstance(err, vol.MultipleInvalid) else [err]:
+        key = str(item.path[0]) if item.path else "base"
+        errors.setdefault(key, item.error_message or str(item))
+    return errors
+
+
+async def _with_field_help(
+    hass: HomeAssistant, domain: str, category: str, step_id: Any, schema: Any,
+) -> str | None:
+    """Add HA's own English help to each field and return the step's description.
+
+    A field gets its data_description, else its label; section fields read the
+    step's sections.<name> strings. Static integration strings, read with HA's
+    translation helper, so no scope or privacy boundary moves; a missing
+    translation leaves the field as it was.
+    """
+    if not isinstance(step_id, str):
+        return None
+    from homeassistant.helpers.translation import async_get_translations  # noqa: PLC0415
+    try:
+        strings = await async_get_translations(hass, "en", category, [domain])
+    except Exception:  # noqa: BLE001 - help text is optional
+        _LOGGER.debug("No %s translations for %s", category, domain, exc_info=True)
+        return None
+    step = f"component.{domain}.{category}.step.{step_id}."
+
+    def annotate(fields: list, prefix: str) -> None:
+        for field in fields:
+            if not isinstance(field, dict) or not isinstance(field.get("name"), str):
+                continue
+            name = field["name"]
+            text = strings.get(f"{prefix}data_description.{name}") or strings.get(f"{prefix}data.{name}")
+            if isinstance(text, str) and text.strip():
+                field["help"] = text.strip()[:HELPER_FIELD_HELP_MAX]
+            if isinstance(field.get("schema"), list):
+                annotate(field["schema"], f"{step}sections.{name}.")
+
+    if isinstance(schema, list):
+        annotate(schema, step)
+    description = strings.get(f"{step}description")
+    return description.strip()[:HELPER_STEP_HELP_MAX] if isinstance(description, str) and description.strip() else None
+
+
 def _creation_menu_error(body: dict, supplied: dict) -> str | None:
     """Reject unlisted menu targets and extra fields before HA dispatch."""
     if "menu_options" not in body["step"]:
@@ -601,6 +686,13 @@ async def _prepare_config_flow_helper(
     message) on refusal. Every flow opened here is aborted in the finally block.
     """
     flow_id = None
+
+    async def _described(body: dict[str, Any]) -> dict[str, Any]:
+        if described := await _with_field_help(
+                hass, helper_type, "config", body["step"].get("step_id"), body["step"].get("schema")):
+            body["step"]["help"] = described
+        return body
+
     try:
         result = await hass.config_entries.flow.async_init(
             helper_type, context={"source": SOURCE_USER}
@@ -636,7 +728,7 @@ async def _prepare_config_flow_helper(
                     if schema is not None:
                         schema(dict(supplied["data"]))
                 except vol.Invalid as err:
-                    return "error", f"The final helper form was rejected: {err}."
+                    return "form", await _described(_rejected_step_body(body, index, _invalid_form_errors(err)))
                 return "ready", None
 
             # Submitting a form whose last_step is unknown could create an entry
@@ -652,7 +744,7 @@ async def _prepare_config_flow_helper(
                     flow_id, dict(supplied["data"])
                 )
             except vol.Invalid as err:
-                return "error", f"flow_steps[{index}] was rejected: {err}."
+                return "form", await _described(_rejected_step_body(body, index, _invalid_form_errors(err)))
             if result.get("type") == FlowResultType.ABORT:
                 return "error", f"Home Assistant refused this helper flow: {result.get('reason')}."
             if result.get("type") == FlowResultType.CREATE_ENTRY:
@@ -667,12 +759,12 @@ async def _prepare_config_flow_helper(
                 error_body = _flow_step_body(helper_type, result)
                 if error_body is None:
                     return "error", "This helper's rejected form could not be described."
-                return "form", error_body
+                return "form", await _described(_rejected_step_body(error_body, index, error_body["step"]["errors"]))
 
         body = _flow_step_body(helper_type, result)
         if body is None:
             return "error", "This helper's creation flow is not a supported form flow."
-        return "form", body
+        return "form", await _described(body)
     except HelperScopeError as exc:
         return "scope_error", str(exc)
     except Exception:  # noqa: BLE001 - integration flow failures become clean tool errors
@@ -1286,6 +1378,13 @@ async def _execute_create_helper(
 ) -> tuple[dict, str, str]:
     helper_type = args.get("helper_type")
     config = args.get("config")
+    if helper_type == "tag":
+        # A tag_id taken since review changes the predicted entity, which would
+        # otherwise surface as a MESA change. Scope first, so absence is no oracle.
+        if scope_error := _scoped_helper_create_scope_error("tag", access_key):
+            return _tool_error(scope_error), "denied", "create_helper"
+        if absence_error := await _tag_create_absence_error(args, hass, "create_helper"):
+            return absence_error
     create_entity = _helper_create_mesa_entity(str(helper_type), args, hass)
     mesa_context = _enforce_helper_mesa_context(
         args,
@@ -2506,6 +2605,9 @@ async def _tool_get_config_entry_options(
                 "send the whole of settings, since the fields it accepts are unknown here."
             )
             return _tool_success(json.dumps(body, default=str)), "allowed", tool
+        if described := await _with_field_help(
+                hass, entry.domain, "options" if mechanism == _OPTIONS else "config", result.get("step_id"), schema):
+            body["help"] = described
         body["schema"] = schema
         # THE FIELDS A CALLER ACTUALLY SENDS BACK, taken from the SCHEMA's own
         # suggested values rather than from the stored settings. Intersecting
