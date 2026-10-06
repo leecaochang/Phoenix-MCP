@@ -219,7 +219,8 @@
       "attentionCheckRequired": "Проверьте результат действия перед продолжением.",
       "attentionNotReviewable": "Этот элемент нельзя подтвердить.",
       "attentionSaveFailed": "Не удалось сохранить проверку. Действие всё ещё требует проверки.",
-      "attentionReviewConflict": "Это действие выполняется или уже проверено. Обновите список."
+      "attentionReviewConflict": "Это действие выполняется или уже проверено. Обновите список.",
+      "providerModelOrAuto": "Передайте либо модель, либо auto, но не оба параметра."
     },
     "agentchat": {
       "answerAnyway": "Все равно ответить",
@@ -1810,7 +1811,19 @@
       "agentcliTencentHint": "Выберите площадку, на которой создан ваш API-ключ TokenHub. Ключи действуют только на своей площадке. Активируйте нужные модели в консоли TokenHub.",
       "agentcliMiMoHint": "Используйте API-ключ Xiaomi MiMo с оплатой по использованию. Ключи подписки Token Plan используют отдельные конечные точки и здесь не поддерживаются.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Автоматически (новейшая доступная)",
+      "agentcliDefaultModelAuto": "Модель по умолчанию: автоматически, сейчас {model}",
+      "agentcliDefaultModelAutoPending": "Модель по умолчанию: автоматически (ожидание списка моделей провайдера)",
+      "agentcliModelReplaced": "Провайдер больше не предлагает {retired}, поэтому этот аккаунт использует {model}.",
+      "agentcliRegion": "Регион",
+      "agentcliRegionGlobal": "Глобальный",
+      "agentcliRegionChina": "Китай",
+      "agentcliRegionEu": "Европа",
+      "agentcliRegionUs": "США",
+      "agentcliZaiChina": "Китай (BigModel)",
+      "agentcliMimoPayg": "Оплата по факту использования",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "shell": {
       "agentChat": "Чат с агентом",

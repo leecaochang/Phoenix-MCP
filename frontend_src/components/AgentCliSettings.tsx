@@ -21,6 +21,10 @@ import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 // different warning and shows again: a dismissal never silently covers a NEW
 // problem.
 const DISMISS_KEY = "phx-agentcli-dismissed";
+/** The model select's value for "follow the provider's newest model". */
+const AUTO_MODEL = "";
+/** What the model select shows for an account before the operator changes it. */
+const currentDraft = (inst: AgentCliInstance) => (inst.model_mode === "auto" ? AUTO_MODEL : inst.model);
 
 function readDismissed(): Record<string, true> {
   try {
@@ -201,7 +205,9 @@ export function AgentCliSettings({
    */
   const modelIsStale = (inst: AgentCliInstance) => {
     const models = liveModels[inst.id];
-    return Boolean(inst.model && models && models.length > 0 && !models.includes(inst.model));
+    return Boolean(
+      inst.model_mode !== "auto" && inst.model && models && models.length > 0 && !models.includes(inst.model),
+    );
   };
 
   const [dismissed, setDismissed] = useState<Record<string, true>>(readDismissed);
@@ -305,7 +311,8 @@ export function AgentCliSettings({
     setBusy(true);
     setModelError(null);
     try {
-      await api.setAgentCliProviderModel(id, modelDraft);
+      if (modelDraft === AUTO_MODEL) await api.setAgentCliProviderAuto(id);
+      else await api.setAgentCliProviderModel(id, modelDraft);
       // A different model has different options, and nothing is known about the
       // new one yet. Same offer as the add flow: check before the first
       // conversation rather than after one behaves oddly.
@@ -405,6 +412,7 @@ export function AgentCliSettings({
 
       <ProviderAddForm
         providerTypes={providerTypes}
+        allowAutomatic
         disabled={busy}
         completeLabel={t("settings.agentcliDone")}
         addingLabelKey="settings.agentcliAdding"
@@ -425,11 +433,17 @@ export function AgentCliSettings({
                 onDismiss={() => setDismissedFlag(inst, "retired", true)}
               />
             )}
+            {inst.model_replaced_from && (
+              <div className="agentcli-settings-hint" role="status">
+                {t("settings.agentcliModelReplaced", { retired: inst.model_replaced_from, model: inst.model })}
+              </div>
+            )}
             {editing === inst.id ? (
               <div className="agentcli-settings-model-edit">
                 <BusySelect className="input input-auto" value={modelDraft} busy={busy}
                         aria-label={t("settings.agentcliSelectModel")}
                         onChange={(e) => setModelDraft(e.target.value)}>
+                  <option value={AUTO_MODEL}>{t("settings.agentcliModelAuto")}</option>
                   {(liveModels[inst.id] ?? []).map((m) => (
                     <option key={m} value={m} disabled={cannotCallTools(inst, m)}>
                       {cannotCallTools(inst, m) ? t("settings.agentcliModelNoTools", { model: m }) : m}
@@ -458,7 +472,7 @@ export function AgentCliSettings({
                   </div>
                   <div className="agentcli-settings-form-actions">
                     <BusyButton className="btn btn-primary btn-sm"
-                            busy={busy} disabled={!modelDraft || modelDraft === inst.model}
+                            busy={busy} disabled={modelDraft === currentDraft(inst)}
                             onClick={() => void saveModel(inst.id)}>{t("common.save")}</BusyButton>
                     <BusyButton className="btn btn-text btn-sm" busy={busy}
                             onClick={() => { setEditing(null); setModelError(null); }}>{t("settings.cancel")}</BusyButton>
@@ -467,7 +481,11 @@ export function AgentCliSettings({
               </div>
             ) : (
               <span className="agentcli-settings-model">
-                  {t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") })}
+                  {inst.model_mode === "auto"
+                    ? (inst.model
+                      ? t("settings.agentcliDefaultModelAuto", { model: inst.model })
+                      : t("settings.agentcliDefaultModelAutoPending"))
+                    : t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") })}
                   {modelIsStale(inst) && isDismissed(inst, "retired") && (
                     <WarningBadge text={t("settings.agentcliModelRetired", { model: inst.model })}
                                   onShow={() => setDismissedFlag(inst, "retired", false)} />
@@ -496,7 +514,7 @@ export function AgentCliSettings({
             {editing !== inst.id && (
               <div className="agentcli-account-actions">
                   <IconButton label={t("settings.agentcliChangeModel")} blocked={busy}
-                              onClick={() => { setEditing(inst.id); setModelDraft(inst.model); setModelError(null); }}>
+                              onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); }}>
                     <EditIcon />
                   </IconButton>
                   <IconButton label={t("settings.agentcliRefresh")} busy={refreshing === inst.id}

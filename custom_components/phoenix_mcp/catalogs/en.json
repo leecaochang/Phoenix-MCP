@@ -1355,7 +1355,19 @@
       "agentcliTencentHint": "Choose the site where you created your TokenHub API key. Keys are site-specific. Activate the models you want to use in the TokenHub console.",
       "agentcliMiMoHint": "Use a pay-as-you-go Xiaomi MiMo API key. Token Plan subscription keys use separate endpoints and are not supported here.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automatic (newest available)",
+      "agentcliDefaultModelAuto": "Default model: automatic, currently {model}",
+      "agentcliDefaultModelAutoPending": "Default model: automatic (waiting for the provider's model list)",
+      "agentcliModelReplaced": "{retired} is no longer offered by this provider, so this account is using {model} instead.",
+      "agentcliRegion": "Region",
+      "agentcliRegionGlobal": "Global",
+      "agentcliRegionChina": "China",
+      "agentcliRegionEu": "Europe",
+      "agentcliRegionUs": "United States",
+      "agentcliZaiChina": "China (BigModel)",
+      "agentcliMimoPayg": "Pay as you go",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "agentchat": {
       "answerAnyway": "Answer anyway",
@@ -1755,7 +1767,8 @@
       "attentionCheckRequired": "Check the action outcome before continuing.",
       "attentionNotReviewable": "This item cannot be acknowledged.",
       "attentionSaveFailed": "The review could not be saved. The action still needs review.",
-      "attentionReviewConflict": "This action is running or has already been reviewed. Refresh the list."
+      "attentionReviewConflict": "This action is running or has already been reviewed. Refresh the list.",
+      "providerModelOrAuto": "Send either a model or auto, not both."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",

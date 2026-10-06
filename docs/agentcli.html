@@ -46,6 +46,7 @@
 
         <h2>Before you start: add a provider account</h2>
         <p>Agent Chat needs an AI provider account. Add one hosted provider or a local Ollama server; you can add more accounts later.</p>
+        <p><strong>Models update themselves.</strong> By default an account is set to <em>Automatic</em>: Phoenix reads the provider's own model list every few hours and uses its newest suitable model, so a provider releasing or retiring models needs no Phoenix update. You can still pick a specific model. If a model you picked later disappears from the provider's list, Phoenix switches that account to the newest model of the same family and says so on the account card; a model you typed in yourself, or one the provider never listed, is never replaced. Voice, AI Task and Agent Chat all follow the account's current model. Decision providers always use an exact model and never switch.</p>
         <div class="tool-toolbar provider-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -63,9 +64,9 @@
               <div><dt>Models</dt><dd>Models returned by your region or workspace.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available when thinking is off.</dd></div>
-              <div><dt>Thinking</dt><dd>On or Off on supported models.</dd></div>
+              <div><dt>Thinking</dt><dd>On or Off on hybrid models; thinking-only models always reason.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">New-user quota in eligible regions</span></dd></div>
-              <div><dt>Additional notes</dt><dd>Enter the full HTTPS Base URL. Workspace endpoints include the workspace ID.</dd></div>
+              <div><dt>Additional notes</dt><dd>Enter the full HTTPS Base URL. Workspace endpoints include the workspace ID and are Alibaba's recommended form; the older shared <code>dashscope.aliyuncs.com</code> host stops receiving new features after 30 September 2026. API keys are specific to a region.</dd></div>
             </dl>
             <a class="provider-link" href="https://modelstudio.alibabacloud.com/" target="_blank" rel="noopener">Get Model Studio API access</a>
           </div>
@@ -88,12 +89,12 @@
             <h3>ChatGPT</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>OpenAI's hosted GPT and o-series APIs.</dd></div>
-              <div><dt>Models</dt><dd>Live GPT and reasoning models available to your account.</dd></div>
+              <div><dt>Models</dt><dd>Live chat models available to your account, excluding models that cannot use tools through the Chat Completions API.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Standard GPT models.</dd></div>
-              <div><dt>Thinking</dt><dd>Reasoning levels on o-series and GPT-5 models.</dd></div>
+              <div><dt>Thinking</dt><dd>Reasoning levels on o-series and GPT-5 models when no tools are involved. Tool turns run with reasoning off, because the Chat Completions API cannot combine tools with reasoning on current models.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability varies">Limited test access may be account-dependent</span></dd></div>
-              <div><dt>Additional notes</dt><dd>API billing is separate from a ChatGPT subscription.</dd></div>
+              <div><dt>Additional notes</dt><dd>API billing is separate from a ChatGPT subscription. Choose United States or Europe only for a project set up for that data residency.</dd></div>
             </dl>
             <a class="provider-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">Get an OpenAI API key</a>
           </div>
@@ -102,8 +103,8 @@
             <h3>Claude</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Anthropic's hosted Claude API.</dd></div>
-              <div><dt>Models</dt><dd>Defaults to Claude Opus; you can select another available model.</dd></div>
-              <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
+              <div><dt>Models</dt><dd>Automatic follows the newest Opus model; you can select another available model.</dd></div>
+              <div><dt>Vision</dt><dd>Auto-detected per model.</dd></div>
               <div><dt>Temperature</dt><dd>Not sent by Phoenix.</dd></div>
               <div><dt>Thinking</dt><dd>Adaptive thinking with a selectable effort level.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability no">No standard API free tier</span></dd></div>
@@ -130,7 +131,7 @@
             <h3>Fireworks</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Hosted inference through Fireworks' OpenAI-compatible API.</dd></div>
-              <div><dt>Models</dt><dd>Tool-capable chat models in the live catalogue.</dd></div>
+              <div><dt>Models</dt><dd>Live models available to your account.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available; Check options verifies the selected model.</dd></div>
               <div><dt>Thinking</dt><dd>Model-dependent; use Check options.</dd></div>
@@ -144,7 +145,7 @@
             <h3>Gemini</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Google's Gemini models through its OpenAI-compatible endpoint.</dd></div>
-              <div><dt>Models</dt><dd>Gemini chat models returned by Google.</dd></div>
+              <div><dt>Models</dt><dd>Gemini chat models returned by Google, excluding speech, image, and live-session models.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Not sent by Phoenix.</dd></div>
               <div><dt>Thinking</dt><dd>Minimal to High on Gemini 2.5 and 3 models.</dd></div>
@@ -158,12 +159,12 @@
             <h3>Grok</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>xAI's hosted Grok models through an OpenAI-compatible API.</dd></div>
-              <div><dt>Models</dt><dd>Live models available to your xAI team.</dd></div>
+              <div><dt>Models</dt><dd>Live chat models available to your xAI team, excluding image, video, and voice models.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available when thinking is off.</dd></div>
               <div><dt>Thinking</dt><dd>Off, Low, or High on reasoning models.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability no">No standard API free tier</span></dd></div>
-              <div><dt>Additional notes</dt><dd>API usage draws from prepaid credits or approved invoice billing.</dd></div>
+              <div><dt>Additional notes</dt><dd>API usage draws from prepaid credits or approved invoice billing. The United States endpoint serves only the models xAI hosts there.</dd></div>
             </dl>
             <a class="provider-link" href="https://console.x.ai/" target="_blank" rel="noopener">Get an xAI API key</a>
           </div>
@@ -186,12 +187,12 @@
             <h3>Kimi</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Moonshot's Kimi models through an OpenAI-compatible API.</dd></div>
-              <div><dt>Models</dt><dd>Your account's entitled models, commonly K2.6 and K2.7 for new keys.</dd></div>
+              <div><dt>Models</dt><dd>Your account's entitled models, such as K3, K2.6, and K2.7 Code.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Legacy <code>moonshot-v1</code> models only.</dd></div>
               <div><dt>Thinking</dt><dd>K3: Low, High, or Max. K2: On or Off.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability varies">Account and promotion-dependent</span></dd></div>
-              <div><dt>Additional notes</dt><dd>K3 is plan-gated. Some older model families are unavailable to new accounts.</dd></div>
+              <div><dt>Additional notes</dt><dd>K3 is plan-gated. Some older model families are unavailable to new accounts. Choose China only for a key issued by the Moonshot China platform.</dd></div>
             </dl>
             <a class="provider-link" href="https://platform.moonshot.ai/console/api-keys" target="_blank" rel="noopener">Get a Kimi API key</a>
           </div>
@@ -200,7 +201,7 @@
             <h3>Meta</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Meta's public-preview, OpenAI-compatible Model API.</dd></div>
-              <div><dt>Models</dt><dd>Muse Spark, with Phoenix defaulting to Muse Spark 1.1.</dd></div>
+              <div><dt>Models</dt><dd>The Muse Spark text models. Automatic follows the newest; the data-sharing contributor variants are not offered.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Not sent by Phoenix.</dd></div>
               <div><dt>Thinking</dt><dd>Minimal to X-High; Muse Spark always reasons.</dd></div>
@@ -214,10 +215,10 @@
             <h3>MiniMax</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>MiniMax models through its Anthropic-compatible API.</dd></div>
-              <div><dt>Models</dt><dd>MiniMax M2 and M1 in Phoenix's curated list.</dd></div>
+              <div><dt>Models</dt><dd>The models MiniMax lists for your key, with a built-in list of its current models if the listing is unavailable.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Not sent by Phoenix.</dd></div>
-              <div><dt>Thinking</dt><dd>On or Off; some models always reason.</dd></div>
+              <div><dt>Thinking</dt><dd>On or Off; the M2 series and some newer models always reason.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability no">No standard API free tier</span></dd></div>
               <div><dt>Additional notes</dt><dd>Pay-as-you-go API keys and Token Plan keys are separate.</dd></div>
             </dl>
@@ -228,12 +229,12 @@
             <h3>Mistral AI</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Mistral's hosted OpenAI-compatible Chat Completions API.</dd></div>
-              <div><dt>Models</dt><dd>Active models that declare chat and function calling.</dd></div>
+              <div><dt>Models</dt><dd>Active models that declare chat and function calling, excluding deprecated and Labs models.</dd></div>
               <div><dt>Vision</dt><dd>Auto-detected per model.</dd></div>
               <div><dt>Temperature</dt><dd>Available on supported models.</dd></div>
               <div><dt>Thinking</dt><dd>None or High on <code>mistral-small-latest</code> and <code>mistral-medium-3-5</code>.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">Free mode with included usage</span></dd></div>
-              <div><dt>Additional notes</dt><dd>Refresh models to update Phoenix's capability metadata.</dd></div>
+              <div><dt>Additional notes</dt><dd>Refresh models to update Phoenix's capability metadata. The Europe and United States endpoints serve only the models Mistral hosts in that region.</dd></div>
             </dl>
             <a class="provider-link" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Get a Mistral API key</a>
           </div>
@@ -242,7 +243,7 @@
             <h3>NVIDIA NIM</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>NVIDIA-hosted endpoints for models from many vendors.</dd></div>
-              <div><dt>Models</dt><dd>Live catalogue, excluding obvious embedding and reranking models.</dd></div>
+              <div><dt>Models</dt><dd>Live catalogue, excluding embedding, reranking, safety, and other obvious non-chat models.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available; Check options verifies the selected model.</dd></div>
               <div><dt>Thinking</dt><dd>Model-dependent; use Check options.</dd></div>
@@ -284,7 +285,7 @@
             <h3>OpenCode Zen</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>OpenCode's curated gateway for coding-agent models.</dd></div>
-              <div><dt>Models</dt><dd>Live models available to your Zen account.</dd></div>
+              <div><dt>Models</dt><dd>Models in your Zen account that use the chat completions API. Zen serves Claude, GPT, Gemini, Grok, and most Qwen models through other APIs, so they are not offered here.</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available; Check options verifies the selected model.</dd></div>
               <div><dt>Thinking</dt><dd>Model-dependent; use Check options.</dd></div>
@@ -345,7 +346,7 @@
               <div><dt>Temperature</dt><dd>Available when supported by the selected model and thinking mode.</dd></div>
               <div><dt>Thinking</dt><dd>On/off; temperature applies when thinking is off.</dd></div>
               <div><dt>Free option</dt><dd>Check the provider console for current offers.</dd></div>
-              <div><dt>Additional notes</dt><dd>Use a pay-as-you-go API key. Token Plan subscription keys use separate endpoints and are not supported here.</dd></div>
+              <div><dt>Additional notes</dt><dd>Choose Pay as you go or Token Plan to match the key. The two key types are separate and cannot be mixed.</dd></div>
             </dl>
             <a class="provider-link" href="https://mimo.mi.com/docs/en-US/quick-start/summary/welcome" target="_blank" rel="noopener">Set up Xiaomi MiMo</a>
           </div>
@@ -354,10 +355,10 @@
             <h3>Z.ai</h3>
             <dl class="provider-specs">
               <div><dt>Description</dt><dd>Z.ai's hosted GLM API, with standard and Coding Plan routes.</dd></div>
-              <div><dt>Models</dt><dd>Live GLM models available on the selected route.</dd></div>
+              <div><dt>Models</dt><dd>Live GLM models available on the selected route (Standard API, Coding Plan, or China).</dd></div>
               <div><dt>Vision</dt><dd>Not auto-detected by Phoenix.</dd></div>
               <div><dt>Temperature</dt><dd>Available when thinking is off.</dd></div>
-              <div><dt>Thinking</dt><dd>On or Off.</dd></div>
+              <div><dt>Thinking</dt><dd>On or Off; the newest GLM models always think.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">Free Flash models</span></dd></div>
               <div><dt>Additional notes</dt><dd>The same key can be saved once for Standard API and once for Coding Plan.</dd></div>
             </dl>

@@ -990,7 +990,8 @@
       "attentionCheckRequired": "Comprueba el resultado de la acción antes de continuar.",
       "attentionNotReviewable": "Este elemento no se puede confirmar.",
       "attentionSaveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión.",
-      "attentionReviewConflict": "Esta acción está en curso o ya se ha revisado. Actualiza la lista."
+      "attentionReviewConflict": "Esta acción está en curso o ya se ha revisado. Actualiza la lista.",
+      "providerModelOrAuto": "Envía un modelo o auto, no ambos."
     },
     "accessKeys": {
       "advanced": "Avanzado",
@@ -1679,7 +1680,19 @@
       "agentcliTencentHint": "Seleccione el sitio donde creó su clave API de TokenHub. Las claves son específicas de cada sitio. Active los modelos que desee usar en la consola de TokenHub.",
       "agentcliMiMoHint": "Use una clave API de pago por uso de Xiaomi MiMo. Las claves de suscripción Token Plan usan otros endpoints y no se admiten aquí.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automático (el más reciente disponible)",
+      "agentcliDefaultModelAuto": "Modelo predeterminado: automático, actualmente {model}",
+      "agentcliDefaultModelAutoPending": "Modelo predeterminado: automático (esperando la lista de modelos del proveedor)",
+      "agentcliModelReplaced": "El proveedor ya no ofrece {retired}, por lo que esta cuenta usa {model} en su lugar.",
+      "agentcliRegion": "Región",
+      "agentcliRegionGlobal": "Global",
+      "agentcliRegionChina": "China",
+      "agentcliRegionEu": "Europa",
+      "agentcliRegionUs": "Estados Unidos",
+      "agentcliZaiChina": "China (BigModel)",
+      "agentcliMimoPayg": "Pago por uso",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "approvalSummary": {
       "action.approve": "Aprobar y ejecutar",

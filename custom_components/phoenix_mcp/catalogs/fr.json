@@ -1352,7 +1352,19 @@
       "agentcliTencentHint": "Choisissez le site où vous avez créé votre clé API TokenHub. Les clés sont propres à chaque site. Activez les modèles souhaités dans la console TokenHub.",
       "agentcliMiMoHint": "Utilisez une clé API Xiaomi MiMo avec facturation à l’usage. Les clés d’abonnement Token Plan utilisent des points de terminaison distincts et ne sont pas prises en charge ici.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automatique (le plus récent disponible)",
+      "agentcliDefaultModelAuto": "Modèle par défaut : automatique, actuellement {model}",
+      "agentcliDefaultModelAutoPending": "Modèle par défaut : automatique (en attente de la liste de modèles du fournisseur)",
+      "agentcliModelReplaced": "{retired} n'est plus proposé par ce fournisseur ; ce compte utilise donc {model}.",
+      "agentcliRegion": "Région",
+      "agentcliRegionGlobal": "Mondial",
+      "agentcliRegionChina": "Chine",
+      "agentcliRegionEu": "Europe",
+      "agentcliRegionUs": "États-Unis",
+      "agentcliZaiChina": "Chine (BigModel)",
+      "agentcliMimoPayg": "Paiement à l'usage",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "agentchat": {
       "answerAnyway": "Répondre quand même",
@@ -1751,7 +1763,8 @@
       "attentionCheckRequired": "Vérifiez le résultat de l’action avant de continuer.",
       "attentionNotReviewable": "Cet élément ne peut pas être confirmé.",
       "attentionSaveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier.",
-      "attentionReviewConflict": "Cette action est en cours ou a déjà été vérifiée. Actualisez la liste."
+      "attentionReviewConflict": "Cette action est en cours ou a déjà été vérifiée. Actualisez la liste.",
+      "providerModelOrAuto": "Envoyez soit un modèle, soit auto, pas les deux."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",

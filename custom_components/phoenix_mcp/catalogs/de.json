@@ -1205,7 +1205,19 @@
       "agentcliTencentHint": "Wählen Sie den Standort, an dem Sie Ihren TokenHub-API-Schlüssel erstellt haben. Schlüssel gelten nur für diesen Standort. Aktivieren Sie die gewünschten Modelle in der TokenHub-Konsole.",
       "agentcliMiMoHint": "Verwenden Sie einen nutzungsabhängig abgerechneten Xiaomi-MiMo-API-Schlüssel. Token-Plan-Abonnementschlüssel verwenden separate Endpunkte und werden hier nicht unterstützt.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automatisch (neuestes verfügbares)",
+      "agentcliDefaultModelAuto": "Standardmodell: automatisch, derzeit {model}",
+      "agentcliDefaultModelAutoPending": "Standardmodell: automatisch (wartet auf die Modellliste des Anbieters)",
+      "agentcliModelReplaced": "{retired} wird von diesem Anbieter nicht mehr angeboten, daher verwendet dieses Konto stattdessen {model}.",
+      "agentcliRegion": "Region",
+      "agentcliRegionGlobal": "Global",
+      "agentcliRegionChina": "China",
+      "agentcliRegionEu": "Europa",
+      "agentcliRegionUs": "Vereinigte Staaten",
+      "agentcliZaiChina": "China (BigModel)",
+      "agentcliMimoPayg": "Nutzungsbasiert",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -1456,7 +1468,8 @@
       "attentionCheckRequired": "Prüfe das Ergebnis der Aktion, bevor du fortfährst.",
       "attentionNotReviewable": "Dieser Eintrag kann nicht bestätigt werden.",
       "attentionSaveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden.",
-      "attentionReviewConflict": "Diese Aktion läuft oder wurde bereits geprüft. Aktualisiere die Liste."
+      "attentionReviewConflict": "Diese Aktion läuft oder wurde bereits geprüft. Aktualisiere die Liste.",
+      "providerModelOrAuto": "Senden Sie entweder ein Modell oder auto, nicht beides."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",

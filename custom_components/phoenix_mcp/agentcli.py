@@ -70,7 +70,6 @@ from .const import (
     AGENTCLI_APPROVAL_WAIT_SECONDS,
     AGENTCLI_PROGRESS_INTERVAL_SECONDS,
     AGENTCLI_CLAUDE_BASE_URL,
-    AGENTCLI_CLAUDE_DEFAULT_MODEL,
     AGENTCLI_CLIENT_IP,
     AGENTCLI_CAPABILITY_CONCURRENCY,
     AGENTCLI_EFFORT_LEVEL_ORDER,
@@ -79,25 +78,26 @@ from .const import (
     AGENTCLI_PROBE_MAX_CALLS,
     AGENTCLI_PROBE_SENTINEL,
     AGENTCLI_DEEPSEEK_BASE_URL,
-    AGENTCLI_DEEPSEEK_DEFAULT_MODEL,
     AGENTCLI_GEMINI_BASE_URL,
-    AGENTCLI_GEMINI_DEFAULT_MODEL,
     AGENTCLI_GROK_BASE_URL,
-    AGENTCLI_GROK_DEFAULT_MODEL,
     AGENTCLI_GROQ_BASE_URL,
     AGENTCLI_KIMI_BASE_URL,
-    AGENTCLI_KIMI_DEFAULT_MODEL,
     AGENTCLI_META_BASE_URL,
-    AGENTCLI_META_DEFAULT_MODEL,
     AGENTCLI_MINIMAX_BASE_URL,
-    AGENTCLI_MINIMAX_DEFAULT_MODEL,
     AGENTCLI_MINIMAX_MODELS,
     AGENTCLI_MISTRAL_BASE_URL,
     AGENTCLI_CEREBRAS_BASE_URL,
     AGENTCLI_FIREWORKS_BASE_URL,
     AGENTCLI_NVIDIA_BASE_URL,
-    AGENTCLI_NVIDIA_DEFAULT_MODEL,
     AGENTCLI_OLLAMA_CLOUD_BASE_URL,
+    AGENTCLI_KIMI_CHINA_BASE_URL,
+    AGENTCLI_ZAI_CHINA_BASE_URL,
+    AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL,
+    AGENTCLI_MISTRAL_EU_BASE_URL,
+    AGENTCLI_MISTRAL_US_BASE_URL,
+    AGENTCLI_OPENAI_US_BASE_URL,
+    AGENTCLI_OPENAI_EU_BASE_URL,
+    AGENTCLI_GROK_US_BASE_URL,
     AGENTCLI_OPENAI_BASE_URL,
     AGENTCLI_OPENCODE_BASE_URL,
     AGENTCLI_MIMO_BASE_URL,
@@ -129,6 +129,7 @@ from .const import (
     VOICE_AGENT_CLIENT_IP,
 )
 from .data import PhoenixData
+from .model_selection import effective_model
 from .helpers import canonical_language, get_client_ip, access_key_has_write_scope, voice_text
 from .access_key_store import AccessKeyRecord
 
@@ -137,6 +138,68 @@ _LOGGER = logging.getLogger(__name__)
 # Fast-failing timeout for the setup/validation probes so an unreachable host
 # does not hang the panel for the OS default (~20s).
 _PROBE_TIMEOUT = ClientTimeout(total=10, connect=5, sock_connect=5)
+# How many distinct model ids an account remembers having seen listed.
+_MODEL_SEEN_LIMIT = 1000
+# OpenAI models that rejected the forced `reasoning_effort: none` of a tool turn
+# (non-reasoning or older models). Process-local: a restart re-learns it with one
+# retried request.
+_OPENAI_NO_EFFORT_NONE: set[str] = set()
+# Providers that require (or reward) the assistant's reasoning_content being sent
+# back verbatim with its tool calls on the next round. Kimi's thinking models and
+# Qwen's preserve_thinking models take it the same way; others use the field for
+# display only.
+_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks"})
+# Upper bound on catalogue pages followed, so a misbehaving provider cannot loop forever.
+_MODEL_LIST_MAX_PAGES = 10
+
+
+def _epoch(value: Any) -> float | None:
+    """A provider timestamp (Unix seconds or an ISO string) as epoch seconds."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if value > 0 else None
+    if isinstance(value, str) and value:
+        parsed = parse_datetime(value)
+        return parsed.timestamp() if parsed else None
+    return None
+
+
+def _is_expired(row: Any) -> bool:
+    """Whether a catalogue row carries a shutdown date that has already passed."""
+    if not isinstance(row, dict):
+        return False
+    for key in ("shutdown_date", "expiration_date", "deprecation"):
+        value = row.get(key)
+        stamp = parse_datetime(value) if isinstance(value, str) and "T" in value else (
+            dt_util.parse_date(value) if isinstance(value, str) and value else None)
+        if stamp is None:
+            continue
+        when = stamp if isinstance(stamp, datetime) else datetime.combine(stamp, datetime.min.time(), tzinfo=dt_util.UTC)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=dt_util.UTC)
+        if when <= utcnow():
+            return True
+    return False
+
+
+def _catalog_of(cfg: dict) -> dict:
+    """The cached provider catalogue of a stored account, or {} when it has none."""
+    catalog = cfg.get("catalog")
+    return catalog if isinstance(catalog, dict) else {}
+
+
+def _created_map(rows: Any) -> dict[str, float]:
+    """Creation time per model id from a provider's catalogue rows, where it gives one."""
+    out: dict[str, float] = {}
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        model_id = row.get("id") or row.get("name") or row.get("model")
+        stamp = _epoch(row.get("created") or row.get("created_at") or row.get("modified_at"))
+        if isinstance(model_id, str) and model_id and stamp:
+            out[model_id] = stamp
+    return out
 # Chat requests stream and can legitimately run for minutes, so bound only the
 # connection, not the total time. The connect bound is kept modest so a transient
 # DNS/connect failure fails fast enough to be retried within the retry window.
@@ -300,6 +363,10 @@ _ZAI_ENDPOINTS = (
         "coding", "Coding Plan", "settings.agentcliZaiCoding",
         AGENTCLI_ZAI_CODING_BASE_URL,
     ),
+    ProviderChoice(
+        "china", "China (BigModel)", "settings.agentcliZaiChina",
+        AGENTCLI_ZAI_CHINA_BASE_URL,
+    ),
 )
 _ZAI_ENDPOINT_FIELD = ProviderField(
     "endpoint_id", "choice", "settings.agentcliZaiPlan",
@@ -313,6 +380,34 @@ _TENCENT_ENDPOINTS = (
 )
 _TENCENT_ENDPOINT_FIELD = ProviderField(
     "endpoint_id", "choice", "settings.agentcliSite", choices=_TENCENT_ENDPOINTS,
+)
+
+def _region_field(choices: tuple[ProviderChoice, ...]) -> ProviderField:
+    return ProviderField("endpoint_id", "choice", "settings.agentcliRegion", choices=choices)
+
+
+_GLOBAL = ("global", "Global", "settings.agentcliRegionGlobal")
+_KIMI_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_KIMI_BASE_URL),
+    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENTCLI_KIMI_CHINA_BASE_URL),
+)
+_MISTRAL_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_MISTRAL_BASE_URL),
+    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_MISTRAL_EU_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_MISTRAL_US_BASE_URL),
+)
+_OPENAI_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_OPENAI_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_OPENAI_US_BASE_URL),
+    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_OPENAI_EU_BASE_URL),
+)
+_GROK_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_GROK_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_GROK_US_BASE_URL),
+)
+_MIMO_ENDPOINTS = (
+    ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENTCLI_MIMO_BASE_URL),
+    ProviderChoice("token_plan", "Token Plan", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
 )
 
 _PROVIDER_LABEL_KEYS = {
@@ -360,26 +455,41 @@ def _definition(
 
 PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
     item.kind: item for item in (
-        _definition("claude", "Anthropic", AGENTCLI_CLAUDE_BASE_URL, adapter="anthropic", model=AGENTCLI_CLAUDE_DEFAULT_MODEL),
-        _definition("deepseek", "DeepSeek", AGENTCLI_DEEPSEEK_BASE_URL, model=AGENTCLI_DEEPSEEK_DEFAULT_MODEL, include_usage=True, reasoning="deepseek"),
-        _definition("chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, include_usage=True, model_filter="openai"),
-        _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, model=AGENTCLI_GEMINI_DEFAULT_MODEL, reasoning="gemini", model_filter="gemini"),
-        _definition("grok", "Grok", AGENTCLI_GROK_BASE_URL, model=AGENTCLI_GROK_DEFAULT_MODEL),
+        _definition("claude", "Anthropic", AGENTCLI_CLAUDE_BASE_URL, adapter="anthropic"),
+        _definition("deepseek", "DeepSeek", AGENTCLI_DEEPSEEK_BASE_URL, include_usage=True, reasoning="deepseek"),
+        _definition(
+            "chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, include_usage=True, model_filter="openai",
+            fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
+        ),
+        _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini"),
+        _definition(
+            "grok", "Grok", AGENTCLI_GROK_BASE_URL,
+            fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
+        ),
         _definition("groq", "Groq", AGENTCLI_GROQ_BASE_URL, include_usage=True),
-        _definition("kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, model=AGENTCLI_KIMI_DEFAULT_MODEL, include_usage=True, reasoning="kimi"),
-        _definition("meta", "Meta", AGENTCLI_META_BASE_URL, model=AGENTCLI_META_DEFAULT_MODEL, reasoning="meta"),
-        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic", model=AGENTCLI_MINIMAX_DEFAULT_MODEL),
-        _definition("mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral"),
-        _definition("nvidia", "NVIDIA NIM", AGENTCLI_NVIDIA_BASE_URL, model=AGENTCLI_NVIDIA_DEFAULT_MODEL, reasoning="probed_effort", model_filter="nvidia"),
-        _definition("mimo", "Xiaomi MiMo", AGENTCLI_MIMO_BASE_URL, reasoning="mimo", model_filter="mimo"),
+        _definition(
+            "kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
+            fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
+        ),
+        _definition("meta", "Meta", AGENTCLI_META_BASE_URL, reasoning="meta", model_filter="meta"),
+        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic"),
+        _definition(
+            "mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
+            fields=(_region_field(_MISTRAL_ENDPOINTS), _API_KEY_FIELD), endpoints=_MISTRAL_ENDPOINTS,
+        ),
+        _definition("nvidia", "NVIDIA NIM", AGENTCLI_NVIDIA_BASE_URL, reasoning="probed_effort", model_filter="nvidia"),
+        _definition(
+            "mimo", "Xiaomi MiMo", AGENTCLI_MIMO_BASE_URL, reasoning="mimo", model_filter="mimo",
+            fields=(_region_field(_MIMO_ENDPOINTS), _API_KEY_FIELD), endpoints=_MIMO_ENDPOINTS,
+        ),
         _definition(
             "tencent", "Tencent Cloud TokenHub", AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
             fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS,
             reasoning="probed_effort", model_filter="tencent",
         ),
-        _definition("opencode", "OpenCode Zen", AGENTCLI_OPENCODE_BASE_URL, reasoning="probed_effort"),
-        _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, reasoning="ollama", ollama="cloud"),
-        _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), reasoning="ollama", ollama="local"),
+        _definition("opencode", "OpenCode Zen", AGENTCLI_OPENCODE_BASE_URL, reasoning="probed_effort", model_filter="opencode"),
+        _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
+        _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
         _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort", model_filter="openrouter"),
         _definition(
             "together", "Together", AGENTCLI_TOGETHER_BASE_URL,
@@ -470,8 +580,9 @@ def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
     if kind == "qwen":
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
-    if kind in ("zai", "tencent"):
-        endpoints = PROVIDER_DEFINITIONS[kind].endpoints
+    definition = PROVIDER_DEFINITIONS.get(kind)
+    if definition is not None and definition.endpoints:
+        endpoints = definition.endpoints
         endpoint_id = str(inst.get("endpoint_id") or endpoints[0].value)
         endpoint = next(
             (choice.label for choice in endpoints if choice.value == endpoint_id),
@@ -552,9 +663,10 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
             _normalized_provider_url(cfg.get("base_url")),
             str(cfg.get("api_key") or "").strip(),
         ))
-    if kind in ("zai", "tencent"):
+    definition = PROVIDER_DEFINITIONS.get(kind)
+    if definition is not None and definition.endpoints:
         return kind, "\0".join((
-            str(cfg.get("endpoint_id") or PROVIDER_DEFINITIONS[kind].endpoints[0].value),
+            str(cfg.get("endpoint_id") or definition.endpoints[0].value),
             str(cfg.get("api_key") or "").strip(),
         ))
     return kind, str(cfg.get("api_key") or "").strip()
@@ -613,12 +725,13 @@ class AgentCliStore:
     async def set_model(self, instance_id: str, model: str) -> bool:
         """Change one account's default model. False if the account is unknown.
 
-        The model is patchable because it goes stale on the PROVIDER's schedule
-        rather than the operator's: a shipped default id can be retired out from
-        under a working install, and deleting the account to re-enter the API key
-        is the wrong cost for that. Only the model is patchable. The credential
-        and base_url are what the account IS, and re-validating them is what the
-        add flow already does.
+        An empty model means AUTOMATIC: the account follows the newest model of
+        its provider's own catalogue and survives that model being replaced (see
+        `model_selection`). That is the default for every new account, because
+        a model id goes stale on the PROVIDER's schedule rather than the
+        operator's, and re-entering the API key is the wrong cost for that.
+        Only the model is patchable. The credential and base_url are what the
+        account IS, and re-validating them is what the add flow already does.
         """
         async with self._lock:
             cfg = self._data.get(instance_id)
@@ -651,6 +764,52 @@ class AgentCliStore:
             cfg["capabilities_checked_at"] = checked_at
             await self._save()
             return True
+
+    async def set_catalog(
+        self, instance_id: str, models: list[str], created: dict[str, float], checked_at: str,
+        eligible: list[str] | None = None,
+    ) -> bool:
+        """Cache what the provider currently lists for this account.
+
+        The catalogue is what lets a request pick the newest model, or replace a
+        retired one, without a network call. `seen` accumulates every id the
+        provider has ever listed for the account; it is what distinguishes a
+        retired model (listed before, gone now) from a custom deployment the
+        listing never contained, which must be left alone. An empty listing is
+        not recorded: it means the provider could not answer, not that every
+        model vanished.
+        """
+        if not models:
+            return False
+        async with self._lock:
+            cfg = self._data.get(instance_id)
+            if not isinstance(cfg, dict):
+                return False
+            seen = [m for m in cfg.get("seen") or [] if isinstance(m, str)]
+            seen.extend(m for m in models if m not in seen)
+            cfg["seen"] = seen[-_MODEL_SEEN_LIMIT:]
+            cfg["catalog"] = {
+                "models": list(models),
+                "created": {m: created[m] for m in models if m in created},
+                "eligible": [m for m in eligible or [] if m in models],
+                "checked_at": checked_at,
+            }
+            await self._save()
+            return True
+
+    def _effective(self, cfg: dict) -> tuple[str, str]:
+        catalog = _catalog_of(cfg)
+        models = [m for m in catalog.get("models") or [] if isinstance(m, str)]
+        eligible = [m for m in catalog.get("eligible") or [] if isinstance(m, str)] or list(models)
+        # A model a real turn showed cannot call tools is no use to automatic mode.
+        caps = _with_learned(cfg)
+        eligible = [m for m in eligible if (caps.get(m) or {}).get("tools") is not False]
+        return effective_model(
+            cfg.get("kind", ""), str(cfg.get("model") or ""), models,
+            [m for m in cfg.get("seen") or [] if isinstance(m, str)],
+            catalog.get("created") if isinstance(catalog.get("created"), dict) else None,
+            eligible or None,
+        )
 
     async def record_refusal(self, instance_id: str, model: str, option: str, at: str) -> bool:
         """Remember that a real turn had this option refused for this model.
@@ -693,13 +852,23 @@ class AgentCliStore:
             if not isinstance(inst, dict) or inst.get("kind") not in PROVIDER_DEFINITIONS:
                 continue
             kind = inst.get("kind", "")
+            decision = provider_purpose(kind) == "decision"
+            model, replaced = self._effective(inst) if not decision else (inst.get("model", ""), "")
+            catalog = _catalog_of(inst)
             out.append({
                 "id": iid,
                 "kind": kind,
                 "name": (f"{PROVIDER_DEFINITIONS[kind].label} ({iid[:8]})"
                          if provider_purpose(kind) == "decision" and counts[kind] > 1
                          else _instance_name(inst, counts[kind] > 1, iid)),
-                "model": inst.get("model", ""),
+                # The model a request would use now. `model_mode` says whether the
+                # operator chose it ("fixed") or the account follows the provider's
+                # newest ("auto"); `model_replaced_from` names a chosen model the
+                # provider has since retired.
+                "model": model,
+                "model_mode": "fixed" if decision or inst.get("model") else "auto",
+                "model_replaced_from": replaced or None,
+                "models_checked_at": catalog.get("checked_at") or None,
                 "base_url": inst.get("base_url", ""),
                 "endpoint_id": inst.get("endpoint_id") or None,
                 "capabilities": _with_learned(inst),
@@ -730,7 +899,19 @@ class AgentCliStore:
         ).rstrip("/")
         if not base_url:
             return None
-        model = model_override or cfg.get("model") or _default_model(kind)
+        if model_override and purpose != "decision":
+            # A per-surface or per-request choice (Voice, AI Task, the chat
+            # dropdown) follows the same rule as the account's own: kept unless
+            # the provider listed it before and has since retired it.
+            model = self._effective({**cfg, "model": model_override})[0]
+        elif model_override:
+            model = model_override
+        elif purpose == "decision":
+            # A decision account is qualified against exact model ids, so it never
+            # follows the provider's newest.
+            model = str(cfg.get("model") or "") or _default_model(kind)
+        else:
+            model = self._effective(cfg)[0]
         model_caps = _with_learned(cfg).get(model) or {}
         vision = model_caps.get("vision") if isinstance(model_caps.get("vision"), bool) else None
         return ProviderConfig(
@@ -869,7 +1050,17 @@ def _mistral_rate_limit_headers(headers: Any) -> dict[str, int]:
 _NON_RETRYABLE_ERROR_CODES = frozenset({
     "insufficient_quota", "billing_hard_limit_reached", "billing_not_active",
     "account_deactivated", "access_terminated", "invalid_api_key",
+    # Anthropic error types that retrying cannot change.
+    "billing_error", "request_too_large", "permission_error", "not_found_error",
 })
+# Anthropic error types that name a transient condition, whether they arrive as an
+# HTTP status or as an `error` event after a 200 stream has already started.
+_CLAUDE_TRANSIENT_ERRORS = frozenset({
+    "overloaded_error", "api_error", "timeout_error", "rate_limit_error",
+})
+# Claude models that rejected adaptive thinking (older models take an enabled
+# thinking budget instead). Process-local; a restart re-learns it with one retry.
+_CLAUDE_NO_ADAPTIVE: set[str] = set()
 
 
 async def _retry_transient(attempt: Callable[[], Awaitable[Any]]) -> Any:
@@ -1054,8 +1245,9 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
 
     Claude takes the full surface (adaptive thinking with a display mode plus an
     output_config effort). MiniMax's Anthropic-compatible API turns thinking on
-    via `{type: adaptive}` but does not accept Anthropic's display/output_config
-    extensions, so it receives only the plain adaptive toggle.
+    via `{type: adaptive}` and takes `output_config.effort` only on its newest
+    model; the effort is not sent, and a model that always thinks simply
+    ignores the toggle.
     """
     body["max_tokens"] = int(options.get("max_tokens") or AGENTCLI_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
@@ -1072,6 +1264,30 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
         effort = options.get("effort", AGENTCLI_DEFAULT_EFFORT)
         if effort in AGENTCLI_EFFORT_LEVELS:
             body["output_config"] = {"effort": effort}
+
+
+def _thinking_type(body: dict) -> str:
+    """The `type` of a request body's thinking object, or "" when there is none."""
+    thinking = body.get("thinking")
+    return str(thinking.get("type") or "") if isinstance(thinking, dict) else ""
+
+
+def _use_enabled_thinking(body: dict) -> None:
+    """Switch a request from adaptive thinking to a fixed enabled budget.
+
+    For models that do not accept adaptive thinking. The budget must stay below
+    max_tokens and at least 1024; a request too small to hold one runs without
+    thinking rather than failing. Effort is dropped: those models do not take it.
+    """
+    thinking = body.get("thinking")
+    if not isinstance(thinking, dict) or thinking.get("type") != "adaptive":
+        return
+    budget = min(int(body.get("max_tokens") or 0) // 2, 16000)
+    if budget >= 1024:
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+    else:
+        body.pop("thinking", None)
+    body.pop("output_config", None)
 
 
 def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[dict]]:
@@ -1109,6 +1325,9 @@ class ClaudeProvider:
     def __init__(self, cfg: ProviderConfig) -> None:
         self.cfg = cfg
         self.kind = cfg.kind
+        # Filled by list_models: creation time per listed id, for model selection.
+        self.model_created: dict[str, float] = {}
+        self._model_rows: dict[str, dict] = {}
 
     def format_tools(self, mcp_tools: list[dict]) -> list[dict]:
         return [
@@ -1171,17 +1390,33 @@ class ClaudeProvider:
 
     async def list_models(self, session: ClientSession) -> list[str]:
         fallback = list(AGENTCLI_MINIMAX_MODELS) if self.kind == "minimax" \
-            else [AGENTCLI_CLAUDE_DEFAULT_MODEL]
+            else ([self.cfg.model] if self.cfg.model else [])
+        rows: list[dict] = []
+        after_id = ""
         try:
-            async with session.get(
-                f"{self.cfg.base_url}/v1/models", headers=self._headers(), timeout=_PROBE_TIMEOUT,
-            ) as resp:
-                if resp.status != 200:
-                    return fallback
-                body = await resp.json(content_type=None)
+            # Anthropic pages /v1/models (default 20 per page), so follow
+            # `has_more` or an account with many models silently loses the rest.
+            for _ in range(_MODEL_LIST_MAX_PAGES):
+                params = {"limit": "1000", **({"after_id": after_id} if after_id else {})}
+                async with session.get(
+                    f"{self.cfg.base_url}/v1/models", headers=self._headers(),
+                    params=params, timeout=_PROBE_TIMEOUT,
+                ) as resp:
+                    if resp.status != 200:
+                        break
+                    body = await resp.json(content_type=None)
+                if not isinstance(body, dict):
+                    break
+                rows.extend(r for r in body.get("data", []) if isinstance(r, dict))
+                after_id = str(body.get("last_id") or "")
+                if not body.get("has_more") or not after_id:
+                    break
         except (ClientError, asyncio.TimeoutError):
-            return fallback
-        return [m["id"] for m in body.get("data", []) if m.get("id")] or fallback
+            pass
+        rows = [row for row in rows if not _is_expired(row)]
+        self.model_created = _created_map(rows)
+        self._model_rows = {m["id"]: m for m in rows if m.get("id")}
+        return [m["id"] for m in rows if m.get("id")] or fallback
 
     def _headers(self) -> dict:
         # MiniMax's Anthropic-compatible API authenticates with a Bearer token
@@ -1216,8 +1451,33 @@ class ClaudeProvider:
     async def list_model_capabilities(
         self, session: ClientSession, models: list[str],
     ) -> dict[str, dict]:
-        """Anthropic's models endpoint reports no per-model parameters."""
-        return {}
+        """Per-model capabilities from the `capabilities` object on each model row.
+
+        Anthropic reports image input, thinking and the effort levels each model
+        accepts, so they are DECLARED rather than probed. MiniMax rows carry no
+        capabilities and yield nothing.
+        """
+        out: dict[str, dict] = {}
+        for model in models:
+            declared = (self._model_rows.get(model) or {}).get("capabilities")
+            if not isinstance(declared, dict):
+                continue
+            caps: dict[str, Any] = {}
+            vision = (declared.get("image_input") or {}).get("supported")
+            if isinstance(vision, bool):
+                caps["vision"] = vision
+            thinking = (declared.get("thinking") or {}).get("supported")
+            if isinstance(thinking, bool):
+                caps["thinking"] = thinking
+            effort = declared.get("effort") or {}
+            if isinstance(effort, dict) and effort.get("supported") is True:
+                caps["effort_levels"] = [
+                    level for level in AGENTCLI_EFFORT_LEVEL_ORDER
+                    if (effort.get(level) or {}).get("supported") is True
+                ]
+            if caps:
+                out[model] = caps
+        return out
 
     async def stream_turn(
         self, session: ClientSession, *, system_prompt: str, messages: list[dict],
@@ -1237,23 +1497,35 @@ class ClaudeProvider:
             "stream": True,
         }
         _apply_claude_options(body, options, self.kind)
+        if self.cfg.model in _CLAUDE_NO_ADAPTIVE:
+            _use_enabled_thinking(body)
         try:
-            async with session.post(
-                f"{self.cfg.base_url}/v1/messages", headers=self._headers(),
-                json=body, timeout=_CHAT_TIMEOUT,
-            ) as resp:
-                if resp.status != 200:
-                    msg, err_code = _parse_provider_error((await resp.text())[:4000])
-                    retryable = resp.status in (429, 500, 502, 503, 529)
-                    if err_code in _NON_RETRYABLE_ERROR_CODES:
-                        retryable = False
-                    yield _norm(EV_ERROR, status=resp.status,
-                                code=_claude_err_code(resp.status),
-                                message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
-                                refused=_refused_option(resp.status, msg, body))
+            for attempt in range(2):
+                async with session.post(
+                    f"{self.cfg.base_url}/v1/messages", headers=self._headers(),
+                    json=body, timeout=_CHAT_TIMEOUT,
+                ) as resp:
+                    if resp.status != 200:
+                        msg, err_code = _parse_provider_error((await resp.text())[:4000])
+                        if (attempt == 0 and resp.status == 400
+                                and _thinking_type(body) == "adaptive"
+                                and "adaptive" in msg.lower()):
+                            # An older model (e.g. Haiku 4.5) takes an enabled
+                            # thinking budget, not adaptive thinking.
+                            _CLAUDE_NO_ADAPTIVE.add(self.cfg.model)
+                            _use_enabled_thinking(body)
+                            continue
+                        retryable = resp.status in (429, 500, 502, 503, 504, 529)
+                        if err_code in _NON_RETRYABLE_ERROR_CODES:
+                            retryable = False
+                        yield _norm(EV_ERROR, status=resp.status,
+                                    code=_claude_err_code(resp.status),
+                                    message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
+                                    refused=_refused_option(resp.status, msg, body))
+                        return
+                    async for ev in self._parse(resp):
+                        yield ev
                     return
-                async for ev in self._parse(resp):
-                    yield ev
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
@@ -1349,6 +1621,12 @@ class ClaudeProvider:
                 saw_stop = True
                 break
             elif etype == "error":
+                # Anthropic can fail AFTER answering 200: an overloaded or
+                # internal error is transient and worth a retry, anything else
+                # is a refusal of this request.
+                err = ev.get("error")
+                if isinstance(err, dict) and err.get("type") in _CLAUDE_TRANSIENT_ERRORS:
+                    raise _ProviderResponseError("provider_incomplete", retryable=True)
                 raise _ProviderResponseError("provider_blocked", retryable=False)
         if not saw_stop or not saw_reason or open_blocks:
             for idx, block in blocks.items():
@@ -1406,6 +1684,8 @@ def _claude_err_code(status: int) -> str:
         return "auth"
     if status == 429:
         return "rate_limit"
+    if status == 402:
+        return "quota"
     return "upstream"
 
 
@@ -1417,7 +1697,8 @@ def _claude_err_code(status: int) -> str:
 _CHATGPT_INCLUDE_RE = re.compile(r"^(gpt-|o\d|chatgpt-)", re.I)
 _CHATGPT_EXCLUDE_RE = re.compile(
     r"audio|realtime|transcribe|tts|image|embedding|whisper|moderation|"
-    r"dall-e|search|instruct|codex",
+    r"dall-e|search|instruct|codex|deep-research|computer-use|cyber|daybreak|"
+    r"(?:^|[-_/.:])(?:live|pro)(?:$|[-_/.:])",
     re.I,
 )
 
@@ -1428,9 +1709,14 @@ def _filter_chatgpt_models(models: list[str]) -> list[str]:
     return chat or models
 
 
+# Identifier fragments that prove a catalogue entry is not a chat model: media
+# generation (image, video, voice, music), speech, embeddings and rerankers,
+# moderation and safety classifiers, and live-session or translation products.
 _NON_CHAT_MODEL_RE = re.compile(
-    r"embed|rerank|re-rank|image|imagen|audio|realtime|transcrib|tts|"
-    r"whisper|moderation|dall-e|speech",
+    r"embed|rerank|re-rank|image|imagen|imagine|audio|realtime|transcrib|tts|"
+    r"whisper|moderation|dall-e|speech|voice|video|veo-|lyria|kinfra|"
+    r"guard|safeguard|orpheus|computer-use|"
+    r"(?:^|[-_/.:])(?:live|stt|asr|translate)(?:$|[-_/.:])",
     re.I,
 )
 
@@ -1462,7 +1748,8 @@ def _filter_gemini_models(models: list[str]) -> list[str]:
     for m in models:
         mid = _strip_models_prefix(m)
         low = mid.lower()
-        if low.startswith("gemini") and "embedding" not in low:
+        if low.startswith("gemini") and not _NON_CHAT_MODEL_RE.search(low) \
+                and not re.search(r"native-audio|robotics|omni|aqa|translate", low):
             out.append(mid)
     return out or [_strip_models_prefix(m) for m in models]
 
@@ -1473,8 +1760,13 @@ def _filter_openrouter_models(data: list[dict]) -> list[str]:
     A model without it cannot drive Phoenix MCP's tools. Sorted for a stable
     dropdown; falls back to every id if none advertise it (schema drift).
     """
-    tool_ids = sorted(m["id"] for m in data
-                      if m.get("id") and "tools" in (m.get("supported_parameters") or []))
+    def _text_only(row: dict) -> bool:
+        outputs = (row.get("architecture") or {}).get("output_modalities")
+        return not isinstance(outputs, list) or outputs == ["text"]
+
+    live = [m for m in data if m.get("id") and not str(m["id"]).endswith(":batch")
+            and _text_only(m)]
+    tool_ids = sorted(m["id"] for m in live if "tools" in (m.get("supported_parameters") or []))
     return tool_ids or sorted(m["id"] for m in data if m.get("id"))
 
 
@@ -1486,7 +1778,14 @@ def _filter_mistral_models(data: list[dict]) -> list[str]:
     both. If the schema disappears entirely, fall back to active ids rather than
     turning a provider response change into an empty account.
     """
-    active = [m for m in data if m.get("id") and m.get("archived") is not True]
+    # A model with a published deprecation date is on its way out, and the
+    # superseded native reasoning line and Labs models are not offered for tool
+    # work, so none of them is a candidate for the dropdown or automatic mode.
+    active = [
+        m for m in data
+        if m.get("id") and m.get("archived") is not True and not m.get("deprecation")
+        and not re.search(r"^labs-|magistral", str(m["id"]), re.I)
+    ]
     if not any(isinstance(m.get("capabilities"), dict) for m in active):
         return [m["id"] for m in active]
     return [
@@ -1531,7 +1830,15 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
     if status != 400 or not message:
         return None
     low = message.lower()
+    if "tools" in sent and re.search(
+        r"(?:tool|function)[ -]calling[^.]*(?:not supported|requires)|use the responses api", low,
+    ):
+        # The model cannot take tools on this endpoint at all (OpenAI's newest
+        # models require the Responses API for them).
+        return "tools"
     for key in AGENTCLI_LEARNABLE_OPTIONS:
+        if key == "tools":
+            continue
         if key in sent and re.search(rf"\b{re.escape(key)}\b", low):
             return key
     return None
@@ -1708,6 +2015,38 @@ async def _ollama_capabilities(
     return dict(p for p in pairs if p is not None)
 
 
+# OpenCode Zen serves one catalogue through several wire formats. Only the
+# chat-completions family is reachable by this client, so models Zen documents on
+# its Responses, Anthropic-messages, Gemini or typed-decision endpoints are left
+# out. Matching is by vendor family word, never by version, so a new release of a
+# family is classified the same way as the last one. A family Phoenix has not seen
+# is kept, because chat completions is Zen's default endpoint.
+_OPENCODE_OTHER_ENDPOINT_RE = re.compile(
+    r"^(?:gpt|grok|claude|gemini|jev|muse|qwen)", re.I,
+)
+
+
+def _filter_opencode_models(models: list[str]) -> list[str]:
+    """Keep the Zen models that answer on /chat/completions."""
+    chat = sorted(
+        m for m in models
+        if not _OPENCODE_OTHER_ENDPOINT_RE.match(m) and not _NON_CHAT_MODEL_RE.search(m)
+    )
+    return chat or sorted(models)
+
+
+def _filter_meta_models(models: list[str]) -> list[str]:
+    """Keep Meta's chat models: the Muse Spark text line, without its data-sharing tier.
+
+    Meta serves image, voice and segmentation models under the same key, and a
+    `-contributor` model trains on the prompts it receives, which must be an
+    explicit operator choice rather than something a listing offers.
+    """
+    chat = sorted(m for m in models if m.lower().startswith("muse-spark")
+                  and "contributor" not in m.lower())
+    return chat or sorted(models)
+
+
 def _filter_nvidia_models(models: list[str]) -> list[str]:
     """Drop NVIDIA's non-chat models (embedding/reranking) from the dropdown.
 
@@ -1717,8 +2056,12 @@ def _filter_nvidia_models(models: list[str]) -> list[str]:
     all. Sorted for a stable dropdown; falls back to every id if the name
     convention ever changes enough to filter everything out.
     """
-    chat = sorted(m for m in models
-                  if not any(w in m.lower() for w in ("embed", "rerank")))
+    chat = sorted(
+        m for m in models
+        if not _NON_CHAT_MODEL_RE.search(m) and not re.search(
+            r"rerank|reward|safety|parse|clip|vila|neva|kosmos|deplot|detector|"
+            r"retriever|calibration|riva", m, re.I)
+    )
     return chat or sorted(models)
 
 
@@ -1740,6 +2083,8 @@ class OpenAICompatProvider:
         self.cfg = cfg
         self.kind = cfg.kind
         self.definition = PROVIDER_DEFINITIONS[cfg.kind]
+        # Filled by list_models: creation time per listed id, for model selection.
+        self.model_created: dict[str, float] = {}
 
     @property
     def _is_ollama(self) -> bool:
@@ -1781,12 +2126,17 @@ class OpenAICompatProvider:
 
     def append_tool_results(self, messages: list[dict], results: list[dict]) -> None:
         for r in results:
-            messages.append({
+            message = {
                 "role": "tool",
                 "tool_call_id": r["tool_use_id"],
                 "name": r.get("tool_name", ""),
                 "content": _model_result_text(r, self.cfg.vision is True),
-            })
+            }
+            if self.kind == "groq":
+                # Groq answers 400 to a `name` on a message; tool_call_id already
+                # carries the link back to the call.
+                del message["name"]
+            messages.append(message)
             if self.cfg.vision is True and r.get("images"):
                 parts: list[dict] = [{
                     "type": "text",
@@ -1867,6 +2217,7 @@ class OpenAICompatProvider:
                     # content_type=None: some Ollama builds omit the JSON content
                     # type, which would otherwise make aiohttp .json() raise.
                     body = await resp.json(content_type=None)
+                self.model_created = _created_map(body.get("models", []))
                 return [m.get("name") or m.get("model") for m in body.get("models", [])
                         if (m.get("name") or m.get("model"))]
             async with session.get(f"{self.cfg.base_url}/models", headers=self._headers(),
@@ -1879,6 +2230,8 @@ class OpenAICompatProvider:
                 else body.get("data", []) if isinstance(body, dict)
                 else []
             )
+            data = [row for row in data if not _is_expired(row)]
+            self.model_created = _created_map(data)
             if self.definition.model_filter == "openrouter":
                 return _filter_openrouter_models(data) or ([self.cfg.model] if self.cfg.model else [])
             if self.definition.model_filter == "mistral":
@@ -1902,6 +2255,10 @@ class OpenAICompatProvider:
                 models = _filter_nvidia_models(models)
             elif self.definition.model_filter == "together":
                 return _filter_together_models(data)
+            elif self.definition.model_filter == "opencode":
+                models = _filter_opencode_models(models)
+            elif self.definition.model_filter == "meta":
+                models = _filter_meta_models(models)
             elif self.definition.model_filter == "chat":
                 models = _filter_generic_chat_models(models)
             return models or ([self.cfg.model] if self.cfg.model else [])
@@ -1914,7 +2271,9 @@ class OpenAICompatProvider:
         None when the provider could not be reached at all, which is not an
         answer about the option and must not be recorded as one.
         """
-        token_limit = "max_completion_tokens" if self.kind == "mimo" else "max_tokens"
+        # OpenAI's reasoning models reject max_tokens, and Meta deprecates it.
+        token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
+                       else "max_tokens")
         body = {"model": self.cfg.model, token_limit: 1, "stream": False,
                 "messages": [{"role": "user", "content": "hi"}], **extra}
         try:
@@ -1995,6 +2354,7 @@ class OpenAICompatProvider:
         #     no established level omits the field and uses the model's default.
         thinking_on = False
         reasoning_model = False
+        effort_forced = False
         if self.definition.reasoning == "deepseek":
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
@@ -2020,7 +2380,15 @@ class OpenAICompatProvider:
             # OpenAI and xAI both take a top-level reasoning_effort on chat
             # completions; sending it marks a reasoning turn (skip temperature).
             # A model that does not accept the level returns a clean error.
-            if effort:
+            if self.kind == "chatgpt" and tools and self.cfg.model not in _OPENAI_NO_EFFORT_NONE:
+                # Chat Completions cannot combine tool calling with a reasoning
+                # effort other than "none" on current OpenAI models, and a newer
+                # model's default effort is not "none". Send "none" for tool turns;
+                # a model that rejects the field (older or non-reasoning models)
+                # is retried once without it below and remembered.
+                body["reasoning_effort"] = "none"
+                effort_forced = True
+            elif effort:
                 body["reasoning_effort"] = effort
                 reasoning_model = True
         elif self.definition.reasoning == "gemini":
@@ -2103,42 +2471,54 @@ class OpenAICompatProvider:
                 pass
         show_thinking = bool(options.get("show_thinking"))
         try:
-            async with session.post(self._chat_url(), headers=self._headers(), json=body,
-                                    timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
-                if resp.status != 200:
-                    msg, err_code = _parse_provider_error((await resp.text())[:4000])
-                    # Ollama commonly 500s on an unknown/hallucinated tool name.
-                    code = "ollama_backend" if self._is_ollama else "upstream"
-                    if resp.status in (401, 403):
-                        code = "auth"
-                    elif resp.status == 429:
-                        code = "rate_limit"
-                    retryable = resp.status in (429, 500, 502, 503)
-                    if err_code in _NON_RETRYABLE_ERROR_CODES:
-                        retryable = False
-                        if err_code == "insufficient_quota":
-                            code = "quota"
-                    rate_limit = (
-                        _mistral_rate_limit_headers(resp.headers)
-                        if self.definition.model_filter == "mistral" and resp.status == 429 else {}
-                    )
-                    yield _norm(EV_ERROR, status=resp.status, code=code,
-                                message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
-                                refused=_refused_option(resp.status, msg, body),
-                                **({"rate_limit": rate_limit} if rate_limit else {}))
+            for attempt in range(2):
+                async with session.post(self._chat_url(), headers=self._headers(), json=body,
+                                        timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
+                    if resp.status != 200:
+                        msg, err_code = _parse_provider_error((await resp.text())[:4000])
+                        if (attempt == 0 and effort_forced and resp.status == 400
+                                and "reasoning_effort" in msg.lower()):
+                            _OPENAI_NO_EFFORT_NONE.add(self.cfg.model)
+                            body.pop("reasoning_effort", None)
+                            continue
+                        # Ollama commonly 500s on an unknown/hallucinated tool name.
+                        code = "ollama_backend" if self._is_ollama else "upstream"
+                        if resp.status in (401, 403):
+                            code = "auth"
+                        elif resp.status == 429:
+                            code = "rate_limit"
+                        retryable = resp.status in (429, 500, 502, 503)
+                        if err_code in _NON_RETRYABLE_ERROR_CODES:
+                            retryable = False
+                            if err_code == "insufficient_quota":
+                                code = "quota"
+                        rate_limit = (
+                            _mistral_rate_limit_headers(resp.headers)
+                            if self.definition.model_filter == "mistral" and resp.status == 429 else {}
+                        )
+                        yield _norm(EV_ERROR, status=resp.status, code=code,
+                                    message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
+                                    refused=_refused_option(resp.status, msg, body),
+                                    **({"rate_limit": rate_limit} if rate_limit else {}))
+                        return
+                    async for ev in self._parse(resp, show_thinking):
+                        yield ev
                     return
-                async for ev in self._parse(resp, show_thinking):
-                    yield ev
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
         text_parts: list[str] = []
-        # DeepSeek, Z.ai, MiMo, and TokenHub retain reasoning_content verbatim with the
-        # assistant tool call on the next round. Other compatible providers use
-        # this field for display only, so retention is profile-controlled.
+        # The providers in _REPLAY_REASONING_KINDS retain reasoning_content verbatim
+        # with the assistant tool call on the next round. Other compatible
+        # providers use this field for display only, so retention is
+        # profile-controlled.
         replay_reasoning_parts: list[str] = []
+        # OpenRouter requires its structured `reasoning_details` array to be sent
+        # back unmodified, in order, across tool calls (encrypted and summarised
+        # reasoning cannot be rebuilt from text).
+        reasoning_details: list = []
         # Mistral emits reasoning as structured ThinkChunk content. Unlike the
         # display-only reasoning fields used by other compatible APIs, Mistral
         # requires these chunks to be replayed in the assistant message on the
@@ -2175,8 +2555,9 @@ class OpenAICompatProvider:
             chunk = _provider_object(payload)
             # Usage must be read BEFORE the empty-choices skip: OpenAI's final
             # usage chunk (stream_options include_usage) carries choices: [].
-            # Some backends (Gemini, Grok, Ollama) volunteer usage on content
-            # chunks instead; cumulative-replace semantics cover both.
+            # Some backends (Gemini, Grok) volunteer usage on content chunks
+            # instead; cumulative-replace semantics cover both. Ollama sends
+            # usage only when include_usage is requested.
             usage = chunk.get("usage")
             if isinstance(usage, dict):
                 pt = _usage_int(usage.get("prompt_tokens"))
@@ -2201,7 +2582,9 @@ class OpenAICompatProvider:
             reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning is not None and not isinstance(reasoning, str):
                 raise _ProviderResponseError()
-            if reasoning and self.kind in ("deepseek", "zai", "mimo", "tencent"):
+            if self.kind == "openrouter" and isinstance(delta.get("reasoning_details"), list):
+                reasoning_details.extend(d for d in delta["reasoning_details"] if isinstance(d, dict))
+            if reasoning and self.kind in _REPLAY_REASONING_KINDS:
                 replay_reasoning_parts.append(str(reasoning))
             if reasoning and show_thinking:
                 yield _norm(EV_THINKING, text=reasoning)
@@ -2321,6 +2704,8 @@ class OpenAICompatProvider:
         assistant_msg: dict = {"role": "assistant", "content": assistant_content}
         if replay_reasoning_parts:
             assistant_msg["reasoning_content"] = "".join(replay_reasoning_parts)
+        if reasoning_details:
+            assistant_msg["reasoning_details"] = reasoning_details
         if assistant_tool_calls:
             assistant_msg["tool_calls"] = assistant_tool_calls
         if bad:
@@ -4601,6 +4986,10 @@ class PhoenixAgentCliChatView(PhoenixView):
             # the providers that publish nothing and validate nothing, which
             # neither of the other two mechanisms can reach.
             refused = payload.get("refused") if name == "error" else None
+            if name == "error" and payload.get("status") == 404:
+                # "Model not found" is how a provider says a model was retired.
+                # Re-read the catalogue so the next turn resolves to its successor.
+                self.hass.async_create_task(async_refresh_catalog(self.hass, instance_id))
             if refused and cfg.model:
                 await store.record_refusal(instance_id, cfg.model, refused, utcnow().isoformat())
             frame = f"event: {name}\ndata: {json.dumps(payload, default=str)}\n\n"
@@ -4909,7 +5298,14 @@ class PhoenixAgentCliProvidersView(PhoenixView):
         try:
             models = decision_models if decision_models is not None else await provider.list_models(session)
             capabilities = await provider.list_model_capabilities(session, models)
-            await store.set_capabilities(instance_id, capabilities, utcnow().isoformat())
+            checked_at = utcnow().isoformat()
+            await store.set_capabilities(instance_id, capabilities, checked_at)
+            if provider_purpose(kind) == "conversation":
+                await store.set_catalog(
+                    instance_id, models, provider.model_created, checked_at,
+                    [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
+                    if capabilities else None,
+                )
         except Exception:  # noqa: BLE001 - capability discovery is best effort
             _LOGGER.debug("Initial Agent Chat capability discovery failed", exc_info=True)
         created = next((i for i in store.list_instances() if i["id"] == instance_id), None)
@@ -4934,18 +5330,29 @@ class PhoenixAgentCliProviderView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
-        if unknown := set(body) - {"model"}:
+        if unknown := set(body) - {"model", "auto"}:
             fields = ", ".join(sorted(unknown))
             return _err("invalid_request", f"Unknown field(s): {fields}.", 400, rid,
                         key="unknownFields", params={"fields": fields})
+        auto = body.get("auto")
+        if auto is not None and not isinstance(auto, bool):
+            return _err("invalid_request", "auto must be a boolean (true or false).", 400, rid,
+                        key="booleanRequired", params={"field": "auto"})
         model = str(body.get("model") or "").strip()
-        if not model:
+        if auto is True and model:
+            return _err("invalid_request", "Send either a model or auto, not both.", 400, rid,
+                        key="providerModelOrAuto")
+        if not model and auto is not True:
             return _err(
                 "invalid_request", "A model is required.", 400, rid,
                 key="providerModelRequired",
             )
         store = await _get_secret_store(self.hass)
         record = store.get(instance_id)
+        if auto is True and record and provider_purpose(record.get("kind", "")) == "decision":
+            # Decision accounts are qualified against exact model ids.
+            return _err("invalid_request", "Decision accounts need an explicit model.", 400, rid,
+                        key="providerModelRequired")
         if record and provider_purpose(record.get("kind", "")) == "decision":
             cfg = store.resolve(instance_id, purpose="decision")
             if cfg is None:
@@ -4971,7 +5378,14 @@ class PhoenixAgentCliProviderView(PhoenixView):
             )
         if self.hass.data.get(DOMAIN) is not None:
             _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
-        return _ok({"instance": {"id": instance_id, "model": model}}, request_id=rid)
+        if auto is True:
+            # Show the operator the model automatic mode resolves to right now.
+            await async_refresh_catalog(self.hass, instance_id, force=True)
+        current = next((i for i in store.list_instances() if i["id"] == instance_id), None)
+        return _ok({"instance": {
+            "id": instance_id, "model": (current or {}).get("model", model),
+            "model_mode": "auto" if auto is True else "fixed",
+        }}, request_id=rid)
 
     @require_admin
     async def delete(self, request: web.Request, instance_id: str) -> web.Response:
@@ -5054,6 +5468,63 @@ class PhoenixAgentCliModelsView(PhoenixView):
         return _ok({"models": models}, request_id=rid)
 
 
+_CATALOG_REFRESH_MIN_GAP = timedelta(seconds=60)
+
+
+async def async_refresh_catalog(hass: HomeAssistant, instance_id: str, *, force: bool = False) -> bool:
+    """Re-read one conversation account's model catalogue and declared capabilities.
+
+    This is what keeps automatic mode current: it runs on a timer, when an account
+    is added or refreshed, and after a provider answers "model not found". A
+    per-account minimum gap stops a failing model from turning every turn into a
+    catalogue request. Returns True when a catalogue was recorded.
+    """
+    store = await _get_secret_store(hass)
+    cfg = store.resolve(instance_id)
+    if cfg is None:
+        return False
+    attempts: dict[str, datetime] = hass.data.setdefault("_phoenix_catalog_attempts", {})
+    now = utcnow()
+    if not force and (last := attempts.get(instance_id)) and now - last < _CATALOG_REFRESH_MIN_GAP:
+        return False
+    attempts[instance_id] = now
+    # Listing with the configured model blanked: a provider that cannot answer
+    # falls back to "the configured model", which must not be recorded as the
+    # whole catalogue.
+    provider = build_provider(dataclasses.replace(cfg, model=""))
+    session = async_get_clientsession(hass)
+    try:
+        models = await provider.list_models(session)
+        previous = (store.get(instance_id) or {}).get("catalog") or {}
+        changed = sorted(models) != sorted(previous.get("models") or [])
+        definition = PROVIDER_DEFINITIONS[cfg.kind]
+        # Ollama declares capabilities per model (one request each), so it is
+        # re-read only when its library actually changed.
+        capabilities = (
+            await provider.list_model_capabilities(session, models)
+            if models and (definition.ollama is None or changed) else None
+        )
+    except Exception:  # noqa: BLE001 - catalogue refresh is best effort
+        _LOGGER.debug("Provider catalogue refresh failed", exc_info=True)
+        return False
+    checked_at = utcnow().isoformat()
+    eligible = None
+    if capabilities:
+        # A model that declares it cannot call tools is no use to Agent Chat, so
+        # automatic mode never lands on one (an undeclared capability stays eligible).
+        eligible = [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
+        await store.set_capabilities(instance_id, capabilities, checked_at)
+    return await store.set_catalog(instance_id, models, provider.model_created, checked_at, eligible)
+
+
+async def async_refresh_all_catalogs(hass: HomeAssistant) -> None:
+    """Refresh every conversation account's catalogue (the scheduled job)."""
+    store = await _get_secret_store(hass)
+    for inst in store.list_instances():
+        if provider_purpose(inst["kind"]) == "conversation":
+            await async_refresh_catalog(hass, inst["id"], force=True)
+
+
 class PhoenixAgentCliRefreshView(PhoenixView):
     """POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh.
 
@@ -5096,6 +5567,12 @@ class PhoenixAgentCliRefreshView(PhoenixView):
             return _err(
                 "not_found", "Provider account not found.", 404, rid,
                 key="providerAccountNotFound",
+            )
+        if provider_purpose(cfg.kind) == "conversation":
+            await store.set_catalog(
+                instance_id, models, getattr(provider, "model_created", {}), checked_at,
+                [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
+                if capabilities else None,
             )
         if self.hass.data.get(DOMAIN) is not None:
             _audit_admin(self.hass, request, rid, f"provider_refresh:{instance_id}")

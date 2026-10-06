@@ -550,6 +550,23 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     entry.async_on_unload(async_track_time_interval(hass, _flush_statistics, ROUTING_STATISTICS_FLUSH_INTERVAL))
 
+    from .agentcli import async_refresh_all_catalogs
+    from .const import AGENTCLI_CATALOG_REFRESH_INTERVAL
+
+    async def _refresh_model_catalogs(_now=None) -> None:
+        try:
+            await async_refresh_all_catalogs(hass)
+        except Exception:
+            _LOGGER.debug("Provider model catalogue refresh failed; will retry", exc_info=True)
+
+    entry.async_on_unload(async_track_time_interval(hass, _refresh_model_catalogs, AGENTCLI_CATALOG_REFRESH_INTERVAL))
+    catalog_task = hass.async_create_background_task(_refresh_model_catalogs(), "phoenix_mcp_model_catalogs")
+
+    def _cancel_catalog_refresh() -> None:
+        catalog_task.cancel()
+
+    entry.async_on_unload(_cancel_catalog_refresh)
+
     async def _flush_last_used(_now=None) -> None:
         await store.async_flush_last_used()
 

@@ -1041,7 +1041,8 @@
       "attentionCheckRequired": "続行する前に操作の結果を確認してください。",
       "attentionNotReviewable": "この項目は確認済みにできません。",
       "attentionSaveFailed": "確認結果を保存できませんでした。操作の確認が引き続き必要です。",
-      "attentionReviewConflict": "この操作は実行中か、すでに確認済みです。一覧を更新してください。"
+      "attentionReviewConflict": "この操作は実行中か、すでに確認済みです。一覧を更新してください。",
+      "providerModelOrAuto": "モデルまたは auto のどちらか一方を送信してください。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -1532,7 +1533,19 @@
       "agentcliTencentHint": "TokenHub API キーを作成したサイトを選択してください。キーはサイトごとに異なります。使用するモデルを TokenHub コンソールで有効にしてください。",
       "agentcliMiMoHint": "Xiaomi MiMo の従量課金 API キーを使用してください。Token Plan のサブスクリプションキーは別のエンドポイントを使用するため、ここでは対応していません。",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "自動（利用可能な最新モデル）",
+      "agentcliDefaultModelAuto": "既定のモデル: 自動（現在は {model}）",
+      "agentcliDefaultModelAutoPending": "既定のモデル: 自動（プロバイダーのモデル一覧を待機中）",
+      "agentcliModelReplaced": "{retired} はこのプロバイダーでは提供されなくなったため、このアカウントでは代わりに {model} を使用しています。",
+      "agentcliRegion": "リージョン",
+      "agentcliRegionGlobal": "グローバル",
+      "agentcliRegionChina": "中国",
+      "agentcliRegionEu": "欧州",
+      "agentcliRegionUs": "米国",
+      "agentcliZaiChina": "中国（BigModel）",
+      "agentcliMimoPayg": "従量課金",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

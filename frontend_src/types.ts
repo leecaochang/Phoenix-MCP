@@ -270,7 +270,15 @@ export interface AgentCliInstance {
   id: string;
   kind: AgentCliProviderKind;
   name: string;
+  /** The model a request would use now. In automatic mode this is the newest
+   *  model of the provider's own catalogue, not something the operator typed. */
   model: string;
+  /** "auto" follows the provider's newest model; "fixed" is the operator's choice. */
+  model_mode?: "auto" | "fixed";
+  /** A chosen model the provider has since retired, when `model` replaced it. */
+  model_replaced_from?: string | null;
+  /** When the provider's model list was last read, ISO. */
+  models_checked_at?: string | null;
   base_url?: string;
   endpoint_id?: string | null;
   /** Per-model declared capabilities, keyed by model id. Empty when the

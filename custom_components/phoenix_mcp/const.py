@@ -110,6 +110,9 @@ CONFIG_RECOVERY_MAX_BYTES = 1_048_576
 CONFIG_RECOVERY_RETENTION_DAYS = 30
 CONFIG_RECOVERY_PER_RESOURCE = 20
 CONFIG_RECOVERY_SWEEP_INTERVAL = datetime.timedelta(seconds=30)
+# How often each conversation account's provider model catalogue is re-read, so
+# automatic model selection follows a provider's new or retired models.
+AGENTCLI_CATALOG_REFRESH_INTERVAL = datetime.timedelta(hours=6)
 CONFIG_RECOVERY_SWEEP_BATCH = 4
 CONFIG_RECOVERY_OBSERVATION_TIMEOUT = 5
 CONFIG_RECOVERY_APPROVAL_CAP = "__configuration_recovery__"
@@ -215,34 +218,32 @@ AGENTCLI_PROVIDERS = frozenset({
     "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent"})
 # Default endpoints/models; the panel may override the model per conversation.
 AGENTCLI_CLAUDE_BASE_URL = "https://api.anthropic.com"
-AGENTCLI_CLAUDE_DEFAULT_MODEL = "claude-opus-4-8"
 AGENTCLI_ANTHROPIC_VERSION = "2023-06-01"
 AGENTCLI_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-# The retired `deepseek-chat` and `deepseek-reasoner` ids answer an HTTP error.
-# They were only routing labels for the non-thinking and thinking modes of the
-# current generation, which is why the default is one id plus the `thinking`
-# field rather than two ids. A shipped default is a guess that rots: the provider
-# card refuses to store a model the provider does not list, so this constant is a
-# starting point and not a promise.
-AGENTCLI_DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
+# No provider ships a default model id. An account without a chosen model is in
+# AUTOMATIC mode and follows the newest model of the provider's own catalogue
+# (see model_selection.py), so a retired or replaced model never needs a Phoenix
+# release. The retired `deepseek-chat` and `deepseek-reasoner` ids were routing
+# labels for thinking modes, which is why the mode is the `thinking` field.
 # ChatGPT (OpenAI) is OpenAI-compatible; base already includes /v1.
 AGENTCLI_OPENAI_BASE_URL = "https://api.openai.com/v1"
 # Gemini via Google's OpenAI-compatible endpoint (Authorization: Bearer <key>);
 # base already includes the OpenAI path, so chat/models append cleanly.
 AGENTCLI_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-AGENTCLI_GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
 # Grok (xAI) is OpenAI-compatible; base includes /v1 so chat/models append cleanly.
-# No default model: the live /v1/models list populates the dropdown (like ChatGPT).
 AGENTCLI_GROK_BASE_URL = "https://api.x.ai/v1"
-AGENTCLI_GROK_DEFAULT_MODEL = ""
 # MiniMax via its Anthropic-compatible API (Authorization: Bearer <key>); base has
 # no /v1, so /v1/messages and /v1/models append cleanly. It speaks the Anthropic
 # Messages wire format, so it runs through ClaudeProvider, not OpenAICompatProvider.
 AGENTCLI_MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
-AGENTCLI_MINIMAX_DEFAULT_MODEL = "MiniMax-M2"
-# MiniMax does not document a models-list endpoint; this curated set backs the
-# model dropdown when the live probe finds none.
-AGENTCLI_MINIMAX_MODELS = ("MiniMax-M2", "MiniMax-M1")
+# MiniMax's /v1/models is documented but not guaranteed on every key; this curated
+# set is ONLY the fallback when the live listing returns nothing. Ids are mixed
+# case. Automatic mode ranks it like any catalogue, so a new MiniMax model reaches
+# an account through the live listing without touching this tuple.
+AGENTCLI_MINIMAX_MODELS = (
+    "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed", "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
+)
 # Mistral's hosted API is OpenAI-compatible for chat and publishes live model
 # capabilities. Base includes /v1 so chat/models append cleanly. There is no
 # shipped default because the account-scoped list is authoritative.
@@ -258,11 +259,9 @@ AGENTCLI_KIMI_BASE_URL = "https://api.moonshot.ai/v1"
 # and k2.5 + the moonshot-v1 series are withheld from newly registered users), so
 # only the live list knows which models a given key can actually call. Naming a
 # flagship default here would offer a model that answers 404 on the lower plans.
-AGENTCLI_KIMI_DEFAULT_MODEL = ""
 # Meta's Model API (dev.meta.ai) is OpenAI-compatible; base includes /v1 so
 # chat/models append cleanly. Its predecessor api.llama.com is being retired.
 AGENTCLI_META_BASE_URL = "https://api.meta.ai/v1"
-AGENTCLI_META_DEFAULT_MODEL = "muse-spark-1.1"
 # OpenRouter aggregates many providers behind one OpenAI-compatible key (a common
 # region-friendly way to reach Meta's Llama and hundreds of other models). Base
 # includes /api/v1; no default model (the live tool-capable list drives the dropdown).
@@ -273,7 +272,6 @@ AGENTCLI_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # vendor-namespaced (e.g. "meta/llama-3.3-70b-instruct"), and tool-calling support
 # varies by model, which the catalog does not advertise.
 AGENTCLI_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-AGENTCLI_NVIDIA_DEFAULT_MODEL = ""
 # Local Ollama has no default: the operator supplies a local base URL and picks a
 # model from the installed list. Ollama Cloud is the same wire format but hosted
 # at a fixed URL and authenticated with an API key (Authorization: Bearer).
@@ -293,6 +291,17 @@ AGENTCLI_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.co
 AGENTCLI_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
 AGENTCLI_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
 AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
+# Regional and plan-specific endpoints a provider documents next to its default.
+# An API key is bound to the region or plan it was issued for, so each is a
+# separate choice rather than a rewrite of the default URL.
+AGENTCLI_KIMI_CHINA_BASE_URL = "https://api.moonshot.cn/v1"
+AGENTCLI_ZAI_CHINA_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+AGENTCLI_MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai/v1"
+AGENTCLI_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
+AGENTCLI_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
+AGENTCLI_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
+AGENTCLI_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
 AGENTCLI_DEFAULT_MAX_TOKENS = 8192
 # Explicit output cap sent to DeepSeek only. Its undocumented default cap can
 # truncate a large tool call (a whole-dashboard write) mid-JSON; 32K is at or
@@ -340,6 +349,7 @@ AGENTCLI_LEARNABLE_OPTIONS = {
     "thinking": "thinking",
     "think": "thinking",
     "enable_thinking": "thinking",
+    "tools": "tools",
 }
 # Per-turn cap on provider and tool round trips before the loop pauses. In the
 # interactive chat this is a "continue?" checkpoint (the operator can grant

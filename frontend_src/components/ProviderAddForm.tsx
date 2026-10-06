@@ -30,6 +30,9 @@ export interface ProviderAddFormProps {
   disabled?: boolean;
   allowCapabilityProbe?: boolean;
   requireModel?: boolean;
+  /** Offer "Automatic" (follow the provider's newest model) and make it the
+   *  default. Decision accounts are qualified against exact models and never use it. */
+  allowAutomatic?: boolean;
   idPrefix?: string;
   completeLabel: string;
   addingLabelKey: string;
@@ -54,7 +57,7 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 
 export function ProviderAddForm({
   providerTypes, disabled, completeLabel, addingLabelKey, onActiveChange, onCreated,
-  allowCapabilityProbe = true, requireModel = false, idPrefix = "agentcli-add",
+  allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add",
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
   const [adding, setAdding] = useState<AgentCliProviderType | null>(null);
@@ -139,7 +142,7 @@ export function ProviderAddForm({
         error: null,
         models: response.models,
         model: response.models.includes(current.model)
-          ? current.model : response.models[0] ?? "",
+          ? current.model : (allowAutomatic ? "" : response.models[0] ?? ""),
       }));
     } catch (error: unknown) {
       if (generation.current !== currentGeneration) return;
@@ -153,8 +156,11 @@ export function ProviderAddForm({
     }
   };
 
+  // An empty model is a valid choice only where "Automatic" is offered.
+  const modelMissing = requireModel && !(allowAutomatic && form.model === "") && !form.models.includes(form.model);
+
   const complete = async () => {
-    if (!adding || !form.validated || (requireModel && !form.models.includes(form.model))) return;
+    if (!adding || !form.validated || modelMissing) return;
     const currentGeneration = ++generation.current;
     setForm((current) => ({ ...current, saving: true, error: null }));
     try {
@@ -166,7 +172,7 @@ export function ProviderAddForm({
       };
       const response = await api.createAgentCliProvider(adding.kind, payload);
       if (generation.current !== currentGeneration) return;
-      await onCreated(response.instance, allowCapabilityProbe && form.probe && Boolean(form.model));
+      await onCreated(response.instance, allowCapabilityProbe && form.probe && Boolean(form.model || response.instance.model));
       if (generation.current === currentGeneration) reset(false);
     } catch (error: unknown) {
       if (generation.current !== currentGeneration) return;
@@ -262,12 +268,13 @@ export function ProviderAddForm({
                 id={`${idPrefix}-model`}
                 className="input input-auto"
                 value={form.model}
-                busy={form.saving} disabled={!form.models.length}
+                busy={form.saving} disabled={!form.models.length && !allowAutomatic}
                 onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
               >
+                {allowAutomatic && <option value="">{t("settings.agentcliModelAuto")}</option>}
                 {form.models.length
                   ? form.models.map((model) => <option key={model} value={model}>{model}</option>)
-                  : <option value="">{t("settings.agentcliNoModels")}</option>}
+                  : !allowAutomatic && <option value="">{t("settings.agentcliNoModels")}</option>}
               </BusySelect>
             </label>
           )}
@@ -292,7 +299,7 @@ export function ProviderAddForm({
                 <BusyButton
                   type="button"
                   className="btn btn-primary btn-sm"
-                  busy={form.saving || Boolean(disabled)} disabled={requireModel && !form.models.includes(form.model)}
+                  busy={form.saving || Boolean(disabled)} disabled={modelMissing}
                   onClick={() => void complete()}
                 >
                   {completeLabel}

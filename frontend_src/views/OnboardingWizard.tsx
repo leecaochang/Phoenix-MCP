@@ -443,6 +443,7 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
 
       <ProviderAddForm
         providerTypes={providerTypes}
+        allowAutomatic
         disabled={busy}
         completeLabel={t("wizard.tryNow")}
         addingLabelKey="wizard.addingProvider"

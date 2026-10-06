@@ -883,7 +883,8 @@
       "attentionCheckRequired": "계속하기 전에 작업 결과를 확인하세요.",
       "attentionNotReviewable": "이 항목은 확인 처리할 수 없습니다.",
       "attentionSaveFailed": "확인 결과를 저장하지 못했습니다. 작업을 계속 확인해야 합니다.",
-      "attentionReviewConflict": "이 작업은 실행 중이거나 이미 확인되었습니다. 목록을 새로고침하세요."
+      "attentionReviewConflict": "이 작업은 실행 중이거나 이미 확인되었습니다. 목록을 새로고침하세요.",
+      "providerModelOrAuto": "모델 또는 auto 중 하나만 보내세요."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -1383,7 +1384,19 @@
       "agentcliTencentHint": "TokenHub API 키를 생성한 사이트를 선택하세요. 키는 해당 사이트에서만 사용할 수 있습니다. TokenHub 콘솔에서 사용할 모델을 활성화하세요.",
       "agentcliMiMoHint": "Xiaomi MiMo 종량제 API 키를 사용하세요. Token Plan 구독 키는 별도 엔드포인트를 사용하며 여기서는 지원되지 않습니다.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "자동(사용 가능한 최신 모델)",
+      "agentcliDefaultModelAuto": "기본 모델: 자동, 현재 {model}",
+      "agentcliDefaultModelAutoPending": "기본 모델: 자동(공급자의 모델 목록을 기다리는 중)",
+      "agentcliModelReplaced": "{retired}은(는) 이 공급자에서 더 이상 제공되지 않아 이 계정은 대신 {model}을(를) 사용합니다.",
+      "agentcliRegion": "지역",
+      "agentcliRegionGlobal": "글로벌",
+      "agentcliRegionChina": "중국",
+      "agentcliRegionEu": "유럽",
+      "agentcliRegionUs": "미국",
+      "agentcliZaiChina": "중국(BigModel)",
+      "agentcliMimoPayg": "종량제",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "approvalSummary": {
       "action.approve": "승인 및 실행",

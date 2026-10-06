@@ -662,7 +662,8 @@
       "attentionCheckRequired": "继续前，请核对操作结果。",
       "attentionNotReviewable": "此事项无法确认。",
       "attentionSaveFailed": "无法保存核对结果。此操作仍需核对。",
-      "attentionReviewConflict": "此操作正在执行或已核对。请刷新列表。"
+      "attentionReviewConflict": "此操作正在执行或已核对。请刷新列表。",
+      "providerModelOrAuto": "请只发送 model 或 auto 其中之一。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -1523,7 +1524,19 @@
       "agentcliTencentHint": "请选择创建 TokenHub API 密钥的站点。密钥不能跨站点使用。请在 TokenHub 控制台开通所需模型。",
       "agentcliMiMoHint": "请使用小米 MiMo 按量付费 API 密钥。Token Plan 订阅密钥使用独立的接口地址，此处不支持。",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "自动（最新可用模型）",
+      "agentcliDefaultModelAuto": "默认模型：自动，当前为 {model}",
+      "agentcliDefaultModelAutoPending": "默认模型：自动（正在等待提供商的模型列表）",
+      "agentcliModelReplaced": "该提供商不再提供 {retired}，因此此账户改用 {model}。",
+      "agentcliRegion": "区域",
+      "agentcliRegionGlobal": "全球",
+      "agentcliRegionChina": "中国",
+      "agentcliRegionEu": "欧洲",
+      "agentcliRegionUs": "美国",
+      "agentcliZaiChina": "中国（BigModel）",
+      "agentcliMimoPayg": "按量付费",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",

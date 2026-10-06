@@ -451,6 +451,10 @@ export const api = {
   setAgentCliProviderModel: (id: string, model: string) =>
     req<{ instance: { id: string; model: string } }>(
       "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { model }),
+  /** Follow the provider's newest model instead of a fixed one. */
+  setAgentCliProviderAuto: (id: string) =>
+    req<{ instance: { id: string; model: string; model_mode: "auto" | "fixed" } }>(
+      "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { auto: true }),
   deleteAgentCliProvider: (id: string) =>
     req<{ deleted: string }>("DELETE", `/agentcli/providers/${encodeURIComponent(id)}`),
   getAgentCliModels: (id: string) =>

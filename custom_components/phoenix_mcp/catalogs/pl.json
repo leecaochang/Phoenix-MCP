@@ -1062,7 +1062,8 @@
       "attentionCheckRequired": "Sprawdź wynik działania przed kontynuacją.",
       "attentionNotReviewable": "Nie można potwierdzić tego elementu.",
       "attentionSaveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia.",
-      "attentionReviewConflict": "To działanie trwa lub zostało już sprawdzone. Odśwież listę."
+      "attentionReviewConflict": "To działanie trwa lub zostało już sprawdzone. Odśwież listę.",
+      "providerModelOrAuto": "Wyślij model albo auto, nie oba naraz."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -1874,7 +1875,19 @@
       "agentcliTencentHint": "Wybierz lokalizację, w której utworzono klucz API TokenHub. Klucze działają tylko w swojej lokalizacji. Aktywuj wybrane modele w konsoli TokenHub.",
       "agentcliMiMoHint": "Użyj klucza API Xiaomi MiMo rozliczanego według użycia. Klucze subskrypcji Token Plan korzystają z osobnych punktów końcowych i nie są tu obsługiwane.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automatycznie (najnowszy dostępny)",
+      "agentcliDefaultModelAuto": "Model domyślny: automatyczny, obecnie {model}",
+      "agentcliDefaultModelAutoPending": "Model domyślny: automatyczny (oczekiwanie na listę modeli dostawcy)",
+      "agentcliModelReplaced": "Dostawca nie oferuje już modelu {retired}, więc to konto używa zamiast niego modelu {model}.",
+      "agentcliRegion": "Region",
+      "agentcliRegionGlobal": "Globalny",
+      "agentcliRegionChina": "Chiny",
+      "agentcliRegionEu": "Europa",
+      "agentcliRegionUs": "Stany Zjednoczone",
+      "agentcliZaiChina": "Chiny (BigModel)",
+      "agentcliMimoPayg": "Płatność za użycie",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "approvalSummary": {
       "action.approve": "Zatwierdź i wykonaj",

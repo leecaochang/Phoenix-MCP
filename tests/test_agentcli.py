@@ -12,6 +12,7 @@ import pytest
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import agentcli
+from custom_components.phoenix_mcp.const import AGENTCLI_MINIMAX_MODELS
 from custom_components.phoenix_mcp.agentcli import (
     ClaudeProvider,
     OpenAICompatProvider,
@@ -78,8 +79,8 @@ class _FakeSession:
         self.calls.append(("POST", {"url": url, "json": json, "allow_redirects": allow_redirects}))
         return self._resp
 
-    def get(self, url, headers=None, timeout=None, allow_redirects=None):
-        self.calls.append(("GET", {"url": url, "allow_redirects": allow_redirects}))
+    def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
+        self.calls.append(("GET", {"url": url, "allow_redirects": allow_redirects, "params": params}))
         return self._resp
 
 
@@ -296,13 +297,13 @@ async def test_openai_usage_chunk_with_empty_choices_reports_usage():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("kind", "expects_flag"), [
     ("chatgpt", True), ("deepseek", True), ("openrouter", True), ("kimi", True),
-    ("groq", True),
+    ("groq", True), ("ollama", True), ("ollama_cloud", True),
     ("gemini", False), ("grok", False), ("mistral", False), ("nvidia", False), ("meta", False),
-    ("ollama", False), ("ollama_cloud", False), ("zai", False),
+    ("zai", False),
     ("together", False), ("cerebras", False), ("fireworks", False), ("qwen", True),
 ])
 async def test_stream_options_include_usage_only_for_curated_kinds(kind, expects_flag):
-    # OpenAI omits streaming usage unless asked; DeepSeek, OpenRouter, Kimi,
+    # OpenAI and Ollama omit streaming usage unless asked; DeepSeek, OpenRouter, Kimi,
     # Groq, and Qwen document accepting the flag. Everyone else must NOT get it (an unrecognized
     # stream_options could reject the whole request there).
     body = _sse("data: [DONE]")
@@ -977,7 +978,7 @@ async def test_minimax_validate_soft_accepts_and_list_models_fallback():
     assert ok is False and "rejected" in msg.lower()
     # list_models falls back to the curated set when the endpoint is absent.
     models = await provider.list_models(_FakeSession(_FakeResp(404, b"", text_data="x")))
-    assert models == ["MiniMax-M2", "MiniMax-M1"]
+    assert models == list(AGENTCLI_MINIMAX_MODELS)
 
 
 @pytest.mark.asyncio

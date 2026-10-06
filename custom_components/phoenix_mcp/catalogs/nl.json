@@ -1052,7 +1052,8 @@
       "attentionCheckRequired": "Controleer het resultaat van de actie voordat je doorgaat.",
       "attentionNotReviewable": "Dit item kan niet worden bevestigd.",
       "attentionSaveFailed": "De controle kon niet worden opgeslagen. De actie moet nog worden gecontroleerd.",
-      "attentionReviewConflict": "Deze actie loopt of is al gecontroleerd. Vernieuw de lijst."
+      "attentionReviewConflict": "Deze actie loopt of is al gecontroleerd. Vernieuw de lijst.",
+      "providerModelOrAuto": "Stuur een model of auto, niet beide."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -1848,7 +1849,19 @@
       "agentcliTencentHint": "Kies de locatie waar u uw TokenHub-API-sleutel hebt aangemaakt. Sleutels gelden alleen voor die locatie. Activeer de gewenste modellen in de TokenHub-console.",
       "agentcliMiMoHint": "Gebruik een Xiaomi MiMo-API-sleutel met betaling per gebruik. Token Plan-abonnementssleutels gebruiken aparte eindpunten en worden hier niet ondersteund.",
       "providerMiMo": "Xiaomi MiMo",
-      "providerTencent": "Tencent Cloud TokenHub"
+      "providerTencent": "Tencent Cloud TokenHub",
+      "agentcliModelAuto": "Automatisch (nieuwste beschikbare)",
+      "agentcliDefaultModelAuto": "Standaardmodel: automatisch, momenteel {model}",
+      "agentcliDefaultModelAutoPending": "Standaardmodel: automatisch (wacht op de modellijst van de aanbieder)",
+      "agentcliModelReplaced": "{retired} wordt niet meer aangeboden door deze aanbieder, dus dit account gebruikt nu {model}.",
+      "agentcliRegion": "Regio",
+      "agentcliRegionGlobal": "Wereldwijd",
+      "agentcliRegionChina": "China",
+      "agentcliRegionEu": "Europa",
+      "agentcliRegionUs": "Verenigde Staten",
+      "agentcliZaiChina": "China (BigModel)",
+      "agentcliMimoPayg": "Betalen naar gebruik",
+      "agentcliMimoTokenPlan": "Token Plan"
     },
     "approvalSummary": {
       "action.approve": "Goedkeuren en uitvoeren",

@@ -7,6 +7,7 @@ const createAgentCliProvider = vi.fn();
 const deleteAgentCliProvider = vi.fn();
 const getAgentCliModels = vi.fn();
 const setAgentCliProviderModel = vi.fn();
+const setAgentCliProviderAuto = vi.fn();
 const probeAgentCliCapabilities = vi.fn();
 const refreshAgentCliProvider = vi.fn();
 const localizedApiMessage = vi.fn((
@@ -27,6 +28,7 @@ vi.mock("../api", () => ({
     deleteAgentCliProvider: (...a: unknown[]) => deleteAgentCliProvider(...a),
     getAgentCliModels: (...a: unknown[]) => getAgentCliModels(...a),
     setAgentCliProviderModel: (...a: unknown[]) => setAgentCliProviderModel(...a),
+    setAgentCliProviderAuto: (...a: unknown[]) => setAgentCliProviderAuto(...a),
     probeAgentCliCapabilities: (...a: unknown[]) => probeAgentCliCapabilities(...a),
     refreshAgentCliProvider: (...a: unknown[]) => refreshAgentCliProvider(...a),
   },
@@ -406,6 +408,44 @@ describe("AgentCliSettings default model", () => {
     // delete nor create may be called.
     expect(deleteAgentCliProvider).not.toHaveBeenCalled();
     expect(createAgentCliProvider).not.toHaveBeenCalled();
+  });
+
+  it("shows an automatic account as following the newest model", async () => {
+    getAgentCliProviders.mockResolvedValue({
+      instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-v4-pro", model_mode: "auto" }],
+    });
+    renderCard();
+    expect(await screen.findByText("Default model: automatic, currently deepseek-v4-pro")).toBeTruthy();
+    // An automatic account is never flagged as holding a retired model.
+    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    fireEvent.click(await screen.findByLabelText("Change default model"));
+    const select = (await screen.findByLabelText("Select default model:")) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    // Nothing to save until the choice differs from what the account already does.
+    expect(screen.getByText("Save").closest("button")).toBeDisabled();
+  });
+
+  it("switches a fixed account back to automatic without sending a model", async () => {
+    setAgentCliProviderAuto.mockResolvedValue({ instance: { id: "i1", model: "deepseek-v4-pro", model_mode: "auto" } });
+    renderCard();
+    fireEvent.click(await screen.findByLabelText("Change default model"));
+    const select = await screen.findByLabelText("Select default model:");
+    fireEvent.change(select, { target: { value: "" } });
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(setAgentCliProviderAuto).toHaveBeenCalledWith("i1"));
+    expect(setAgentCliProviderModel).not.toHaveBeenCalled();
+  });
+
+  it("tells the operator when a chosen model was retired and replaced", async () => {
+    getAgentCliProviders.mockResolvedValue({
+      instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-flash",
+        model_mode: "fixed", model_replaced_from: "deepseek-v4-flash" }],
+    });
+    getAgentCliModels.mockResolvedValue({ models: ["deepseek-flash", "deepseek-v4-pro"] });
+    renderCard();
+    expect(await screen.findByText(
+      "deepseek-v4-flash is no longer offered by this provider, so this account is using deepseek-flash instead.",
+    )).toBeTruthy();
   });
 
   it("warns when the configured model is no longer offered", async () => {

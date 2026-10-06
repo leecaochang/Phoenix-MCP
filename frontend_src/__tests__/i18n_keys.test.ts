@@ -76,6 +76,7 @@ const BACKEND_NAMED = [
   "settings.agentcliServerUrl", "settings.agentcliZai",
   "settings.agentcliSite", "settings.agentcliSingapore",
   "settings.agentcliGuangzhou", "settings.agentcliSiliconValley",
+  "settings.agentcliRegion", "settings.agentcliMimo",
 ];
 
 const catalog = flattenCatalog(en.panel);
