@@ -28,6 +28,9 @@ export function AuditView({ accessKeys }: Props) {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A failed read is reported as such: an empty table would claim there was no
+  // activity when the evidence was only unavailable.
+  const [error, setError] = useState<string | null>(null);
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome | "">("");
   const [accessKeyFilter, setAccessKeyFilter] = useState("");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("");
@@ -75,8 +78,16 @@ export function AuditView({ accessKeys }: Props) {
       if (!isLatest()) return;
       setEntries((prev) => (offset === 0 ? resp.entries : [...prev, ...resp.entries]));
       setHasMore(offset + resp.entries.length < resp.total);
+      setError(null);
     } catch {
-      if (offset === 0 && isLatest()) setEntries([]);
+      if (!isLatest()) return;
+      // A failed first page leaves no rows for the current filters; a failed
+      // later page keeps the rows already shown and Load more stays to retry.
+      if (offset === 0) {
+        setEntries([]);
+        setHasMore(false);
+      }
+      setError(t("audit.loadFailed"));
     } finally {
       if (isLatest()) {
         setLoading(false);
@@ -166,12 +177,17 @@ export function AuditView({ accessKeys }: Props) {
           </div>
         </div>
 
-        <AuditTable
-          entries={entries}
-          loading={loading}
-          accessKeyNames={accessKeyNames}
-        />
-        {hasMore && (
+        {error && <div className="banner banner-error mb-8" role="alert">{error}</div>}
+        {!(error && entries.length === 0 && !loading) && (
+          <AuditTable
+            entries={entries}
+            loading={loading}
+            accessKeyNames={accessKeyNames}
+          />
+        )}
+        {/* Not while a first page is loading: a later page fetched for the new
+            filters would append to rows from the old ones. */}
+        {hasMore && !loading && (
           <div className="approval-history-more">
             <BusyButton className="btn btn-ghost btn-sm" busy={loadingMore}
               onClick={() => load(entries.length)}>

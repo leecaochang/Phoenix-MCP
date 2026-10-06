@@ -477,3 +477,114 @@ async def test_request_control_fields_refuse_before_handler(hass, hass_admin_use
     with pytest.raises(WsCommandNotDispatchedError, match="request fields"):
         await async_ws_command(hass, "input_boolean/create", {"name": "Must not exist", field: value})
     assert await async_ws_command(hass, "input_boolean/list", {}) == before
+
+
+async def test_timeout_reports_an_unknown_outcome_because_the_handler_keeps_running(
+    hass, hass_admin_user, monkeypatch
+):
+    """HA's async_response runs the handler as its own task; a timeout does not stop it.
+
+    The error must therefore not read as a definite failure that invites a retry.
+    """
+    import asyncio
+
+    import custom_components.phoenix_mcp.ws_dispatch as wd
+    from homeassistant.components import websocket_api
+
+    release = asyncio.Event()
+    effects: list[str] = []
+
+    @websocket_api.websocket_command({"type": "phx_test/slow_write"})
+    @websocket_api.async_response
+    async def _handler(hass, connection, msg):
+        await release.wait()
+        effects.append("written")
+        connection.send_result(msg["id"], {"ok": True})
+
+    websocket_api.async_register_command(hass, _handler)
+    monkeypatch.setattr(wd, "ALLOWED_WS_COMMANDS", wd.ALLOWED_WS_COMMANDS | {"phx_test/slow_write"})
+
+    with pytest.raises(WsDispatchError, match="may still complete it") as exc_info:
+        await wd.async_ws_command(hass, "phx_test/slow_write", {}, timeout=0.01)
+    assert not isinstance(exc_info.value, WsCommandNotDispatchedError)
+    assert wd.ws_commands_unsettled()
+
+    # A recovery record cannot be reviewed while the handler may still write:
+    # a newer write admitted after review would be overwritten by this one.
+    from homeassistant.helpers.storage import Store
+    from custom_components.phoenix_mcp.config_recovery import (
+        ConfigurationRecovery, ConfigurationRecoveryError,
+    )
+    recovery = ConfigurationRecovery(Store(hass, 1, "ws-unsettled-recovery"))
+    rid = await recovery.begin("dashboard:test", "update", "access_key", {})
+    recovery.leave(rid)
+    with pytest.raises(ConfigurationRecoveryError, match="still running"):
+        await recovery.reviewed(rid, "admin")
+
+    release.set()
+    await hass.async_block_till_done()
+    assert effects == ["written"]
+    await asyncio.sleep(0)  # the future's done callback runs on the next tick
+    assert not wd.ws_commands_unsettled()
+
+
+async def test_cancelled_caller_still_tracks_the_running_command(hass, hass_admin_user, monkeypatch):
+    import asyncio
+
+    import custom_components.phoenix_mcp.ws_dispatch as wd
+    from homeassistant.components import websocket_api
+
+    release = asyncio.Event()
+
+    @websocket_api.websocket_command({"type": "phx_test/slow_cancel"})
+    @websocket_api.async_response
+    async def _handler(hass, connection, msg):
+        await release.wait()
+        connection.send_error(msg["id"], "late_failure", "failed after the caller left")
+
+    websocket_api.async_register_command(hass, _handler)
+    monkeypatch.setattr(wd, "ALLOWED_WS_COMMANDS", wd.ALLOWED_WS_COMMANDS | {"phx_test/slow_cancel"})
+
+    caller = hass.async_create_task(wd.async_ws_command(hass, "phx_test/slow_cancel", {}))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert wd.ws_commands_unsettled()
+    release.set()
+    await hass.async_block_till_done()
+    await asyncio.sleep(0)
+    assert not wd.ws_commands_unsettled()
+
+
+async def test_cancellation_after_an_error_receipt_retrieves_it(hass, hass_admin_user, monkeypatch):
+    """HA's error can arrive just before the caller is cancelled; nobody reads it
+    then, and asyncio would log it as a never-retrieved exception."""
+    import asyncio
+
+    import custom_components.phoenix_mcp.ws_dispatch as wd
+    from homeassistant.components import websocket_api
+
+    release = asyncio.Event()
+    receipts: list[asyncio.Future] = []
+    caller: asyncio.Task | None = None
+
+    @websocket_api.websocket_command({"type": "phx_test/fail_then_cancel"})
+    @websocket_api.async_response
+    async def _handler(hass, connection, msg):
+        receipts.append(connection.result_future)
+        await release.wait()
+        connection.send_error(msg["id"], "failed", "terminal failure before cancellation")
+        caller.cancel()
+
+    websocket_api.async_register_command(hass, _handler)
+    monkeypatch.setattr(wd, "ALLOWED_WS_COMMANDS", wd.ALLOWED_WS_COMMANDS | {"phx_test/fail_then_cancel"})
+
+    caller = hass.async_create_task(wd.async_ws_command(hass, "phx_test/fail_then_cancel", {}))
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert receipts[0].done() and not wd.ws_commands_unsettled()
+    assert not receipts[0]._log_traceback, "the error receipt was left unretrieved"

@@ -24,6 +24,18 @@ async def cleanup_mesa_policy_workers(hass):
     await ashutdown_policy_workers()
 
 
+@pytest.fixture(autouse=True)
+def forget_unsettled_ws_commands():
+    """A test's still-running HA command must not block review in the next test.
+
+    The tracking set is process-wide by design; each test has its own loop.
+    """
+    from custom_components.phoenix_mcp import ws_dispatch
+
+    yield
+    ws_dispatch._UNSETTLED.clear()
+
+
 @pytest.fixture
 def custom_sentence_recognition(monkeypatch):
     """Mark a real HA match with the metadata used for custom sentence precedence."""

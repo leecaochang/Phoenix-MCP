@@ -471,9 +471,10 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         data.routes_registered = True
 
     # Assist bridge: register the Phoenix MCP scoped llm.API so HA's native Assist/voice
-    # conversation agents can drive the bound access key's tools. Kill-switch-gated like
-    # the client routes (Assist is agent activity); the admin settings PATCH toggles
-    # it live when the kill switch flips. No-op on HA versions lacking the seam.
+    # conversation agents can drive the bound access key's tools. Registered whenever HA
+    # supports it, kill switch or not: each turn's instance carries no tools while the
+    # kill switch is on or nothing is bound, so a pipeline pointed at it degrades
+    # instead of failing. No-op on HA versions lacking the seam.
     from .assist_api import (
         async_probe_assist_api,
         async_register_assist_api,

@@ -252,7 +252,7 @@
       "modeDescAllow": "呼び出しをすぐに実行します。",
       "modeDescConfirm": "各呼び出しをこのパネルの承認待ちキューに追加します。",
       "updateFailed": "機能を更新できませんでした。",
-      "passThroughNotice": "<strong>パススルーが有効です。</strong>読み取りと日常的なアクションは許可として扱われます。設定変更、システムアクション、高リスク機能、システムログへのアクセスには、引き続き以下の設定が適用されます。確認では常に承認が必要です。",
+      "passThroughNotice": "<strong>パススルーが有効です。</strong>読み取りと日常的なアクションは許可として扱われます。設定変更、システムアクション、高リスク機能、システムログへのアクセス、カメラ画像の読み取りには、引き続き以下の設定が適用されます。確認では常に承認が必要です。",
       "esphomeBadgeTitle": "アドオンが利用可能になるまで、このアクセスキーには ESPHome ツールが表示されません。機能は今すぐ設定できます。",
       "confirmUnavailable": "この機能では承認を必須にできません。",
       "cap_calendar_write": {
@@ -503,7 +503,8 @@
       "resourcePlaceholder": "リソース...",
       "filterIpAria": "送信元で絞り込む",
       "ipPlaceholder": "送信元...",
-      "refreshAria": "監査ログを更新"
+      "refreshAria": "監査ログを更新",
+      "loadFailed": "監査ログを読み込めませんでした。更新して再試行してください。"
     },
     "inject": {
       "profileSet": "{key} に MESA プロファイルが設定されています。クリックして編集",
@@ -1300,7 +1301,7 @@
       "agentcliProbedNothing": "このプロバイダーはオプションを検証しないため、確認できませんでした。",
       "agentcliProbedNoLevels": "Phoenix はこのプロバイダーに思考レベルを送信しないため、確認するレベルはありません。",
       "agentcliProbedUnanswered": "{calls} 回試しましたが、プロバイダーがすべて拒否したため確認できませんでした。通常はアカウントにクレジットがないか、このモデルでキーが無効です。",
-      "agentcliModelRetired": "このプロバイダーは {model} の提供を終了しました。現在のモデルを選択しないと、このアカウントの Agent Chat は失敗します。",
+      "agentcliModelRetired": "{model} はこのプロバイダーの現在のモデル一覧にありません。カスタムモデルやプライベートモデルであれば、そのまま動作する場合があります。そうでない場合は、現在のモデルを選択してください。",
       "agentcliModelUnavailable": "{model}（利用不可）",
       "agentcliModelNoTools": "{model}（ツール呼び出しなし）",
       "agentcliDefaultNoTools": "{model} はツールを呼び出せないため、このアカウントでは Agent Chat が動作しません。ツール呼び出しに対応するモデルを選択してください。",

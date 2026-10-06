@@ -171,7 +171,7 @@
         </ul>
 
         <h2>Pass-through mode</h2>
-        <p>Pass-through access keys skip the three-level permission check and have <span class="state green"><span class="swatch"></span>GREEN</span> access to every entity. They are for trusted tools where maintaining a full tree is impractical.</p>
+        <p>Pass-through access keys skip the three-level permission check and have <span class="state green"><span class="swatch"></span>GREEN</span> access to every entity, or only to the entities exposed to Assist when <strong>Limit to Assist-exposed entities</strong> is on. They are for trusted tools where maintaining a full tree is impractical.</p>
 
         <div class="callout warn">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
@@ -187,7 +187,7 @@
           <li>The <code>phoenix_mcp</code> domain blocklist and sensitive-attribute scrubbing</li>
           <li>Rate limiting</li>
           <li>Any capability in the write, system, and irreversible group (each must still be enabled)</li>
-          <li>System log read</li>
+          <li>System log read and Camera image read</li>
           <li>A capability set to <code>confirm</code>, which is gated even under pass-through</li>
         </ul>
         <p>All other read-tier capabilities are granted by pass-through. Use pass-through only for tools you fully control.</p>

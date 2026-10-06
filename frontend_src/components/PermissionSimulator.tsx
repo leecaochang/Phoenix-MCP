@@ -80,11 +80,15 @@ export function PermissionSimulator({ accessKeyId, externalEntityId, resolveDept
     }
   }, [externalEntityId]);
 
-  // Simulate when entity selection or permissions version changes.
-  // Uses externalEntityId directly when it just changed, because entityInputRef
-  // may still hold the previous entity.
+  // Simulate when entity selection or permissions version changes. A new
+  // selection is simulated directly, because entityInputRef may still hold the
+  // previous entity; a permission refresh re-simulates what the box shows now,
+  // which the operator may have cleared or retyped since selecting.
+  const lastExternal = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const entity = externalEntityId?.trim() || entityInputRef.current.trim();
+    const selected = lastExternal.current !== externalEntityId && externalEntityId?.trim();
+    lastExternal.current = externalEntityId;
+    const entity = selected || entityInputRef.current.trim();
     if (!entity) return;
     if (!triggerVersion && !externalEntityId) return;
     simulate(entity);
@@ -92,7 +96,15 @@ export function PermissionSimulator({ accessKeyId, externalEntityId, resolveDept
 
   // Manual typing: debounce 600ms (skip if input was set externally)
   useEffect(() => {
-    if (!entityInput.trim()) return;
+    if (!entityInput.trim()) {
+      // An empty box shows nothing, including a reply still on its way for
+      // the entity that was there before.
+      genRef.current += 1;
+      setResult(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     if (externalUpdateRef.current) {
       externalUpdateRef.current = false;
       return;
@@ -114,7 +126,12 @@ export function PermissionSimulator({ accessKeyId, externalEntityId, resolveDept
       {error && <div className="banner banner-error mt-6">{error}</div>}
       {result && (() => {
         const visiblePath = filterPath(result.resolution_path, resolveDepth);
-        const effective = effectiveFromPath(visiblePath);
+        // The server's verdict is authoritative for an entity: it also applies
+        // what the path cannot show (a missing entity, a blocked domain, a
+        // persona or household limit). A device or domain row previews only
+        // its own ancestor rules, but never for an entity that does not exist.
+        const effective = resolveDepth === "entity" || result.effective === "NOT_FOUND"
+          ? result.effective : effectiveFromPath(visiblePath);
         return (
           <div className="sim-path">
             {visiblePath.map((step, i) => (

@@ -159,6 +159,30 @@ async def test_corrupt_store_reads_as_unharvested() -> None:
     assert store.catalog.harvested is False
 
 
+@pytest.mark.parametrize("stored,expected", [
+    ("not-a-number", 0), (["1"], 0), ({"n": 1}, 0), (float("inf"), 0),
+    (float("nan"), 0), (True, 0), (-5, 0), ("7", 7), (12, 12),
+])
+async def test_loaded_resource_count_is_sanitized(stored, expected) -> None:
+    """A well-formed cache document with a bad count must still load, not abort setup."""
+
+    class _Store:
+        async def async_load(self):
+            return {"entries": [], "harvested_at": "2026-01-01T00:00:00+00:00", "resource_count": stored}
+
+    store = CardCatalogStore(_Store())  # type: ignore[arg-type]
+    await store.async_load()
+    assert store.catalog.resource_count == expected
+    assert store.catalog.harvested is True
+
+
+@pytest.mark.parametrize("count", [float("inf"), float("nan"), "1e999", [3]])
+async def test_harvest_with_an_unrepresentable_count_records_zero(count) -> None:
+    store = CardCatalogStore()
+    await store.async_replace(entries=[], resource_count=count, failed_imports=[])
+    assert store.catalog.resource_count == 0
+
+
 async def test_round_trip_through_as_dict() -> None:
     store = CardCatalogStore()
     await store.async_replace(

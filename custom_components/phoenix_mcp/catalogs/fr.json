@@ -252,7 +252,7 @@
       "modeDescAllow": "Exécuter les appels immédiatement.",
       "modeDescConfirm": "Mettre chaque appel en attente d'approbation dans ce panneau.",
       "updateFailed": "Échec de la mise à jour de la capacité.",
-      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Les lectures et les actions quotidiennes sont traitées comme Autoriser. Les modifications de configuration, les actions système, les capacités à risque élevé et l'accès au journal système utilisent toujours les paramètres ci-dessous. Confirmer nécessite toujours une approbation.",
+      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Les lectures et les actions quotidiennes sont traitées comme Autoriser. Les modifications de configuration, les actions système, les capacités à risque élevé, l'accès au journal système et la lecture d'images de caméra utilisent toujours les paramètres ci-dessous. Confirmer nécessite toujours une approbation.",
       "esphomeBadgeTitle": "Les outils ESPHome restent masqués pour cette clé d’accès tant que le module complémentaire n'est pas disponible. La capacité peut néanmoins être définie dès maintenant.",
       "confirmUnavailable": "Cette capacité ne peut pas nécessiter d'approbation.",
       "cap_calendar_write": {
@@ -692,7 +692,8 @@
       "resourcePlaceholder": "Ressource...",
       "filterIpAria": "Filtrer par source",
       "ipPlaceholder": "Adresse source...",
-      "refreshAria": "Actualiser le journal d'audit"
+      "refreshAria": "Actualiser le journal d'audit",
+      "loadFailed": "Impossible de charger le journal d'audit. Actualisez pour réessayer."
     },
     "wizard": {
       "accessSub": "Développez le groupe <code>light</code> et choisissez une lumière que vous pouvez vérifier. Sélectionnez <strong>W</strong> pour accorder un accès en lecture et en écriture. Accordez un appareil entier ou développez-le pour choisir une entité. Vous pourrez ajouter d'autres autorisations plus tard.",
@@ -1119,7 +1120,7 @@
       "agentcliProbedNothing": "Ce fournisseur ne valide pas les options, rien n'a donc pu être établi.",
       "agentcliProbedNoLevels": "Phoenix n'envoie pas de niveau de réflexion à ce fournisseur, il n'y a donc aucun niveau à vérifier.",
       "agentcliProbedUnanswered": "{calls} requêtes tentées, mais le fournisseur les a toutes refusées, rien n'a donc pu être vérifié. Cela signifie généralement que le compte n'a pas de crédit ou que la clé n'est pas valide pour ce modèle.",
-      "agentcliModelRetired": "Ce fournisseur ne propose plus {model}. Choisissez un modèle actuel, sinon le Chat de l'agent échouera sur ce compte.",
+      "agentcliModelRetired": "{model} ne figure pas dans la liste actuelle des modèles de ce fournisseur. Un modèle personnalisé ou privé peut tout de même fonctionner. Sinon, choisissez un modèle actuel.",
       "agentcliModelUnavailable": "{model} (plus disponible)",
       "agentcliModelNoTools": "{model} (pas d'appel d'outil)",
       "agentcliDefaultNoTools": "{model} ne peut pas appeler d'outils, le Chat de l'agent ne fonctionnera donc pas sur ce compte. Choisissez un modèle qui prend en charge l'appel d'outils.",

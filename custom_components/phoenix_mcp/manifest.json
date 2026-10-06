@@ -8,6 +8,6 @@
   "documentation": "https://leecaochang.github.io/Phoenix-MCP/",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/leecaochang/Phoenix-MCP/issues",
-  "requirements": ["voluptuous-serialize>=2.7.0", "Babel>=2.18.0", "jsonschema>=4.26.0"],
+  "requirements": ["Babel>=2.18.0", "jsonschema>=4.26.0"],
   "version": "1.4.0"
 }

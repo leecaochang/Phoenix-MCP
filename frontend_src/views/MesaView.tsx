@@ -557,6 +557,18 @@ export function ProfileEditor({
   const [detail, setDetail] = useState<MesaProfileDetail | null>(null);
   const [state, setState] = useState<EditorState>(initialState);
   const [loading, setLoading] = useState(!isNew);
+  // An existing profile is only editable once its stored document has loaded:
+  // saving the blank form a failed read leaves behind would replace the authored
+  // restrictions with defaults.
+  const [loaded, setLoaded] = useState(isNew || !profileKey);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  // A new entity profile starts from the entity's inherited modes, so it is not
+  // saved until that read has succeeded for the chosen entity.
+  const [seed, setSeed] = useState<{ key: string; status: "pending" | "done" | "failed" } | null>(null);
+  const [seedAttempt, setSeedAttempt] = useState(0);
+  // Fields the operator set, so a late seed never replaces a deliberate choice,
+  // including one that happens to equal the value it started with.
+  const touched = useRef(new Set<keyof EditorState>());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<MesaValidationIssue[]>([]);
@@ -572,23 +584,30 @@ export function ProfileEditor({
 
   useEffect(() => {
     if (isNew || !profileKey) return;
+    let cancelled = false;
     setLoading(true);
-    Promise.all([
-      loadProfile(scope, profileKey),
-      // Effective resolution only makes sense for entities.
-      scope === "entity" ? api.getMesaProfile(profileKey) : Promise.resolve(null),
-    ])
+    setError(null);
+    // One entity read carries both the stored document and the effective
+    // resolution; the other scopes have no effective panel.
+    const read: Promise<[MesaProfileDocument | null, MesaProfileDetail | null]> = scope === "entity"
+      ? api.getMesaProfile(profileKey).then((d) => [d.stored, d])
+      : loadProfile(scope, profileKey).then((stored) => [stored, null]);
+    read
       .then(([stored, d]) => {
+        if (cancelled) return;
         setDetail(d);
         const next = docToEditor(profileKey, stored);
         setState(next);
         cleanSnapshot.current = JSON.stringify(next);
+        setLoaded(true);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : t("mesa.loadProfileFailed")))
-      .finally(() => setLoading(false));
-  }, [scope, profileKey, isNew]);
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : t("mesa.loadProfileFailed")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [scope, profileKey, isNew, loadAttempt]);
 
   function set<K extends keyof EditorState>(key: K, value: EditorState[K]) {
+    touched.current.add(key);
     setState((s) => ({ ...s, [key]: value }));
   }
 
@@ -625,42 +644,57 @@ export function ProfileEditor({
     }
     return out.sort((a, b) => compareStrings(a.label, b.label));
   }, [entityTree, scope, integrationOptions, deviceOptions]);
+  // A boolean, so another picker list arriving does not re-run (and cancel)
+  // the seed read below.
+  const keyKnown = useMemo(() => keyOptions.some((o) => o.value === state.key.trim()), [keyOptions, state.key]);
 
   // New entity profiles: seed control + enforcement from the entity's effective
   // (inherited) mode, so creating a profile starts from what MESA already applies
   // (e.g. a lock opens at "prohibited") rather than a generic Autonomous default.
-  // Seeds once per selected entity and never overwrites a value the user then edits.
+  // Seeds once per selected entity. A mode the operator set is kept, and so are
+  // their other edits: only the seeded modes and the chosen key join the clean
+  // baseline. A caller-supplied key is a fact, so it is read even before the
+  // picker list knows it.
+  const seedKey = isNew && scope === "entity" && (keyKnown || !!lockedKey) ? state.key.trim() : "";
   useEffect(() => {
     if (!isNew || scope !== "entity") return;
-    const key = state.key.trim();
-    if (!key || !keyOptions.some((o) => o.value === key)) {
+    const key = seedKey;
+    if (!key) {
       setDetail(null);
       seededForKey.current = null;
       return;
     }
     if (seededForKey.current === key) return;
-    seededForKey.current = key;
+    setSeed({ key, status: "pending" });
     let cancelled = false;
     api.getMesaProfile(key)
       .then((d) => {
         if (cancelled) return;
+        // Marked only once a read is accepted, so a cancelled one is retried.
+        seededForKey.current = key;
+        setSeed({ key, status: "done" });
         setDetail(d);
         const eff = effectiveModes(d);
-        setState((s) => {
-          // A caller-supplied seed (suggestions Review) wins over the
-          // effective-mode default; enforcement still seeds from effective.
-          const next = {
-            ...s,
-            control_mode: seedControlMode ?? eff.control_mode,
-            enforcement_mode: eff.enforcement_mode,
-          };
-          cleanSnapshot.current = JSON.stringify(next);
-          return next;
-        });
+        // A caller-supplied seed (suggestions Review) wins over the
+        // effective-mode default; enforcement still seeds from effective.
+        const seed = { control_mode: seedControlMode ?? eff.control_mode, enforcement_mode: eff.enforcement_mode };
+        const base = JSON.parse(cleanSnapshot.current) as EditorState;
+        cleanSnapshot.current = JSON.stringify({ ...base, key: state.key, ...seed });
+        setState((s) => ({
+          ...s,
+          control_mode: touched.current.has("control_mode") ? s.control_mode : seed.control_mode,
+          enforcement_mode: touched.current.has("enforcement_mode") ? s.enforcement_mode : seed.enforcement_mode,
+        }));
       })
-      .catch(() => { if (!cancelled) setDetail(null); });
+      .catch(() => {
+        if (cancelled) return;
+        setDetail(null);
+        setSeed({ key, status: "failed" });
+      });
     return () => { cancelled = true; };
-  }, [isNew, scope, state.key, keyOptions, seedControlMode]);
+  }, [isNew, scope, seedKey, state.key, seedControlMode, seedAttempt]);
+  const seedReady = !seedKey || (seed?.key === seedKey && seed.status === "done");
+  const seedFailed = !!seedKey && seed?.key === seedKey && seed.status === "failed";
 
   // Integration: validate against the picker list when it loaded; if that list is
   // empty (e.g. the integration-options endpoint isn't reachable yet), fall back to
@@ -671,7 +705,7 @@ export function ProfileEditor({
       : keyOptions.some((o) => o.value === state.key.trim()));
   const keyInvalidShown = !lockedKey && isNew && state.key.trim() !== "" && !keyValid;
   const dirty = JSON.stringify(state) !== cleanSnapshot.current;
-  const canSave = !saving && !loading && keyValid;
+  const canSave = !saving && !loading && loaded && keyValid && seedReady;
 
   // Suggested tags for this scope's domain, ordered by root priority and
   // interleaved so the most relevant namespace leads (not alphabetical, which
@@ -739,7 +773,15 @@ export function ProfileEditor({
       <h3 className="modal-title" id="mesa-editor-title">{titleVerb}</h3>
       <div className="mesa-editor-body">
         {error && <ErrorMsg msg={error} />}
-        {loading ? <Loading /> : (
+        {seedFailed && (
+          <>
+            <ErrorMsg msg={t("mesa.loadProfileFailed")} />
+            <button className="btn btn-ghost" onClick={() => setSeedAttempt((n) => n + 1)}>{t("common.refresh")}</button>
+          </>
+        )}
+        {loading ? <Loading /> : !loaded ? (
+          <button className="btn btn-ghost" onClick={() => setLoadAttempt((n) => n + 1)}>{t("common.refresh")}</button>
+        ) : (
           <>
             {scope === "entity" && !isNew && detail && <MesaEffectivePanel detail={detail} />}
             {isNew && !lockedKey && (

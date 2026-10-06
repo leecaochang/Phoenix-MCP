@@ -16,11 +16,18 @@ const BUTTONS: { state: NodeState; label: string; titleKey: string }[] = [
   { state: "RED", label: "D", titleKey: "perms.selRed" },
 ];
 
-let _dragState: NodeState | null = null;
+// A paint gesture belongs to the pointer that started it: another finger
+// entering a row, or releasing, neither paints nor ends it. A release the page
+// never sees (outside the window, or while it lost focus) ends it too, so a
+// later hover with no button held cannot paint.
+let _drag: { state: NodeState; pointerId: number } | null = null;
 
 if (typeof document !== "undefined") {
-  document.addEventListener("pointerup", () => { _dragState = null; });
-  document.addEventListener("pointercancel", () => { _dragState = null; });
+  const end = (e: PointerEvent) => { if (_drag?.pointerId === e.pointerId) _drag = null; };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+  window.addEventListener("blur", () => { _drag = null; });
+  window.addEventListener("pagehide", () => { _drag = null; });
 }
 
 // Holds the nearest scrolling ancestor's scroll position steady for a few
@@ -49,9 +56,14 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
       aria-label={label}
       style={{ touchAction: "none" }}
       onPointerEnter={(e) => {
-        if (_dragState !== null && !disabled) {
+        if (_drag === null || _drag.pointerId !== e.pointerId) return;
+        if ((e.buttons & 1) === 0) {
+          _drag = null;
+          return;
+        }
+        if (!disabled) {
           lockScroll(e.currentTarget.closest<HTMLElement>(".phx-content"));
-          onChange(_dragState);
+          onChange(_drag.state);
         }
       }}
     >
@@ -64,12 +76,15 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
           title={title}
           className={`perm-btn${value === state ? ` active-${state}` : ""}`}
           onPointerDown={(e) => {
-            if (disabled) return;
+            // Only the primary button of the primary contact paints: a right
+            // click opening a context menu, or a second finger, must not
+            // change a saved permission.
+            if (disabled || e.button !== 0 || e.isPrimary === false) return;
             e.preventDefault();
             e.currentTarget.releasePointerCapture(e.pointerId);
             lockScroll(e.currentTarget.closest<HTMLElement>(".phx-content"));
             const newState: NodeState = state === value ? "GREY" : state;
-            _dragState = newState;
+            _drag = { state: newState, pointerId: e.pointerId };
             onChange(newState);
             // Unconditional, and safe for keyboard users: this only runs on
             // the pointer path (a keyboard Enter/Space activation never

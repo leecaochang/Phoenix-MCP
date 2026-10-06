@@ -253,7 +253,7 @@
       "modeDescAllow": "Run calls immediately.",
       "modeDescConfirm": "Queue each call for approval in this panel.",
       "updateFailed": "Failed to update capability.",
-      "passThroughNotice": "<strong>Pass-through is enabled.</strong> Reads and everyday actions are treated as Allow. Configuration changes, system actions, high-risk capabilities, and system log access still use the settings below. Confirm always requires approval.",
+      "passThroughNotice": "<strong>Pass-through is enabled.</strong> Reads and everyday actions are treated as Allow. Configuration changes, system actions, high-risk capabilities, system log access, and camera image reads still use the settings below. Confirm always requires approval.",
       "esphomeBadgeTitle": "The ESPHome tools stay hidden from this access key until the add-on is available. The capability can still be set now.",
       "confirmUnavailable": "This capability cannot require approval.",
       "cap_calendar_write": {
@@ -695,7 +695,8 @@
       "resourcePlaceholder": "Resource...",
       "filterIpAria": "Filter by source",
       "ipPlaceholder": "Source...",
-      "refreshAria": "Refresh audit log"
+      "refreshAria": "Refresh audit log",
+      "loadFailed": "Could not load the audit log. Refresh to try again."
     },
     "wizard": {
       "accessSub": "Expand the <code>light</code> group and choose a light you can verify. Select <strong>W</strong> to grant read and write access. Grant a whole device or expand it to choose one entity. You can add more permissions later.",
@@ -1122,7 +1123,7 @@
       "agentcliProbedNothing": "This provider does not validate the options, so nothing could be established.",
       "agentcliProbedNoLevels": "Phoenix does not send a thinking level to this provider, so there are no levels to check.",
       "agentcliProbedUnanswered": "Tried {calls} requests, but the provider declined every one, so nothing could be checked. This usually means the account has no credit, or the key is not valid for this model.",
-      "agentcliModelRetired": "This provider no longer offers {model}. Pick a current model, or Agent Chat will fail on this account.",
+      "agentcliModelRetired": "{model} is not in this provider's current model list. A custom or private model can still work. Otherwise, pick a current model.",
       "agentcliModelUnavailable": "{model} (no longer available)",
       "agentcliModelNoTools": "{model} (no tool calling)",
       "agentcliDefaultNoTools": "{model} cannot call tools, so Agent Chat will not work on this account. Pick a model that supports tool calling.",

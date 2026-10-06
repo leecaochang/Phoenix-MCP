@@ -406,11 +406,58 @@ def test_structure_to_json_supports_home_assistant_selector_schema():
 
 
 def test_parse_structured_plain_and_fenced_and_bad():
-    assert ai_task._parse_structured('{"a": 1}') == {"a": 1}
-    assert ai_task._parse_structured('```json\n{"a": 2}\n```') == {"a": 2}
-    assert ai_task._parse_structured('```\n{"a": 3}\n```') == {"a": 3}
+    assert ai_task._parse_structured('{"a": 1}', None) == {"a": 1}
+    assert ai_task._parse_structured('```json\n{"a": 2}\n```', None) == {"a": 2}
+    assert ai_task._parse_structured('```\n{"a": 3}\n```', None) == {"a": 3}
     with pytest.raises(HomeAssistantError):
-        ai_task._parse_structured("not json at all")
+        ai_task._parse_structured("not json at all", None)
+
+
+def _ha_structure():
+    """The schema HA's ai_task.generate_data service builds from a structure field map."""
+    from homeassistant.components.ai_task import _validate_structure_fields
+
+    return _validate_structure_fields({
+        "summary": {"required": True, "selector": {"text": {}}},
+        "priority": {"selector": {"number": {"min": 1, "max": 5}}},
+    })
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply", [
+    "{}",
+    '{"summary": 7}',
+    '{"summary": "ok", "unrequested": 1}',
+    '{"summary": "ok", "priority": 9}',
+    '{"summary": NaN}',
+    '{"summary": "ok", "priority": Infinity}',
+])
+async def test_generate_structured_refuses_output_the_structure_rejects(reply):
+    data = _make_data(**_FULL)
+    store = MagicMock()
+    store.resolve.return_value = SimpleNamespace(model="m")
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
+         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
+         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value=reply)):
+        with pytest.raises(HomeAssistantError):
+            await ai_task.async_generate_ai_task_data(MagicMock(), data, "do it", _ha_structure())
+
+
+@pytest.mark.asyncio
+async def test_generate_structured_returns_the_model_value_uncoerced():
+    data = _make_data(**_FULL)
+    store = MagicMock()
+    store.resolve.return_value = SimpleNamespace(model="m")
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
+         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
+         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value='{"summary": "ok", "priority": 3}')):
+        result = await ai_task.async_generate_ai_task_data(MagicMock(), data, "do it", _ha_structure())
+    # HA's number selector would coerce 3 to 3.0; an automation templating the
+    # value must see what the model wrote, as with HA's own AI Task providers.
+    assert result == {"summary": "ok", "priority": 3}
+    assert type(result["priority"]) is int
 
 
 # --------------------------------------------------------------------------- #

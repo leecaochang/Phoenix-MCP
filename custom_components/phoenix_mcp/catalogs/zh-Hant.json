@@ -684,7 +684,8 @@
       "rowRequestId": "請求 ID",
       "rowResource": "資源",
       "rowTime": "時間",
-      "rowAccessKey": "存取金鑰"
+      "rowAccessKey": "存取金鑰",
+      "loadFailed": "無法載入稽核日誌。請重新整理再試。"
     },
     "caps": {
       "cap_automation_write": {
@@ -813,7 +814,7 @@
       "modeDescDeny": "阻止此能力。",
       "noBuilder": "未檢測到 Device Builder 載入項",
       "noEsphome": "未檢測到 ESPHome",
-      "passThroughNotice": "<strong>直通模式已啟用。</strong>讀取和日常操作一律視為「允許」。設定變更、系統操作、高風險能力和系統日誌存取仍按下方的設定執行。「確認」始終需要核准。",
+      "passThroughNotice": "<strong>直通模式已啟用。</strong>讀取和日常操作一律視為「允許」。設定變更、系統操作、高風險能力、系統日誌存取和攝影機影像讀取仍按下方的設定執行。「確認」始終需要核准。",
       "tierConfigWrite": "設定變更",
       "tierEveryday": "日常操作",
       "tierIrreversible": "高風險",
@@ -1476,7 +1477,7 @@
       "agentcliGlobalLabel": "在整個 Home Assistant 中顯示",
       "agentcliIntro": "使用您自己的模型提供者與 Home Assistant 對話。智慧體對話會遵循所選存取金鑰的權限、核准和 MESA 規則。請先新增提供者帳戶，然後從右上角開啟智慧體對話。",
       "agentcliModelNoTools": "{model}（不支援工具呼叫）",
-      "agentcliModelRetired": "該提供者已不再提供 {model}。請選擇一個仍在提供的模型，否則此帳戶的對話會失敗。",
+      "agentcliModelRetired": "{model} 不在該提供者目前的模型清單中。自訂或私有模型可能仍可正常使用；否則請選擇一個目前提供的模型。",
       "agentcliModelUnavailable": "{model}（已不再提供）",
       "agentcliNoAccounts": "尚無提供者帳戶。",
       "agentcliNoModels": "（沒有可用的模型）",

@@ -117,6 +117,31 @@ function isOurNode(n: Node): boolean {
   return el.nodeType === 1 && (el.classList?.contains(BTN_CLASS) || el.id === WIDEN_STYLE_ID);
 }
 
+/** Bring a MESA profile button to the given state and label.
+ *
+ *  Writes nothing when both are already current, so the injector's own table
+ *  observer does not feed back into an endless rescan loop. The label is
+ *  compared on its own: a language change or a device rename alters it while
+ *  the profiled state stays the same. Returns whether anything was written.
+ */
+export function applyProfileButton(btn: HTMLButtonElement, has: boolean, label: string): boolean {
+  const want = has ? "has" : "new";
+  if (btn.dataset.phxState === want && btn.getAttribute("aria-label") === label) return false;
+  btn.dataset.phxState = want;
+  // Compact, fixed-width glyphs (no "MESA" text, which is too wide for the cell):
+  // a check on an accent fill means "profile set, click to edit"; a "+" outline
+  // means "create". The MESA wording lives in the tooltip.
+  btn.textContent = has ? "\u2713" : "+";
+  btn.title = label;
+  // The glyph alone ("+"/"check") is a useless accessible name, so mirror the
+  // title into aria-label (which the title does not provide on its own).
+  btn.setAttribute("aria-label", label);
+  btn.style.background = has ? "var(--primary-color, #03a9f4)" : "var(--secondary-background-color, rgba(127,127,127,0.16))";
+  btn.style.color = has ? "var(--text-primary-color, #fff)" : "var(--secondary-text-color, #717171)";
+  btn.style.borderColor = has ? "var(--primary-color, #03a9f4)" : "var(--divider-color)";
+  return true;
+}
+
 /**
  * True when every mutation in the batch was caused by the injector's own DOM,
  * so reacting to it would feed an endless rescan -> repaint -> rescan loop.

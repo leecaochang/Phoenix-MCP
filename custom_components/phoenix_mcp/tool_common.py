@@ -48,19 +48,18 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
-    """Serialize an HA form schema with probatio when HA ships it, else voluptuous_serialize."""
-    try:
-        import probatio  # noqa: PLC0415
-    except ImportError:
-        import voluptuous_serialize  # noqa: PLC0415
+    """Serialize an HA form schema with the engine that built it.
 
-        return voluptuous_serialize.convert(
-            schema, custom_serializer=custom_serializer
-        )
-
+    HA 2026.9 and later build every schema with probatio, aliasing `voluptuous`
+    to it. Earlier releases build genuine voluptuous schemas and ship
+    voluptuous_serialize as a core dependency, which is why Phoenix does not
+    declare it. Probatio being importable does not mean HA uses it, since another
+    package can install it on an older release, so the schema's type decides.
+    """
     if type(schema).__module__.startswith("probatio"):
-        return probatio.to_field_list(schema, custom_serializer=custom_serializer)
+        import probatio  # noqa: PLC0415
 
+        return probatio.to_field_list(schema, custom_serializer=custom_serializer)
     import voluptuous_serialize  # noqa: PLC0415
 
     return voluptuous_serialize.convert(schema, custom_serializer=custom_serializer)

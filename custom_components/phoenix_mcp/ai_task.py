@@ -20,7 +20,6 @@ HA-COUPLING POINT with ws_dispatch / assist_api / voice_agent: re-verify on HA u
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
@@ -30,6 +29,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util.json import json_loads
 
 from .const import DOMAIN
 
@@ -323,8 +323,15 @@ def _structure_to_json(structure: Any) -> dict | None:
         ) from err
 
 
-def _parse_structured(text: str) -> Any:
-    """Parse the model's final text as JSON, tolerating markdown code fences."""
+def _parse_structured(text: str, structure: Any) -> Any:
+    """Parse the model's final text as JSON and hold it to the requested structure.
+
+    Tolerates markdown code fences. The structure only reaches the model as a
+    prompt, so its answer is validated here: a missing field, a wrong type or a
+    non-finite number fails the task instead of reaching the automation. Returns
+    the parsed value as the model wrote it, as Home Assistant's own AI Task
+    providers do: the structure's coercions would turn a count of 95 into 95.0.
+    """
     body = text.strip()
     if body.startswith("```"):
         # Strip a leading ```json / ``` fence and its closing ```.
@@ -332,12 +339,23 @@ def _parse_structured(text: str) -> Any:
         if body.rstrip().endswith("```"):
             body = body.rstrip()[:-3]
     try:
-        return json.loads(body.strip())
-    except (json.JSONDecodeError, ValueError) as err:
+        # HA's parser, unlike json.loads, refuses NaN and Infinity.
+        parsed = json_loads(body.strip())
+    except ValueError as err:
         _LOGGER.error("Phoenix MCP AI Task: could not parse structured output: %s", err)
         raise HomeAssistantError(
             "The Phoenix MCP AI Task did not return valid JSON for the requested structure."
         ) from err
+    if not callable(structure):
+        return parsed
+    try:
+        structure(parsed)
+    except vol.Invalid as err:
+        _LOGGER.error("Phoenix MCP AI Task: structured output does not match the structure: %s", err)
+        raise HomeAssistantError(
+            f"The Phoenix MCP AI Task's output did not match the requested structure: {err}"
+        ) from err
+    return parsed
 
 
 from .conversation_log import recorded_turn
@@ -407,7 +425,7 @@ async def _async_generate_ai_task_data(
 
     if structure_json is None:
         return text
-    return _parse_structured(text)
+    return _parse_structured(text, structure)
 
 
 def _base_url(hass: HomeAssistant) -> str:

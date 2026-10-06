@@ -16,7 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -472,6 +472,26 @@ async def test_tool_call_on_revoked_access_key_returns_error(hass):
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
     result = await tool.async_call(hass, _tool_input({}), _ctx())
     assert "error" in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rebound_to", ["other-key", None])
+async def test_retained_tool_refuses_after_rebind_or_unbind(hass, rebound_to):
+    """A tool built under the old binding must not keep dispatching as that key.
+
+    The key itself stays valid, so only the binding comparison refuses it.
+    """
+    access_key = _make_access_key()
+    data = _make_data(access_key, bound_id=rebound_to)
+    hass.data[DOMAIN] = data
+
+    dispatch = AsyncMock()
+    tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
+    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+        result = await tool.async_call(hass, _tool_input({"entity_id": "light.x"}), _ctx())
+
+    assert "binding changed" in result["error"]
+    dispatch.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -131,7 +131,7 @@
       "modeDescAllow": "Ejecuta las llamadas inmediatamente.",
       "modeDescConfirm": "Pone cada llamada en cola para su aprobación en este panel.",
       "updateFailed": "No se pudo actualizar la capacidad.",
-      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Las lecturas y las acciones cotidianas se tratan como Permitir. Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo y el acceso al registro del sistema siguen usando la configuración siguiente. Confirmar siempre requiere aprobación.",
+      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Las lecturas y las acciones cotidianas se tratan como Permitir. Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo, el acceso al registro del sistema y la lectura de imágenes de cámara siguen usando la configuración siguiente. Confirmar siempre requiere aprobación.",
       "esphomeBadgeTitle": "Las herramientas de ESPHome permanecen ocultas para esta clave de acceso hasta que el complemento esté disponible. La capacidad puede configurarse ahora.",
       "confirmUnavailable": "Esta capacidad no puede requerir aprobación.",
       "cap_calendar_write": {
@@ -416,7 +416,8 @@
       "resourcePlaceholder": "Recurso...",
       "filterIpAria": "Filtrar por origen",
       "ipPlaceholder": "Origen...",
-      "refreshAria": "Actualizar registro de auditoría"
+      "refreshAria": "Actualizar registro de auditoría",
+      "loadFailed": "No se pudo cargar el registro de auditoría. Actualiza para volver a intentarlo."
     },
     "approvals": {
       "approve": "Aprobar y ejecutar",
@@ -1447,7 +1448,7 @@
       "agentcliProbedNothing": "Este proveedor no valida las opciones, por lo que no se pudo determinar nada.",
       "agentcliProbedNoLevels": "Phoenix no envía un nivel de razonamiento a este proveedor, por lo que no hay niveles que comprobar.",
       "agentcliProbedUnanswered": "Se intentaron {calls} solicitudes, pero el proveedor rechazó todas, por lo que no se pudo comprobar nada. Esto suele significar que la cuenta no tiene crédito o que la clave no es válida para este modelo.",
-      "agentcliModelRetired": "Este proveedor ya no ofrece {model}. Elija un modelo actual o el Chat de agente fallará con esta cuenta.",
+      "agentcliModelRetired": "{model} no está en la lista actual de modelos de este proveedor. Un modelo personalizado o privado puede seguir funcionando. De lo contrario, elija un modelo actual.",
       "agentcliModelUnavailable": "{model} (ya no disponible)",
       "agentcliModelNoTools": "{model} (sin llamada de herramientas)",
       "agentcliDefaultNoTools": "{model} no puede llamar a las herramientas, por lo que el Chat de agente no funcionará con esta cuenta. Elija un modelo que admita la llamada de herramientas.",

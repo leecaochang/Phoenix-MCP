@@ -23,7 +23,7 @@ import { api, setHass } from "../api";
 import { JS_BUILD } from "../version";
 import { syncCardCatalog } from "../utils/card_harvest";
 import { loadTranslations, resolveLanguage, syncTranslations, t } from "../i18n";
-import { BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
+import { applyProfileButton, BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
 import { claimInjectController, type InjectController } from "./ownership";
 import { blockInjectSession, injectSessionBlocked, startInjectSession } from "./compatibility";
 import type { QuickAddScope } from "./QuickAdd";
@@ -166,30 +166,17 @@ function displayKey(scope: Scope, key: string): string {
   }
 }
 
-/** Set the +/MESA appearance for the entity's current profiled state. No-op (no
- *  DOM writes) when already in the right state, so the injector's own table
- *  observer does not feed back into an endless rescan loop. */
+/** Set the +/MESA appearance and label for the target's current profiled state. */
 function applyButtonState(btn: HTMLButtonElement, scope: Scope, key: string): void {
   const has = profiled[scope].has(key);
-  const want = has ? "has" : "new";
-  if (btn.dataset.phxState === want) return;
-  dbg("glyph flip", key, `${btn.dataset.phxState ?? "(new)"} -> ${want}`, "has=", has);
-  btn.dataset.phxState = want;
-  // Compact, fixed-width glyphs (no "MESA" text, which is too wide for the cell):
-  // a check on an accent fill means "profile set, click to edit"; a "+" outline
-  // means "create". The MESA wording lives in the tooltip.
-  btn.textContent = has ? "✓" : "+";
   const shown = displayKey(scope, key);
   const label = has
     ? t("inject.profileSet", { key: shown })
     : t("inject.profileCreate", { key: shown });
-  btn.title = label;
-  // The glyph alone ("+"/"check") is a useless accessible name, so mirror the
-  // title into aria-label (which the title does not provide on its own).
-  btn.setAttribute("aria-label", label);
-  btn.style.background = has ? "var(--primary-color, #03a9f4)" : "var(--secondary-background-color, rgba(127,127,127,0.16))";
-  btn.style.color = has ? "var(--text-primary-color, #fff)" : "var(--secondary-text-color, #717171)";
-  btn.style.borderColor = has ? "var(--primary-color, #03a9f4)" : "var(--divider-color)";
+  const before = btn.dataset.phxState;
+  if (applyProfileButton(btn, has, label)) {
+    dbg("glyph flip", key, `${before ?? "(new)"} -> ${has ? "has" : "new"}`, "has=", has);
+  }
 }
 
 function decorateRow(row: HTMLElement): void {

@@ -34,6 +34,22 @@ const VERTICAL_ARROW_OWNER = [
   "[role='spinbutton']",
 ].join(", ");
 
+const TABBABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), "
+  + "textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+
+/** The controls Tab can reach, in order. A closed <details> shows only its own
+ *  summary: a control inside it matches the selector but is not reachable, and
+ *  treating it as the trap's last element lets Tab leave the dialog. */
+function tabbable(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE)).filter((el) => {
+    const ownDetails = el.tagName === "SUMMARY" ? el.parentElement : null;
+    for (let node = el.parentElement; node && node !== root; node = node.parentElement) {
+      if (node.tagName === "DETAILS" && !node.hasAttribute("open") && node !== ownDetails) return false;
+    }
+    return true;
+  });
+}
+
 function activeElement(): HTMLElement | null {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
@@ -85,9 +101,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   recordNavigationRef.current = recordNavigation;
 
   useEffect(() => {
-    const first = modalRef.current?.querySelector<HTMLElement>(
-      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-    );
+    const first = modalRef.current ? tabbable(modalRef.current)[0] : undefined;
     // Fall back to the dialog itself (tabIndex={-1}) so focus never stays
     // behind the backdrop when a modal has no focusable child (e.g. loading).
     if (!modalRef.current?.contains(activeElement())) (first ?? modalRef.current)?.focus();
@@ -176,9 +190,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     if (e.key !== "Tab") return;
     const modal = modalRef.current;
     if (!modal) return;
-    const focusable = modal.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-    );
+    const focusable = tabbable(modal);
     if (focusable.length === 0) {
       // Nothing tabbable inside: keep focus pinned on the dialog itself.
       e.preventDefault();

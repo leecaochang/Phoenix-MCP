@@ -136,7 +136,7 @@ describe("permission tree search and device cleanup", () => {
       name: "N: No explicit grant (inherits from parent)",
     });
     clearButton.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(clearButton, { pointerId: 1 });
+    fireEvent.pointerDown(clearButton, { pointerId: 1, isPrimary: true });
 
     await waitFor(() => expect(mocks.patchDevicePermission).toHaveBeenCalledWith(
       "access-key-1", GHOST_DEVICE_ID, { state: "GREY" },

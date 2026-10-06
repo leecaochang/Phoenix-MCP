@@ -523,7 +523,7 @@ class TestReconfigureMechanism:
         Say the form could not be described instead."""
         async def _init(handler, *, context=None, data=None):
             return {"type": FlowResultType.FORM, "flow_id": "rf1", "step_id": "reconfigure",
-                    # A shape voluptuous_serialize cannot convert.
+                    # A shape HA's schema serializer cannot convert.
                     "data_schema": vol.Schema({vol.Required("entities"): list})}
 
         with patch.object(hass.config_entries.flow, "async_init", _init), \
@@ -564,3 +564,26 @@ class TestReconfigureMechanism:
         assert body["mechanism"] is None
         assert body["schema"] == []
         assert "no way to change its settings" in body["note"]
+
+
+def test_schema_serializer_follows_the_schema_engine_not_package_presence(monkeypatch):
+    """HA 2026.7/2026.8 build genuine voluptuous schemas even when another package
+    has installed probatio, and ship voluptuous_serialize for them; HA 2026.9+
+    builds probatio schemas. Importability of probatio must not pick the engine."""
+    import sys
+    import types
+
+    import probatio
+    from custom_components.phoenix_mcp.tool_common import serialize_ha_schema
+
+    legacy = types.ModuleType("voluptuous_serialize")
+    legacy.convert = lambda schema, custom_serializer=None: ["legacy", schema]
+    monkeypatch.setitem(sys.modules, "voluptuous_serialize", legacy)
+
+    class GenuineVoluptuousSchema:  # its module is not probatio
+        pass
+
+    genuine = GenuineVoluptuousSchema()
+    assert serialize_ha_schema(genuine, None) == ["legacy", genuine]
+    current = probatio.Schema({probatio.Required("name"): str})
+    assert serialize_ha_schema(current, None) == [{"type": "string", "name": "name", "required": True}]

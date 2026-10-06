@@ -375,7 +375,8 @@
       "rowRequestId": "Verzoek-ID",
       "rowResource": "Resource",
       "rowTime": "Tijd",
-      "rowAccessKey": "Toegangssleutel"
+      "rowAccessKey": "Toegangssleutel",
+      "loadFailed": "Het auditlogboek kon niet worden geladen. Vernieuw om het opnieuw te proberen."
     },
     "caps": {
       "cap_automation_write": {
@@ -504,7 +505,7 @@
       "modeDescDeny": "Deze mogelijkheid blokkeren.",
       "noBuilder": "Device Builder-add-on niet gedetecteerd",
       "noEsphome": "ESPHome niet gedetecteerd",
-      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Lezen en dagelijkse acties worden behandeld als Toestaan. Configuratiewijzigingen, systeemacties, risicovolle mogelijkheden en systeemlogboektoegang gebruiken nog steeds de onderstaande instellingen. Bevestigen vereist altijd goedkeuring.",
+      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Lezen en dagelijkse acties worden behandeld als Toestaan. Configuratiewijzigingen, systeemacties, risicovolle mogelijkheden, systeemlogboektoegang en het lezen van camerabeelden gebruiken nog steeds de onderstaande instellingen. Bevestigen vereist altijd goedkeuring.",
       "tierConfigWrite": "Configuratiewijzigingen",
       "tierEveryday": "Dagelijkse acties",
       "tierIrreversible": "Hoog risico",
@@ -1607,7 +1608,7 @@
       "agentcliGlobalLabel": "In heel Home Assistant weergeven",
       "agentcliIntro": "Chat met Home Assistant met je eigen modelprovider. Agent Chat volgt de machtigingen, goedkeuringen en MESA-regels van het geselecteerde toegangssleutel. Voeg een provideraccount toe en open Agent Chat vervolgens vanuit de rechterbovenhoek.",
       "agentcliModelNoTools": "{model} (geen toolaanroepen)",
-      "agentcliModelRetired": "Deze provider biedt {model} niet meer aan. Kies een actueel model, anders mislukt Agent Chat met dit account.",
+      "agentcliModelRetired": "{model} staat niet in de huidige modellenlijst van deze provider. Een aangepast of privémodel kan nog steeds werken. Kies anders een actueel model.",
       "agentcliModelUnavailable": "{model} (niet meer beschikbaar)",
       "agentcliNoAccounts": "Nog geen provideraccounts.",
       "agentcliNoModels": "(geen modellen beschikbaar)",

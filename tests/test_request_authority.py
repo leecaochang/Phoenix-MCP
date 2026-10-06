@@ -289,6 +289,8 @@ async def _internal_ingress(kind, hass, data, access_key, name, arguments):
     from custom_components.phoenix_mcp.assist_api import PhoenixAssistTool
 
     if kind == 'assist':
+        # Assist builds tools only for the bound access key.
+        await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)
         tool = PhoenixAssistTool(name, '', MagicMock(), access_key.id)
         from homeassistant.auth.const import GROUP_ID_ADMIN
         from homeassistant.core import Context

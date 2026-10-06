@@ -20,6 +20,7 @@ from .const import (CONFIG_RECOVERY_MAX_BYTES, CONFIG_RECOVERY_MAX_RECORDS,
                     CONFIG_RECOVERY_UNRESOLVED)
 from .helpers import redact_structure
 from .recovery_storage import RecoveryStorage
+from .ws_dispatch import ws_commands_unsettled
 
 
 recovery_source: ContextVar[dict | None] = ContextVar("phoenix_recovery_source", default=None)
@@ -260,6 +261,12 @@ class ConfigurationRecovery:
             record = self._records[rid]
             if rid in self._active or record["resource"] in self._resources:
                 raise ConfigurationRecoveryError("The configuration operation is still active.")
+            # A timed-out command can still land after its caller released the
+            # resource; reviewing first would let a newer write be overwritten.
+            if ws_commands_unsettled():
+                raise ConfigurationRecoveryError(
+                    "A Home Assistant command Phoenix sent is still running; review once it finishes."
+                )
             if delete and record["phase"] not in ("verified", "not_applied", "reviewed"):
                 raise ConfigurationRecoveryError("Review this unresolved recovery record before removing it.")
             previous = dict(self._records)

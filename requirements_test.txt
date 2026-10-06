@@ -3,7 +3,8 @@
 # pytest-homeassistant-custom-component (PHACC) is the single source of truth for
 # the Home Assistant test stack: each PHACC version pins an exact homeassistant
 # version plus the matched pytest, pytest-asyncio, aiohttp, sqlalchemy, etc. So
-# pinning PHACC alone makes the whole stack reproducible.
+# pinning PHACC pins the primary test stack; deeper transitive packages can
+# still float within the ranges their dependents allow.
 #
 #   PHACC 0.13.367  ->  homeassistant==2026.9.4
 #   Python: 3.14

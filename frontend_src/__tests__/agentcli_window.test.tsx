@@ -30,6 +30,7 @@ import {
   resolveAgentCliTopMargin,
   fmtTokens,
   focusAgentCliPopup,
+  restorableTurns,
   type Turn,
 } from "../components/AgentCliWindow";
 import {
@@ -96,6 +97,37 @@ function createPopupWindow(): { popup: Window; iframe: HTMLIFrameElement } {
 function mkTurn(lines: number, msgs: unknown[]): Turn {
   return { entries: [], messages: msgs, lines };
 }
+
+describe("restorableTurns", () => {
+  it("drops malformed saved turns and entries and keeps the readable ones", () => {
+    const good = { entries: [{ kind: "user", text: "hi", ts: 1 }], messages: [{ role: "user", content: "hi" }], lines: 1 };
+    expect(restorableTurns([
+      {}, null, "turn", { entries: null },
+      { entries: [{ kind: "assistant", text: "ok", thinking: "" }, {}, null, { kind: 3 }] },
+      good,
+    ])).toEqual([
+      { entries: [{ kind: "assistant", text: "ok", thinking: "" }], messages: [], lines: 1 },
+      good,
+    ]);
+  });
+
+  it("drops entries of a known kind that lack the fields it renders, and unknown kinds", () => {
+    const ok = { kind: "assistant", text: "ok", thinking: "" };
+    expect(restorableTurns([{ entries: [
+      { kind: "assistant", thinking: "" }, { kind: "user", text: 5 }, { kind: "tool_result", id: "t", name: "n" },
+      { kind: "surprise", text: "x" }, ok,
+    ], messages: [], lines: 1 }])).toEqual([{ entries: [ok], messages: [], lines: 1 }]);
+  });
+
+  it("opens the window over a corrupted saved transcript", () => {
+    getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
+    setSessionTurns([{}, { entries: [{ kind: "user", text: "kept prompt", ts: 1 }], messages: [], lines: 1 }]);
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                           initialAccessKeyId="t1" onClose={() => {}} />);
+    expect(screen.getByText("kept prompt")).toBeInTheDocument();
+    setSessionTurns([]);
+  });
+});
 
 describe("agentCLI resize snapping (snapResizeRect)", () => {
   const VW = 1000, VH = 800, M = 8;
@@ -971,6 +1003,94 @@ describe("AgentCliWindow streaming", () => {
       expect(screen.getByText("first request")).toBeInTheDocument();
     }
     expect(screen.getByText("second request")).toBeInTheDocument();
+  });
+
+  it("retires a running turn when its account is removed and another is selected", async () => {
+    const two: AgentCliInstance[] = [INSTANCES[0], { id: "i-other", kind: "chatgpt", name: "Other", model: "gpt" }];
+    let emit!: (n: string, p: unknown) => void;
+    let finish!: () => void;
+    agentCliChat.mockImplementationOnce(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      emit = onEvent;
+      await new Promise<void>((r) => { finish = r; });
+    });
+    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} scrollbackLines={500}
+                                        initialAccessKeyId="t1" onClose={() => {}} />);
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByLabelText("Message Agent Chat");
+    fireEvent.change(textarea, { target: { value: "hello first account" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
+    expect(agentCliChat.mock.calls[0][0].instance_id).toBe("i-claude");
+
+    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} scrollbackLines={500}
+                                  initialAccessKeyId="t1" onClose={() => {}} />);
+    await act(async () => {
+      emit("assistant_delta", { text: "STALE_REPLY" });
+      emit("messages", { messages: [{ role: "assistant", content: "old-format" }] });
+      emit("done", { stop_reason: "end_turn" });
+      finish();
+    });
+    expect(screen.queryByText("STALE_REPLY")).toBeNull();
+
+    agentCliChat.mockImplementationOnce(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("done", { stop_reason: "end_turn" });
+    });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    fireEvent.change(textarea, { target: { value: "hello second account" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(2));
+    expect(agentCliChat.mock.calls[1][0].instance_id).toBe("i-other");
+    expect(JSON.stringify(agentCliChat.mock.calls[1][0].messages)).not.toContain("old-format");
+  });
+
+  it.each(["account removed", "history cleared"])("drops a paused turn's Continue when the %s", async (how) => {
+    const two: AgentCliInstance[] = [INSTANCES[0], { id: "i-other", kind: "chatgpt", name: "Other", model: "gpt" }];
+    agentCliChat.mockImplementationOnce(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("assistant_delta", { text: "Still investigating." });
+      onEvent("continue_required", { iterations: 10 });
+      onEvent("done", { stop_reason: "tool_use" });
+    });
+    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} scrollbackLines={500}
+                                        initialAccessKeyId="t1" onClose={() => {}} />);
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByLabelText("Message Agent Chat");
+    fireEvent.change(textarea, { target: { value: "look into it" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(await screen.findByText("Paused after 10 steps. Continue investigating?")).toBeInTheDocument();
+
+    if (how === "account removed") {
+      view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} scrollbackLines={500}
+                                    initialAccessKeyId="t1" onClose={() => {}} />);
+    } else {
+      fireEvent.change(textarea, { target: { value: "/clear" } });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+    }
+    await waitFor(() => expect(screen.queryByText("Paused after 10 steps. Continue investigating?")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  });
+
+  it("keeps the final events when the stream ends before React renders them", async () => {
+    // A network read delivers the last frames and the end of the stream in one
+    // task (Home Companion sends its whole answer as one delta right before
+    // "done"), so the turn is finalized before any render of those events.
+    agentCliChat.mockImplementation(async (body, onEvent: (n: string, p: unknown) => void) => {
+      await Promise.resolve();
+      onEvent("assistant_delta", { text: "The final answer." });
+      onEvent("messages", { messages: [{ role: "user", content: body.user }, { role: "assistant", content: "x" }] });
+      onEvent("done", { stop_reason: "end_turn" });
+    });
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                           initialAccessKeyId="t1" onClose={() => {}} />);
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByLabelText("Message Agent Chat");
+    fireEvent.change(textarea, { target: { value: "what is the answer" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(textarea).not.toBeDisabled());
+    expect(screen.getAllByText("The final answer.").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const saved = getSessionTurns() as Turn[];
+      expect(saved[saved.length - 1]?.entries.map((e) => e.kind)).toEqual(["user", "assistant"]);
+    });
   });
 
   it("streams a turn: user, assistant text, tool call/result, and approval flow", async () => {

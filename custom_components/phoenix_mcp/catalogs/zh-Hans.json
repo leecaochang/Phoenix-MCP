@@ -169,7 +169,7 @@
       "modeDescDeny": "阻止此能力。",
       "noBuilder": "未检测到 Device Builder 加载项",
       "noEsphome": "未检测到 ESPHome",
-      "passThroughNotice": "<strong>直通模式已启用。</strong>读取和日常操作一律视为“允许”。配置变更、系统操作、高风险能力和系统日志访问仍按下方的设置执行。“确认”始终需要审批。",
+      "passThroughNotice": "<strong>直通模式已启用。</strong>读取和日常操作一律视为“允许”。配置变更、系统操作、高风险能力、系统日志访问和摄像头图像读取仍按下方的设置执行。“确认”始终需要审批。",
       "tierConfigWrite": "配置变更",
       "tierEveryday": "日常操作",
       "tierIrreversible": "高风险",
@@ -702,7 +702,8 @@
       "rowRequestId": "请求 ID",
       "rowResource": "资源",
       "rowTime": "时间",
-      "rowAccessKey": "访问密钥"
+      "rowAccessKey": "访问密钥",
+      "loadFailed": "无法加载审计日志。请刷新重试。"
     },
     "changes": {
       "added": "已添加",
@@ -1292,7 +1293,7 @@
       "agentcliProbedNothing": "该供应商不校验这些选项，因此无法得出结论。",
       "agentcliProbedNoLevels": "Phoenix 不会向该供应商发送思考档位，因此没有档位可供检测。",
       "agentcliProbedUnanswered": "已尝试 {calls} 次请求，但该供应商全部拒绝，因此无法检测。通常是账号余额不足，或这个密钥对该模型无效。",
-      "agentcliModelRetired": "该供应商已不再提供 {model}。请选择一个仍在提供的模型，否则此账号的对话会失败。",
+      "agentcliModelRetired": "{model} 不在该供应商当前的模型列表中。自定义或私有模型可能仍可正常使用；否则请选择一个当前提供的模型。",
       "agentcliModelUnavailable": "{model}（已不再提供）",
       "agentcliModelNoTools": "{model}（不支持工具调用）",
       "agentcliDefaultNoTools": "{model} 不支持工具调用，此账号的对话功能无法使用。请选择一个支持工具调用的模型。",

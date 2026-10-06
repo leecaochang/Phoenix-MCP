@@ -377,6 +377,9 @@ def test_audit_prose_keeps_master_off_and_administrator_provenance() -> None:
     assert "unless Disable all logging is enabled" in operations
     assert "pending approval records bypass the per-outcome switches but are suppressed by Disable all logging" in operations
     assert '"Never" disables the periodic flush; stop, reload and unload still attempt a final save' in operations
+    agentcli = _plain_page("agentcli.html")
+    assert "subject to your logging settings" in agentcli
+    assert "Every tool call is written to the audit log" not in agentcli
     for name in ("security.html", "admin-api.html"):
         page = _plain_page(name)
         assert "originating_access_key_id" in page

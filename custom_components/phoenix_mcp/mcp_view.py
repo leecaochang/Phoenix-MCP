@@ -8343,7 +8343,11 @@ async def _dispatch_tools_call(
         _log(data, access_key, request_id=request_id, method="tools/call", resource="unknown_tool",
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32602, "Unknown tool."), "tools/call", "unknown_tool", "invalid_request"
-    arguments = params.get("arguments") or {}
+    arguments = params.get("arguments")
+    if arguments is None:
+        # Omitted or null is a no-argument call. Any other non-object, falsy or
+        # not, is refused by the argument check rather than read as {}.
+        arguments = {}
     _mesa_advisory_ctx.set(False)
     try:
         tool_result, outcome, resource = await _call_tool(

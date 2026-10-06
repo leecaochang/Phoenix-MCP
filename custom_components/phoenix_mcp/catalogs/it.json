@@ -301,7 +301,8 @@
       "rowRequestId": "ID richiesta",
       "rowResource": "Risorsa",
       "rowTime": "Ora",
-      "rowAccessKey": "Chiave di accesso"
+      "rowAccessKey": "Chiave di accesso",
+      "loadFailed": "Impossibile caricare il registro di controllo. Aggiorna per riprovare."
     },
     "approvalSummary": {
       "action.approve": "Approva ed esegui",
@@ -827,7 +828,7 @@
       "modeDescDeny": "Blocca questa capacità.",
       "noBuilder": "Add-on Device Builder non rilevato",
       "noEsphome": "ESPHome non rilevato",
-      "passThroughNotice": "<strong>Il pass-through è abilitato.</strong> Le letture e le azioni quotidiane sono trattate come Consenti. Le modifiche di configurazione, le azioni di sistema, le capacità ad alto rischio e l'accesso al registro di sistema usano comunque le impostazioni seguenti. La modalità Conferma richiede sempre approvazione.",
+      "passThroughNotice": "<strong>Il pass-through è abilitato.</strong> Le letture e le azioni quotidiane sono trattate come Consenti. Le modifiche di configurazione, le azioni di sistema, le capacità ad alto rischio, l'accesso al registro di sistema e la lettura delle immagini delle telecamere usano comunque le impostazioni seguenti. La modalità Conferma richiede sempre approvazione.",
       "tierConfigWrite": "Modifiche di configurazione",
       "tierEveryday": "Azioni quotidiane",
       "tierIrreversible": "Alto rischio",
@@ -1268,7 +1269,7 @@
       "agentcliGlobalLabel": "Mostra in tutto Home Assistant",
       "agentcliIntro": "Chatta con Home Assistant usando il tuo provider di modelli. Agent Chat rispetta le autorizzazioni, le approvazioni e le regole MESA della chiave di accesso selezionata. Aggiungi un account provider, poi apri Agent Chat dall'angolo in alto a destra.",
       "agentcliModelNoTools": "{model} (nessuna chiamata agli strumenti)",
-      "agentcliModelRetired": "Questo provider non offre più {model}. Scegli un modello attuale, altrimenti Agent Chat non funzionerà su questo account.",
+      "agentcliModelRetired": "{model} non è nell'elenco attuale dei modelli di questo provider. Un modello personalizzato o privato può comunque funzionare. Altrimenti scegli un modello attuale.",
       "agentcliModelUnavailable": "{model} (non più disponibile)",
       "agentcliNoAccounts": "Non ci sono ancora account provider.",
       "agentcliNoModels": "(nessun modello disponibile)",

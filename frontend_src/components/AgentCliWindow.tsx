@@ -139,6 +139,36 @@ function stripActivity(entries: ChatEntry[]): ChatEntry[] {
   return entries.filter((e) => !isActivity(e));
 }
 
+// The string fields each saved entry kind needs to render.
+const ENTRY_TEXT_FIELDS: Record<ChatEntry["kind"], string[]> = {
+  user: ["text"],
+  assistant: ["text", "thinking"],
+  tool_call: ["id", "name"],
+  tool_result: ["id", "name", "summary"],
+  tool_image: ["id", "name", "mimeType"],
+  progress: ["id", "message"],
+  approval: ["approvalId", "toolName", "status"],
+  notice: ["message"],
+  error: ["code", "message"],
+};
+
+/** Keep only the saved turns and entries the window can render. Browser storage
+ *  is outside Phoenix's control, and one malformed turn or entry would otherwise
+ *  stop the window from opening on every reload. */
+export function restorableTurns(saved: unknown[]): Turn[] {
+  const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+  const renderable = (e: unknown): e is ChatEntry => {
+    if (!isObject(e) || typeof e.kind !== "string" || !Object.prototype.hasOwnProperty.call(ENTRY_TEXT_FIELDS, e.kind)) return false;
+    return ENTRY_TEXT_FIELDS[e.kind as ChatEntry["kind"]].every((field) => typeof e[field] === "string");
+  };
+  return saved.filter(isObject).flatMap((turn) => {
+    if (!Array.isArray(turn.entries)) return [];
+    const entries = turn.entries.filter(renderable);
+    const lines = typeof turn.lines === "number" && Number.isFinite(turn.lines) ? turn.lines : entries.length;
+    return [{ ...turn, entries, messages: Array.isArray(turn.messages) ? turn.messages : [], lines }];
+  });
+}
+
 function countLines(entries: ChatEntry[]): number {
   let n = 0;
   for (const e of entries) {
@@ -592,7 +622,7 @@ export function AgentCliWindow({
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
   const restoredApprovals = useRef(new Set<string>());
-  const [turns, setTurns] = useState<Turn[]>(() => (getSessionTurns() as Turn[]).map((turn) => ({
+  const [turns, setTurns] = useState<Turn[]>(() => restorableTurns(getSessionTurns()).map((turn) => ({
     ...turn,
     entries: turn.entries.map((entry) => {
       if (entry.kind !== "approval" || ["approved", "rejected", "cancelled", "expired", "failed", "resolved"].includes(entry.status)) return entry;
@@ -653,8 +683,15 @@ export function AgentCliWindow({
   const closingPopupRef = useRef(false);
   const cancelledRef = useRef(false);
   const lastQueryRef = useRef("");
+  // The authoritative copy of the running turn. Every change goes through
+  // updateLive, which writes the ref synchronously: a stream whose last event and
+  // end arrive together finalizes the turn before React renders that event, and
+  // a ref mirrored at render time would fold the turn without it.
   const liveRef = useRef<ChatEntry[]>([]);
-  liveRef.current = live;
+  const updateLive = useCallback((next: ChatEntry[] | ((prev: ChatEntry[]) => ChatEntry[])) => {
+    liveRef.current = typeof next === "function" ? next(liveRef.current) : next;
+    setLive(liveRef.current);
+  }, []);
   const usageRef = useRef(usage);
   usageRef.current = usage;
   // Session totals at the moment the current turn started; the turn's
@@ -831,14 +868,23 @@ export function AgentCliWindow({
   }, [persistenceOwner]);
 
   // Reset the conversation when the access key or account changes (tool scope /
-  // message format differ), but NOT on the initial restore.
+  // message format differ), but NOT on the initial restore. A running turn is
+  // retired with it: deleting the account in use selects another one, and the
+  // old stream must not refill the new history or its next request.
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
+    turnGenerationRef.current += 1;
+    cancelledRef.current = true;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+    // A paused turn's Continue belongs to the old conversation too.
+    setPendingContinue(null);
     restoredApprovals.current.clear();
     setTurns([]);
-    setLive([]);
+    updateLive([]);
     resetUsage();
-  }, [accessKeyId, instanceId, resetUsage]);
+  }, [accessKeyId, instanceId, resetUsage, updateLive]);
 
   // If an account is added or removed while the window is open, keep the
   // selection valid without a page reload. When the last account is removed,
@@ -914,12 +960,13 @@ export function AgentCliWindow({
     abortRef.current?.abort();
     abortRef.current = null;
     setSending(false);
+    setPendingContinue(null);
     setTurns([]);
-    setLive([]);
+    updateLive([]);
     resetUsage();
     setGearOpen(false);
     setAnnouncement("");
-  }, [resetUsage]);
+  }, [resetUsage, updateLive]);
 
   // Cancel the running turn: abort the request, ignore any late response, and
   // put the query back in the box so it can be edited and resent. The partial
@@ -948,13 +995,12 @@ export function AgentCliWindow({
       setSessionTurns(next, persistenceOwner);
       setTurns(next);
     }
-    liveRef.current = [];
-    setLive([]);
+    updateLive([]);
     const draft = input || lastQueryRef.current;
     setSessionDraft(draft, persistenceOwner);
     flushSessionDraft(persistenceOwner);
     setInput(draft);
-  }, [input, persistenceOwner, scrollbackLines, turns]);
+  }, [input, persistenceOwner, scrollbackLines, turns, updateLive]);
 
 
   const endTurnRef = useRef(cancel);
@@ -1063,7 +1109,7 @@ export function AgentCliWindow({
     usageBaseRef.current = stateless ? { input: 0, output: 0 }
       : { input: usageRef.current.input, output: usageRef.current.output };
     turnSawUsageRef.current = false;
-    setLive(mode === "continue" ? [] : [{ kind: "user", text, ts: Date.now() }]);
+    updateLive(mode === "continue" ? [] : [{ kind: "user", text, ts: Date.now() }]);
     setSending(true);
 
     const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines);
@@ -1072,11 +1118,11 @@ export function AgentCliWindow({
     const ac = new AbortController();
     abortRef.current = ac;
 
-    const push = (e: ChatEntry) => setLive((prev) => [...prev, e]);
+    const push = (e: ChatEntry) => updateLive((prev) => [...prev, e]);
     // Progress replaces the previous line for the same call rather than appending:
     // a five-minute build ticks dozens of times and would otherwise bury the chat.
     const showProgress = (id: string, message: string) => {
-      setLive((prev) => {
+      updateLive((prev) => {
         const last = prev[prev.length - 1];
         if (last && last.kind === "progress" && last.id === id) {
           return [...prev.slice(0, -1), { ...last, message }];
@@ -1087,14 +1133,14 @@ export function AgentCliWindow({
     // Always moves to the bottom, so the line tracks the newest call instead of
     // sitting wherever the first one happened.
     const showActivity = (name: string) => {
-      setLive((prev) => [
+      updateLive((prev) => [
         ...stripActivity(prev),
         { kind: "progress", id: ACTIVITY_ID, message: t("agentchat.workingOn", { name }), activity: true } as ChatEntry,
       ]);
     };
-    const clearActivity = () => setLive((prev) => stripActivity(prev));
+    const clearActivity = () => updateLive((prev) => stripActivity(prev));
     const appendAssistant = (delta: string, thinking: boolean) => {
-      setLive((prev) => {
+      updateLive((prev) => {
         const last = prev[prev.length - 1];
         if (last && last.kind === "assistant") {
           const upd = { ...last } as Extract<ChatEntry, { kind: "assistant" }>;
@@ -1177,7 +1223,7 @@ export function AgentCliWindow({
               setAnnouncement(t("agentchat.announceApproval", { name: String(p.tool_name ?? "") }));
               break;
             case "approval_resolved":
-              setLive((prev) => prev.map((e) =>
+              updateLive((prev) => prev.map((e) =>
                 e.kind === "approval" && e.approvalId === p.approval_id
                   ? { ...e, status: String(p.status ?? "resolved"),
                       reason: typeof p.reason === "string" && p.reason ? p.reason : undefined } : e));
@@ -1258,14 +1304,14 @@ export function AgentCliWindow({
         const entries = stripActivity(liveRef.current);
         const turn: Turn = { entries, messages: newMessages, lines: countLines(entries) };
         setTurns((prev) => trimTurns([...prev, turn], scrollbackLines));
-        setLive([]);
+        updateLive([]);
         // Announce the completed reply now that streaming is over.
         const finals = entries.filter((e) => e.kind === "assistant" && e.text.trim());
         const finalText = finals.length ? (finals[finals.length - 1] as Extract<ChatEntry, { kind: "assistant" }>).text : "";
         if (finalText) setAnnouncement(finalText);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -1322,7 +1368,7 @@ export function AgentCliWindow({
     // chat. Only a still-pending card is swapped, so a fast SSE resolution
     // is never overwritten.
     const marker = approve ? t("agentchat.approving") : t("agentchat.rejecting");
-    setLive((prev) => prev.map((e) =>
+    updateLive((prev) => prev.map((e) =>
       e.kind === "approval" && e.approvalId === approvalId && e.status === "pending"
         ? { ...e, status: marker } : e));
     try {
@@ -1349,17 +1395,17 @@ export function AgentCliWindow({
       // handler's own marker: if the SSE event resolved the card meanwhile
       // (say, an admin approved it in the panel while this reject failed),
       // that final status wins.
-      setLive((prev) => prev.map((e) =>
+      updateLive((prev) => prev.map((e) =>
         e.kind === "approval" && e.approvalId === approvalId && e.status === marker
           ? { ...e, status: "pending" } : e));
-      setLive((prev) => [...prev, {
+      updateLive((prev) => [...prev, {
         kind: "error", code: "approval_action_failed",
         message: err instanceof Error ? err.message : t("agentchat.approvalActionFailed"),
       }]);
     } finally {
       resolvingApprovalsRef.current.delete(approvalId);
     }
-  }, []);
+  }, [updateLive]);
 
   // Update one approval card wherever it currently lives.
   //
@@ -1378,11 +1424,11 @@ export function AgentCliWindow({
     }
     const mapEntry = (e: ChatEntry) =>
       e.kind === "approval" && e.approvalId === approvalId ? update(e) : e;
-    setLive((prev) => prev.map(mapEntry));
+    updateLive((prev) => prev.map(mapEntry));
     setTurns((prev) => prev.map((turn) =>
       turn.entries.some((e) => e.kind === "approval" && e.approvalId === approvalId)
         ? { ...turn, entries: turn.entries.map(mapEntry) } : turn));
-  }, []);
+  }, [updateLive]);
 
   // Resolution events sent while this document was absent cannot reach its
   // subscription. Verify restored cards before offering actions, and poll until

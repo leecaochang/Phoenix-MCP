@@ -2516,7 +2516,7 @@ def _settings_applied(mechanism: str, result: Any) -> bool:
 def _options_schema_json(result: Any) -> list | None:
     """Serialize a flow step's data_schema the way HA's own frontend receives it.
 
-    voluptuous_serialize with HA's custom_serializer is exactly what
+    serialize_ha_schema with HA's custom_serializer is exactly what
     helpers/data_entry_flow._prepare_result_json uses, so an agent reads the same
     field names, defaults and selectors the UI does; an entity field even carries
     the domains it accepts. Reimplementing this would drift from what the flow

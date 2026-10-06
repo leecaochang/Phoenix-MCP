@@ -280,7 +280,7 @@
       "modeDescAllow": "호출을 즉시 실행합니다.",
       "modeDescConfirm": "각 호출을 이 패널에서 승인 대기열에 넣습니다.",
       "updateFailed": "기능을 업데이트하지 못했습니다.",
-      "passThroughNotice": "<strong>패스스루가 활성화되었습니다.</strong> 읽기 및 일상 작업은 허용으로 처리됩니다. 구성 변경, 시스템 작업, 고위험 기능 및 시스템 로그 접근은 여전히 아래 설정을 사용합니다. 확인은 항상 승인이 필요합니다.",
+      "passThroughNotice": "<strong>패스스루가 활성화되었습니다.</strong> 읽기 및 일상 작업은 허용으로 처리됩니다. 구성 변경, 시스템 작업, 고위험 기능, 시스템 로그 접근 및 카메라 이미지 읽기는 여전히 아래 설정을 사용합니다. 확인은 항상 승인이 필요합니다.",
       "esphomeBadgeTitle": "애드온을 사용할 수 있을 때까지 ESPHome 도구는 이 액세스 키에 숨겨진 상태로 유지됩니다. 기능은 지금도 설정할 수 있습니다.",
       "confirmUnavailable": "이 기능은 승인을 요구할 수 없습니다.",
       "cap_calendar_write": {
@@ -326,7 +326,8 @@
       "rowRequestId": "요청 ID",
       "rowResource": "리소스",
       "rowTime": "시각",
-      "rowAccessKey": "액세스 키"
+      "rowAccessKey": "액세스 키",
+      "loadFailed": "감사 로그를 불러오지 못했습니다. 새로고침하여 다시 시도하세요."
     },
     "changes": {
       "added": "추가됨",
@@ -1151,7 +1152,7 @@
       "agentcliProbedNothing": "이 공급자는 옵션을 검증하지 않으므로 확인할 수 있는 것이 없습니다.",
       "agentcliProbedNoLevels": "Phoenix는 이 공급자에 사고 수준을 보내지 않으므로 확인할 수준이 없습니다.",
       "agentcliProbedUnanswered": "요청 {calls}건을 시도했지만 공급자가 모두 거부하여 확인할 수 없었습니다. 이는 대개 계정에 크레딧이 없거나, 이 모델에 대해 키가 유효하지 않다는 뜻입니다.",
-      "agentcliModelRetired": "이 공급자에서는 더 이상 {model}이(가) 제공되지 않습니다. 현재 모델을 선택하지 않으면 이 계정에서 에이전트 채팅이 실패합니다.",
+      "agentcliModelRetired": "{model}이(가) 이 공급자의 현재 모델 목록에 없습니다. 사용자 지정 모델이나 비공개 모델은 계속 작동할 수 있습니다. 그렇지 않으면 현재 모델을 선택하세요.",
       "agentcliModelUnavailable": "{model} (더 이상 사용할 수 없음)",
       "agentcliModelNoTools": "{model} (도구 호출 불가)",
       "agentcliDefaultNoTools": "{model}은(는) 도구를 호출할 수 없으므로 이 계정에서 에이전트 채팅이 작동하지 않습니다. 도구 호출을 지원하는 모델을 선택하세요.",

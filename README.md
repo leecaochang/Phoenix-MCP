@@ -11,7 +11,7 @@
 
 Phoenix MCP gives your AI agents scoped, least-privilege access to Home Assistant. Each client gets its own access key, limited to exactly the entities you allow, with its own capabilities, rate limit, and optional expiry. Auditing is enabled by default and configurable per outcome, any access key can be revoked instantly, and the per-entity semantic safety layer (MESA) can make a device confirm-only or off-limits by its nature, no matter what permissions an access key is granted. Advisory is the default MESA mode: most policy restrictions warn until Enforced is selected; read-only nature and explicit privacy denials still block.
 
-Phoenix MCP runs entirely inside Home Assistant, with no extra process, no cloud dependency in the core server, and no setup beyond the Phoenix MCP panel (the optional Agent Chat, voice, and AI Task features send conversations to the model provider you configure, unless you point them at a local Ollama). It works with the MCP clients you already use (Claude Code, Cursor, ChatGPT/Codex, Gemini, and others), or you can skip installing a client altogether and chat from inside Home Assistant itself. Either way, a guided setup takes you from a new access key to a working agent in minutes, backed by a catalog of 169 tools for reading, controlling, and authoring your configuration. The panel is available in multiple languages, follows your Home Assistant profile language by default, and falls back to English when that language is unavailable. Home Companion and optional decision routing can also send requests and scoped results to a hosted provider. External MCP clients follow their own provider and data-sharing settings.
+Phoenix MCP runs entirely inside Home Assistant, with no separate service to deploy, no cloud dependency in the core server, and no setup beyond the Phoenix MCP panel (the optional Agent Chat, voice, and AI Task features send conversations to the model provider you configure, unless you point them at a local Ollama). It works with the MCP clients you already use (Claude Code, Cursor, ChatGPT/Codex, Gemini, and others), or you can skip installing a client altogether and chat from inside Home Assistant itself. Either way, a guided setup takes you from a new access key to a working agent in minutes, backed by a catalog of 169 tools for reading, controlling, and authoring your configuration. The panel is available in multiple languages, follows your Home Assistant profile language by default, and falls back to English when that language is unavailable. Home Companion and optional decision routing can also send requests and scoped results to a hosted provider. External MCP clients follow their own provider and data-sharing settings.
 
 ## Languages
 
@@ -26,7 +26,7 @@ New here? Start with the **[Quick start](https://leecaochang.github.io/Phoenix-M
 ## Requirements
 
 - Home Assistant 2026.7.0 or later.
-- One Phoenix MCP instance per Home Assistant. Home Assistant installs the Python requirements `voluptuous-serialize>=2.7.0`, `Babel>=2.18.0`, `jsonschema>=4.26.0` under its dependency constraints; MESA is bundled with Phoenix MCP.
+- One Phoenix MCP instance per Home Assistant. Home Assistant installs the Python requirements `Babel>=2.18.0`, `jsonschema>=4.26.0` under its dependency constraints; MESA is bundled with Phoenix MCP.
 
 ## Install via HACS
 

@@ -353,7 +353,7 @@
       "modeDescAllow": "Aufrufe sofort ausführen.",
       "modeDescConfirm": "Jeden Aufruf zur Genehmigung in diesem Panel in die Warteschlange stellen.",
       "updateFailed": "Fähigkeit konnte nicht aktualisiert werden.",
-      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Lesezugriffe und alltägliche Aktionen werden als Erlauben behandelt. Konfigurationsänderungen, Systemaktionen, Hochrisiko-Fähigkeiten und der Zugriff auf das Systemprotokoll verwenden weiterhin die Einstellungen unten. Bestätigen erfordert immer eine Genehmigung.",
+      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Lesezugriffe und alltägliche Aktionen werden als Erlauben behandelt. Konfigurationsänderungen, Systemaktionen, Hochrisiko-Fähigkeiten, der Zugriff auf das Systemprotokoll und das Lesen von Kamerabildern verwenden weiterhin die Einstellungen unten. Bestätigen erfordert immer eine Genehmigung.",
       "esphomeBadgeTitle": "Die ESPHome-Werkzeuge bleiben für diesen Zugriffsschlüssel ausgeblendet, bis das Add-on verfügbar ist. Die Fähigkeit kann trotzdem schon jetzt festgelegt werden.",
       "confirmUnavailable": "Diese Fähigkeit kann keine Genehmigung erfordern.",
       "cap_calendar_write": {
@@ -971,7 +971,7 @@
       "agentcliProbedNothing": "Dieser Anbieter validiert die Optionen nicht, daher konnte nichts festgestellt werden.",
       "agentcliProbedNoLevels": "Phoenix sendet keine Denkstufe an diesen Anbieter, daher gibt es keine Stufen zu prüfen.",
       "agentcliProbedUnanswered": "Es wurden {calls} Anfragen versucht, aber der Anbieter hat jede abgelehnt, daher konnte nichts geprüft werden. Dies bedeutet in der Regel, dass das Konto kein Guthaben hat oder der Schlüssel für dieses Modell nicht gültig ist.",
-      "agentcliModelRetired": "Dieser Anbieter bietet {model} nicht mehr an. Wählen Sie ein aktuelles Modell, sonst schlägt der Agent-Chat für dieses Konto fehl.",
+      "agentcliModelRetired": "{model} ist nicht in der aktuellen Modellliste dieses Anbieters. Ein benutzerdefiniertes oder privates Modell kann trotzdem funktionieren. Andernfalls wählen Sie ein aktuelles Modell.",
       "agentcliModelUnavailable": "{model} (nicht mehr verfügbar)",
       "agentcliModelNoTools": "{model} (kein Tool-Aufruf)",
       "agentcliDefaultNoTools": "{model} kann keine Tools aufrufen, daher funktioniert der Agent-Chat für dieses Konto nicht. Wählen Sie ein Modell, das Tool-Aufrufe unterstützt.",
@@ -1978,7 +1978,8 @@
       "resourcePlaceholder": "Ressource...",
       "filterIpAria": "Nach Quelle filtern",
       "ipPlaceholder": "Quelle...",
-      "refreshAria": "Prüfprotokoll aktualisieren"
+      "refreshAria": "Prüfprotokoll aktualisieren",
+      "loadFailed": "Das Prüfprotokoll konnte nicht geladen werden. Aktualisieren Sie, um es erneut zu versuchen."
     },
     "selectBy": {
       "apply": "Anwenden",

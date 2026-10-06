@@ -67,7 +67,7 @@
 
         <h2 id="deployment-mode">Deployment mode</h2>
         <p>A single deployment setting, <code>mesa_mode</code>, decides how strict MESA is overall. It is set in the panel's <strong>Settings</strong> tab and reported by <code>get_overview</code> (which, when MESA is active, also lists the operator-set prohibited and read-only entities so an agent learns what is off-limits up front).</p>
-        <p>MESA companion audit entries depend on the <code>mesa_core.audit</code> logger accepting INFO events. The bundled library defaults this logger to INFO; raising it to WARNING suppresses companion rows. To retain actual denial details in Phoenix's audit log, set <code>mesa_core.audit: info</code> under <code>logger.logs</code> in your HA configuration. This also writes MESA event lines to the HA log. Phoenix's audit bridge does not change the logger level; no companion rows alone does not establish that no MESA decision occurred.</p>
+        <p>MESA companion audit entries depend on the <code>mesa_core.audit</code> logger accepting INFO events. The bundled library sets this logger to INFO, so companion rows are recorded without any configuration, and each event also appears as an INFO line in the HA log. A <code>logger.logs</code> override that raises <code>mesa_core.audit</code> to WARNING suppresses companion rows; set it to <code>info</code>, or remove it, to retain actual denial details in Phoenix's audit log. Phoenix's audit bridge does not change the logger level; no companion rows alone does not establish that no MESA decision occurred.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">mesa_mode</th><th scope="col">Effect</th></tr></thead>

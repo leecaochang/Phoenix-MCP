@@ -188,6 +188,10 @@ if _ASSIST_API_SUPPORTED:
                 access_key = _current_dispatch_access_key(data, self._access_key_id)
                 if access_key is None:
                     return {"error": "This Phoenix MCP access key is no longer available."}
+                # A tool built before a rebind or unbind still carries the old key;
+                # the binding, not the key's own validity, is what grants Assist it.
+                if data.store.get_settings().assist_bound_access_key_id != self._access_key_id:
+                    return {"error": "The Phoenix MCP Assist binding changed. Start a new conversation."}
 
                 request_id = generate_request_id()
                 resp_msg, _m, _r, outcome = await _dispatch_mcp(

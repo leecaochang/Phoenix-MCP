@@ -6,6 +6,7 @@ Access keys are stored only as SHA-256 hashes and compared in constant time.
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import hmac
 import logging
@@ -19,7 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .durable_storage import DurableStore
+from .durable_storage import DurableStorageError, DurableStore
 from .const import (
     CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS,
     AGENTCLI_MAX_ITERATIONS,
@@ -879,6 +880,13 @@ class AccessKeyStore:
         # Global per-entity hints (entity_id to hint text), surfaced to every access key
         # in the context endpoint. Distinct from per-access-key permission-node hints.
         self._entity_hints: dict[str, str] = {}
+        # What storage is known to hold, for undoing a change whose save failed.
+        self._durable: dict | None = None
+        self._durable_records: dict[str, AccessKeyRecord] = {}
+        # Writes land one at a time in submission order; the sequence number
+        # tells a failed write whether a newer one is queued behind it.
+        self._write_lock = asyncio.Lock()
+        self._save_seq = 0
         self.async_lock: asyncio.Lock = asyncio.Lock()
 
     @classmethod
@@ -929,23 +937,93 @@ class AccessKeyStore:
             str(k): str(v) for k, v in (raw.get("entity_hints") or {}).items()
         }
 
+        self._durable = copy.deepcopy(self._payload())
+        self._durable_records = dict(self._access_keys)
         if normalized or approvals_cleaned:
             # Persist the cleaned form so a one-time corruption does not have to
             # be re-normalized on every load.
             await self.async_save()
 
-    async def async_save(self) -> None:
-        """Persist the current in-memory state to HA storage."""
-        usage_version = self._usage_version
-        await self._store.async_save({
+    def _payload(self) -> dict:
+        return {
             "version": STORAGE_VERSION,
             "access_keys": [t.to_storage_dict() for t in self._access_keys.values()],
             "archived_access_keys": [a.to_storage_dict() for a in self._archived.values()],
             "pending_approvals": self._pending_approvals,
             "settings": self._settings.to_dict(),
             "entity_hints": self._entity_hints,
-        })
-        self._saved_usage_version = usage_version
+        }
+
+    async def async_save(self) -> None:
+        """Persist the current in-memory state to HA storage.
+
+        The state is copied when submitted and written by a task the store owns,
+        one write at a time in submission order. HA's executor finishes a write
+        whose waiter was cancelled, so a cancelled caller still waits for its
+        write to settle before the cancellation propagates: its lock keeps
+        covering the write, and an older write never lands after a newer one.
+        """
+        self._save_seq += 1
+        write = asyncio.get_running_loop().create_task(self._async_write(
+            copy.deepcopy(self._payload()), self._save_seq, self._usage_version,
+        ))
+        cancelled = False
+        while not write.done():
+            try:
+                await asyncio.wait({write})
+            except asyncio.CancelledError:
+                cancelled = True
+        if cancelled:
+            if not write.cancelled():
+                write.exception()  # its outcome is applied by the write itself
+            raise asyncio.CancelledError
+        await write
+
+    async def _async_write(self, payload: dict, seq: int, usage_version: int) -> None:
+        """Write one submitted state and apply its outcome to memory.
+
+        Mutators change memory first, so when the newest submitted write fails,
+        memory returns to the last durable state before the error is raised: a
+        refused change, such as a broader permission tree, must not stay in force
+        while storage holds the old one. An older failed write leaves memory to
+        the newer write queued behind it, which carries the same changes.
+        """
+        async with self._write_lock:
+            try:
+                await self._store.async_save(payload)
+            except DurableStorageError:
+                if seq == self._save_seq and self._durable is not None:
+                    self._restore(self._durable)
+                raise
+            self._durable = payload
+            self._durable_records = dict(self._access_keys)
+            self._saved_usage_version = usage_version
+
+    def _restore(self, payload: dict) -> None:
+        """Return memory to a durable payload, keeping live record objects.
+
+        Request authority and handlers hold record references, so a durable
+        record gets its last object back, updated in place, even when the failed
+        change had removed it.
+        """
+        payload = copy.deepcopy(payload)  # records must not share the durable copy's containers
+        saved = {r["id"]: AccessKeyRecord.from_dict(r) for r in payload["access_keys"]}
+        restored: dict[str, AccessKeyRecord] = {}
+        for access_key_id, record in saved.items():
+            live = self._access_keys.get(access_key_id) or self._durable_records.get(access_key_id)
+            if live is None:
+                live = record
+            else:
+                live.__dict__.update(record.__dict__)
+            restored[access_key_id] = live
+        self._access_keys = restored
+        self._archived = {
+            r["id"]: ArchivedAccessKeyRecord.from_dict(r) for r in payload["archived_access_keys"]
+        }
+        self._settings.__dict__.update(GlobalSettings.from_dict(payload["settings"]).__dict__)
+        self._pending_approvals[:] = payload["pending_approvals"]
+        self._entity_hints.clear()
+        self._entity_hints.update(payload["entity_hints"])
 
     def get_pending_approvals(self) -> list[dict]:
         """Return the pending-approvals array. Mutations require async_lock."""

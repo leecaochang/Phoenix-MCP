@@ -479,7 +479,7 @@ describe("AgentCliSettings default model", () => {
     renderCard();
     expect(await screen.findByText("Default model: automatic, currently deepseek-v4-pro")).toBeTruthy();
     // An automatic account is never flagged as holding a retired model.
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
     fireEvent.click(await screen.findByLabelText("Change default model"));
     const select = (await screen.findByLabelText("Select default model:")) as HTMLSelectElement;
     expect(select.value).toBe("");
@@ -515,14 +515,14 @@ describe("AgentCliSettings default model", () => {
       instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-chat" }],
     });
     renderCard();
-    expect(await screen.findByText(/no longer offers deepseek-chat/)).toBeTruthy();
+    expect(await screen.findByText(/deepseek-chat is not in this provider's current model list/)).toBeTruthy();
   });
 
   it("says nothing when the configured model is still offered", async () => {
     renderCard();
     await screen.findByLabelText("Change default model");
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
   });
 
   it("says nothing when the provider could not be reached", async () => {
@@ -536,7 +536,7 @@ describe("AgentCliSettings default model", () => {
     renderCard();
     await screen.findByLabelText("Change default model");
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
   });
 
   it("says nothing when the provider reports an empty list", async () => {
@@ -547,7 +547,7 @@ describe("AgentCliSettings default model", () => {
     renderCard();
     await screen.findByLabelText("Change default model");
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
   });
 
   it("shows the retired model but does not let it be picked again", async () => {
@@ -654,21 +654,21 @@ describe("AgentCliSettings dismissible warnings", () => {
   it("closes on the X and leaves a marker that brings it back", async () => {
     const { unmount } = renderCard();
     fireEvent.click(await screen.findByLabelText("Dismiss this warning"));
-    await waitFor(() => expect(screen.queryByText(/no longer offers/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
 
-    const badge = screen.getByLabelText(/no longer offers gone:8b/);
+    const badge = screen.getByLabelText(/gone:8b is not in this provider's current model list/);
     fireEvent.click(badge);
-    expect(await screen.findByText(/no longer offers gone:8b/)).toBeTruthy();
+    expect(await screen.findByText(/gone:8b is not in this provider's current model list/)).toBeTruthy();
 
     // Close it again and prove the dismissal SURVIVES a remount: an in-memory
     // one would return on the next card open.
     fireEvent.click(screen.getByLabelText("Dismiss this warning"));
-    await waitFor(() => expect(screen.queryByText(/no longer offers/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
     unmount();
     renderCard();
     await screen.findByLabelText("Change default model");
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
-    expect(await screen.findByLabelText(/no longer offers gone:8b/)).toBeTruthy();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
+    expect(await screen.findByLabelText(/gone:8b is not in this provider's current model list/)).toBeTruthy();
   });
 
   it("a dismissal does not cover a warning about a different model", async () => {
@@ -676,14 +676,14 @@ describe("AgentCliSettings dismissible warnings", () => {
     // category: a NEW broken model must warn on its own.
     const { unmount } = renderCard();
     fireEvent.click(await screen.findByLabelText("Dismiss this warning"));
-    await waitFor(() => expect(screen.queryByText(/no longer offers/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
     unmount();
 
     getAgentCliProviders.mockResolvedValue({
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "alsogone:8b" }],
     });
     renderCard();
-    expect(await screen.findByText(/no longer offers alsogone:8b/)).toBeTruthy();
+    expect(await screen.findByText(/alsogone:8b is not in this provider's current model list/)).toBeTruthy();
   });
 
   it("no marker when there is nothing wrong", async () => {
@@ -694,7 +694,7 @@ describe("AgentCliSettings dismissible warnings", () => {
     await screen.findByLabelText("Change default model");
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByLabelText("Dismiss this warning")).toBeNull();
-    expect(screen.queryByText(/no longer offers/)).toBeNull();
+    expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyProfileButton,
   areaIdFromPath,
   BTN_CLASS,
   deepQueryAll,
@@ -327,4 +328,25 @@ it("places the MESA control after the icon when HA selection mode adds a checkbo
   const point = nameInsertionPoint(row);
   expect(point?.parent.id).toBe("icon");
   expect(point?.before).toBeNull();
+});
+
+describe("applyProfileButton", () => {
+  it("relabels a button whose state is unchanged when its label changes", () => {
+    const btn = document.createElement("button");
+    expect(applyProfileButton(btn, false, "Create MESA profile for light.x")).toBe(true);
+    expect(applyProfileButton(btn, false, "Create MESA profile for light.x")).toBe(false);
+    // A language change re-scans with the same profiled state.
+    expect(applyProfileButton(btn, false, "Profil MESA erstellen")).toBe(true);
+    expect(btn.getAttribute("aria-label")).toBe("Profil MESA erstellen");
+    expect(btn.title).toBe("Profil MESA erstellen");
+    expect(btn.textContent).toBe("+");
+  });
+
+  it("flips the glyph with the profiled state", () => {
+    const btn = document.createElement("button");
+    applyProfileButton(btn, false, "create");
+    expect(applyProfileButton(btn, true, "edit")).toBe(true);
+    expect(btn.dataset.phxState).toBe("has");
+    expect(btn.textContent).toBe("\u2713");
+  });
 });

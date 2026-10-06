@@ -83,6 +83,8 @@ async def test_user_entity_permissions_intersect_phoenix_grants(hass, hass_admin
 async def test_assist_gate_and_audit_use_requesting_user(hass, hass_admin_user, identity):
     data, access_key = await _environment(hass)
     user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
+    # Assist builds tools only for the bound access key.
+    await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)
     tool = assist_api.PhoenixAssistTool("get_logs", "", {}, access_key.id)
     downstream = AsyncMock(return_value=({"content": [{"type": "text", "text": "private-log-fixture"}]}, "allowed", "get_logs"))
     # Keep the owning capability gate, replace only the admin-only backend read.
@@ -233,6 +235,7 @@ async def test_service_authority_uses_native_admin_registration(
     if identity == "bearer":
         result, outcome, _ = await mcp_view._tool_call_service(args, access_key, hass, data)
     else:
+        await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)
         tool = assist_api.PhoenixAssistTool("call_service", "", {}, access_key.id)
         result = await tool.async_call(hass, llm.ToolInput(tool_name="call_service", tool_args=args),
                                       _context(user.id if identity != "unknown" else None))

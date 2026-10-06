@@ -36,6 +36,25 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 10.0
 
+# Results of commands whose caller stopped waiting (timeout or cancellation)
+# while HA's handler task, which Phoenix cannot cancel, was still running.
+_UNSETTLED: set[asyncio.Future] = set()
+
+
+def ws_commands_unsettled() -> bool:
+    """Whether a dispatched command may still change Home Assistant."""
+    return bool(_UNSETTLED)
+
+
+def _track_unsettled(future: asyncio.Future) -> None:
+    def settled(done: asyncio.Future) -> None:
+        _UNSETTLED.discard(done)
+        if not done.cancelled():
+            done.exception()  # retrieved, so a late failure is not logged as unhandled
+
+    _UNSETTLED.add(future)
+    future.add_done_callback(settled)
+
 # The only WS commands Phoenix MCP is permitted to dispatch in-process. async_ws_command
 # refuses anything outside this set, so a future caller cannot turn user input
 # into an arbitrary privileged command run as admin. Adding a command here is a
@@ -258,11 +277,26 @@ async def async_ws_command(
         # require_admin runs synchronously (raises if not admin); async_response
         # schedules a background task that resolves result_future.
         handler(hass, connection, msg)
-        return await asyncio.wait_for(connection.result_future, timeout)
+        future = connection.result_future
+        # asyncio.wait, unlike wait_for, leaves the future alone on timeout or
+        # cancellation, so Phoenix still learns when HA's handler task settles.
+        try:
+            await asyncio.wait({future}, timeout=timeout)
+        except asyncio.CancelledError:
+            if not future.done():
+                _track_unsettled(future)
+            elif not future.cancelled():
+                future.exception()  # a receipt nobody will read; retrieve it so it is not logged
+            raise
+        if not future.done():
+            _track_unsettled(future)
+            raise WsDispatchError(
+                f"WebSocket command {command} did not finish within {timeout:g} seconds. "
+                "Home Assistant may still complete it, so check the result before retrying."
+            )
+        return future.result()
     except WsDispatchError:
         raise
-    except TimeoutError as err:
-        raise WsDispatchError(f"WebSocket command {command} timed out.") from err
     except Exception as err:  # noqa: BLE001 - degrade any HA-internal breakage to a clean error
         raise WsDispatchError(f"WebSocket command {command} failed: {err}") from err
 

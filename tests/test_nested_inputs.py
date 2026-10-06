@@ -236,3 +236,38 @@ class TestJsonEncodedContainers:
             hass, MagicMock())
         assert outcome == "invalid_request"
         assert "nesting" in result["content"][0]["text"]
+
+
+@pytest.mark.parametrize("arguments,reaches_handler", [
+    pytest.param(..., True, id="omitted"),
+    (None, True),
+    ({}, True),
+    ([], False),
+    (False, False),
+    (0, False),
+    ("", False),
+    ([1], False),
+])
+async def test_only_an_omitted_or_null_arguments_member_means_no_arguments(hass, access_key_store, arguments, reaches_handler):
+    """A falsy non-object is malformed, not a no-argument call; it must not queue an approval."""
+    from custom_components.phoenix_mcp.audit import AuditLog
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.rate_limiter import RateLimiter
+
+    access_key, _raw = await access_key_store.async_create_access_key("argument-shape", "admin")
+    await access_key_store.async_patch_access_key(access_key.id, cap_restart="confirm")
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog(), hass=hass)
+    hass.data[DOMAIN] = data
+    handler = AsyncMock(return_value=({"content": [{"type": "text", "text": "ok"}]}, "allowed", "restart_ha"))
+    params: dict = {"name": "restart_ha"}
+    if arguments is not ...:
+        params["arguments"] = arguments
+    try:
+        with patch.dict(mcp_view._TOOL_HANDLERS, {"restart_ha": (handler, (), {})}):
+            _msg, _method, _resource, outcome = await mcp_view._dispatch_mcp(
+                "tools/call", 1, params, access_key, hass, data, "127.0.0.1", "")
+    finally:
+        if data.sensor_flush_cancel is not None:
+            data.sensor_flush_cancel()
+    assert (outcome != "invalid_request") is reaches_handler
+    assert handler.called is reaches_handler

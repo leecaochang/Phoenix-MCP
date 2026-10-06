@@ -172,6 +172,16 @@ def sanitize_failures(raw: object) -> list[dict]:
     return out
 
 
+def _resource_count(value: object) -> int:
+    """A non-negative count from a harvest payload or the stored cache; anything else is 0."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return 0
+    try:
+        return max(0, int(value))
+    except (ValueError, OverflowError):
+        return 0
+
+
 class CardCatalogStore:
     """Persisted card catalog, replaced wholesale by each harvest.
 
@@ -206,7 +216,7 @@ class CardCatalogStore:
         self._catalog = CardCatalog(
             entries=sanitize_entries(data.get("entries")),
             harvested_at=_clean_str(data.get("harvested_at"), limit=64),
-            resource_count=int(data.get("resource_count") or 0),
+            resource_count=_resource_count(data.get("resource_count")),
             failed_imports=sanitize_failures(data.get("failed_imports")),
         )
 
@@ -219,16 +229,10 @@ class CardCatalogStore:
         self, *, entries: object, resource_count: object, failed_imports: object
     ) -> CardCatalog:
         """Replace the catalog from a harvest payload and persist it."""
-        count = 0
-        if isinstance(resource_count, (int, float, str)):
-            try:
-                count = max(0, int(resource_count))
-            except (TypeError, ValueError):
-                count = 0
         self._catalog = CardCatalog(
             entries=sanitize_entries(entries),
             harvested_at=utcnow().isoformat(),
-            resource_count=count,
+            resource_count=_resource_count(resource_count),
             failed_imports=sanitize_failures(failed_imports),
         )
         await self.async_save()

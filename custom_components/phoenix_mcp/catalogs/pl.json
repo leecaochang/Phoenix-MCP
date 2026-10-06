@@ -383,7 +383,8 @@
       "rowRequestId": "ID żądania",
       "rowResource": "Zasób",
       "rowTime": "Czas",
-      "rowAccessKey": "Klucz dostępu"
+      "rowAccessKey": "Klucz dostępu",
+      "loadFailed": "Nie udało się wczytać dziennika audytu. Odśwież, aby spróbować ponownie."
     },
     "caps": {
       "cap_automation_write": {
@@ -512,7 +513,7 @@
       "modeDescDeny": "Blokuj tę możliwość.",
       "noBuilder": "Nie wykryto dodatku Device Builder",
       "noEsphome": "Nie wykryto ESPHome",
-      "passThroughNotice": "<strong>Tryb Pass-through jest włączony.</strong> Odczyt i codzienne akcje są traktowane jako Zezwól. Zmiany konfiguracji, akcje systemowe, możliwości wysokiego ryzyka i dostęp do dziennika systemowego nadal korzystają z poniższych ustawień. Potwierdź zawsze wymaga zatwierdzenia.",
+      "passThroughNotice": "<strong>Tryb Pass-through jest włączony.</strong> Odczyt i codzienne akcje są traktowane jako Zezwól. Zmiany konfiguracji, akcje systemowe, możliwości wysokiego ryzyka, dostęp do dziennika systemowego i odczyt obrazów kamery nadal korzystają z poniższych ustawień. Potwierdź zawsze wymaga zatwierdzenia.",
       "tierConfigWrite": "Zmiany konfiguracji",
       "tierEveryday": "Codzienne akcje",
       "tierIrreversible": "Wysokie ryzyko",
@@ -1633,7 +1634,7 @@
       "agentcliGlobalLabel": "Pokaż w całym Home Assistant",
       "agentcliIntro": "Czatuj z Home Assistant przy użyciu własnego dostawcy modelu. Czat agenta działa zgodnie z uprawnieniami, zatwierdzeniami i regułami MESA wybranego klucza dostępu. Dodaj konto dostawcy, a następnie otwórz Czat agenta z prawego górnego rogu.",
       "agentcliModelNoTools": "{model} (bez wywoływania narzędzi)",
-      "agentcliModelRetired": "Ten dostawca nie oferuje już modelu {model}. Wybierz aktualny model, w przeciwnym razie Czat agenta nie zadziała na tym koncie.",
+      "agentcliModelRetired": "Modelu {model} nie ma na bieżącej liście modeli tego dostawcy. Model niestandardowy lub prywatny może nadal działać. W przeciwnym razie wybierz aktualny model.",
       "agentcliModelUnavailable": "{model} (niedostępny)",
       "agentcliNoAccounts": "Nie ma jeszcze kont dostawców.",
       "agentcliNoModels": "(brak dostępnych modeli)",

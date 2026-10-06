@@ -154,4 +154,44 @@ describe("AuditView", () => {
     );
     vi.useRealTimers();
   });
+
+  it("reports a failed read instead of an empty log, and recovers on refresh", async () => {
+    vi.mocked(api.getAudit)
+      .mockRejectedValueOnce(new Error("Server error"))
+      .mockResolvedValueOnce({ entries: [entry()], total: 1 });
+    const { findByRole, queryByText, getByLabelText, findByText } = render(<AuditView accessKeys={[]} />);
+
+    expect((await findByRole("alert")).textContent).toBe("Could not load the audit log. Refresh to try again.");
+    expect(queryByText("No audit entries found.")).toBeNull();
+
+    fireEvent.click(getByLabelText("Refresh audit log"));
+    await findByText("create_automation");
+    expect(queryByText("Could not load the audit log. Refresh to try again.")).toBeNull();
+  });
+
+  it("keeps the rows already shown when a later page fails", async () => {
+    vi.mocked(api.getAudit)
+      .mockResolvedValueOnce({ entries: [entry()], total: 2 })
+      .mockRejectedValueOnce(new Error("Server error"));
+    const { findByText, findByRole, getByText } = render(<AuditView accessKeys={[]} />);
+    await findByText("create_automation");
+    fireEvent.click(getByText("Load more"));
+    await findByRole("alert");
+    expect(getByText("create_automation")).toBeTruthy();
+    expect(getByText("Load more")).toBeTruthy();
+  });
+
+  it("offers no Load more while a filter change is loading its first page", async () => {
+    const next = deferred<{ entries: AuditEntry[]; total: number }>();
+    vi.mocked(api.getAudit)
+      .mockResolvedValueOnce({ entries: [entry({ outcome: "allowed" })], total: 5 })
+      .mockReturnValueOnce(next.promise);
+    const { findByText, queryByText, getByLabelText } = render(<AuditView accessKeys={[]} />);
+    await findByText("Load more");
+    fireEvent.change(getByLabelText("Filter by outcome"), { target: { value: "denied" } });
+    await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(2));
+    expect(queryByText("Load more")).toBeNull();
+    next.resolve({ entries: [entry({ request_id: "r9", outcome: "denied" })], total: 1 });
+    await waitFor(() => expect(queryByText("Load more")).toBeNull());
+  });
 });
