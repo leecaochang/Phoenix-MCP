@@ -1710,11 +1710,13 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
 
 async def test_reference_and_explicit_selection_share_total_deadline(hass, context_chat):
     data, _ = context_chat
-    await data.store.async_patch_settings(decision_timeout_ms=250)
+    # Each request alone fits the deadline and the pair does not; the wide margins
+    # keep the first request inside it on a loaded test runner.
+    await data.store.async_patch_settings(decision_timeout_ms=1000)
     messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is Off.'},
                 {'role': 'user', 'content': 'turn it off'}]
     async def response(*args):
-        await asyncio.sleep(.15)
+        await asyncio.sleep(.6)
         return reference_chat_wire(args[4])
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):

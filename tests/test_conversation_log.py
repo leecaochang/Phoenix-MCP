@@ -478,6 +478,20 @@ def test_service_credentials_are_redacted_without_losing_error_codes(value, secr
     assert history.sanitized({"code": "cancelled"}, max_bytes=10000) == {"code": "cancelled"}
 
 
+@pytest.mark.parametrize("value,secret", [
+    ("disarm with code 4321 please", "4321"),
+    ("unlock the front door, pin 0000", "0000"),
+    ("The keypad passcode 77 88", "77 88"),
+])
+def test_spoken_alarm_codes_are_redacted(value, secret):
+    assert secret not in history.sanitized(value, max_bytes=10000)
+
+
+def test_codes_away_from_alarm_words_stay_readable():
+    for text in ("error code 404 from the API", "zip code 10001"):
+        assert history.sanitized(text, max_bytes=10000) == text
+
+
 def test_address_redaction_preserves_durations_and_ordinary_words():
     source = "Spin: 1200 rpm; delay: 00:05:00; at: 07:30:00; MAC aa:bb:cc:dd:ee:ff"
     assert history.sanitized(source, max_bytes=10000, hide_ip=True) == source
@@ -553,6 +567,15 @@ def test_content_search_and_multimodal_excerpt(conversation_data):
     cached = log._search[handle[1]]
     assert log.query(search=prompt)["total"] == 1
     assert log._search[handle[1]] is cached
+
+
+def test_image_only_prompt_counts_its_attachment(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt=[{"type": "image", "data": "binary"}])
+    log.finish(handle, response="A cat")
+    row = log.query()["entries"][0]
+    assert row["excerpt"] == "" and row["prompt_attachments"] == 1
 
 
 @pytest.mark.asyncio

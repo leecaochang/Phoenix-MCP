@@ -859,6 +859,7 @@ export interface ConversationSummary {
   execution_status: ConversationOutcome;
   response_status: ConversationResponseOutcome;
   excerpt: string;
+  prompt_attachments?: number;
   first_tool?: string;
   finished_at?: string;
   omitted_events?: number;

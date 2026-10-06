@@ -40,6 +40,28 @@ _LOGGER = logging.getLogger(__name__)
 _FIELDS = frozenset({"summary", "start", "end", "description", "location", "rrule"})
 
 
+def _journal_row_problem(row: Any, seen: set[str]) -> str | None:
+    """Name the first field that makes a stored journal record unusable, or None."""
+    if not isinstance(row, dict):
+        return "is not an object"
+    if not isinstance(row.get("receipt_id"), str) or not row["receipt_id"] or row["receipt_id"] in seen:
+        return "has a missing or repeated receipt_id"
+    if row.get("status") not in {"outcome_unknown", "applied", "reviewed", "not_applied"}:
+        return "has an unknown status"
+    for key in ("entity_id", "access_key_id", "created_at", "recovery"):
+        if not isinstance(row.get(key), str) or not row[key]:
+            return f"has no {key}"
+    if row.get("operation") not in {"create", "update", "delete"}:
+        return "has an unknown operation"
+    for key in ("identity", "requested"):
+        if not isinstance(row.get(key), dict):
+            return f"has no {key}"
+    for key in ("before", "after"):
+        if row.get(key) is not None and not isinstance(row[key], dict):
+            return f"has an invalid {key}"
+    return None
+
+
 class CalendarWriteJournal:
     """Save intent before dispatch; an interrupted record remains outcome_unknown."""
 
@@ -58,24 +80,21 @@ class CalendarWriteJournal:
                 value = await self.store.async_load()
                 records = [] if value is None else value["records"]
                 if not isinstance(records, list) or len(records) > CALENDAR_RECEIPT_LIMIT:
-                    raise ValueError
-                seen = set()
-                for row in records:
-                    if (not isinstance(row, dict) or not isinstance(row.get("receipt_id"), str)
-                            or not row["receipt_id"] or row["receipt_id"] in seen
-                            or row.get("status") not in {"outcome_unknown", "applied", "reviewed", "not_applied"}
-                            or not all(isinstance(row.get(key), str) and row[key]
-                                       for key in ("entity_id", "access_key_id", "created_at", "recovery"))
-                            or row.get("operation") not in {"create", "update", "delete"}
-                            or not isinstance(row.get("identity"), dict)
-                            or not isinstance(row.get("requested"), dict)
-                            or any(row.get(key) is not None and not isinstance(row[key], dict)
-                                   for key in ("before", "after"))):
-                        raise ValueError
+                    raise ValueError("the record list is missing or over its limit")
+                seen: set[str] = set()
+                for index, row in enumerate(records):
+                    if reason := _journal_row_problem(row, seen):
+                        raise ValueError(f"record {index} {reason}")
                     seen.add(row["receipt_id"])
                 self.records = records
                 self.unavailable = False
-            except Exception:
+            except Exception as err:
+                if not self.unavailable:
+                    # The attention panel sends the operator here; say what failed,
+                    # never the stored content.
+                    _LOGGER.warning("Calendar write history in .storage/%s could not be read (%s); "
+                                    "calendar writes are paused", self.store.key,
+                                    err if isinstance(err, ValueError) and str(err) else type(err).__name__)
                 self.unavailable = True
                 raise ValueError("Calendar recovery storage is unavailable; no write was dispatched.") from None
         return self.records

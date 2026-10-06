@@ -2396,7 +2396,8 @@
         "input": "Sprawdzony tekst",
         "contextHelp": "To tekst użytkownika w ustrukturyzowanym żądaniu decyzji. Liczby elementów kontekstu są w danych surowych; instrukcje dostawcy są pominięte.",
         "requestCompleted": "Żądanie do modelu zakończone"
-      }
+      },
+      "attachmentPrompt": "Wiadomość z obrazem lub plikiem"
     },
     "attention": {
       "title": "Wymaga uwagi",

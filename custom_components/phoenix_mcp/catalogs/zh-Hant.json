@@ -2294,7 +2294,8 @@
         "input": "檢查的文字",
         "contextHelp": "這是結構化決策請求中的使用者文字。上下文數量見原始資料，不包含供應商指令。",
         "requestCompleted": "模型請求已完成"
-      }
+      },
+      "attachmentPrompt": "圖片或檔案提示內容"
     },
     "attention": {
       "title": "需要關注",

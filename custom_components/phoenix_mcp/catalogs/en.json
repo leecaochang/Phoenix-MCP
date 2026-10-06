@@ -2136,6 +2136,7 @@
       "activity": "Activity",
       "response": "Response",
       "promptUnavailable": "Phoenix did not receive a usable prompt for this turn.",
+      "attachmentPrompt": "Image or file prompt",
       "noActivity": "No tool activity was recorded.",
       "responseUnavailable": "The final reply was not available to Phoenix, or was not retained. Tool results appear in Activity.",
       "technical": "Technical details",

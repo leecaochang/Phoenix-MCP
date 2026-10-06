@@ -1158,6 +1158,23 @@ def test_read_all_names_a_leaf_it_could_not_parse(tmp_path):
     assert any("broken.yaml" in r for r in found.unreadable)
 
 
+def test_read_all_treats_an_empty_include_as_empty_not_unreadable(tmp_path):
+    """HA ships an empty scenes.yaml; it holds no entries rather than hiding some."""
+    _seed(tmp_path, "scene: !include scenes.yaml\nautomation: !include_dir_list automations/\n")
+    write(tmp_path, "scenes.yaml", "")
+    write(tmp_path, "automations/blank.yaml", "# nothing yet\n")
+    write(tmp_path, "automations/real.yaml", "id: a1\n")
+    assert yi.read_all_entries(str(tmp_path), "scene") == yi.DomainEntries([], ())
+    found = yi.read_all_entries(str(tmp_path), "automation")
+    assert [e["id"] for e in found.entries] == ["a1"] and found.unreadable == ()
+
+
+def test_read_all_names_a_missing_include_file(tmp_path):
+    _seed(tmp_path, "scene: !include scenes.yaml\n")
+    found = yi.read_all_entries(str(tmp_path), "scene")
+    assert found.entries == [] and any("scenes.yaml" in r for r in found.unreadable)
+
+
 def test_read_all_names_a_missing_include_directory(tmp_path):
     _seed(tmp_path, "automation: !include_dir_list automations/\n")
     found = yi.read_all_entries(str(tmp_path), "automation")

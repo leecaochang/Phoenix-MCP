@@ -55,6 +55,16 @@ describe("ConversationsView", () => {
     expect(view.getByText("<script>alert(1)</script>")).toBeTruthy();
   });
 
+  it("labels an image-only prompt instead of calling it missing", async () => {
+    const image = { ...summary, coverage: "partial_conversation" as const, source: "agentcli", prompt_attachments: 1 };
+    vi.mocked(api.getConversations).mockImplementation(async () => list([image]));
+    vi.mocked(api.getConversation).mockResolvedValue({ ...detail, ...image, prompt: [{ attachment: true, type: "image", omitted: "media" }] });
+    const view = render(<ConversationsView />);
+    fireEvent.click((await view.findByText("Image or file prompt")).closest("summary")!);
+    await waitFor(() => expect(view.getAllByText("Image or file prompt")).toHaveLength(2));
+    expect(view.queryByText(/did not receive a usable prompt/)).toBeNull();
+  });
+
   it("discards stale filtered responses", async () => {
     const old = deferred<ConversationListResponse>();
     vi.mocked(api.getConversations).mockReturnValueOnce(old.promise).mockResolvedValueOnce(list([{ ...summary, excerpt: "Current" }]));

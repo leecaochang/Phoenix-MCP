@@ -92,6 +92,21 @@ async def test_unreadable_calendar_history_is_not_an_empty_list(attention_env, h
     assert result == {"items": [{"id": "calendar_storage", "kind": "calendar_storage"}]}
 
 
+async def test_unreadable_calendar_history_says_why_once_in_the_log(attention_env, hass, caplog):
+    """The attention text points at the HA log, so the log must name the failing field."""
+    client, data, _ = attention_env
+    data.calendar_writes = CalendarWriteJournal(hass)
+    record = {"receipt_id": "r1", "status": "applied", "entity_id": "calendar.home", "token_id": "old",
+              "created_at": "2026-10-01T00:00:00+00:00", "recovery": "x", "operation": "create",
+              "identity": {}, "requested": {}, "summary": "Dentist"}
+    data.calendar_writes.store.async_load = AsyncMock(return_value={"records": [record]})
+    for _ in range(2):
+        await client.get("/api/phoenix-mcp/admin/attention")
+    warnings = [r.getMessage() for r in caplog.records if "Calendar write history" in r.getMessage()]
+    assert len(warnings) == 1 and "record 0 has no access_key_id" in warnings[0]
+    assert "Dentist" not in warnings[0]
+
+
 @pytest.mark.parametrize("admin", [False, True])
 async def test_attention_is_ha_admin_only(hass, hass_client_no_auth, hass_access_token, hass_admin_user, admin):
     assert await async_setup_component(hass, "http", {})

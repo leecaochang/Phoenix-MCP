@@ -626,12 +626,19 @@ class DomainEntries:
     unreadable: tuple[str, ...]
 
 
+_UNREADABLE = object()
+
+
 def _load_branch(path: str) -> Any:
-    """Parse one leaf file, or None when it is missing or unparseable."""
+    """Parse one leaf file, or _UNREADABLE when it is missing or unparseable.
+
+    An empty file parses to None and contributes nothing: HA ships an empty
+    scenes.yaml, so it must not be reported as unreadable.
+    """
     try:
         return load_tagged(path)
     except (OSError, yaml.YAMLError):
-        return None
+        return _UNREADABLE
 
 
 def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
@@ -668,7 +675,7 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
     if layout.has_inline:
         # Readable, unlike the write path, which refuses inline as ambiguous.
         root = _load_branch(os.path.join(config_dir, CONFIGURATION_YAML))
-        for key, value in (root or {}).items():
+        for key, value in (root if isinstance(root, dict) else {}).items():
             if not isinstance(key, str) or (key != domain and not key.startswith(domain + " ")):
                 continue
             if shape == "list" and isinstance(value, list):
@@ -679,7 +686,7 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
     for target in layout.targets:
         if target.flavor == "!include":
             loaded = _load_branch(target.path)
-            if loaded is None:
+            if loaded is _UNREADABLE:
                 unreadable.append(f"{os.path.basename(target.path)} could not be read")
             elif shape == "list" and isinstance(loaded, list):
                 entries.extend(loaded)
@@ -691,8 +698,10 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
             continue
         for leaf in _iter_dir_files(target.path):
             loaded = _load_branch(leaf)
-            if loaded is None:
+            if loaded is _UNREADABLE:
                 unreadable.append(f"{os.path.basename(leaf)} could not be read")
+                continue
+            if loaded is None:
                 continue
             # Each flavor packages its files differently: *_dir_list gives one
             # entry per file, *_dir_merge_list a list per file, *_dir_named keys

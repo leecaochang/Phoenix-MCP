@@ -2289,7 +2289,8 @@
         "input": "检查的文本",
         "contextHelp": "这是结构化决策请求中的用户文本。上下文数量见原始数据，不包含提供方指令。",
         "requestCompleted": "模型请求已完成"
-      }
+      },
+      "attachmentPrompt": "图片或文件提示内容"
     },
     "attention": {
       "title": "需要关注",

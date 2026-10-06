@@ -43,6 +43,10 @@ _IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|(?<!\w)(?:[0-9a-f]{0,4}:){2,}[0-9
 _CODE = re.compile(r'(?i)(\bcode["\']?\s*(?::|=|\bis\b)\s*["\']?)([0-9][0-9 -]{2,})')
 _SERVICE_CODE = re.compile(r"(?i)(\bcode[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)")
 _QUERY_SECRET = re.compile(r"(?i)([?&](?:pin|psk|encryption_key|code)=)[^&#\s\"']+")
+# Spoken codes ("disarm with code 4321") only near alarm or lock words, so that
+# "error code 404" elsewhere stays readable.
+_ALARM_TALK = re.compile(r"(?i)\b(?:alarm|disarm|arm|unlock|lock|keypad)\b")
+_SPOKEN_CODE = re.compile(r"(?i)(\b(?:code|pin|passcode)\s+(?:is\s+)?)(\d[\d -]*\d)")
 
 
 def sensitive_key(key: str, service: bool = False) -> bool:
@@ -94,6 +98,8 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
         if service or "service_data" in raw or "alarm_control_panel" in raw or "lock.unlock" in raw:
             clean = _SERVICE_CODE.sub(lambda m: m[1] + _REDACTED, clean)
         clean = _QUERY_SECRET.sub(lambda m: m[1] + _REDACTED, clean)
+        if _ALARM_TALK.search(raw):
+            clean = _SPOKEN_CODE.sub(lambda m: m[1] + _REDACTED, clean)
         clean = _DATA_URI.sub("<attachment omitted>", clean)
         return _IP.sub(hide_address, clean) if hide_ip else clean
 
@@ -236,6 +242,11 @@ def text_values(value: Any):
             yield from text_values(item)
     elif value is not None:
         yield str(value)
+
+
+def prompt_attachments(prompt: Any) -> int:
+    """Media blocks in a sanitized list prompt, so an image-only prompt is not "missing"."""
+    return sum(1 for block in prompt if isinstance(block, dict) and block.get("attachment") is True) if isinstance(prompt, list) else 0
 
 
 def prompt_excerpt(prompt: Any) -> str:
@@ -578,7 +589,8 @@ class ConversationLog:
             entries.append(entry)
         keys = {"id", "source", "started_at", "updated_at", "finished_at", "coverage", "status", "execution_status", "response_status", "tool_count", "change_count", "omissions", "omitted_events", "first_tool"}
         def summary(e: dict) -> dict:
-            return {**{k: deepcopy(v) for k, v in e.items() if k in keys}, "excerpt": prompt_excerpt(e["prompt"])}
+            return {**{k: deepcopy(v) for k, v in e.items() if k in keys}, "excerpt": prompt_excerpt(e["prompt"]),
+                    "prompt_attachments": prompt_attachments(e["prompt"])}
 
         if grouped:
             selected = {e.get("thread_id", e["id"]) for e in entries}

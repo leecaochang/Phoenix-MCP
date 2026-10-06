@@ -2289,7 +2289,8 @@
         "input": "Texto comprobado",
         "contextHelp": "Este es el texto del usuario en la solicitud de decisión estructurada. Las cantidades de contexto aparecen en Datos sin procesar; se excluyen las instrucciones del proveedor.",
         "requestCompleted": "Solicitud al modelo completada"
-      }
+      },
+      "attachmentPrompt": "Mensaje con imagen o archivo"
     },
     "attention": {
       "title": "Requiere atención",

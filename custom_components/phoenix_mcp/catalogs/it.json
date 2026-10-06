@@ -2289,7 +2289,8 @@
         "input": "Testo verificato",
         "contextHelp": "Questo è il testo dell’utente nella richiesta decisionale strutturata. Le quantità di contesto sono nei dati grezzi; le istruzioni del fornitore sono escluse.",
         "requestCompleted": "Richiesta al modello completata"
-      }
+      },
+      "attachmentPrompt": "Messaggio con immagine o file"
     },
     "attention": {
       "title": "Richiede attenzione",

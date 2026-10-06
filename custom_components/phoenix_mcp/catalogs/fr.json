@@ -2289,7 +2289,8 @@
         "input": "Texte vérifié",
         "contextHelp": "Il s’agit du texte utilisateur dans la demande de décision structurée. Les quantités de contexte figurent dans les données brutes ; les instructions du fournisseur sont exclues.",
         "requestCompleted": "Demande au modèle terminée"
-      }
+      },
+      "attachmentPrompt": "Message avec image ou fichier"
     },
     "attention": {
       "title": "À vérifier",

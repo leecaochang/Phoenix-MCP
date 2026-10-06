@@ -152,7 +152,8 @@ function unavailable(entry: ConversationEntry, field: "prompt" | "response"): st
 function PromptEvidence({ value }: { value: unknown }) {
   if (!Array.isArray(value)) return <TextEvidence value={value} />;
   const text = value.filter(block => block && ["text", "input_text"].includes(block.type) && typeof block.text === "string").map(block => block.text).join("\n\n");
-  return <>{text && <TextEvidence value={text} />}<details><summary>{t("conversations.details")}</summary><TextEvidence value={value} code /></details></>;
+  const attachmentOnly = !text && value.some(block => block?.attachment === true);
+  return <>{text && <TextEvidence value={text} />}{attachmentOnly && <p className="conversation-secondary">{t("conversations.attachmentPrompt")}</p>}<details><summary>{t("conversations.details")}</summary><TextEvidence value={value} code /></details></>;
 }
 
 function routeHeading(payload: Record<string, unknown> | null): string {
@@ -425,7 +426,7 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
       }}>
         <summary>
           <span className="conversation-summary">
-            <span className="conversation-summary-title">{entry.turns && <span className="conversation-secondary">{t("conversations.conversation")} · </span>}{entry.excerpt || entry.first_tool || t(entry.coverage === "tool_exchange" ? "conversations.toolExchange" : "conversations.promptUnavailable")}</span>
+            <span className="conversation-summary-title">{entry.turns && <span className="conversation-secondary">{t("conversations.conversation")} · </span>}{entry.excerpt || (entry.prompt_attachments ? t("conversations.attachmentPrompt") : entry.first_tool) || t(entry.coverage === "tool_exchange" ? "conversations.toolExchange" : "conversations.promptUnavailable")}</span>
             <span className="conversation-secondary">{label("source", entry.source)} · {localeDateTime(entry.latest_at ?? entry.started_at)}{entry.turns ? ` · ${t("conversations.turns", { count: localeNumber(entry.turns.length) })}` : ""}</span>
             <span className="conversation-secondary">{[entry.tool_count ? tn("conversations.toolCount", entry.tool_count) : "", entry.change_count ? tn("conversations.changeCount", entry.change_count) : "", entry.tool_count ? t("conversations.execution", { outcome: label("outcome", entry.execution_status) }) : ""].filter(Boolean).join(" · ")}</span>
           </span>
