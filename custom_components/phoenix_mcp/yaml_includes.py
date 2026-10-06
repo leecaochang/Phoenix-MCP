@@ -95,6 +95,11 @@ MSG_AMBIGUOUS = (
     "{domain} '{entry_id}' was not found in the {domain} include files. It may be "
     "defined in a package or inline in configuration.yaml, which Phoenix MCP does not edit."
 )
+MSG_CREATE_UNPROVABLE = (
+    "Phoenix MCP cannot confirm that {domain} id '{entry_id}' is unused, because {domain} "
+    "may also be defined in a package or inline in configuration.yaml. Omit the id to have "
+    "an unused one generated."
+)
 MSG_CREATE_NO_ROUTE = (
     "configuration.yaml does not route {domain} to an editable YAML file, "
     "so Phoenix MCP cannot determine where to create it."
@@ -1279,6 +1284,9 @@ def _automation_write_checked(
     try:
         located = locate_entry(layout, entry_id)
     except LocateError as exc:
+        if create and exc.reason == "ambiguous" and not generated_id:
+            return OpResult(ok=False, error_kind=_LOCATE_KIND_MAP[exc.reason],
+                            message=MSG_CREATE_UNPROVABLE.format(domain="automation", entry_id=entry_id))
         if not create or exc.reason not in (("not_found", "ambiguous") if generated_id else ("not_found",)):
             return _locate_error_result(exc)
         conflict = automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash)

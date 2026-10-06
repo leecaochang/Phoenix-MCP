@@ -1187,3 +1187,17 @@ def test_read_all_reports_a_shape_mismatch(tmp_path):
     write(tmp_path, "automations/one.yaml", "id: a1\n")
     found = yi.read_all_entries(str(tmp_path), "automation")
     assert found.unreadable
+
+
+def test_explicit_automation_id_under_packages_explains_the_create_refusal(tmp_path):
+    write(tmp_path, "configuration.yaml", """\
+        homeassistant:
+          packages: {}
+        automation: !include automations.yaml
+    """)
+    write(tmp_path, "automations.yaml", "[]\n")
+    res = yi.automation_write(str(tmp_path), "porch", {"id": "porch", "triggers": [], "actions": []}, True, None, True)
+    assert not res.ok and "cannot confirm" in res.message and "Omit the id" in res.message
+    generated = yi.automation_write(str(tmp_path), "phoenix_mcp_x", {"id": "phoenix_mcp_x", "triggers": [], "actions": []},
+                                    True, None, True, True)
+    assert generated.ok, generated.message

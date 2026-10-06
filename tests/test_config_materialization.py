@@ -272,11 +272,11 @@ class TestCreateMaterialization:
         ))[0])
 
         current = _json((await _call_tool(
-            "get_automation", {"automation_id": created["id"]}, access_key, hass, data,
+            "get_automation", {"automation_id": created["automation_id"]}, access_key, hass, data,
         ))[0])
         result, outcome, _res = await _call_tool(
             "edit_automation",
-            {"automation_id": created["id"], "expected_hash": current["content_hash"], "config": {
+            {"automation_id": created["automation_id"], "expected_hash": current["content_hash"], "config": {
                 "alias": "After Rename",
                 "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
                 "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
@@ -478,3 +478,90 @@ async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_script_delete_approval_names_the_automation_that_calls_it(hass, admin_user):
+    from custom_components.phoenix_mcp.tools.authoring import _build_diff_delete_script
+    assert await async_setup_component(hass, "script", {})
+    assert await async_setup_component(hass, "automation", {})
+    data = _data()
+    key = _access_key(PermissionTree(domains={"script": PermissionNode(state="GREEN"), "automation": PermissionNode(state="GREEN")}),
+                      cap_script_write="allow", cap_automation_write="allow")
+    _, outcome, _ = await _call_tool("create_script", {"script_id": "porch_lights", "config": {
+        "alias": "Porch lights", "sequence": [{"delay": "00:00:01"}]}}, key, hass, data)
+    assert outcome == "allowed"
+    _, outcome, _ = await _call_tool("create_automation", {"config": {
+        "alias": "Evening porch", "triggers": [{"trigger": "state", "entity_id": "sun.sun"}],
+        "actions": [{"action": "script.turn_on", "target": {"entity_id": "script.porch_lights"}}]}}, key, hass, data)
+    assert outcome == "allowed"
+    await hass.async_block_till_done()
+    diff = await _build_diff_delete_script({"script_id": "porch_lights"}, key, hass)
+    consumers = diff["preview"]["relationships"]["consumers"]
+    assert diff["preview"]["relationships"]["consumer_count"] >= 1
+    assert "Evening porch" in json.dumps(consumers)
+
+
+async def test_automation_receipt_names_its_entity_and_flags_unresolvable_references(hass, admin_user):
+    assert await async_setup_component(hass, "automation", {})
+    hass.states.async_set("light.porch", "off", {})
+    hass.states.async_set("sun.sun", "above_horizon", {})
+    key = _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN"), "light": PermissionNode(state="GREEN"),
+                                              "sun": PermissionNode(state="YELLOW")}),
+                      cap_automation_write="allow")
+    result, outcome, _ = await _call_tool("create_automation", {"config": {
+        "alias": "Porch at dusk", "triggers": [{"trigger": "state", "entity_id": "sun.sun"}],
+        "actions": [{"action": "light.turn_on", "target": {"entity_id": ["light.porch", "light.porhc"]}}]}},
+        key, hass, _data())
+    assert outcome == "allowed", result
+    body = _json(result)
+    assert body["entity_id"] == "automation.porch_at_dusk" and body["automation_id"]
+    assert len(body["warnings"]) == 1 and "light.porhc" in body["warnings"][0] and "light.porch," not in body["warnings"][0]
+    clean, _, _ = await _call_tool("edit_automation", {"automation_id": body["automation_id"], "config": {
+        "alias": "Porch at dusk", "triggers": [{"trigger": "state", "entity_id": "sun.sun"}],
+        "actions": [{"action": "light.turn_on", "target": {"entity_id": "light.porch"}}]}}, key, hass, _data())
+    assert "warnings" not in _json(clean)
+    await hass.async_block_till_done()
+
+
+async def test_entity_ids_reach_the_stored_automation_and_script(hass, admin_user):
+    assert await async_setup_component(hass, "automation", {})
+    assert await async_setup_component(hass, "script", {})
+    hass.states.async_set("sun.sun", "above_horizon", {})
+    data = _data()
+    key = _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN"), "script": PermissionNode(state="GREEN"),
+                                              "sun": PermissionNode(state="YELLOW")}),
+                      cap_automation_write="allow", cap_script_write="allow")
+    created = _json((await _call_tool("create_automation", {"config": {
+        "alias": "Garden", "triggers": [{"trigger": "state", "entity_id": "sun.sun"}], "actions": []}}, key, hass, data))[0])
+    read, outcome, _ = await _call_tool("get_automation", {"automation_id": created["entity_id"]}, key, hass, data)
+    assert outcome == "allowed" and _json(read)["automation_id"] == created["automation_id"]
+    await _call_tool("create_script", {"script_id": "garden_water", "config": {"alias": "Water", "sequence": []}}, key, hass, data)
+    read, outcome, _ = await _call_tool("get_script", {"script_id": "script.garden_water"}, key, hass, data)
+    assert outcome == "allowed", read
+    _, outcome, _ = await _call_tool("delete_automation", {"automation_id": created["entity_id"]}, key, hass, data)
+    assert outcome == "allowed"
+    await hass.async_block_till_done()
+
+
+async def test_delete_removes_the_registry_entry_like_ha_does(hass, admin_user):
+    from homeassistant.helpers import entity_registry as er
+    assert await async_setup_component(hass, "automation", {})
+    assert await async_setup_component(hass, "script", {})
+    hass.states.async_set("sun.sun", "above_horizon", {})
+    data = _data()
+    key = _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN"), "script": PermissionNode(state="GREEN"),
+                                              "sun": PermissionNode(state="YELLOW")}),
+                      cap_automation_write="allow", cap_script_write="allow")
+    created = _json((await _call_tool("create_automation", {"config": {
+        "alias": "Garden", "triggers": [{"trigger": "state", "entity_id": "sun.sun"}], "actions": []}}, key, hass, data))[0])
+    await _call_tool("create_script", {"script_id": "garden_water", "config": {"alias": "Water", "sequence": []}}, key, hass, data)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    assert registry.async_get("automation.garden") and registry.async_get("script.garden_water")
+    for tool, args in (("delete_automation", {"automation_id": created["automation_id"]}),
+                       ("delete_script", {"script_id": "garden_water"})):
+        _, outcome, _ = await _call_tool(tool, args, key, hass, data)
+        assert outcome == "allowed"
+    await hass.async_block_till_done()
+    assert registry.async_get("automation.garden") is None and registry.async_get("script.garden_water") is None
+    assert hass.states.get("automation.garden") is None and hass.states.get("script.garden_water") is None

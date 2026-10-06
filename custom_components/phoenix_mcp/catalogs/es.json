@@ -170,7 +170,8 @@
       "patch.append": "añadido a {subject}",
       "patch.remove": "eliminado {subject}",
       "patch.set": "establecido {subject}",
-      "size.was": "{size} (antes {before})"
+      "size.was": "{size} (antes {before})",
+      "patch.multi": "{count} cambios"
     },
     "mesaSuggestion": {
       "baseline_note": " El modo Prohibido coincide con la línea base integrada para este dominio, por lo que el perfil creado hace explícita esa intención; elija Confirmar en Revisión para permitir el control del agente mediante aprobaciones.",
@@ -846,7 +847,8 @@
       "delete_calendar_event": "Eliminar evento del calendario",
       "location.create": "Crear ubicación {name}",
       "location.delete": "Eliminar ubicación {name}",
-      "location.update": "Actualizar ubicación {name}"
+      "location.update": "Actualizar ubicación {name}",
+      "patch_dashboard.multi": "Aplicar {count} cambios en el panel de control '{label}'"
     },
     "adminError": {
       "authRequired": "Se requiere autenticación.",
@@ -1977,7 +1979,9 @@
       "location.delete.body": "Se eliminará el elemento seleccionado. Es posible que el cambio no se pueda deshacer.",
       "location.delete.title": "Eliminar ubicación {name}",
       "location.update.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
-      "location.update.title": "Actualizar ubicación {name}"
+      "location.update.title": "Actualizar ubicación {name}",
+      "patch_dashboard.multi.title": "Actualizar panel de control «{label}»",
+      "patch_dashboard.multi.body": "Se actualizará la configuración del panel de control de Home Assistant. Abra Detalles para revisar el cambio exacto propuesto."
     },
     "common": {
       "after": "Después",

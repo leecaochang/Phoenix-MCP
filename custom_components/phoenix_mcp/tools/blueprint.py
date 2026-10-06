@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -245,6 +246,17 @@ async def _tool_get_blueprint(
     # Raw file text, not bp.data: the parsed form holds HA Input placeholder
     # objects that do not serialize, and the source is what an author needs to see.
     body = {**_blueprint_meta(domain, path, bp), "content": content}
+    if "input" in args:
+        inputs = args.get("input")
+        if not isinstance(inputs, dict):
+            return _tool_error("input must be an object of blueprint input values."), "invalid_request", "get_blueprint"
+        try:
+            rendered = await async_ws_command(hass, "blueprint/substitute", {"domain": domain, "path": path, "input": inputs})
+        except WsDispatchError as exc:
+            # Drop HA's error code; the message names the missing or invalid input.
+            reason = re.sub(r"^[a-z_]+: ", "", str(exc))
+            return _tool_error(f"The blueprint could not be rendered with these inputs: {reason}"), "invalid_request", "get_blueprint"
+        body["substituted_config"] = rendered.get("substituted_config") if isinstance(rendered, dict) else None
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_blueprint"
 
 

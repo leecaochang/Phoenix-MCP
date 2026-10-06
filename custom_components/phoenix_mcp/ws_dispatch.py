@@ -86,6 +86,9 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # ABSENT: it fetches an operator-unseen URL from inside HA, which is an
         # SSRF primitive with LAN and supervisor reach. Callers pass literal YAML.
         "blueprint/save", "blueprint/delete",
+        # Read-only: renders a blueprint with caller-supplied inputs into the
+        # standalone config it would produce, without saving anything.
+        "blueprint/substitute",
         # Energy dashboard preferences. energy/get_prefs is the only route to the
         # mapping between a statistic and its Energy role (grid / solar / battery /
         # gas / water / individual device): it lives in .storage/energy, which no

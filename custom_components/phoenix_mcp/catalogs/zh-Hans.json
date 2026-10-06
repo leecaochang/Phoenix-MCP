@@ -868,7 +868,8 @@
       "patch.remove": "删除了 {subject}",
       "energy.sources": "{count} 个来源，{devices} 个设备",
       "config_entry.options": "重新配置了 {subject}",
-      "config_entry.reconfigure": "重新配置了 {subject}"
+      "config_entry.reconfigure": "重新配置了 {subject}",
+      "patch.multi": "{count} 项更改"
     },
     "diff": {
       "blueprint.create": "创建 {domain} 蓝图“{rel}”",
@@ -976,7 +977,8 @@
       "delete_calendar_event": "删除日历事件",
       "location.create": "创建位置 {name}",
       "location.delete": "删除位置 {name}",
-      "location.update": "更新位置 {name}"
+      "location.update": "更新位置 {name}",
+      "patch_dashboard.multi": "对仪表盘“{label}”应用 {count} 项更改"
     },
     "approvals": {
       "approve": "批准并执行",
@@ -2068,7 +2070,9 @@
       "location.delete.body": "此操作将移除所选项目。更改可能无法撤销。",
       "location.delete.title": "删除位置 {name}",
       "location.update.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
-      "location.update.title": "更新位置 {name}"
+      "location.update.title": "更新位置 {name}",
+      "patch_dashboard.multi.title": "更新仪表盘“{label}”",
+      "patch_dashboard.multi.body": "这将更新 Home Assistant 仪表盘配置。打开详细信息可查看具体更改内容。"
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",

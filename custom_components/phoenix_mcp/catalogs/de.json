@@ -1331,7 +1331,8 @@
       "delete_calendar_event": "Kalendertermin löschen",
       "location.create": "Standort {name} erstellen",
       "location.delete": "Standort {name} löschen",
-      "location.update": "Standort {name} aktualisieren"
+      "location.update": "Standort {name} aktualisieren",
+      "patch_dashboard.multi": "{count} Änderungen auf das Dashboard '{label}' anwenden"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -1754,7 +1755,9 @@
       "location.delete.body": "Das ausgewählte Element wird entfernt. Die Änderung lässt sich möglicherweise nicht rückgängig machen.",
       "location.delete.title": "Standort {name} löschen",
       "location.update.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
-      "location.update.title": "Standort {name} aktualisieren"
+      "location.update.title": "Standort {name} aktualisieren",
+      "patch_dashboard.multi.title": "Dashboard '{label}' aktualisieren",
+      "patch_dashboard.multi.body": "Dadurch wird die Dashboard-Konfiguration von Home Assistant aktualisiert. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen."
     },
     "common": {
       "after": "Nachher",
@@ -2049,7 +2052,8 @@
       "patch.append": "an {subject} angehängt",
       "patch.remove": "{subject} entfernt",
       "patch.set": "{subject} gesetzt",
-      "size.was": "{size} (vorher {before})"
+      "size.was": "{size} (vorher {before})",
+      "patch.multi": "{count} Änderungen"
     },
     "mesaSuggestion": {
       "baseline_note": " Verboten entspricht der integrierten Basislinie für diese Domäne, daher macht das erstellte Profil diese Absicht explizit; wählen Sie in der Überprüfung Bestätigen, um stattdessen die Agentensteuerung hinter Genehmigungen zuzulassen.",

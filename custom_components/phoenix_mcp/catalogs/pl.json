@@ -273,7 +273,8 @@
       "patch.append": "dodano do {subject}",
       "patch.remove": "usunięto {subject}",
       "patch.set": "ustawiono {subject}",
-      "size.was": "{size} (było {before})"
+      "size.was": "{size} (było {before})",
+      "patch.multi": "zmiany: {count}"
     },
     "changes": {
       "added": "Dodano",
@@ -699,7 +700,8 @@
       "delete_calendar_event": "Usuń wydarzenie z kalendarza",
       "location.create": "Utwórz lokalizację {name}",
       "location.delete": "Usuń lokalizację {name}",
-      "location.update": "Zaktualizuj lokalizację {name}"
+      "location.update": "Zaktualizuj lokalizację {name}",
+      "patch_dashboard.multi": "Zastosuj zmiany ({count}) w panelu '{label}'"
     },
     "approvals": {
       "approve": "Zatwierdź i wykonaj",
@@ -2171,7 +2173,9 @@
       "location.delete.body": "Wybrany element zostanie usunięty. Zmiana może być nieodwracalna.",
       "location.delete.title": "Usuń lokalizację {name}",
       "location.update.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "location.update.title": "Zaktualizuj lokalizację {name}"
+      "location.update.title": "Zaktualizuj lokalizację {name}",
+      "patch_dashboard.multi.title": "Zaktualizuj panel '{label}'",
+      "patch_dashboard.multi.body": "Spowoduje to zaktualizowanie konfiguracji panelu Home Assistant. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę."
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",

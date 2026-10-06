@@ -57,14 +57,12 @@ def _text(content: dict) -> str:
 
 async def _call(args, access_key=None, hass=None, data=None):
     args = dict(args)
-    target = {"path": args.pop("path")}
-    if "url_path" in args:
-        target["url_path"] = args.pop("url_path")
-    change = {"kind": args.pop("op", "set")}
+    change = {"path": args.pop("path"), "kind": args.pop("op", "set")}
     if "value" in args:
         change["value"] = args.pop("value")
-    args["target"] = target
-    args["change"] = change
+    if "url_path" in args:
+        args["target"] = {"url_path": args.pop("url_path")}
+    args["changes"] = [change]
     return await _call_tool(
         "patch_dashboard", args, access_key, hass, data if data is not None else MagicMock())
 
@@ -177,8 +175,8 @@ class TestPatchDashboard:
         assert stored["views"][0]["cards"] == LAYOUT["views"][0]["cards"]
         assert stored["views"][0]["badges"][0]["name"] == "Laundry"
         body = _json(content)
-        assert body["saved"] is True and body["op"] == "set"
-        assert body["path"] == "views[0].badges[0].entity"
+        assert body["saved"] is True
+        assert body["changes"] == [{"op": "set", "path": "views[0].badges[0].entity"}]
         assert body["content_hash"] == content_hash(stored)
         hist = versions.list_for("dashboard", "lovelace")
         assert len(hist) == 1 and hist[0].summary == "set views[0].badges[0].entity"
@@ -311,3 +309,52 @@ class TestPatchDashboard:
             _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         assert await async_get_lovelace_config(h, None) == LAYOUT
+
+
+class TestPatchDashboardSeveralChanges:
+    async def test_several_changes_apply_in_order_under_one_write(self, hass, lovelace_env):
+        h, _l = lovelace_env
+        await _seed(h)
+        data, versions = _data()
+        content, outcome, _ = await _call_tool("patch_dashboard", {"changes": [
+            {"path": ["views", 0, "badges", 0, "entity"], "kind": "set", "value": "sensor.new_remaining"},
+            {"path": ["views", 0, "badges", 0, "name"], "kind": "set", "value": "Washer"},
+        ]}, _access_key(), h, data)
+        assert outcome == "allowed", content
+        stored = await async_get_lovelace_config(h, None)
+        assert stored["views"][0]["badges"][0]["entity"] == "sensor.new_remaining"
+        assert stored["views"][0]["badges"][0]["name"] == "Washer"
+        hist = versions.list_for("dashboard", "lovelace")
+        assert len(hist) == 1 and hist[0].summary == "2 changes"
+
+    async def test_one_bad_change_writes_nothing_and_names_its_index(self, hass, lovelace_env):
+        h, _l = lovelace_env
+        await _seed(h)
+        content, outcome, _ = await _call_tool("patch_dashboard", {"changes": [
+            {"path": ["views", 0, "badges", 0, "name"], "kind": "set", "value": "Washer"},
+            {"path": ["views", 9, "title"], "kind": "set", "value": "x"},
+        ]}, _access_key(), h, _data()[0])
+        assert outcome == "invalid_request" and "changes[1]" in _text(content)
+        assert await async_get_lovelace_config(h, None) == LAYOUT
+
+    async def test_a_change_that_would_blank_the_dashboard_is_refused(self, hass, lovelace_env):
+        h, _l = lovelace_env
+        await _seed(h)
+        content, outcome, _ = await _call_tool("patch_dashboard", {"changes": [
+            {"path": ["views", 0, "cards"], "kind": "set", "value": {"type": "markdown"}},
+        ]}, _access_key(), h, _data()[0])
+        assert outcome == "invalid_request" and "would not render" in _text(content)
+        assert await async_get_lovelace_config(h, None) == LAYOUT
+
+
+@pytest.mark.parametrize("layout", [
+    {"views": {"title": "Home"}},
+    {"views": [{"title": "Home", "cards": {"type": "markdown"}}]},
+    {"views": [{"sections": [{"cards": [{"type": "vertical-stack", "cards": {"type": "markdown"}}]}]}]},
+])
+async def test_set_dashboard_config_refuses_a_layout_that_would_not_render(hass, lovelace_env, layout):
+    h, _l = lovelace_env
+    await _seed(h)
+    content, outcome, _ = await _call_tool("set_dashboard_config", {"config": layout}, _access_key(), h, _data()[0])
+    assert outcome == "invalid_request" and "would not render" in _text(content)
+    assert await async_get_lovelace_config(h, None) == LAYOUT

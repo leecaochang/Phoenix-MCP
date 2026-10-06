@@ -48,7 +48,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -3019,6 +3019,36 @@ async def _tool_dry_run_service(
     return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
 
+def config_entity_references(hass: HomeAssistant, cfg_type: str, config: dict) -> set[str]:
+    """Entity IDs an automation or script config refers to.
+
+    Automation indirect targets (device/area/floor/label selectors) expand to
+    their entities; callers collapse missing and out-of-scope IDs together.
+    """
+    referenced: set[str] = set()
+    if cfg_type == "automation":
+        for ents in entities_by_role(config, build_expand_target(hass)).values():
+            referenced.update(ents)
+    else:
+        _collect_entity_id_values(config, referenced)
+    return referenced
+
+
+def reference_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_type: str, config: dict) -> list[str]:
+    """A saved config's references that are missing or outside this access key's scope."""
+    try:
+        refs = config_entity_references(hass, cfg_type, config)
+    except Exception:  # noqa: BLE001 - a warning must never fail a saved write
+        return []
+    missing = sorted(eid for eid in refs if resolve(eid, access_key, hass) not in (Permission.READ, Permission.WRITE))
+    if not missing:
+        return []
+    listed = ", ".join(missing[:REFERENCE_WARNING_MAX])
+    more = f" and {len(missing) - REFERENCE_WARNING_MAX} more" if len(missing) > REFERENCE_WARNING_MAX else ""
+    return [f"Saved, but these referenced entities are missing or outside this access key's scope, so the "
+            f"{cfg_type} may not work as intended: {listed}{more}."]
+
+
 async def _tool_validate_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -3046,15 +3076,10 @@ async def _tool_validate_config(
     try:
         if cfg_type == "automation":
             result = await _validate_automation_config(hass, "phoenix_mcp_validate", config)
-            # Indirect targets (device/area/floor/label selectors) expand to
-            # their entities so the accessibility report below covers them;
-            # the no-oracle collapse already handles out-of-scope ids.
-            for ents in entities_by_role(config, build_expand_target(hass)).values():
-                referenced.update(ents)
         else:
             script_result = await _validate_script_config(hass, "phoenix_mcp_validate", config)
             result = script_result  # type: ignore[assignment]  # one local, two validator result types
-            _collect_entity_id_values(config, referenced)
+        referenced = config_entity_references(hass, cfg_type, config)
         if result is None:
             valid = False
             errors.append("Config failed schema validation.")

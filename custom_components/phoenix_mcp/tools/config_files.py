@@ -21,7 +21,7 @@ configuration.yaml and the YAML files it !includes, behind three refusals:
 
 from __future__ import annotations
 
-from ..request_authority import check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 
 from collections.abc import Sequence
@@ -408,10 +408,24 @@ async def _execute_write_file(
         after=_version_content_payload(content, path=rel),
         alias=rel,
     )
-    return _tool_success(json.dumps({
+    body: dict[str, Any] = {
         "path": path, "bytes_written": len(content.encode("utf-8")),
+        # An overwrite is named, so a write meant as a new file cannot replace one unnoticed.
+        "action": "overwrote" if existed else "created",
         "recovery_id": recovery_receipt.get("recovery_id"),
-    })), "allowed", f"file:{path}"
+    }
+    if rel.startswith("themes/"):
+        # A theme file is inert until the frontend re-reads the themes directory.
+        try:
+            check_request_authority()
+            await hass.services.async_call("frontend", "reload_themes", blocking=True)
+            body["post_action"] = "themes_reloaded"
+        except AuthorityChangedError:
+            raise
+        except Exception:  # noqa: BLE001 - the write itself already succeeded
+            _LOGGER.debug("Theme reload after write failed", exc_info=True)
+            body["post_action"] = "themes_reload_failed"
+    return _tool_success(json.dumps(body)), "allowed", f"file:{path}"
 
 
 # ---------------------------------------------------------------------------

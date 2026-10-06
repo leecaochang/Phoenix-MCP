@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, PATCH_DASHBOARD_MAX_CHANGES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -213,12 +213,11 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     },
     {'name': 'create_calendar_event',
      'cap': 'cap_calendar_write',
-     'description': 'Create one writable calendar event using integration feature checks, MESA, exact '
-                    'approval binding and a durable recovery receipt. Updates and deletes require '
-                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
-                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
-                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
-                    'uncertain write.',
+     'description': ('Create one event on a writable calendar. Integration feature checks, MESA and approval '
+                    'apply, and the result is a durable recovery receipt. For a recurring event set event.rrule '
+                    'without the RRULE: prefix, e.g. FREQ=WEEKLY;BYDAY=MO,WE or FREQ=MONTHLY;BYMONTHDAY=1. No '
+                    'automatic retry or rollback; if a write is interrupted, read get_calendar_write before '
+                    'trying again.'),
      'inputSchema': {'type': 'object',
                      'properties': {'entity_id': {'type': 'string',
                                                   'description': 'A calendar.* entity ID.'},
@@ -244,22 +243,15 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                                                           'description': 'Event '
                                                                                          'location.'},
                                                              'rrule': {'type': 'string',
-                                                                       'description': 'HA-supported '
-                                                                                      'daily, weekly, '
-                                                                                      'monthly or '
-                                                                                      'yearly '
-                                                                                      'recurrence '
-                                                                                      'rule.'}},
+                                                                       'description': 'Recurrence rule without the RRULE: prefix, e.g. FREQ=WEEKLY;BYDAY=MO or FREQ=DAILY;COUNT=5; daily, weekly, monthly and yearly rules are supported.'}},
                                               'required': ['summary', 'start', 'end']}},
                      'required': ['entity_id', 'event']}},
     {'name': 'update_calendar_event',
      'cap': 'cap_calendar_write',
-     'description': 'Update one writable calendar event using integration feature checks, MESA, exact '
-                    'approval binding and a durable recovery receipt. Updates and deletes require '
-                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
-                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
-                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
-                    'uncertain write.',
+     'description': ('Update one event addressed by its current uid and content_hash from get_calendar_events. '
+                    'For a recurring event pick one occurrence with recurrence_id, optionally with recurrence_range '
+                    'THISANDFUTURE; the whole series is never backed up or rewritten. Same checks and receipt as '
+                    'create_calendar_event.'),
      'inputSchema': {'type': 'object',
                      'properties': {'entity_id': {'type': 'string',
                                                   'description': 'A calendar.* entity ID.'},
@@ -309,12 +301,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                                                           'description': 'Event '
                                                                                          'location.'},
                                                              'rrule': {'type': 'string',
-                                                                       'description': 'HA-supported '
-                                                                                      'daily, weekly, '
-                                                                                      'monthly or '
-                                                                                      'yearly '
-                                                                                      'recurrence '
-                                                                                      'rule.'}}},
+                                                                       'description': 'Recurrence rule without the RRULE: prefix, e.g. FREQ=WEEKLY;BYDAY=MO or FREQ=DAILY;COUNT=5; daily, weekly, monthly and yearly rules are supported.'}}},
                                     'mode': {'type': 'string',
                                              'enum': ['replace', 'patch'],
                                              'description': 'replace requires summary/start/end and '
@@ -330,12 +317,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                   'mode']}},
     {'name': 'delete_calendar_event',
      'cap': 'cap_calendar_write',
-     'description': 'Delete one writable calendar event using integration feature checks, MESA, exact '
-                    'approval binding and a durable recovery receipt. Updates and deletes require '
-                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
-                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
-                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
-                    'uncertain write.',
+     'description': ('Delete one event addressed by its current uid and content_hash; for a recurring event, '
+                    'one occurrence or, with recurrence_range THISANDFUTURE, the rest of the series. A deleted '
+                    'UID cannot be restored. Same checks and receipt as create_calendar_event.'),
      'inputSchema': {'type': 'object',
                      'properties': {'entity_id': {'type': 'string',
                                                   'description': 'A calendar.* entity ID.'},
@@ -562,7 +546,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "creating it if there is none, and sets only the fields you pass: stat_energy_from and "
             "stat_energy_to (grid import/export, battery discharge/charge), number_energy_price and "
             "number_energy_price_export. Call get_energy_config first to see what is there. "
-            "A verified write returns a recovery_id for restore_configuration."
+            "A verified write returns a recovery_id for restore_configuration, and issues: Home Assistant's own "
+            "check of the saved setup, such as a statistic with the wrong unit (null when the check could not run)."
         ),
         "cap": "cap_energy_write",
         "inputSchema": {
@@ -665,7 +650,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "ID of the automation to read, from list_automations or the automation's 'id' state attribute."},
+                "automation_id": {"type": "string", "description": "The automation's stored id (from list_automations or its 'id' state attribute) or its entity_id."},
             },
             "required": ["automation_id"],
         },
@@ -710,7 +695,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "ID of the automation to edit, as returned by create_automation or read from the automation's 'id' state attribute."},
+                "automation_id": {"type": "string", "description": "The automation's stored id, as returned by create_automation, or its entity_id."},
                 "config": {"type": "object", "description": "Full replacement automation configuration (alias, trigger, action, condition, mode). Do not include 'id'."},
                 "expected_hash": {"type": "string", "description": "content_hash from get_automation. Required for alias changes, optional for same-alias edits. Any supplied hash must still match at the write boundary."},
             },
@@ -728,7 +713,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "ID of the automation to delete."},
+                "automation_id": {"type": "string", "description": "The automation's stored id or its entity_id."},
             },
             "required": ["automation_id"],
         },
@@ -758,7 +743,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "script_id": {"type": "string", "description": "ID of the script to read (the slug, e.g. 'morning_routine')."},
+                "script_id": {"type": "string", "description": "The script's stored id (the slug, e.g. 'morning_routine') or its entity_id."},
             },
             "required": ["script_id"],
         },
@@ -800,7 +785,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "script_id": {"type": "string", "description": "ID of the script to edit (the slug, e.g. 'morning_routine')."},
+                "script_id": {"type": "string", "description": "The script's stored id (the slug, e.g. 'morning_routine') or its entity_id."},
                 "config": {"type": "object", "description": "Full replacement script configuration (alias, sequence, mode, variables, fields)."},
                 "expected_hash": {"type": "string", "description": "Optional content_hash from get_script. When given, the edit is refused if the script changed since that read."},
             },
@@ -817,7 +802,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "script_id": {"type": "string", "description": "ID of the script to delete (the slug, e.g. 'morning_routine')."},
+                "script_id": {"type": "string", "description": "The script's stored id (the slug, e.g. 'morning_routine') or its entity_id."},
             },
             "required": ["script_id"],
         },
@@ -1086,6 +1071,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "The blueprint path exactly as returned by list_blueprints, e.g. 'homeassistant/motion_light.yaml'.",
                 },
+                "input": {
+                    "type": "object",
+                    "description": "Optional input values. When given, substituted_config returns the standalone automation or script the blueprint produces with them, e.g. to detach an instance from its blueprint. Nothing is saved.",
+                },
             },
             "required": ["domain", "path"],
         },
@@ -1260,7 +1249,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Update one device's user-controlled registry metadata: display-name override, area, enabled state, "
             "and labels. Requires cap_registry_write plus an explicit WRITE grant on the device; attached entity "
-            "or domain grants cannot authorize a whole-device mutation. Use changes.name: null to restore the integration-provided name, or area_id: null to clear placement. Only "
+            "or domain grants cannot authorize a whole-device mutation. Use changes.name: null to restore the integration-provided name, or area_id: null to clear placement. Renaming a device keeps its entities' entity_ids; entities named relative to the device show the new name in their friendly names. Change an entity_id with set_entity. Only "
             "user-disabled devices may be toggled, and a disabled owning config entry prevents enable. Name, area, "
             "and enabled-state changes require every attached registry entity to remain writable; label-only edits "
             "do not. Device rename and enable/disable are evaluated against every attached entity's fully inherited "
@@ -2777,7 +2766,14 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "helper_type": {"type": "string", "description": "Helper domain, such as input_boolean, mold_indicator, or history_stats."},
-                "config": {"type": "object", "description": "Storage-helper fields, e.g. {\"name\": \"Guest mode\"}. Do not use with flow_steps."},
+                "config": {"type": "object", "description": (
+                    "Storage-helper fields; do not use with flow_steps. Keys by type: input_boolean name, icon, initial; "
+                    "input_number name, min, max (both required), step, mode (slider|box), unit_of_measurement, initial; "
+                    "input_text name, min, max, pattern, mode (text|password), initial; input_select name, options "
+                    "(required list), initial; input_datetime name, has_date and/or has_time, initial; input_button name; "
+                    "counter name, initial, step, minimum, maximum, restore; timer name, duration (HH:MM:SS), restore; "
+                    "schedule name plus monday..sunday lists of {from, to}. Every type accepts icon. Setting initial makes "
+                    "the helper start at that value after every restart instead of restoring its last state.")},
                 "flow_steps": {
                     "type": "array",
                     "maxItems": 8,
@@ -2903,7 +2899,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "are refused. Pass expected_hash (the content_hash from a prior read_file) to make the write "
             "conditional: if the file changed since you read it, the write is refused instead of "
             "overwriting the other change. A verified write returns a recovery_id for "
-            "restore_configuration."
+            "restore_configuration and an action of created or overwrote. A write under themes/ also "
+            "reloads themes so the change takes effect (post_action reports the reload)."
         ),
         "cap": "cap_filesystem",
         "inputSchema": {
@@ -3439,31 +3436,28 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "patch_dashboard",
         "description": (
-            "Change ONE path-addressed value anywhere in a Lovelace dashboard without "
-            "resending the layout. Use this for what the card tools cannot reach: a "
-            "view-level badge, a view option, or a single field inside a card. Call "
-            "get_dashboard_config first to find the target path and its content_hash. target.path is "
-            "an array of keys and 0-based indexes, e.g. [\"views\", 0, \"badges\", 4, "
-            "\"entity\"] addresses that badge's entity. change.kind set replaces "
-            "the value at target.path; append adds to a list it addresses; remove "
-            "deletes it. Nothing is created along the way, so a path whose parent does "
-            "not exist is refused rather than built. Omit target.url_path for the default "
-            "dashboard. Storage-mode dashboards only. May require admin approval. Pass "
-            "expected_hash to refuse the write if the layout changed since your read; "
-            "the result returns the new content_hash for chaining further patches. "
-            "Values that a read redacted are refused: a read replaces entities this "
-            "access key cannot resolve with a placeholder, and writing one back would "
-            "overwrite real configuration with it."
+            "Change path-addressed values anywhere in a Lovelace dashboard without resending the layout. Use "
+            "this for what the card tools cannot reach (a view-level badge, a view option, a single field inside "
+            "a card) and for several related edits at once, such as repointing every card get_relationships "
+            "listed for a replaced entity. Call get_dashboard_config first to find the paths and its "
+            "content_hash. Each change's path is an array of keys and 0-based indexes, e.g. [\"views\", 0, "
+            "\"badges\", 4, \"entity\"]; kind set replaces the value there, append adds to a list it "
+            "addresses, remove deletes it. Changes apply in order, each to the layout the previous one left, "
+            "and all of them or none are written, under one approval. Nothing is created along the way, so a "
+            "path whose parent does not exist is refused rather than built. Omit target.url_path for the "
+            "default dashboard. Storage-mode dashboards only. Pass expected_hash to refuse the write if the "
+            "layout changed since your read; the result returns the new content_hash for chaining. Values a "
+            "read redacted are refused: writing the placeholder back would overwrite real configuration."
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "target": {"type": "object", "description": "Dashboard path to change.", "additionalProperties": False, "properties": {"url_path": {"type": "string", "description": "Dashboard URL path."}, "path": {"type": "array", "items": {"type": ["string", "integer"]}, "description": "Key/index path."}}, "required": ["path"]},
-                "change": {"type": "object", "description": "Set, append, or remove operation.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "value": {"type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "New value for set or append."}}, "required": ["kind"]},
+                "target": {"type": "object", "description": "The dashboard to change; omit for the default dashboard.", "additionalProperties": False, "properties": {"url_path": {"type": "string", "description": "Dashboard URL path."}}},
+                "changes": {"type": "array", "minItems": 1, "maxItems": PATCH_DASHBOARD_MAX_CHANGES, "description": "Changes applied in order, all or none.", "items": {"type": "object", "additionalProperties": False, "properties": {"path": {"type": "array", "items": {"type": ["string", "integer"]}, "description": "Key/index path."}, "kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "value": {"type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "New value for set or append."}}, "required": ["path", "kind"]}},
                 "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior read; the write is refused if the layout changed since then."},
             },
-            "required": ["target", "change"],
+            "required": ["changes"],
         },
     },
 ]

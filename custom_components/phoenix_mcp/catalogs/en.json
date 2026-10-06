@@ -1564,6 +1564,7 @@
       "location.update": "Update location {name}",
       "mesa_service": "MESA confirmation for {domain}.{service}",
       "patch_dashboard.append": "Append to {path} on dashboard '{label}'",
+      "patch_dashboard.multi": "Apply {count} changes to dashboard '{label}'",
       "patch_dashboard.remove": "Remove {path} from dashboard '{label}'",
       "patch_dashboard.set": "Set {path} on dashboard '{label}'",
       "patch_yaml_config.append": "Append to {path} in {file}",
@@ -1627,6 +1628,7 @@
       "loc.section": "section {index}",
       "loc.view": "view {index}",
       "patch.append": "appended to {subject}",
+      "patch.multi": "{count} changes",
       "patch.remove": "removed {subject}",
       "patch.set": "set {subject}",
       "size": "{size}",
@@ -1989,6 +1991,8 @@
       "named.resource.editTitle": "Edit {kind} '{label}'",
       "patch_dashboard.append.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
       "patch_dashboard.append.title": "Update dashboard '{label}'",
+      "patch_dashboard.multi.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
+      "patch_dashboard.multi.title": "Update dashboard '{label}'",
       "patch_dashboard.remove.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
       "patch_dashboard.remove.title": "Update dashboard '{label}'",
       "patch_dashboard.set.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
@@ -2317,6 +2321,7 @@
     "rate_limit.title": "Phoenix MCP Alert"
   },
   "voice": {
+    "access_key_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
     "answer_truncated": "I had to stop before finishing.",
     "companion_accepted": "Home Assistant accepted the device commands.",
     "companion_accepted_calm_guide": "Home Assistant confirms it accepted the command for {names}.",
@@ -2385,7 +2390,6 @@
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs attention in Phoenix MCP.",
     "provider_error": "Sorry, {reason}.",
-    "access_key_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable."
   }
 }

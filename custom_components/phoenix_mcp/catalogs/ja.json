@@ -879,7 +879,8 @@
       "patch.append": "{subject} に追加",
       "patch.remove": "{subject} を削除",
       "patch.set": "{subject} を設定",
-      "size.was": "{size}（変更前: {before}）"
+      "size.was": "{size}（変更前: {before}）",
+      "patch.multi": "{count} 件の変更"
     },
     "mesaSuggestion": {
       "baseline_note": " 禁止はこのドメインの組み込みベースラインと一致するため、作成したプロファイルによって意図が明示されます。承認を条件にエージェントの制御を許可するには、レビューで確認を選択してください。",
@@ -1269,7 +1270,8 @@
       "delete_calendar_event": "カレンダーの予定を削除",
       "location.create": "場所 {name} を作成",
       "location.delete": "場所 {name} を削除",
-      "location.update": "場所 {name} を更新"
+      "location.update": "場所 {name} を更新",
+      "patch_dashboard.multi": "ダッシュボード「{label}」に {count} 件の変更を適用"
     },
     "settings": {
       "addProviderFirst": "先に Agent Chat でプロバイダーアカウントを追加してください。",
@@ -2068,7 +2070,9 @@
       "location.delete.body": "選択した項目を削除します。この変更は元に戻せない場合があります。",
       "location.delete.title": "場所 {name} を削除",
       "location.update.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
-      "location.update.title": "場所 {name} を更新"
+      "location.update.title": "場所 {name} を更新",
+      "patch_dashboard.multi.title": "ダッシュボード「{label}」を更新",
+      "patch_dashboard.multi.body": "Home Assistantのダッシュボード設定を更新します。正確な変更内容を確認するには、詳細を開いてください。"
     },
     "routing": {
       "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",

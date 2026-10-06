@@ -105,7 +105,7 @@ class TestAutomationCapture:
             "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
         }
         created = _text((await _call_tool("create_automation", {"config": cfg}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
 
         current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         await _call_tool(
@@ -199,7 +199,7 @@ class TestAutomationRestore:
         data, versions = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
 
@@ -221,7 +221,7 @@ class TestAutomationRestore:
         data, versions = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
 
@@ -239,7 +239,7 @@ class TestAutomationRestore:
         data, versions = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         create_ver = versions.list_for("automation", aid)[0]
         result, outcome, _r = await async_restore_version(create_ver, "admin-1", hass, data, side="before")
         assert outcome == "invalid_request"
@@ -249,7 +249,7 @@ class TestAutomationRestore:
         data, versions = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         delete_ver = versions.list_for("automation", aid)[0]  # newest is the delete
@@ -257,7 +257,7 @@ class TestAutomationRestore:
         assert outcome == "allowed"
 
         # Deleted automations are restored under their original ID.
-        assert _text(result)["id"] == aid
+        assert _text(result)["automation_id"] == aid
         items = _read_automations_yaml(os.path.join(hass.config.config_dir, "automations.yaml"))
         assert sum(1 for a in items if a.get("id") == aid) == 1  # exactly one, in place
 
@@ -270,7 +270,7 @@ class TestAutomationRestore:
         data, versions = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         delete_ver = versions.list_for("automation", aid)[0]
@@ -330,7 +330,7 @@ class TestRestoreEndpoint:
             "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
         }
         created = _text((await _call_tool("create_automation", {"config": cfg}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         await _call_tool("edit_automation", {"automation_id": aid, "config": dict(cfg, alias="B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
         return data, versions, aid

@@ -265,7 +265,8 @@
       "patch.append": "toegevoegd aan {subject}",
       "patch.remove": "{subject} verwijderd",
       "patch.set": "{subject} ingesteld",
-      "size.was": "{size} (was {before})"
+      "size.was": "{size} (was {before})",
+      "patch.multi": "{count} wijzigingen"
     },
     "changes": {
       "added": "Toegevoegd",
@@ -691,7 +692,8 @@
       "delete_calendar_event": "Kalenderafspraak verwijderen",
       "location.create": "Locatie {name} maken",
       "location.delete": "Locatie {name} verwijderen",
-      "location.update": "Locatie {name} bijwerken"
+      "location.update": "Locatie {name} bijwerken",
+      "patch_dashboard.multi": "{count} wijzigingen toepassen op dashboard '{label}'"
     },
     "approvals": {
       "approve": "Goedkeuren en uitvoeren",
@@ -2145,7 +2147,9 @@
       "location.delete.body": "Het geselecteerde item wordt verwijderd. De wijziging kan mogelijk niet worden teruggedraaid.",
       "location.delete.title": "Locatie {name} verwijderen",
       "location.update.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "location.update.title": "Locatie {name} bijwerken"
+      "location.update.title": "Locatie {name} bijwerken",
+      "patch_dashboard.multi.title": "Dashboard '{label}' bijwerken",
+      "patch_dashboard.multi.body": "Hiermee wordt de Home Assistant-dashboardconfiguratie bijgewerkt. Open Details om de exacte voorgestelde wijziging te bekijken."
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",

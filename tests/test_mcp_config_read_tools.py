@@ -93,7 +93,7 @@ class TestGetAutomation:
         data = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
 
         result, outcome, _res = await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data)
         assert outcome == "allowed"
@@ -135,7 +135,7 @@ class TestGetAutomation:
 
         reader = _access_key(cap_automation_write="confirm")
         result, outcome, _res = await _call_tool(
-            "get_automation", {"automation_id": created["id"]}, reader, hass, data)
+            "get_automation", {"automation_id": created["automation_id"]}, reader, hass, data)
         assert outcome == "allowed"
         assert _json(result)["config"]["alias"] == "Porch"
 
@@ -167,7 +167,7 @@ class TestAutomationCas:
         data = _data()
         access_key = _access_key(cap_automation_write="allow")
         created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
         read = _json((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         good_hash = read["content_hash"]
 
@@ -199,7 +199,7 @@ class TestAutomationCas:
         created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
         _r, outcome, _res = await _call_tool(
             "edit_automation",
-            {"automation_id": created["id"], "config": _cfg(description="Updated description")},
+            {"automation_id": created["automation_id"], "config": _cfg(description="Updated description")},
             access_key, hass, data,
         )
         assert outcome == "allowed"
@@ -233,7 +233,7 @@ class TestApprovalDiffCompleteness:
         created = _json((await _call_tool("create_automation", {"config": big_cfg}, access_key, hass, data))[0])
 
         diff = await _build_diff_edit_automation(
-            {"automation_id": created["id"], "config": big_cfg}, access_key, hass)
+            {"automation_id": created["automation_id"], "config": big_cfg}, access_key, hass)
         assert "more characters)" not in diff["after"]
         assert "more characters)" not in diff["before"]
         # Whole JSON on both sides: the last step survives, not just the first.
@@ -280,7 +280,7 @@ class TestApprovalDiffCompleteness:
                        versions=VersionStore(), mesa=None)
         access_key = _access_key(cap_automation_write="allow")
         created = _json((await _call_tool("create_automation", {"config": big_cfg}, access_key, hass, data))[0])
-        aid = created["id"]
+        aid = created["automation_id"]
 
         # Gate an edit carrying a LARGE config so a real pending approval is
         # created with content that a display cap would have clipped.

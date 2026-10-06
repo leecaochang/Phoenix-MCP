@@ -386,6 +386,30 @@ class TestConfigFlowHelperCreation:
         assert "live confirmation code" in content["content"][0]["text"]
 
 
+class TestCreateHelperDuplicateName:
+    async def test_same_name_is_refused_with_the_existing_id(self, hass, helper_env, hass_admin_user):
+        first = _json((await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Guest mode"}},
+                                   _access_key(), hass))[0])
+        content, outcome, _ = await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "guest MODE"}},
+                                          _access_key(), hass)
+        assert outcome == "invalid_request"
+        assert first["helper"]["id"] in content["content"][0]["text"] and "edit_helper" in content["content"][0]["text"]
+        _, outcome, _ = await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Holiday mode"}},
+                                    _access_key(), hass)
+        assert outcome == "allowed"
+
+    async def test_a_hidden_same_name_helper_is_not_revealed(self, hass, helper_env, hass_admin_user):
+        first = _json((await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Vault"}},
+                                   _access_key(), hass))[0])
+        hidden = f"input_boolean.{first['helper']['id']}"
+        tree = PermissionTree(domains={"input_boolean": PermissionNode(state="GREEN")},
+                              entities={hidden: PermissionNode(state="RED")})
+        content, outcome, _ = await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Vault"}},
+                                          _access_key(permissions=tree), hass)
+        assert outcome == "allowed"
+        assert first["helper"]["id"] != _json(content)["helper"]["id"]
+
+
 class TestEditHelperKeepsUnnamedFields:
     """HA rebuilds most storage helpers from the update alone; edits must not reset fields."""
 
@@ -467,7 +491,7 @@ class TestEditDeleteHelper:
             _access_key(), hass,
         ))[0])
         await hass.async_block_till_done()
-        diff = _build_diff_delete_helper(
+        diff = await _build_diff_delete_helper(
             {
                 "helper_type": "input_boolean",
                 "helper_id": created["helper"]["id"],
@@ -475,6 +499,7 @@ class TestEditDeleteHelper:
             _access_key(), hass,
         )
         assert diff["target"]["label"] == "Approval helper"
+        assert diff["preview"]["relationships"]["consumer_count"] == 0
 
     async def test_edit(self, hass, helper_env, hass_admin_user):
         created = _json((await _call(

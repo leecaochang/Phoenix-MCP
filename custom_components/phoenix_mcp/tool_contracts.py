@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from .const import (
+    PATCH_DASHBOARD_MAX_CHANGES,
     SERVICE_TARGET_MAX_GROUPS,
     SERVICE_TARGET_MAX_IDS,
     UNKNOWN_ARGUMENT_ALIASES,
@@ -77,9 +78,10 @@ _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
     },
     "patch_dashboard": {
         "url_path": "target.url_path",
-        "path": "target.path",
-        "op": "change.kind",
-        "value": "change.value",
+        "path": "changes[].path",
+        "op": "changes[].kind",
+        "value": "changes[].value",
+        "change": 'changes: [{"path":[...],"kind":"set","value":...}]',
     },
     "set_entity": {
         field: f"changes.{field}" for field in (
@@ -182,7 +184,7 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
 
     examine(args, properties, protected)
     if tool == "patch_dashboard" and isinstance(args.get("target"), dict):
-        examine(args["target"], properties["target"]["properties"], ("url_path", "path"), "target.")
+        examine(args["target"], properties["target"]["properties"], ("url_path",), "target.")
     if not findings:
         return None
     return " ".join(findings) + f" Valid parameters: {', '.join(sorted(properties))}. Correct the arguments and retry."
@@ -311,13 +313,22 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if "content" in change:
             out["content"] = change["content"]
     elif tool == "patch_dashboard":
-        target, change = out.pop("target", None), out.pop("change", None)
-        if not isinstance(target, dict) or not isinstance(change, dict) or not isinstance(target.get("path"), list):
-            return out, "target.path and change must be supplied."
-        out.update({key: target[key] for key in ("url_path", "path") if key in target})
-        out["op"] = change.get("kind")
-        if "value" in change:
-            out["value"] = change["value"]
+        target, changes = out.pop("target", None), out.pop("changes", None)
+        if target is not None and not isinstance(target, dict):
+            return out, "target must be an object."
+        if not isinstance(changes, list) or not 1 <= len(changes) <= PATCH_DASHBOARD_MAX_CHANGES:
+            return out, f"changes must be a list of 1 to {PATCH_DASHBOARD_MAX_CHANGES} changes."
+        if target and "url_path" in target:
+            out["url_path"] = target["url_path"]
+        flat = []
+        for change in changes:
+            if not isinstance(change, dict) or not isinstance(change.get("path"), list):
+                return out, "Each change needs a path array and a kind."
+            item = {"path": change["path"], "op": change.get("kind")}
+            if "value" in change:
+                item["value"] = change["value"]
+            flat.append(item)
+        out["changes"] = flat
     elif tool in {"set_entity", "set_device", "set_integration"}:
         changes = out.pop("changes", None)
         if not isinstance(changes, dict) or not changes:

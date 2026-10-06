@@ -551,3 +551,31 @@ class TestBlueprintRestore:
         result, outcome, _r = await async_restore_version(record, "admin-1", hass, data)
         assert outcome == "invalid_request"
         assert result.get("isError") is True
+
+
+async def test_get_blueprint_renders_inputs_into_a_standalone_config(hass, bp_env, hass_admin_user):
+    from homeassistant.setup import async_setup_component
+    _write_existing(bp_env, rel="author/porch.yaml", body="""
+blueprint:
+  name: Porch light
+  domain: automation
+  input:
+    lamp:
+      name: Lamp
+trigger:
+  - platform: state
+    entity_id: sun.sun
+action:
+  - service: light.turn_on
+    target:
+      entity_id: !input lamp
+""")
+    assert await async_setup_component(hass, "automation", {})
+    body = _json((await _call("get_blueprint", {"domain": "automation", "path": "author/porch.yaml",
+                                                "input": {"lamp": "light.porch"}}, _access_key(), hass))[0])
+    rendered = json.dumps(body["substituted_config"])
+    assert "light.porch" in rendered and "!input" not in rendered
+    missing, outcome, _ = await _call("get_blueprint", {"domain": "automation", "path": "author/porch.yaml", "input": {}},
+                                      _access_key(), hass)
+    assert outcome == "invalid_request" and "could not be rendered" in _text(missing)
+    assert "Missing input" in _text(missing) and "unknown_error" not in _text(missing)

@@ -509,7 +509,7 @@ async def test_structural_dashboard_writes_return_recovery_id(hass, op):
     if op == "card":
         result = await _execute_add_dashboard_card({"view_index": 0, "card": {"type": "markdown", "content": "Test"}}, t, hass, d)
     else:
-        result = await _execute_patch_dashboard({"op": "set", "path": ["views", 0, "title"], "value": "Changed"}, t, hass, d)
+        result = await _execute_patch_dashboard({"changes": [{"op": "set", "path": ["views", 0, "title"], "value": "Changed"}]}, t, hass, d)
     assert result[1] == "allowed", result
     assert body(result)["recovery_id"] == d.config_recovery.records()[0]["id"]
     assert d.config_recovery.records()[0]["phase"] == "verified"
@@ -630,3 +630,16 @@ async def test_admin_energy_version_restore_keeps_a_durable_pre_image(hass):
         with patch.object(d.config_recovery, "begin", AsyncMock(side_effect=ConfigurationRecoveryError("store unavailable"))):
             refused = await async_restore_energy_prefs({"device_consumption": []}, t, hass, d)
     assert refused[1] == "invalid_request" and prefs == saved
+
+
+async def test_write_file_names_an_overwrite_and_reloads_a_theme(hass):
+    from custom_components.phoenix_mcp.tools.config_files import _execute_write_file
+    t, d = access_key(cap_filesystem="allow"), runtime()
+    reloads = []
+    hass.services.async_register("frontend", "reload_themes", lambda call: reloads.append(call))
+    created = await _execute_write_file({"path": "themes/calm.yaml", "content": "calm:\n  primary-color: teal\n"}, t, hass, d)
+    assert body(created)["action"] == "created" and body(created)["post_action"] == "themes_reloaded"
+    overwritten = await _execute_write_file({"path": "themes/calm.yaml", "content": "calm:\n  primary-color: navy\n"}, t, hass, d)
+    assert body(overwritten)["action"] == "overwrote" and len(reloads) == 2
+    plain = await _execute_write_file({"path": "www/note.txt", "content": "x"}, t, hass, d)
+    assert "post_action" not in body(plain)

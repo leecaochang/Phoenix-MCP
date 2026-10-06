@@ -1599,7 +1599,8 @@
       "delete_calendar_event": "Supprimer un événement du calendrier",
       "location.create": "Créer le lieu {name}",
       "location.delete": "Supprimer le lieu {name}",
-      "location.update": "Mettre à jour le lieu {name}"
+      "location.update": "Mettre à jour le lieu {name}",
+      "patch_dashboard.multi": "Appliquer {count} modifications au tableau de bord « {label} »"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -1626,7 +1627,8 @@
       "patch.append": "ajout à {subject}",
       "patch.remove": "suppression de {subject}",
       "patch.set": "définition de {subject}",
-      "size.was": "{size} (avant {before})"
+      "size.was": "{size} (avant {before})",
+      "patch.multi": "{count} modifications"
     },
     "adminError": {
       "authRequired": "Authentification requise.",
@@ -2068,7 +2070,9 @@
       "location.delete.body": "Cette action supprimera l’élément sélectionné. La modification peut être irréversible.",
       "location.delete.title": "Supprimer le lieu {name}",
       "location.update.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
-      "location.update.title": "Mettre à jour le lieu {name}"
+      "location.update.title": "Mettre à jour le lieu {name}",
+      "patch_dashboard.multi.title": "Mettre à jour le tableau de bord « {label} »",
+      "patch_dashboard.multi.body": "Cela mettra à jour la configuration du tableau de bord Home Assistant. Ouvrez Détails pour réviser la modification proposée exacte."
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",

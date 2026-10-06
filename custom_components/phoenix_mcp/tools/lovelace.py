@@ -28,7 +28,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from ..card_catalog import CardEntry
-from ..const import CAP_DENY, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
+from ..const import CAP_DENY, LAYOUT_SHAPE_MAX_DEPTH, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..tool_input import nested_argument_error
@@ -672,6 +672,8 @@ def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, st
     config = args.get("config")
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", tool_name
+    if shape := _layout_shape_reason(config):
+        return _tool_error(shape), "invalid_request", tool_name
     offender = redaction_sentinel_path(config)
     if offender is not None:
         where = _patch_path_label(offender) if offender else "config"
@@ -777,6 +779,51 @@ def _card_index_ok(value: Any) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _layout_shape_reason(config: Any) -> str | None:
+    """Refuse a layout the dashboard frontend could not render.
+
+    Home Assistant stores any shape here, but the frontend iterates views, cards,
+    sections and badges as lists, so an object in one of those places blanks
+    the dashboard for every viewer. Only the resulting layout is judged.
+    """
+    def cards_reason(cards: Any, where: str, depth: int) -> str | None:
+        if not isinstance(cards, list):
+            return f"{where} must be a list"
+        for index, card in enumerate(cards):
+            if depth < LAYOUT_SHAPE_MAX_DEPTH and isinstance(card, dict):
+                if "cards" in card and (reason := cards_reason(card["cards"], f"{where}[{index}].cards", depth + 1)):
+                    return reason
+                if "card" in card and not isinstance(card["card"], dict):
+                    return f"{where}[{index}].card must be an object"
+        return None
+
+    def reason() -> str | None:
+        if not isinstance(config, dict) or "views" not in config:
+            return None
+        views = config["views"]
+        if not isinstance(views, list):
+            return "views must be a list"
+        for vi, view in enumerate(views):
+            if not isinstance(view, dict):
+                return f"views[{vi}] must be an object"
+            for key in ("sections", "badges"):
+                if key in view and not isinstance(view[key], list):
+                    return f"views[{vi}].{key} must be a list"
+            if "cards" in view and (found := cards_reason(view["cards"], f"views[{vi}].cards", 0)):
+                return found
+            for si, section in enumerate(view.get("sections") or []):
+                if not isinstance(section, dict):
+                    return f"views[{vi}].sections[{si}] must be an object"
+                if "cards" in section and (found := cards_reason(section["cards"], f"views[{vi}].sections[{si}].cards", 0)):
+                    return found
+        return None
+
+    found = reason()
+    return None if found is None else (
+        f"The resulting dashboard would not render: {found}. Dashboards list their views, sections, "
+        "badges and cards in arrays; nothing was written.")
+
+
 def _card_shape_reason(card: Any) -> str | None:
     """Cheap structural check on an agent-supplied card config."""
     if not isinstance(card, dict) or not isinstance(card.get("type"), str) or not card["type"]:
@@ -851,6 +898,8 @@ def _apply_dashboard_card_op(
             if not _card_index_ok(position) or not 0 <= position <= len(cards):
                 return None, None, f"position must be an integer in 0..{len(cards)}."
             cards.insert(position, card)
+        if shape := _layout_shape_reason(new_config):
+            return None, None, shape
         return new_config, None, None
     card_index = args.get("card_index")
     if not _card_index_ok(card_index) or not 0 <= card_index < len(cards):
@@ -866,6 +915,8 @@ def _apply_dashboard_card_op(
         cards[card_index] = card
     else:
         cards.pop(card_index)
+    if shape := _layout_shape_reason(new_config):
+        return None, None, shape
     return new_config, prior, None
 
 
@@ -1087,37 +1138,34 @@ def _patch_op_arg(args: dict) -> str:
     return op if op in _PATCH_OPS else "set"
 
 
-def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, Any, str | None]:
-    """Apply one path-addressed patch to a COPY of config.
+def _apply_one_patch(config: dict, change: dict) -> tuple[Any, str | None]:
+    """Apply one path-addressed change in place; returns (prior_value, reason).
 
-    Returns (new_config, prior_value, None) or (None, None, reason). prior_value is
-    what the path held before (None for a path being appended to, which keeps its
-    list identity). Deep-copies first for the same reason the card ops do:
-    async_get_lovelace_config can hand back the lovelace integration's live object.
+    prior_value is what the path held before (None for an append, which keeps
+    its list identity). Never called on the live lovelace object.
     """
-    op = _patch_op_arg(args)
-    path = args.get("path")
-    new_config = copy.deepcopy(config)
-    container, key, reason = resolve_json_path(new_config, path)
+    op = _patch_op_arg(change)
+    path = change.get("path")
+    container, key, reason = resolve_json_path(config, path)
     if reason is not None:
-        return None, None, reason
+        return None, reason
     if op == "remove":
         prior = container[key]
         if isinstance(container, list):
             container.pop(key)
         else:
             del container[key]
-        return new_config, prior, None
-    if "value" not in args:
-        return None, None, f"value is required for op '{op}'."
-    value = args["value"]
+        return prior, None
+    if "value" not in change:
+        return None, f"value is required for op '{op}'."
+    value = change["value"]
     # The caller's own value is the ONLY thing that can introduce a sentinel here:
     # every other byte of the layout is untouched because it was never resent,
     # which is the entire reason this tool exists.
     offender = redaction_sentinel_path(value)
     if offender is not None:
         where = _patch_path_label(offender) if offender else "value"
-        return None, None, (
+        return None, (
             f"value contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
             "That placeholder is what a read substitutes for an entity this access key cannot "
             "resolve (out of scope, or one that no longer exists), so writing it back would "
@@ -1126,41 +1174,79 @@ def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, Any, 
     if op == "append":
         target = container[key]
         if not isinstance(target, list):
-            return None, None, f"op 'append' requires the path to address a list; {_patch_path_label(path)} is not one."
+            return None, f"op 'append' requires the path to address a list; {_patch_path_label(path)} is not one."
         target.append(value)
-        return new_config, None, None
+        return None, None
     prior = container[key] if not isinstance(container, list) or 0 <= key < len(container) else None
     container[key] = value
-    return new_config, prior, None
+    return prior, None
+
+
+def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, list[Any], str | None]:
+    """Apply every change, in order, to a COPY of config, or none of them.
+
+    Each path addresses the layout as left by the changes before it. Returns
+    (new_config, priors, None) or (None, [], reason naming the failing change).
+    Deep-copies first for the same reason the card ops do:
+    async_get_lovelace_config can hand back the lovelace integration's live object.
+    """
+    changes = args.get("changes")
+    if not isinstance(changes, list) or not changes:
+        return None, [], "changes must list at least one change."
+    new_config = copy.deepcopy(config)
+    priors: list[Any] = []
+    for index, change in enumerate(changes):
+        prior, reason = _apply_one_patch(new_config, change if isinstance(change, dict) else {})
+        if reason is not None:
+            return None, [], f"changes[{index}]: {reason}" if len(changes) > 1 else reason
+        priors.append(prior)
+    if shape := _layout_shape_reason(new_config):
+        return None, [], shape
+    return new_config, priors, None
+
+
+def _patch_summary_fields(args: dict, label: str) -> dict:
+    """One-change summaries keep their own wording; several are counted."""
+    changes = args.get("changes") or []
+    if len(changes) == 1:
+        return _summary(f"patch_dashboard.{_patch_op_arg(changes[0])}", label=label,
+                        path=_patch_path_label(changes[0].get("path")))
+    return _summary("patch_dashboard.multi", label=label, count=len(changes))
 
 
 async def _build_diff_patch_dashboard(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     url_path = str_arg(args.get("url_path")).strip() or None
     label = url_path or "(default dashboard)"
-    op = _patch_op_arg(args)
-    path_label = _patch_path_label(args.get("path"))
-    before = None
+    changes = [change for change in args.get("changes") or [] if isinstance(change, dict)]
+    priors: list[Any] = []
     try:
         current = await async_get_lovelace_config(hass, url_path)
         if isinstance(current, dict):
-            _, prior, _ = _apply_dashboard_patch(current, args)
-            if prior is not None:
-                before = _truncate(
-                    json.dumps(filter_service_response(prior, access_key, hass), indent=2, default=str),
-                    max_chars=MAX_DIFF_INLINE_BYTES,
-                )
+            _, priors, _ = _apply_dashboard_patch(current, args)
     except Exception:  # noqa: BLE001 - diagnostic only; the precheck already validated
         pass
-    after = None
-    if op != "remove" and "value" in args:
-        after = _truncate(json.dumps(args["value"], indent=2, default=str), max_chars=MAX_DIFF_INLINE_BYTES)
+
+    def render(value: Any) -> str:
+        return _truncate(json.dumps(value, indent=2, default=str), max_chars=MAX_DIFF_INLINE_BYTES)
+
+    single = len(changes) == 1
+    befores = [filter_service_response(prior, access_key, hass) for prior in priors]
+    afters = [change.get("value") if _patch_op_arg(change) != "remove" and "value" in change else None
+              for change in changes]
+    before = (render(befores[0]) if single and befores and befores[0] is not None
+              else render([{"path": _patch_path_label(c.get("path")), "before": b} for c, b in zip(changes, befores)])
+              if not single and befores else None)
+    after = (render(afters[0]) if single and afters[0] is not None
+             else render([{"path": _patch_path_label(c.get("path")), "op": _patch_op_arg(c), "value": a}
+                          for c, a in zip(changes, afters)]) if not single else None)
     return {
         "kind": "yaml_diff",
-        **_summary(f"patch_dashboard.{op}", label=label, path=path_label),
+        **_patch_summary_fields(args, label),
         "target": {"type": "dashboard", "id": url_path, "label": label},
         "before": before,
         "after": after,
-        "preview": {"url_path": url_path, "path": path_label, "op": op},
+        "preview": {"url_path": url_path, "changes": [
+            {"path": _patch_path_label(change.get("path")), "op": _patch_op_arg(change)} for change in changes]},
     }
 
 
@@ -1222,22 +1308,25 @@ async def _execute_patch_dashboard(
     )
     if recovery_result is not None:
         return recovery_result
-    op = _patch_op_arg(args)
-    path_label = _patch_path_label(args.get("path"))
+    changes = [change for change in args.get("changes") or [] if isinstance(change, dict)]
+    applied = [{"op": _patch_op_arg(change), "path": _patch_path_label(change.get("path"))} for change in changes]
+    summary = (_version_summary(f"patch.{applied[0]['op']}", subject=applied[0]["path"]) if len(applied) == 1
+               else _version_summary("patch.multi", count=len(applied)))
     await _record_version(
         data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit", before=current, after=new_config, alias=url_path or "(default)",
-        summary=_version_summary(f"patch.{op}", subject=path_label),
+        summary=summary,
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, **recovery_receipt, "op": op, "path": path_label,
+        "url_path": url_path, "saved": True, **recovery_receipt, "changes": applied,
         # Structural like the card ops, so the resulting hash is safe to hand back
         # and the agent can chain further patches without another read.
         "content_hash": content_hash(new_config),
     }
-    warnings = _card_warnings(args.get("value"), data) if op != "remove" else []
+    warnings = [warning for change in changes if _patch_op_arg(change) != "remove"
+                for warning in _card_warnings(change.get("value"), data)]
     if warnings:
-        body["warnings"] = warnings
+        body["warnings"] = list(dict.fromkeys(warnings))
     return _tool_success(json.dumps(body, default=str)), "allowed", f"dashboard:{resource_id}"
 
 

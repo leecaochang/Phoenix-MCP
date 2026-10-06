@@ -927,6 +927,9 @@ async def _execute_edit_energy_config(
     body = {
         "saved": True, "recovery_id": rid,
         **{k: v for k, v in summary.items()}, **_scoped_body(after, True, access_key, hass),
+        # Home Assistant's own check of the saved setup, e.g. a statistic with
+        # the wrong unit; null means it could not run, not that all is well.
+        "issues": await _energy_issues(after, access_key, hass),
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", "energy:preferences"
 

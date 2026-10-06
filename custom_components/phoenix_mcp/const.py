@@ -76,6 +76,12 @@ DEBUG_CAPTURE_MAX_CHARS = 2000
 LOG_DETAIL_STALE_MESSAGE = "Invalid or stale log detail reference. Restart the query."
 # call_service reports at most this many target states after the call.
 SERVICE_RESULT_STATES_MAX = 20
+# Authoring results name at most this many unresolvable references.
+REFERENCE_WARNING_MAX = 20
+# Nested stack cards checked for list shape before a dashboard write.
+LAYOUT_SHAPE_MAX_DEPTH = 10
+# One patch_dashboard call applies at most this many changes under one approval.
+PATCH_DASHBOARD_MAX_CHANGES = 20
 TEMPLATE_WORKER_TIMEOUT_SECONDS = 5
 TEMPLATE_WORKER_CPU_SECONDS = 2
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
@@ -1547,6 +1553,7 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "patch_dashboard.set": "Set {path} on dashboard '{label}'",
     "patch_dashboard.append": "Append to {path} on dashboard '{label}'",
     "patch_dashboard.remove": "Remove {path} from dashboard '{label}'",
+    "patch_dashboard.multi": "Apply {count} changes to dashboard '{label}'",
     # Service calls and the native physical-gate tools.
     "call_service": "Call {domain}/{service}",
     "call_service.mesa": "Call {domain}/{service} (includes MESA confirmation)",
@@ -1604,6 +1611,7 @@ _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
     "patch_dashboard.set": "Update dashboard '{label}'",
     "patch_dashboard.append": "Update dashboard '{label}'",
     "patch_dashboard.remove": "Update dashboard '{label}'",
+    "patch_dashboard.multi": "Update dashboard '{label}'",
 }
 
 _APPROVAL_SUMMARY_BODIES = {
@@ -1802,6 +1810,7 @@ VERSION_SUMMARY_TEMPLATES: dict[str, str] = {
     "patch.set": "set {subject}",
     "patch.append": "appended to {subject}",
     "patch.remove": "removed {subject}",
+    "patch.multi": "{count} changes",
 }
 
 
@@ -2459,7 +2468,7 @@ UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
     "add_dashboard_card": ("url_path", "view_index", "section_index", "position", "expected_hash"),
     "edit_dashboard_card": ("url_path", "view_index", "section_index", "card_index", "expected_hash"),
     "delete_dashboard_card": ("url_path", "view_index", "section_index", "card_index", "expected_hash"),
-    "patch_dashboard": ("target", "expected_hash"),
+    "patch_dashboard": ("target", "changes", "expected_hash"),
     "edit_dashboard": ("dashboard_id",),
     "delete_dashboard": ("dashboard_id",),
     "list_files": ("path",),

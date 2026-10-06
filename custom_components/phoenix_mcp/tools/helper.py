@@ -1111,6 +1111,33 @@ async def _revalidate_scoped_helper_context(
     return context, None
 
 
+async def _duplicate_helper_name_error(
+    hass: HomeAssistant, access_key: AccessKeyRecord, helper_type: str, config: dict,
+) -> str | None:
+    """Refuse a second helper with the same name, which HA would quietly suffix.
+
+    A retried create otherwise leaves two helpers. Only a match this access key
+    can read refuses, so a name cannot probe for a helper outside its scope; a
+    hidden match is created as before. Scoped types (zone, tag, person) skip the
+    check entirely.
+    """
+    name = config.get("name")
+    if helper_type in _SCOPED_STORAGE_HELPER_TYPES or not isinstance(name, str) or not name.strip():
+        return None
+    try:
+        items = _storage_items(helper_type, await async_ws_command(hass, f"{helper_type}/list", {}))
+    except WsDispatchError:
+        return None
+    for item in items or []:
+        if not isinstance(item, dict) or str(item.get("name") or "").strip().casefold() != name.strip().casefold():
+            continue
+        entity_id = _resolve_helper_entity_id(hass, helper_type, str(item.get("id") or ""))
+        if entity_id is not None and resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE):
+            return (f"The {helper_type} helper {name.strip()!r} already exists (helper_id {item.get('id')!r}). "
+                    "Use edit_helper to change it, or choose another name.")
+    return None
+
+
 async def _tool_create_helper(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -1128,6 +1155,9 @@ async def _tool_create_helper(
         pre = _helper_write_precheck(args, "create_helper", require_id=False)
         if pre is not None:
             return pre
+        if duplicate := await _duplicate_helper_name_error(
+                hass, access_key, str(helper_type), dict_arg(args.get("config"))):
+            return _tool_error(duplicate), "invalid_request", "create_helper"
         if helper_type in _SCOPED_STORAGE_HELPER_TYPES:
             if scope_error := _scoped_helper_create_scope_error(
                 str(helper_type), access_key
@@ -2111,7 +2141,9 @@ def _build_diff_edit_helper(
     }
 
 
-def _build_diff_delete_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_delete_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+    from .discovery import _registry_relationship_preview  # noqa: PLC0415
+
     helper_type = args.get("helper_type")
     helper_id = str(args.get("helper_id") or "").strip()
     entity_id = _resolve_helper_entity_id(hass, str(helper_type), helper_id)
@@ -2125,7 +2157,11 @@ def _build_diff_delete_helper(args: dict, access_key: AccessKeyRecord, hass: Hom
         **_summary("delete_helper", helper_type=helper_type, helper_id=helper_id),
         "target": {"type": "helper", "id": helper_id, "label": label},
         "before": None,
-        "preview": {"helper_type": helper_type, "warning": "This helper will be removed permanently."},
+        "preview": {
+            "helper_type": helper_type, "warning": "This helper will be removed permanently.",
+            "relationships": (await _registry_relationship_preview(hass, entity_id) if entity_id is not None
+                              else {"consumers": [], "consumer_count": 0, "searched": []}),
+        },
     }
 
 

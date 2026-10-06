@@ -112,6 +112,10 @@ async def _finish_entity_write(
         )
         body["registration"] = {"status": "observation_failed", "entity_id": None, "state_present": None}
     check_request_authority()
+    if domain == "script":
+        from .discovery import reference_warnings  # noqa: PLC0415
+        if warnings := reference_warnings(hass, access_key, "script", config):
+            body["warnings"] = warnings
     status = body["registration"]["status"]
     if status == "timed_out":
         body["message"] = "Configuration saved and reload completed. Entity registration or live state was not observed within the wait budget and access key scope. Retry a lookup, not the write."
@@ -288,6 +292,7 @@ async def _tool_get_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one automation's current stored config, with a content_hash."""
+    args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_automation"
     automation_id = str(args.get("automation_id") or "").strip()
@@ -418,6 +423,23 @@ async def _tool_create_automation(
     return await _execute_create_automation(args, access_key, hass, data)
 
 
+def _automation_receipt(
+    hass: HomeAssistant, access_key: AccessKeyRecord, automation_id: str, config: dict, tool_name: str,
+) -> tuple[dict, str, str]:
+    """Name the saved automation's id and entity, and flag unresolvable references.
+
+    The reload above is blocking and in-process, so the entity is registered by now.
+    """
+    from .discovery import reference_warnings  # noqa: PLC0415
+
+    entity_id = _authoring_entity_id(hass, "automation", automation_id)
+    visible = entity_id is not None and resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+    body: dict[str, Any] = {"automation_id": automation_id, "entity_id": entity_id if visible else None, "config": config}
+    if warnings := reference_warnings(hass, access_key, "automation", config):
+        body["warnings"] = warnings
+    return _tool_success(json.dumps(body, indent=2, default=str)), "allowed", tool_name
+
+
 async def _execute_create_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -467,7 +489,7 @@ async def _execute_create_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="create", before=None, after=config, alias=config.get("alias"),
     )
-    return _tool_success(json.dumps(config, indent=2, default=str)), "allowed", "create_automation"
+    return _automation_receipt(hass, access_key, automation_id, config, "create_automation")
 
 
 async def _tool_edit_automation(
@@ -479,6 +501,7 @@ async def _tool_edit_automation(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace the config of an existing UI automation."""
+    args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_automation"
     pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True)
@@ -541,7 +564,7 @@ async def _execute_edit_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="edit", before=before_cfg, after=config, alias=config.get("alias"),
     )
-    return _tool_success(json.dumps(config, indent=2, default=str)), "allowed", "edit_automation"
+    return _automation_receipt(hass, access_key, automation_id, config, "edit_automation")
 
 
 async def _tool_delete_automation(
@@ -553,6 +576,7 @@ async def _tool_delete_automation(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a UI automation."""
+    args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_automation"
     automation_id = str_arg(args.get("automation_id")).strip()
@@ -572,6 +596,16 @@ async def _tool_delete_automation(
     if blocked is not None:
         return blocked
     return await _execute_delete_automation(args, access_key, hass, data)
+
+
+def _remove_registry_entry(hass: HomeAssistant, domain: str, item_id: str) -> None:
+    """Drop a deleted automation's or script's registry entry, as HA's own delete does.
+
+    A reload alone leaves it behind as a restored, unavailable entity.
+    """
+    registry = er.async_get(hass)
+    if entity_id := registry.async_get_entity_id(domain, domain, item_id):
+        registry.async_remove(entity_id)
 
 
 async def _execute_delete_automation(
@@ -614,6 +648,8 @@ async def _execute_delete_automation(
             else:
                 removed = op.before
         await hass.services.async_call("automation", "reload", blocking=True)
+        check_request_authority()
+        _remove_registry_entry(hass, "automation", automation_id)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -654,6 +690,7 @@ async def _tool_get_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one script's current stored config, with a content_hash."""
+    args = _with_stored_id(hass, args, "script")
     if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_script"
     script_id = str(args.get("script_id") or "").strip()
@@ -778,6 +815,7 @@ async def _tool_edit_script(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace the config of an existing script in scripts.yaml."""
+    args = _with_stored_id(hass, args, "script")
     if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_script"
     pre = await _script_write_precheck(args, hass, "edit_script")
@@ -865,6 +903,7 @@ async def _tool_delete_script(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a script from scripts.yaml."""
+    args = _with_stored_id(hass, args, "script")
     if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_script"
     script_id = str_arg(args.get("script_id")).strip()
@@ -928,6 +967,8 @@ async def _execute_delete_script(
             else:
                 before_cfg = op.before
         await hass.services.async_call("script", "reload", blocking=True)
+        check_request_authority()
+        _remove_registry_entry(hass, "script", script_id)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -1454,6 +1495,31 @@ def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass:
     }
 
 
+def _authoring_entity_id(hass: HomeAssistant, domain: str, entry_id: str) -> str | None:
+    """The entity a stored automation, script or scene id currently owns."""
+    if entity_id := er.async_get(hass).async_get_entity_id(domain, domain, entry_id):
+        return entity_id
+    for state in hass.states.async_all(domain):
+        if str(state.attributes.get("id")) == entry_id or state.entity_id == f"{domain}.{entry_id}":
+            return state.entity_id
+    return None
+
+
+def _with_stored_id(hass: HomeAssistant, args: dict, domain: str) -> dict:
+    """Accept an automation or script entity_id where its stored id is expected.
+
+    Resolved through the registry before any approval, so approvals and
+    executors only ever see the stored id. Anything else passes through.
+    """
+    key = f"{domain}_id"
+    raw = args.get(key)
+    if isinstance(raw, str) and raw.strip().startswith(f"{domain}."):
+        entry = er.async_get(hass).async_get(raw.strip())
+        if entry is not None and entry.domain == domain and entry.platform == domain and entry.unique_id:
+            return {**args, key: entry.unique_id}
+    return args
+
+
 def _authoring_entry_label(
     hass: HomeAssistant, domain: str, entry_id: str
 ) -> str | None:
@@ -1488,6 +1554,16 @@ async def _build_diff_edit_automation(args: dict, access_key: AccessKeyRecord, h
     }
 
 
+async def _authoring_consumers(hass: HomeAssistant, domain: str, item_id: str) -> dict[str, Any]:
+    """What still uses the entity a delete removes, for the approval card."""
+    from .discovery import _registry_relationship_preview  # noqa: PLC0415
+
+    entity_id = _authoring_entity_id(hass, domain, item_id)
+    if entity_id is None:
+        return {"consumers": [], "consumer_count": 0, "searched": []}
+    return await _registry_relationship_preview(hass, entity_id)
+
+
 async def _build_diff_delete_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
 ) -> dict:
@@ -1501,7 +1577,8 @@ async def _build_diff_delete_automation(
         **_summary("delete_automation", automation_id=automation_id),
         "target": {"type": "automation", "id": automation_id, "label": label},
         "before": before,
-        "preview": {"warning": "This automation will be removed permanently."},
+        "preview": {"warning": "This automation will be removed permanently.",
+                    "relationships": await _authoring_consumers(hass, "automation", automation_id)},
     }
 
 
@@ -1589,7 +1666,8 @@ async def _build_diff_delete_scene(
         **_summary("delete_scene", scene_id=scene_id),
         "target": {"type": "scene", "id": scene_id, "label": label},
         "before": before,
-        "preview": {"warning": "This scene will be removed permanently."},
+        "preview": {"warning": "This scene will be removed permanently.",
+                    "relationships": await _authoring_consumers(hass, "scene", scene_id)},
     }
 
 
@@ -1637,5 +1715,6 @@ async def _build_diff_delete_script(
         **_summary("delete_script", script_id=script_id),
         "target": {"type": "script", "id": script_id, "label": label},
         "before": before,
-        "preview": {"warning": "This script will be removed permanently."},
+        "preview": {"warning": "This script will be removed permanently.",
+                    "relationships": await _authoring_consumers(hass, "script", script_id)},
     }

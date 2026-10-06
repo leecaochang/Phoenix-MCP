@@ -23,7 +23,7 @@ CASES = [
     ('add_dashboard_card', {'dashboard_url': 'private', 'view_index': 0, 'card': {'type': 'markdown'}}, 'url_path'),
     ('edit_dashboard_card', {'url_path': 'valid', 'view_indxe': 0}, 'view_index'),
     ('delete_dashboard_card', {'section_indxe': 0}, 'section_index'),
-    ('patch_dashboard', {'target': {'path': ['views'], 'dashboard_url': 'private'}, 'change': {'kind': 'set', 'value': []}}, 'target.url_path'),
+    ('patch_dashboard', {'target': {'dashboard_url': 'private'}, 'changes': [{'path': ['views'], 'kind': 'set', 'value': []}]}, 'target.url_path'),
     ('edit_dashboard', {'dashboard': 'private', 'config': {}}, 'dashboard_id'),
     ('delete_dashboard', {'dashboard': 'private'}, 'dashboard_id'),
     ('list_files', {'directory': 'www'}, 'path'),
@@ -115,8 +115,8 @@ def test_nested_dashboard_and_retired_forms():
 
 
 def test_error_bounds_and_nested_parameter_names():
-    error = unknown_argument_error('patch_dashboard', {'target': {'urlpath': 'x', 'file_path': 'x'}})
-    assert 'target.url_path' in error and 'target.path' in error
+    error = unknown_argument_error('patch_dashboard', {'target': {'urlpath': 'x', 'dashboard': 'x'}})
+    assert 'target.url_path' in error
     assert len(error) < 2000
     assert unknown_argument_error('get_dashboard_config', {'x' * 10000: 'secret'}) is None
     assert unknown_argument_error('get_dashboard_config', {3: 'secret'}) is None
@@ -219,7 +219,7 @@ async def test_approved_executor_accepts_normalized_patch_shape(hass):
         patch('custom_components.phoenix_mcp.tool_contracts.unknown_argument_error', side_effect=AssertionError('public-only check')),
     ):
         _, outcome, _ = await _EXECUTOR_REGISTRY['patch_dashboard']({
-            'url_path': 'test', 'path': ['views'], 'op': 'set', 'value': [{'title': 'Changed'}],
+            'url_path': 'test', 'changes': [{'path': ['views'], 'op': 'set', 'value': [{'title': 'Changed'}]}],
         }, access_key(cap_lovelace_write='allow'), hass, data)
     assert outcome == 'allowed'
     save.assert_awaited_once_with(hass, 'test', {'views': [{'title': 'Changed'}]})

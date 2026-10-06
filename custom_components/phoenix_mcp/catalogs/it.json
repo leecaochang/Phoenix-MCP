@@ -581,7 +581,9 @@
       "location.delete.body": "Verrà rimosso l’elemento selezionato. La modifica potrebbe non essere reversibile.",
       "location.delete.title": "Elimina posizione {name}",
       "location.update.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
-      "location.update.title": "Aggiorna posizione {name}"
+      "location.update.title": "Aggiorna posizione {name}",
+      "patch_dashboard.multi.title": "Aggiorna la plancia '{label}'",
+      "patch_dashboard.multi.body": "Verrà aggiornata la configurazione della plancia di Home Assistant. Apri Dettagli per rivedere la modifica esatta proposta."
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",
@@ -1553,7 +1555,8 @@
       "patch.append": "aggiunto a {subject}",
       "patch.remove": "rimosso {subject}",
       "patch.set": "impostato {subject}",
-      "size.was": "{size} (prima {before})"
+      "size.was": "{size} (prima {before})",
+      "patch.multi": "{count} modifiche"
     },
     "changes": {
       "added": "Aggiunto",
@@ -1961,7 +1964,8 @@
       "delete_calendar_event": "Eliminare un evento del calendario",
       "location.create": "Crea posizione {name}",
       "location.delete": "Elimina posizione {name}",
-      "location.update": "Aggiorna posizione {name}"
+      "location.update": "Aggiorna posizione {name}",
+      "patch_dashboard.multi": "Applica {count} modifiche alla plancia '{label}'"
     },
     "wizard": {
       "accessSub": "Espandi il gruppo <code>light</code> e scegli una luce che puoi verificare. Seleziona <strong>W</strong> per concedere l'accesso in lettura e scrittura. Concedi un intero dispositivo o espandilo per scegliere una sola entità. Puoi aggiungere altre autorizzazioni in seguito.",

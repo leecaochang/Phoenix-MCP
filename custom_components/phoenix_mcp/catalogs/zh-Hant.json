@@ -546,7 +546,9 @@
       "location.delete.body": "此操作將移除所選項目。變更可能無法復原。",
       "location.delete.title": "刪除位置 {name}",
       "location.update.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
-      "location.update.title": "更新位置 {name}"
+      "location.update.title": "更新位置 {name}",
+      "patch_dashboard.multi.title": "更新儀表板「{label}」",
+      "patch_dashboard.multi.body": "這將更新 Home Assistant 儀表板設定。開啟詳細資訊可檢視具體更改內容。"
     },
     "approvals": {
       "approve": "核准並執行",
@@ -1023,7 +1025,8 @@
       "delete_calendar_event": "刪除行事曆事件",
       "location.create": "建立位置 {name}",
       "location.delete": "刪除位置 {name}",
-      "location.update": "更新位置 {name}"
+      "location.update": "更新位置 {name}",
+      "patch_dashboard.multi": "對儀表板「{label}」套用 {count} 項變更"
     },
     "inject": {
       "mesaProfile": "MESA 策略",
@@ -1966,7 +1969,8 @@
       "patch.append": "向 {subject} 追加了內容",
       "patch.remove": "刪除了 {subject}",
       "patch.set": "設定了 {subject}",
-      "size.was": "{size}（原為 {before}）"
+      "size.was": "{size}（原為 {before}）",
+      "patch.multi": "{count} 項變更"
     },
     "wizard": {
       "accessSub": "展開 <code>light</code> 分組，選擇一個您可以親自驗證的燈。選擇 <strong>W</strong> 以授予讀寫權限。您可以授權整個裝置，也可以展開後只選擇其中一個實體。之後還可以新增更多權限。",

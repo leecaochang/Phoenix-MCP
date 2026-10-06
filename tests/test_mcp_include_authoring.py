@@ -126,7 +126,7 @@ class TestAutomationSplitLayout:
         content, outcome, _ = await _call_tool(
             "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "allowed"
-        aid = json.loads(_text(content))["id"]
+        aid = json.loads(_text(content))["automation_id"]
         new_file = env / "automations" / f"{aid}.yaml"
         assert new_file.exists()
 
@@ -312,7 +312,7 @@ class TestLegacyFallbackParity:
         content, outcome, _ = await _call_tool(
             "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "allowed"
-        aid = json.loads(_text(content))["id"]
+        aid = json.loads(_text(content))["automation_id"]
         assert (env / "automations.yaml").exists()
 
         _, outcome, _ = await _call_tool(
@@ -398,7 +398,7 @@ class TestTagHandling:
         access_key = _access_key(cap_automation_write="allow")
         content, _, _ = await _call_tool(
             "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, data)
-        aid = json.loads(_text(content))["id"]
+        aid = json.loads(_text(content))["automation_id"]
         await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         record = versions.list_for("automation", aid)[0]  # the delete, before=config

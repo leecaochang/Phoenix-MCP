@@ -121,7 +121,8 @@
       "patch.append": "{subject}에 추가됨",
       "patch.remove": "{subject} 제거됨",
       "patch.set": "{subject} 설정됨",
-      "size.was": "{size}(변경 전: {before})"
+      "size.was": "{size}(변경 전: {before})",
+      "patch.multi": "변경 {count}건"
     },
     "inject": {
       "profileSet": "{key}에 MESA 프로필이 설정됨 - 클릭하여 편집",
@@ -739,7 +740,8 @@
       "delete_calendar_event": "캘린더 일정 삭제",
       "location.create": "위치 {name} 만들기",
       "location.delete": "위치 {name} 삭제",
-      "location.update": "위치 {name} 업데이트"
+      "location.update": "위치 {name} 업데이트",
+      "patch_dashboard.multi": "대시보드 '{label}'에 변경 사항 {count}개 적용"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field}은(는) 활성 액세스 키를 참조해야 합니다.",
@@ -1681,7 +1683,9 @@
       "location.delete.body": "선택한 항목을 삭제합니다. 변경 사항을 되돌리지 못할 수 있습니다.",
       "location.delete.title": "위치 {name} 삭제",
       "location.update.body": "제안된 구성 변경 사항이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
-      "location.update.title": "위치 {name} 업데이트"
+      "location.update.title": "위치 {name} 업데이트",
+      "patch_dashboard.multi.title": "대시보드 \"{label}\" 업데이트",
+      "patch_dashboard.multi.body": "Home Assistant 대시보드 구성이 업데이트됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오."
     },
     "approvals": {
       "approve": "승인 및 실행",

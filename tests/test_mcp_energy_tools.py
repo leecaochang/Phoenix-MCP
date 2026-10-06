@@ -269,6 +269,8 @@ def _writer(prefs: dict):
     async def dispatch(hass, command, payload, **kw):
         if command == "energy/get_prefs":
             return json.loads(json.dumps(prefs))
+        if command == "energy/validate":
+            return {"energy_sources": [], "device_consumption": []}
         assert command == "energy/save_prefs", command
         saved.append(payload)
         prefs.update(json.loads(json.dumps(payload)))
@@ -1145,3 +1147,23 @@ async def test_preview_rows_are_scoped_like_every_other_read(hass: HomeAssistant
     }
     rows = _preview_rows(prefs, _access_key(), hass)
     assert rows["sources"][0]["meters"] == [["stat_energy_from", REDACTION_SENTINEL]]
+
+
+async def test_a_write_reports_home_assistants_validation_of_the_saved_setup(hass: HomeAssistant) -> None:
+    _seed_states(hass, "sensor.washer_energy", "sensor.new_washer_energy")
+    ws, _ = _writer(LIVE)
+    base = ws.side_effect
+
+    async def with_issue(h, command, payload, **kw):
+        if command == "energy/validate":
+            return {"energy_sources": [], "device_consumption": [
+                [{"type": "entity_unexpected_unit_energy", "affected_entities": [["sensor.new_washer_energy", "W"]]}], []]}
+        return await base(h, command, payload, **kw)
+
+    with patch(_WS, AsyncMock(side_effect=with_issue)):
+        content, outcome, _ = await _edit(
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
+            statistic="sensor.washer_energy", new_statistic="sensor.new_washer_energy")
+    assert outcome == "allowed"
+    issues = json.loads(content["content"][0]["text"])["issues"]
+    assert issues and issues[0]["type"] == "entity_unexpected_unit_energy"
