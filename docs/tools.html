@@ -169,7 +169,7 @@
           <article class="tool" data-cap="read" data-search="get_log_detail detail_ref log text chunk">
             <div class="tool-head"><span class="tool-name">get_log_detail</span><span class="badge badge-cap">System log read</span></div>
             <p class="tool-desc">Fetch one bounded, scrubbed text chunk of a bucket returned by <code>get_logs</code> (<code>system_log</code>) or <code>get_phoenix_diagnostics</code>. A Phoenix diagnostics reference also needs Diagnostics at the time of use. The reply's <code>detail</code> contains one chunk; continue by passing <code>detail.next_offset</code> as <code>detail_offset</code> until <code>detail.has_more</code> is false. Offsets count characters in the full scrubbed text. References are access-key-bound; a changed or evicted bucket, or changed redaction, requires a fresh query.</p>
-            <dl><dt>params</dt><dd><code>detail_ref</code> (required), <code>detail_field</code> (<code>message</code> default or <code>exception</code>), <code>message_index</code> (a message variant), <code>detail_offset</code></dd></dl>
+            <dl><dt>params</dt><dd><code>detail_ref</code> (required), <code>detail_field</code> (<code>message</code> default or <code>exception</code>), <code>message_index</code> (a message variant; omit it for <code>exception</code>), <code>detail_offset</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read discovery" data-search="get_phoenix_diagnostics phoenix logs self diagnostics">

@@ -27,8 +27,10 @@ _SYSTEM_LOG_DETAIL_PROPERTIES = {
         "description": "message for a retained message variant, exception for the traceback.",
     },
     "message_index": {
-        "type": "integer", "minimum": 0, "default": 0,
-        "description": "Message detail only. Zero-based retained variant index in the bucket.",
+        # No schema default: Assist fills declared defaults in, and this field's
+        # mere presence is refused with detail_field exception.
+        "type": "integer", "minimum": 0,
+        "description": "Message detail only; omit for exception. Zero-based retained variant index in the bucket, 0 when omitted.",
     },
     "detail_offset": {
         "type": "integer", "minimum": 0, "default": 0,
