@@ -39,6 +39,16 @@ RELATIVE_VOLUME_PLAN_VERSION = 1
 APPROVAL_REASON_FORMAT_INCOMPATIBLE = "approval_format_incompatible"
 MAX_REQUEST_BODY_BYTES = 1_048_576
 MAX_BATCH_ITEMS = 50
+# Storage collections use domain/create|update|delete and a domain_id target.
+STORAGE_HELPER_TYPES = frozenset({
+    "input_boolean", "input_number", "input_text", "input_select",
+    "input_datetime", "input_button", "counter", "timer", "schedule",
+    "zone", "tag", "person",
+})
+WS_REQUEST_CONTROL_FIELDS = frozenset({"id", "type"})
+STORAGE_HELPER_REQUEST_FIELDS = WS_REQUEST_CONTROL_FIELDS | frozenset(
+    f"{domain}_id" for domain in STORAGE_HELPER_TYPES
+)
 TOOL_INPUT_MAX_DEPTH = 64
 TOOL_INPUT_MAX_NODES = 32768
 SERVICE_TARGET_MAX_GROUPS = 32

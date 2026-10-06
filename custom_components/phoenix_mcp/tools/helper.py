@@ -36,7 +36,12 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 from homeassistant.util import slugify
 
-from ..const import CAP_DENY, TEMPLATE_RECOVERY_TYPES
+from ..const import (
+    CAP_DENY,
+    STORAGE_HELPER_REQUEST_FIELDS,
+    STORAGE_HELPER_TYPES as HELPER_TYPES,
+    TEMPLATE_RECOVERY_TYPES,
+)
 from ..data import PhoenixData
 from ..mesa import (
     RegistryMesaDecision,
@@ -81,14 +86,6 @@ _NOT_A_HELPER_ENTRY = (
     "switch_as_x or min_max); integration entries cannot be reconfigured here."
 )
 
-
-# Storage-based helper domains managed via the in-process WS command dispatch
-# ({type}/create|update|delete, item id key = "{type}_id"). Config-entry helper
-# types (template, group, utility_meter, etc.) go through the config-flow path.
-HELPER_TYPES = frozenset({
-    "input_boolean", "input_number", "input_text",
-    "input_select", "input_datetime", "input_button", "counter", "timer", "schedule", "zone", "tag", "person",
-})
 
 _ZONE_CONFIG_FIELDS = frozenset({
     "name", "latitude", "longitude", "radius", "passive", "icon",
@@ -804,6 +801,18 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
             return _tool_error("config must be an object."), "invalid_request", tool_name
     elif not isinstance(config, dict) or not config:
         return _tool_error("config must be a non-empty object (at least 'name')."), "invalid_request", tool_name
+    reserved = STORAGE_HELPER_REQUEST_FIELDS
+    if args["helper_type"] == "tag" and not require_id:
+        reserved = reserved - {"tag_id"}
+    if set(config) & reserved:
+        return (
+            _tool_error(
+                "config must not contain WebSocket request fields or helper update target fields. "
+                "Use helper_id to select an existing helper."
+            ),
+            "invalid_request",
+            tool_name,
+        )
     if args.get("helper_type") == "zone" and isinstance(config, dict):
         unknown = sorted(set(config) - _ZONE_CONFIG_FIELDS)
         if unknown:
@@ -1319,7 +1328,7 @@ async def _execute_create_helper(
             item = await async_ws_command(
                 hass,
                 "person/update",
-                {"person_id": restore_id, **config},
+                {**config, "person_id": restore_id},
             )
         except WsDispatchError as exc:
             try:
@@ -1768,7 +1777,13 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
     from ..request_authority import check_request_authority
 
     helper_type = args["helper_type"]
-    helper_id = args["helper_id"]
+    helper_id = str(args["helper_id"]).strip()
+    target_field = f"{helper_type}_id"
+    if (payload.get(target_field) != helper_id
+            or set(payload) & (STORAGE_HELPER_REQUEST_FIELDS - {target_field})
+            or (deleting and set(payload) != {target_field})):
+        raise ConfigurationRecoveryError("Helper request does not match its exact target; nothing was dispatched.")
+    payload = {**payload, target_field: helper_id}
     operation = "delete_helper" if deleting else "edit_helper"
     key = f"helper:{helper_type}:{helper_id}"
     recovery = data.config_recovery
@@ -1779,7 +1794,7 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
             raise ConfigurationRecoveryError("Helper storage could not be verified.")
         return next((row for row in rows if row.get("id") == helper_id), None)
 
-    if not isinstance(before, dict):
+    if not isinstance(before, dict) or before.get("id") != helper_id:
         raise ConfigurationRecoveryError("A complete helper safety copy is unavailable; nothing was dispatched.")
     # Private person bindings intentionally remain outside Phoenix storage.
     public = _public_helper_config(helper_type, before) if helper_type == "person" else before
@@ -1888,7 +1903,7 @@ async def _execute_edit_helper(
                 config.get("device_trackers", current.get("device_trackers", []))
             ),
         }
-    payload = {f"{helper_type}_id": helper_id, **config}
+    payload = {**config, f"{helper_type}_id": helper_id}
     try:
         item = await _protected_storage_helper_write(args, access_key, hass, data, before_cfg, payload)
     except Exception:

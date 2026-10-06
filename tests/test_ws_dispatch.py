@@ -467,3 +467,13 @@ async def test_lovelace_save_wraps_storage_failure(hass, monkeypatch):
     with pytest.raises(WsDispatchError, match="failed to save") as exc:
         await wd_module.async_save_lovelace_config(hass, None, {"views": []})
     assert exc.value.__cause__ is failure
+
+
+@pytest.mark.parametrize("field,value", (("id", 99), ("type", "input_boolean/delete"), ("type", "input_boolean/create")))
+async def test_request_control_fields_refuse_before_handler(hass, hass_admin_user, field, value):
+    """Even matching request fields are not HA configuration fields."""
+    assert await async_setup_component(hass, "input_boolean", {"input_boolean": {}})
+    before = await async_ws_command(hass, "input_boolean/list", {})
+    with pytest.raises(WsCommandNotDispatchedError, match="request fields"):
+        await async_ws_command(hass, "input_boolean/create", {"name": "Must not exist", field: value})
+    assert await async_ws_command(hass, "input_boolean/list", {}) == before

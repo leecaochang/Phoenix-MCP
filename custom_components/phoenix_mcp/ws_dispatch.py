@@ -25,6 +25,7 @@ import logging
 from typing import Any
 
 from .request_authority import check_request_authority
+from .const import STORAGE_HELPER_TYPES, WS_REQUEST_CONTROL_FIELDS
 
 import voluptuous as vol
 from homeassistant.components.websocket_api import const as ws_const
@@ -55,10 +56,7 @@ DEFAULT_TIMEOUT = 10.0
 # without registering a subscription. Phoenix resolves every IEEE and numeric
 # group id from scoped registry entities; callers never provide either kind of
 # radio identifier.
-_HELPER_DOMAINS = (
-    "input_boolean", "input_number", "input_text",
-    "input_select", "input_datetime", "input_button", "counter", "timer", "schedule", "zone", "tag", "person",
-)
+_HELPER_DOMAINS = tuple(sorted(STORAGE_HELPER_TYPES))
 ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
     [f"{domain}/{op}" for domain in _HELPER_DOMAINS for op in ("create", "update", "delete", "list")]
     + [
@@ -228,13 +226,15 @@ async def async_ws_command(
     """
     if command not in ALLOWED_WS_COMMANDS:
         raise WsCommandNotDispatchedError(f"WebSocket command not allowed: {command}")
+    if set(payload) & WS_REQUEST_CONTROL_FIELDS:
+        raise WsCommandNotDispatchedError("Payload must not contain WebSocket request fields.")
 
     handlers = hass.data.get(ws_const.DOMAIN)
     if not handlers or command not in handlers:
         raise WsCommandNotDispatchedError(f"WebSocket command not available: {command}")
     handler, schema = handlers[command]
 
-    msg: dict[str, Any] = {"id": 1, "type": command, **payload}
+    msg: dict[str, Any] = {**payload, "id": 1, "type": command}
     if schema not in (None, False):
         try:
             msg = schema(msg)
