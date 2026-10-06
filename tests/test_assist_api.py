@@ -29,6 +29,7 @@ else:
     from voluptuous_openapi import convert as to_openapi
 
 from custom_components.phoenix_mcp import assist_api
+from custom_components.phoenix_mcp.assist_gemini import gemini_schema
 from custom_components.phoenix_mcp.assist_api import (
     PhoenixAssistAPI,
     PhoenixAssistTool,
@@ -267,16 +268,24 @@ async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_fo
     context.platform = "google_generative_ai_conversation"
     instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
     tools = {tool.name: tool for tool in instance.tools}
-    assert "get_capability_summary" in tools
-    assert "set_entity" not in tools
-    assert "media_player__HassSetVolumeRelative" not in tools
-    assert "skipping tool set_entity" in caplog.text
-    assert set(tools) < set(definitions)
+    assert {"get_capability_summary", "set_entity", "get_state", "intent__HassTurnOn",
+            "media_player__HassSetVolumeRelative", "call_service"} <= set(tools)
+    baseline = {tool.name for tool in (await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())).tools}
+    assert baseline - set(tools) == {"patch_dashboard", "set_zigbee_device_property"}
+    assert "skipping tool patch_dashboard" in caplog.text
     for name, tool in tools.items():
         public = to_openapi(tool.parameters, custom_serializer=instance.custom_serializer)
-        assert public == definitions[name]
+        assert public == gemini_schema(definitions[name])[0]
         Draft202012Validator.check_schema(public)
-        format_schema(public)
+        formatted = format_schema(public)
+        # HA's own {"json"} fallback never fires: every open object arrives pre-shaped.
+        pending = list((formatted.get("properties") or {}).values())
+        while pending:
+            node = pending.pop()
+            assert node.get("type") != "OBJECT" or node.get("properties"), name
+            pending.extend((node.get("properties") or {}).values())
+            if isinstance(node.get("items"), dict):
+                pending.append(node["items"])
 
 
 @pytest.mark.asyncio

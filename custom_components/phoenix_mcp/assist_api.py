@@ -31,6 +31,7 @@ from typing import Any, cast
 from homeassistant.core import HomeAssistant
 import voluptuous as vol
 
+from .assist_gemini import gemini_schema, unwrap_json_fields
 from .const import ASSIST_CLIENT_IP, DOMAIN
 from .household_authority import household_scope
 from .request_authority import AuthorityChangedError
@@ -162,11 +163,14 @@ if _ASSIST_API_SUPPORTED:
     class PhoenixAssistTool(_llm.Tool):
         """One announced Phoenix MCP tool, dispatched through the bound access key's scope."""
 
-        def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str) -> None:
+        def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str,
+                     json_paths: tuple[tuple[str, ...], ...] = ()) -> None:
             self.name = name
             self.description = description
             self.parameters = parameters
             self._access_key_id = access_key_id
+            # Open objects Gemini was shown as JSON text, decoded before dispatch.
+            self._json_paths = json_paths
 
         async def async_call(self, hass, tool_input, llm_context) -> dict:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
@@ -189,7 +193,7 @@ if _ASSIST_API_SUPPORTED:
                 resp_msg, _m, _r, outcome = await _dispatch_mcp(
                     "tools/call",
                     tool_input.id,
-                    {"name": self.name, "arguments": tool_input.tool_args or {}},
+                    {"name": self.name, "arguments": unwrap_json_fields(tool_input.tool_args or {}, self._json_paths)},
                     access_key,
                     hass,
                     data,
@@ -264,15 +268,20 @@ if _ASSIST_API_SUPPORTED:
                     name = tool_def.get("name")
                     try:
                         schema = deepcopy(tool_def.get("inputSchema") or {})
-                        if (llm_context.platform == "google_generative_ai_conversation"
-                                and not _gemini_schema_compatible(schema)):
-                            raise ValueError("Home Assistant's Gemini formatter cannot represent this schema")
+                        advertised = schema
+                        json_paths: tuple[tuple[str, ...], ...] = ()
+                        if llm_context.platform == "google_generative_ai_conversation":
+                            # Validation keeps the full schema; Gemini is shown a
+                            # representable copy (see assist_gemini).
+                            advertised, json_paths = gemini_schema(schema)
+                            if not _gemini_schema_compatible(advertised):
+                                raise ValueError("Home Assistant's Gemini formatter cannot represent this schema")
                         parameters = _convert_to_voluptuous(deepcopy(schema))
                         # HA serializers unwrap Schema before invoking the hook.
                         node = parameters
                         while isinstance(node, vol.Schema):
                             node = node.schema
-                        public_schemas[id(node)] = (node, schema)
+                        public_schemas[id(node)] = (node, advertised)
                     except Exception as err:  # noqa: BLE001 - one bad schema must not
                         # take down the whole voice assistant; skip just that tool.
                         _LOGGER.warning(
@@ -287,6 +296,7 @@ if _ASSIST_API_SUPPORTED:
                     tools.append(
                         PhoenixAssistTool(
                             str(name), tool_def.get("description"), parameters, access_key.id,
+                            json_paths=json_paths,
                         )
                     )
 
