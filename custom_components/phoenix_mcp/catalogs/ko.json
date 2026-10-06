@@ -514,7 +514,6 @@
       "willSetIntegration": "권한: {state}. 기기 노드: {devices}; 기기에 속하지 않는 활성 엔티티 노드: {entities}."
     },
     "agentchat": {
-      "answerAnyway": "그래도 답변",
       "announceApproval": "{name} 작업에 대한 승인이 필요합니다.",
       "announceError": "오류: {message}",
       "announceResolved": "승인: {status}입니다.",
@@ -774,7 +773,6 @@
       "bodyTooLarge": "요청 본문이 너무 큽니다.",
       "bodyUnreadable": "요청 본문을 읽지 못했습니다.",
       "booleanRequired": "{field}은(는) true 또는 false여야 합니다.",
-      "homeFocusBypassNewMessage": "홈 중심 모드는 새 메시지를 보낼 때만 우회할 수 있습니다.",
       "unknownFields": "알 수 없는 필드: {fields}.",
       "capabilityConfirmUnsupported": "{capability}은(는) 확인 모드를 지원하지 않습니다.",
       "capabilityModeInvalid": "{capability}은(는) deny, allow 또는 confirm 중 하나여야 합니다.",
@@ -1229,7 +1227,7 @@
       "detailLevelAria": "{surface} 세부 수준",
       "homeFocused": "홈 중심",
       "homeFocusedAria": "{surface} 홈 중심 모드",
-      "homeFocusedHelp": "보안 제어가 아닌 초점 기본 설정입니다. 명백히 관련 없는 요청은 거절하고, 가정과의 관련성이 타당하거나 모호한 요청은 정상적으로 처리합니다.",
+      "homeFocusedHelp": "집중 설정이며 보안 제어가 아닙니다. Home Assistant 설치와 직접 관련 없는 요청은 거부되며, 이를 무시할 방법은 없습니다.",
       "assistIntro": "기존 Home Assistant LLM 통합 구성 요소에 Phoenix MCP의 범위 제한 도구에 대한 접근 권한을 부여합니다. 해당 에이전트를 구성할 때 <strong>Phoenix MCP (scoped)</strong>를 선택하세요. Phoenix MCP가 모델을 관리하게 하려면 위의 음성 에이전트를 사용하세요.",
       "assistNotBound": "바인딩되지 않음",
       "assistUnsupported": "이 기능은 현재 Home Assistant 버전에서 지원되지 않습니다.",
@@ -1287,8 +1285,8 @@
       "notifyApprovalLabel": "승인이 필요할 때 알림",
       "notifyRateLimitHelp": "액세스 키가 속도 제한에 도달하면 Home Assistant 알림을 보냅니다. 액세스 키당 분당 최대 한 번입니다.",
       "notifyRateLimitLabel": "속도 제한에 도달하면 알림",
-      "presetsHelp": "액세스 키의 기능, 권한, 속도 제한 및 패스스루 설정의 이름이 지정된 버전을 저장합니다. 이 옵션을 활성화하면 각 액세스 키의 현재 설정에서 프리셋이 생성됩니다. 프리셋을 전환하면 현재 변경 사항이 먼저 저장됩니다.",
-      "presetsLabel": "액세스 키 설정 프리셋",
+      "presetsHelp": "액세스 키마다 이름을 붙인 설정을 여러 개 저장하고 서로 전환할 수 있게 합니다. 예를 들어 제한이 강한 일상용 설정과 유지 관리용으로 더 넓은 설정을 함께 둘 수 있습니다. 프리셋에는 키의 기능, 권한, 요청 한도, 패스스루 설정이 저장됩니다. 이 기능을 켜면 각 액세스 키에 현재 설정으로 만든 프리셋이 하나씩 생깁니다. 프리셋을 전환할 때는 저장되지 않은 변경 사항이 먼저 떠나는 프리셋에 저장됩니다.",
+      "presetsLabel": "프리셋 사용",
       "providerAccount": "공급자 계정",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1396,7 +1394,14 @@
       "agentcliRegionUs": "미국",
       "agentcliZaiChina": "중국(BigModel)",
       "agentcliMimoPayg": "종량제",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "LLM 공급자",
+      "providersIntro": "Agent Chat, 음성 에이전트, AI 작업이 사용하는 AI 공급자 계정입니다. 계정을 추가하고 모델을 선택하거나 자동으로 두고 여기서 관리하세요.",
+      "providerChecksLabel": "새 모델 확인",
+      "providerChecksHelp": "각 공급자의 모델 목록을 주기적으로 다시 읽어 자동 계정이 새 모델을 따르고 중단된 모델을 대체합니다. 끄면 새로고침을 누를 때만 확인합니다.",
+      "providerChecksHoursLabel": "확인 주기(시간)",
+      "providerChecksHoursHelp": "{min}~{max}시간.",
+      "providerChecksHoursAria": "공급자 확인 간격(시간)"
     },
     "approvalSummary": {
       "action.approve": "승인 및 실행",
@@ -1998,7 +2003,7 @@
       "presetDeleteBody": "저장된 스냅샷 <strong>{name}</strong>은(는) 영구적으로 제거됩니다. 액세스 키의 현재 설정은 영향을 받지 않습니다.",
       "presetDeleteTitle": "프리셋 삭제: {name}",
       "presetEmpty": "아직 프리셋이 없습니다. 현재 설정을 이 액세스 키의 첫 번째 프리셋으로 저장하십시오.",
-      "presetHint": "이 액세스 키에 적용한 변경 사항은 전환할 때 현재 프리셋에 저장됩니다. 현재 프리셋을 적용하면 저장된 상태로 되돌아갑니다.",
+      "presetHint": "프리셋을 전환하면 이 액세스 키의 저장되지 않은 변경 사항이 먼저 활성 프리셋에 저장됩니다. 대신 활성 프리셋을 적용하면 저장된 상태로 되돌아갑니다.",
       "presetMax": "액세스 키는 최대 {max}개의 프리셋을 가질 수 있습니다.",
       "presetModified": "수정됨",
       "presetModifiedTitle": "이 액세스 키의 설정에 저장되지 않은 변경 사항이 있습니다. 프리셋을 전환하면 변경 사항이 이 프리셋에 저장됩니다.",
@@ -2077,7 +2082,6 @@
       "providerSection": "판단 제공자",
       "providerHint": "{voice} 및 {chat}에서 명령을 직접 처리하기 위한 선택 사항입니다. 필요한 경우 인식되지 않은 명령, 적합한 엔티티 정보 및 대화 기록을 받습니다. API 요금이 발생할 수 있습니다.",
       "decisionAccount": "판단 계정",
-      "localOnly": "로컬 전용 (판단 제공자 없음)",
       "removeAccount": "{name} 삭제",
       "connectionSettings": "연결 설정",
       "decisionBudget": "판단 제한 시간 (ms)",
@@ -2086,7 +2090,10 @@
       "accountModel": "{name}의 모델",
       "commandHelp": "먼저 로컬 인텐트를 시도한 다음 선택 사항인 결정 제공자를 사용합니다. 나머지 요청은 평소 사용하는 AI 제공자에게 전달됩니다. 권한과 승인 요구 사항은 계속 적용됩니다.",
       "requestLimit": "시간당 판단 요청 수 (0 = 무제한)",
-      "requestLimitHint": "음성, 채팅, 미리 보기, 섀도 검사에서 공유합니다. 활성화된 동안 실패를 포함한 시도 횟수를 세며 재시작 후에도 유지됩니다. UTC 기준 매 정시에 초기화됩니다. 일반 제공업체의 한도는 별도입니다. 요청 수 제한이며 금액 한도가 아닙니다."
+      "requestLimitHint": "음성, 채팅, 미리 보기, 섀도 검사에서 공유합니다. 활성화된 동안 실패를 포함한 시도 횟수를 세며 재시작 후에도 유지됩니다. UTC 기준 매 정시에 초기화됩니다. 일반 제공업체의 한도는 별도입니다. 요청 수 제한이며 금액 한도가 아닙니다.",
+      "useProvider": "결정 공급자 사용",
+      "useProviderHelp": "켜짐: 선택한 결정 공급자가 Phoenix가 로컬에서 일치시킬 수 없는 요청을 처리합니다. 꺼짐: 하나가 선택되어 있어도 결정 공급자를 사용하지 않습니다.",
+      "useProviderNone": "켜려면 결정 공급자를 추가하세요."
     },
     "routingStats": {
       "title": "라우팅 통계",
@@ -2306,7 +2313,6 @@
   },
   "voice": {
     "answer_truncated": "완료하기 전에 중단해야 했습니다.",
-    "focus_answer_anyway": "계속하려면 전체 요청을 다시 말하고 그래도 답변하라고 명확히 말해 주세요.",
     "focus_declined": "이 대화는 홈 중심 모드이므로 집과 Home Assistant에 관한 요청만 도와드릴 수 있습니다.",
     "could_not_complete": "죄송합니다. 해당 작업을 완료하지 못했습니다.",
     "error": "죄송합니다. Phoenix MCP 음성 에이전트에 오류가 발생했습니다.",

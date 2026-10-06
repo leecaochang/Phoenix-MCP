@@ -551,7 +551,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(async_track_time_interval(hass, _flush_statistics, ROUTING_STATISTICS_FLUSH_INTERVAL))
 
     from .agentcli import async_refresh_all_catalogs
-    from .const import AGENTCLI_CATALOG_REFRESH_INTERVAL
+    from .const import AGENTCLI_CATALOG_TICK_INTERVAL
 
     async def _refresh_model_catalogs(_now=None) -> None:
         try:
@@ -559,7 +559,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         except Exception:
             _LOGGER.debug("Provider model catalogue refresh failed; will retry", exc_info=True)
 
-    entry.async_on_unload(async_track_time_interval(hass, _refresh_model_catalogs, AGENTCLI_CATALOG_REFRESH_INTERVAL))
+    entry.async_on_unload(async_track_time_interval(hass, _refresh_model_catalogs, AGENTCLI_CATALOG_TICK_INTERVAL))
     catalog_task = hass.async_create_background_task(_refresh_model_catalogs(), "phoenix_mcp_model_catalogs")
 
     def _cancel_catalog_refresh() -> None:
@@ -908,7 +908,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await store.async_patch_settings(assist_bound_access_key_id=None,
             voice_agent_enabled=False, voice_agent_access_key_id=None,
             voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_access_key_id=None,
-            ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None)
+            ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None,
+            decision_provider_default_id=None)
     for record in changed:
         dismiss_approval_notification(hass, record.id)
         fire_approval_resolved_event(hass, record)

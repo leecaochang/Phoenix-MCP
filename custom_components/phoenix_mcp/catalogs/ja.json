@@ -628,7 +628,7 @@
       "presetDeleteBody": "保存済みのスナップショット <strong>{name}</strong> を完全に削除します。アクセスキーの現在の設定には影響しません。",
       "presetDeleteTitle": "プリセットを削除: {name}",
       "presetEmpty": "プリセットはまだありません。現在の設定をこのアクセスキーの最初のプリセットとして保存してください。",
-      "presetHint": "プリセットを切り替えると、このアクセスキーに加えた変更が有効なプリセットに保存されます。有効なプリセットを適用すると、保存済みの状態に戻ります。",
+      "presetHint": "プリセットを切り替えると、このアクセスキーの未保存の変更が先に有効なプリセットへ保存されます。代わりに有効なプリセットを適用すると、保存済みの状態に戻ります。",
       "presetMax": "一つのアクセスキーに保存できるプリセットは最大 {max} 個です。",
       "presetModified": "変更あり",
       "presetModifiedTitle": "このアクセスキーの設定には未保存の変更があります。プリセットを切り替えると、このプリセットに保存されます。",
@@ -942,7 +942,6 @@
       "assistExposurePassThroughOnly": "use_assist_exposure は pass_through アクセスキーでのみ有効です。",
       "assistPipelineFailed": "Assist パイプラインを作成できませんでした。",
       "booleanRequired": "{field} は true または false にしてください。",
-      "homeFocusBypassNewMessage": "ホーム重視は、新しいメッセージを送信するときにだけ解除できます。",
       "unknownFields": "不明なフィールド: {fields}。",
       "capabilityConfirmUnsupported": "{capability} は確認モードに対応していません。",
       "capabilityModeInvalid": "{capability} は deny、allow、confirm のいずれかにしてください。",
@@ -1045,7 +1044,6 @@
       "providerModelOrAuto": "モデルまたは auto のどちらか一方を送信してください。"
     },
     "agentchat": {
-      "answerAnyway": "そのまま回答",
       "announceApproval": "アクション {name} には承認が必要です。",
       "announceError": "エラー: {message}",
       "announceResolved": "承認は {status} です。",
@@ -1378,7 +1376,7 @@
       "detailLevelAria": "{surface} の詳細度",
       "homeFocused": "ホーム重視",
       "homeFocusedAria": "{surface} のホーム重視モード",
-      "homeFocusedHelp": "焦点の設定であり、セキュリティ制御ではありません。明らかに無関係な依頼は断り、家庭との関連が妥当または曖昧な依頼には通常どおり対応します。",
+      "homeFocusedHelp": "フォーカスの設定であり、セキュリティ制御ではありません。Home Assistant の環境に直接関係しないリクエストは拒否され、上書きする方法はありません。",
       "assistIntro": "既存の Home Assistant LLM インテグレーションに Phoenix MCP のスコープ付きツールへのアクセスを付与します。そのエージェントの設定時に <strong>Phoenix MCP（スコープ付き）</strong>を選択してください。Phoenix MCP にモデルを管理させる場合は上の音声エージェントを使用します。",
       "assistNotBound": "未バインド",
       "assistUnsupported": "お使いの Home Assistant バージョンではこの機能に対応していません。",
@@ -1436,8 +1434,8 @@
       "notifyApprovalLabel": "承認が必要なときに通知",
       "notifyRateLimitHelp": "アクセスキーがレート制限に達したとき、各アクセスキーにつき一分に最大一回 Home Assistant 通知を送信します。",
       "notifyRateLimitLabel": "レート制限に達したときに通知",
-      "presetsHelp": "アクセスキーの機能、権限、レート制限、パススルー設定に名前を付けて保存します。有効にすると、各アクセスキーの現在の設定からプリセットを作成します。プリセットを切り替える前に現在の変更を保存します。",
-      "presetsLabel": "アクセスキー設定プリセット",
+      "presetsHelp": "アクセスキーごとに名前付きの設定を複数保存して切り替えられるようにします。たとえば、制限を厳しくした日常用の設定と、メンテナンス用のより広い設定を使い分けられます。プリセットには、キーの機能、権限、レート制限、パススルー設定が保存されます。有効にすると、各アクセスキーに現在の設定から作成したプリセットが ひとつ用意されます。プリセットを切り替えるときは、保存されていない変更が先に、切り替え前のプリセットへ保存されます。",
+      "presetsLabel": "プリセットを有効にする",
       "providerAccount": "プロバイダーアカウント",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1545,7 +1543,14 @@
       "agentcliRegionUs": "米国",
       "agentcliZaiChina": "中国（BigModel）",
       "agentcliMimoPayg": "従量課金",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "LLM プロバイダー",
+      "providersIntro": "Agent Chat、音声エージェント、AI タスクが使う AI プロバイダーアカウントです。アカウントを追加し、モデルを選ぶか自動のままにして、ここで管理します。",
+      "providerChecksLabel": "新しいモデルを確認する",
+      "providerChecksHelp": "各プロバイダーのモデル一覧を定期的に再取得し、自動のアカウントが新しいモデルに追従し、提供終了したモデルを置き換えます。オフにすると、更新を押したときだけ確認します。",
+      "providerChecksHoursLabel": "確認間隔（時間）",
+      "providerChecksHoursHelp": "{min} 〜 {max} 時間。",
+      "providerChecksHoursAria": "プロバイダー確認の間隔（時間）"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2072,7 +2077,6 @@
       "providerSection": "判断プロバイダー",
       "providerHint": "{voice} と {chat} でコマンドを直接処理するための任意の設定です。必要に応じて未認識のコマンド、対象エンティティの詳細、会話履歴を受信します。API 料金が発生する場合があります。",
       "decisionAccount": "判断用アカウント",
-      "localOnly": "ローカルのみ（判断プロバイダーなし）",
       "removeAccount": "{name}を削除",
       "connectionSettings": "接続設定",
       "decisionBudget": "判断のタイムアウト（ミリ秒）",
@@ -2081,7 +2085,10 @@
       "accountModel": "{name}のモデル",
       "commandHelp": "まずローカルのインテントを試し、次に任意の判断プロバイダーを使用します。その他のリクエストは通常の AI プロバイダーに送られます。権限と承認は引き続き適用されます。",
       "requestLimit": "一時間あたりの判定リクエスト数（0 = 無制限）",
-      "requestLimitHint": "音声、チャット、プレビュー、シャドーチェックで共有します。有効時の試行を失敗も含めて数え、再起動後も保持します。UTC の毎正時にリセットします。通常のプロバイダーの利用枠は別です。これはリクエスト数の制限であり、金額の上限ではありません。"
+      "requestLimitHint": "音声、チャット、プレビュー、シャドーチェックで共有します。有効時の試行を失敗も含めて数え、再起動後も保持します。UTC の毎正時にリセットします。通常のプロバイダーの利用枠は別です。これはリクエスト数の制限であり、金額の上限ではありません。",
+      "useProvider": "判断プロバイダーを使用",
+      "useProviderHelp": "オン: 選択した判断プロバイダーが、Phoenix がローカルで一致させられないリクエストを処理します。オフ: 選択済みでも判断プロバイダーは使用されません。",
+      "useProviderNone": "オンにするには判断プロバイダーを追加してください。"
     },
     "routingStats": {
       "title": "ルーティング統計",
@@ -2306,7 +2313,6 @@
   },
   "voice": {
     "answer_truncated": "完了する前に停止する必要がありました。",
-    "focus_answer_anyway": "続けるには、依頼全体を繰り返し、そのまま回答するよう明示してください。",
     "focus_declined": "この会話はホーム重視モードのため、ご自宅とHome Assistantに関する依頼のみお手伝いできます。",
     "could_not_complete": "申し訳ありません。完了できませんでした。",
     "error": "申し訳ありません。Phoenix MCP 音声エージェントでエラーが発生しました。",

@@ -6,7 +6,6 @@
   },
   "voice": {
     "answer_truncated": "Ik moest stoppen voordat ik klaar was.",
-    "focus_answer_anyway": "Herhaal je volledige verzoek om door te gaan en zeg uitdrukkelijk dat er toch moet worden geantwoord.",
     "focus_declined": "Dit gesprek staat in de woninggerichte modus, dus ik kan alleen helpen met verzoeken over je woning en Home Assistant.",
     "could_not_complete": "Sorry, dat kon ik niet voltooien.",
     "error": "Sorry, de Phoenix MCP-spraakagent is op een fout gelopen.",
@@ -791,7 +790,6 @@
       "tablist": "Goedkeuringsweergaven"
     },
     "agentchat": {
-      "answerAnyway": "Toch antwoorden",
       "announceApproval": "Actie {name} heeft je goedkeuring nodig.",
       "announceError": "Fout: {message}",
       "announceResolved": "Goedkeuring {status}.",
@@ -943,7 +941,6 @@
       "bodyTooLarge": "RequestBody te groot.",
       "bodyUnreadable": "RequestBody lezen is mislukt.",
       "booleanRequired": "{field} moet true of false zijn.",
-      "homeFocusBypassNewMessage": "De huisfocus kan alleen worden omzeild bij het verzenden van een nieuw bericht.",
       "unknownFields": "Onbekende velden: {fields}.",
       "capabilityConfirmUnsupported": "{capability} ondersteunt de Bevestigen-modus niet.",
       "capabilityModeInvalid": "{capability} moet deny, allow of confirm zijn.",
@@ -1279,7 +1276,7 @@
       "presetDeleteBody": "De opgeslagen momentopname <strong>{name}</strong> wordt permanent verwijderd. De huidige instellingen van de toegangssleutel worden niet beïnvloed.",
       "presetDeleteTitle": "Voorinstelling verwijderen: {name}",
       "presetEmpty": "Nog geen voorinstellingen. Sla de huidige instellingen op als de eerste voorinstelling van deze toegangssleutel.",
-      "presetHint": "Wijzigingen die je aan deze toegangssleutel maakt, worden bij het schakelen opgeslagen in de actieve voorinstelling. Het toepassen van de actieve voorinstelling keert terug naar de opgeslagen staat.",
+      "presetHint": "Als je van voorinstelling wisselt, worden niet-opgeslagen wijzigingen aan deze toegangssleutel eerst opgeslagen in de actieve voorinstelling. Als je de actieve voorinstelling toepast, wordt juist de opgeslagen toestand hersteld.",
       "presetMax": "Een toegangssleutel kan maximaal {max} voorinstellingen hebben.",
       "presetModified": "Gewijzigd",
       "presetModifiedTitle": "De instellingen van deze toegangssleutel hebben niet-opgeslagen wijzigingen; bij het schakelen worden ze in deze voorinstelling opgeslagen.",
@@ -1694,7 +1691,7 @@
       "detailLevelAria": "Detailniveau van {surface}",
       "homeFocused": "Op het huis gericht",
       "homeFocusedAria": "Huisgerichte modus van {surface}",
-      "homeFocusedHelp": "Voorkeur voor focus, geen beveiligingscontrole. Duidelijk niet-gerelateerde verzoeken worden geweigerd; plausibele of onduidelijke thuisverzoeken worden normaal behandeld.",
+      "homeFocusedHelp": "Focusvoorkeur, geen beveiligingsmaatregel. Verzoeken die niet direct over je Home Assistant-installatie gaan, worden geweigerd en er is geen manier om dat te omzeilen.",
       "assistIntro": "Geef een bestaande Home Assistant LLM-integratie toegang tot de afgebakende tools van Phoenix MCP. Kies <strong>Phoenix MCP (scoped)</strong> bij het configureren van die agent. Gebruik Spraakagent (hierboven) als je wilt dat Phoenix MCP het model beheert.",
       "assistNotBound": "Niet gekoppeld",
       "assistUnsupported": "Deze functie wordt niet ondersteund door je Home Assistant-versie.",
@@ -1752,8 +1749,8 @@
       "notifyApprovalLabel": "Melden wanneer goedkeuring nodig is",
       "notifyRateLimitHelp": "Stuur een Home Assistant-melding wanneer een toegangssleutel zijn snelheidslimiet bereikt, maximaal één keer per toegangssleutel per minuut.",
       "notifyRateLimitLabel": "Melden wanneer een snelheidslimiet wordt bereikt",
-      "presetsHelp": "Bewaar benoemde versies van de mogelijkheden, machtigingen, snelheidslimieten en pass-through-instelling van een toegangssleutel. Inschakelen maakt een voorinstelling van de huidige instellingen van elke toegangssleutel. Schakelen tussen voorinstellingen slaat de huidige wijzigingen eerst op.",
-      "presetsLabel": "Voorinstellingen voor instellingen voor toegangssleutels",
+      "presetsHelp": "Hiermee kun je voor elke toegangssleutel meerdere benoemde configuraties opslaan en ertussen wisselen, bijvoorbeeld een strakke dagelijkse configuratie en een ruimere voor onderhoud. Een voorinstelling bewaart de mogelijkheden, rechten, snelheidslimieten en de pass-through-instelling van de sleutel. Als je dit inschakelt, krijgt elke toegangssleutel eerst één voorinstelling die is gemaakt van de huidige instellingen. Bij het wisselen worden niet-opgeslagen wijzigingen eerst opgeslagen in de voorinstelling die je verlaat.",
+      "presetsLabel": "Voorinstellingen inschakelen",
       "providerAccount": "Provideraccount",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1861,7 +1858,14 @@
       "agentcliRegionUs": "Verenigde Staten",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Betalen naar gebruik",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "LLM-aanbieders",
+      "providersIntro": "De AI-aanbiedersaccounts die Agent Chat, de spraakagent en de AI-taak gebruiken. Voeg een account toe, kies het model of laat het op Automatisch staan, en beheer het hier.",
+      "providerChecksLabel": "Aanbieders controleren op nieuwe modellen",
+      "providerChecksHelp": "Leest regelmatig de modellijst van elke aanbieder opnieuw, zodat accounts op Automatisch nieuwe modellen volgen en ingetrokken modellen vervangen. Zet dit uit om alleen te controleren als je op Vernieuwen drukt.",
+      "providerChecksHoursLabel": "Controleer elke (uren)",
+      "providerChecksHoursHelp": "Tussen {min} en {max} uur.",
+      "providerChecksHoursAria": "Uren tussen aanbiedercontroles"
     },
     "approvalSummary": {
       "action.approve": "Goedkeuren en uitvoeren",
@@ -2150,7 +2154,6 @@
       "providerSection": "Beslissingsprovider",
       "providerHint": "Optioneel voor directe opdrachtafhandeling in {voice} en {chat}. Ontvangt zo nodig niet-herkende opdrachten, gegevens van geschikte entiteiten en gespreksgeschiedenis. Er kunnen API-kosten gelden.",
       "decisionAccount": "Beslissingsaccount",
-      "localOnly": "Alleen lokaal (geen beslissingsprovider)",
       "removeAccount": "{name} verwijderen",
       "connectionSettings": "Verbindingsinstellingen",
       "decisionBudget": "Beslissingstime-out (ms)",
@@ -2159,7 +2162,10 @@
       "accountModel": "Model voor {name}",
       "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden.",
       "requestLimit": "Beslissingsverzoeken per uur (0 = onbeperkt)",
-      "requestLimitHint": "Gedeeld door Spraak, Chat, voorbeelden en schaduwcontroles. Telt pogingen wanneer ingeschakeld, inclusief fouten, en blijft bewaard na een herstart. Wordt elk heel UTC-uur gereset. Je gebruikelijke provider heeft een afzonderlijk tegoed. Dit is een verzoeklimiet, geen geldlimiet."
+      "requestLimitHint": "Gedeeld door Spraak, Chat, voorbeelden en schaduwcontroles. Telt pogingen wanneer ingeschakeld, inclusief fouten, en blijft bewaard na een herstart. Wordt elk heel UTC-uur gereset. Je gebruikelijke provider heeft een afzonderlijk tegoed. Dit is een verzoeklimiet, geen geldlimiet.",
+      "useProvider": "Beslissingsaanbieder gebruiken",
+      "useProviderHelp": "Aan: de geselecteerde beslissingsaanbieder behandelt verzoeken die Phoenix niet lokaal kan koppelen. Uit: er wordt geen beslissingsaanbieder gebruikt, ook al is er een geselecteerd.",
+      "useProviderNone": "Voeg een beslissingsaanbieder toe om dit aan te zetten."
     },
     "routingStats": {
       "title": "Routeringsstatistieken",

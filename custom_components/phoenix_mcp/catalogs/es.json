@@ -621,7 +621,6 @@
       "skillHarnessHint": "Instale la guía en ~/.dsh/skills/phoenix/SKILL.md. Si usa un DSH_HOME personalizado, utilice su directorio skills."
     },
     "agentchat": {
-      "answerAnyway": "Responder de todos modos",
       "announceApproval": "La acción {name} requiere aprobación.",
       "announceError": "Error: {message}",
       "announceResolved": "Aprobación {status}.",
@@ -891,7 +890,6 @@
       "assistExposurePassThroughOnly": "use_assist_exposure solo es válido para claves de acceso pass_through.",
       "assistPipelineFailed": "No se pudo crear la canalización de Assist.",
       "booleanRequired": "{field} debe ser true o false.",
-      "homeFocusBypassNewMessage": "El enfoque en el hogar solo puede omitirse al enviar un mensaje nuevo.",
       "unknownFields": "Campos desconocidos: {fields}.",
       "capabilityConfirmUnsupported": "{capability} no admite el modo Confirmar.",
       "capabilityModeInvalid": "{capability} debe ser deny, allow o confirm.",
@@ -1110,7 +1108,7 @@
       "presetDeleteBody": "La instantánea guardada <strong>{name}</strong> se eliminará permanentemente. Los ajustes actuales de la clave de acceso no se ven afectados.",
       "presetDeleteTitle": "Eliminar preajuste: {name}",
       "presetEmpty": "Aún no hay preajustes. Guarde los ajustes actuales como el primer preajuste de esta clave de acceso.",
-      "presetHint": "Los cambios que haga en esta clave de acceso se guardan en el preajuste activo al cambiar. Aplicar el preajuste activo revierte a su estado guardado.",
+      "presetHint": "Al cambiar de preajuste, los cambios sin guardar de esta clave de acceso se guardan primero en el preajuste activo. Aplicar el preajuste activo, en cambio, lo restablece a su estado guardado.",
       "presetMax": "Una clave de acceso puede tener como máximo {max} preajustes.",
       "presetModified": "Modificado",
       "presetModifiedTitle": "Los ajustes de esta clave de acceso tienen cambios sin guardar; al cambiar de preajuste se guardan en este preajuste.",
@@ -1525,7 +1523,7 @@
       "detailLevelAria": "Nivel de detalle de {surface}",
       "homeFocused": "Enfocado en el hogar",
       "homeFocusedAria": "Modo enfocado en el hogar de {surface}",
-      "homeFocusedHelp": "Preferencia de enfoque, no un control de seguridad. Se rechazan las solicitudes claramente ajenas; las solicitudes domésticas plausibles o ambiguas se atienden con normalidad.",
+      "homeFocusedHelp": "Preferencia de enfoque, no un control de seguridad. Las solicitudes que no se refieren directamente a su instalación de Home Assistant se rechazan y no hay forma de omitirlo.",
       "assistIntro": "Dé a una integración de LLM existente de Home Assistant acceso a las herramientas con ámbito de Phoenix MCP. Elija <strong>Phoenix MCP (con ámbito)</strong> al configurar ese agente. Use el agente de voz (arriba) si quiere que Phoenix MCP gestione el modelo.",
       "assistNotBound": "No vinculado",
       "assistUnsupported": "Esta función no es compatible con su versión de Home Assistant.",
@@ -1583,8 +1581,8 @@
       "notifyApprovalLabel": "Notificar cuando se necesite aprobación",
       "notifyRateLimitHelp": "Enviar una notificación de Home Assistant cuando una clave de acceso alcance su límite de velocidad, como máximo una vez por clave de acceso cada minuto.",
       "notifyRateLimitLabel": "Notificar cuando se alcance un límite de velocidad",
-      "presetsHelp": "Guardar versiones con nombre de las capacidades, los permisos, los límites de velocidad y la configuración de paso directo de una clave de acceso. Habilitarlo crea un ajuste preestablecido a partir de la configuración actual de cada clave de acceso. Cambiar de ajuste preestablecido guarda primero los cambios actuales.",
-      "presetsLabel": "Ajustes preestablecidos de configuración de claves de acceso",
+      "presetsHelp": "Permite guardar varias configuraciones con nombre para cada clave de acceso y cambiar entre ellas, por ejemplo una configuración diaria restringida y otra más amplia para mantenimiento. Un preajuste guarda las capacidades, los permisos, los límites de frecuencia y el ajuste de paso directo de la clave. Al activarlo, cada clave de acceso empieza con un preajuste creado a partir de su configuración actual. Al cambiar de preajuste, los cambios sin guardar se guardan primero en el preajuste que dejas.",
+      "presetsLabel": "Activar preajustes",
       "providerAccount": "Cuenta de proveedor",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1692,7 +1690,14 @@
       "agentcliRegionUs": "Estados Unidos",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Pago por uso",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "Proveedores de LLM",
+      "providersIntro": "Las cuentas de proveedor de IA que usan Agent Chat, el agente de voz y la tarea de IA. Añade una cuenta, elige su modelo o déjala en Automático, y gestiónala aquí.",
+      "providerChecksLabel": "Comprobar si hay modelos nuevos",
+      "providerChecksHelp": "Vuelve a leer periódicamente la lista de modelos de cada proveedor para que las cuentas en Automático sigan los modelos nuevos y sustituyan los retirados. Desactívalo para comprobar solo al pulsar Actualizar.",
+      "providerChecksHoursLabel": "Comprobar cada (horas)",
+      "providerChecksHoursHelp": "Entre {min} y {max} horas.",
+      "providerChecksHoursAria": "Horas entre comprobaciones de proveedores"
     },
     "approvalSummary": {
       "action.approve": "Aprobar y ejecutar",
@@ -2072,7 +2077,6 @@
       "providerSection": "Proveedor de decisiones",
       "providerHint": "Opcional para gestionar órdenes directamente en {voice} y {chat}. Recibe órdenes no reconocidas, datos de entidades aptas e historial de conversación cuando es necesario. Pueden aplicarse cargos de API.",
       "decisionAccount": "Cuenta de decisiones",
-      "localOnly": "Solo local (sin proveedor de decisiones)",
       "removeAccount": "Eliminar {name}",
       "connectionSettings": "Ajustes de conexión",
       "decisionBudget": "Tiempo límite de decisión (ms)",
@@ -2081,7 +2085,10 @@
       "accountModel": "Modelo de {name}",
       "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones.",
       "requestLimit": "Solicitudes de decisión por hora (0 = sin límite)",
-      "requestLimitHint": "Compartido por Voz, Chat, vistas previas y comprobaciones en segundo plano. Cuenta los intentos mientras está activo, incluidos los fallidos, y se conserva al reiniciar. Se restablece cada hora en punto UTC. Tu proveedor habitual tiene una cuota aparte. Es un límite de solicitudes, no de dinero."
+      "requestLimitHint": "Compartido por Voz, Chat, vistas previas y comprobaciones en segundo plano. Cuenta los intentos mientras está activo, incluidos los fallidos, y se conserva al reiniciar. Se restablece cada hora en punto UTC. Tu proveedor habitual tiene una cuota aparte. Es un límite de solicitudes, no de dinero.",
+      "useProvider": "Usar proveedor de decisión",
+      "useProviderHelp": "Activado: el proveedor de decisión seleccionado atiende las solicitudes que Phoenix no puede resolver localmente. Desactivado: no se usa ningún proveedor de decisión, aunque haya uno seleccionado.",
+      "useProviderNone": "Añade un proveedor de decisión para activarlo."
     },
     "routingStats": {
       "title": "Estadísticas de enrutamiento",
@@ -2306,7 +2313,6 @@
   },
   "voice": {
     "answer_truncated": "Tuve que detenerme antes de terminar.",
-    "focus_answer_anyway": "Para continuar, repite la solicitud completa y di explícitamente que responda de todos modos.",
     "focus_declined": "Esta conversación está en modo centrado en el hogar, así que solo puedo ayudar con solicitudes sobre tu hogar y Home Assistant.",
     "could_not_complete": "Lo siento, no pude completarlo.",
     "error": "Lo siento, el agente de voz de Phoenix MCP ha encontrado un error.",

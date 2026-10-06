@@ -110,9 +110,14 @@ CONFIG_RECOVERY_MAX_BYTES = 1_048_576
 CONFIG_RECOVERY_RETENTION_DAYS = 30
 CONFIG_RECOVERY_PER_RESOURCE = 20
 CONFIG_RECOVERY_SWEEP_INTERVAL = datetime.timedelta(seconds=30)
-# How often each conversation account's provider model catalogue is re-read, so
-# automatic model selection follows a provider's new or retired models.
-AGENTCLI_CATALOG_REFRESH_INTERVAL = datetime.timedelta(hours=6)
+# How often the provider model catalogues are CONSIDERED for a re-read. Whether an
+# account is actually re-read depends on the operator's settings below, so a
+# change of period takes effect without re-registering the timer.
+AGENTCLI_CATALOG_TICK_INTERVAL = datetime.timedelta(hours=1)
+# Operator setting: how many hours between automatic provider model checks.
+PROVIDER_CATALOG_REFRESH_HOURS_MIN = 6
+PROVIDER_CATALOG_REFRESH_HOURS_MAX = 720
+PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT = 24
 CONFIG_RECOVERY_SWEEP_BATCH = 4
 CONFIG_RECOVERY_OBSERVATION_TIMEOUT = 5
 CONFIG_RECOVERY_APPROVAL_CAP = "__configuration_recovery__"
@@ -1871,9 +1876,6 @@ VOICE_TEMPLATES: dict[str, str] = {
     ),
     # Appended after a real answer, so it is a follow-on sentence, not a reply.
     "answer_truncated": "I had to stop before finishing.",
-    "focus_answer_anyway": (
-        "To continue, repeat your complete request and explicitly say to answer anyway."
-    ),
 }
 
 # Auto routing follows the ingress language; legacy diagnostic modes retain their allowlist.

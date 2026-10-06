@@ -172,6 +172,10 @@ export interface GlobalSettings {
   command_routing_languages?: string[];
   command_routing_timeout_ms?: number;
   decision_provider_id?: string | null;
+  /** The decision account selected as the default; kept when the provider is switched off. */
+  decision_provider_default_id?: string | null;
+  provider_catalog_refresh_enabled?: boolean;
+  provider_catalog_refresh_hours?: number;
   decision_shadow_enabled?: boolean;
   decision_timeout_ms?: number;
   decision_request_budget?: number;

@@ -35,6 +35,8 @@ vi.mock("../api", () => ({
 }));
 
 import { AgentCliSettings } from "../components/AgentCliSettings";
+import { LlmProviderSettings } from "../components/LlmProviderSettings";
+import type { GlobalSettings } from "../types";
 
 function instances() {
   return {
@@ -82,25 +84,32 @@ async function beginAdd(kind = "claude") {
   fireEvent.change(picker, { target: { value: kind } });
 }
 
-function renderCard() {
+const onSettingChange = vi.fn();
+
+function renderCard(settings: Partial<GlobalSettings> = {}) {
+  // The provider accounts and the chat behaviour are separate cards in the panel;
+  // both render here so each test can reach whichever control it exercises.
   return render(
-    <AgentCliSettings
-      routingMode="off"
-      onRoutingChange={() => {}}
-      scrollback={100}
-      onScrollbackChange={() => {}}
-      maxIterations={20}
-      onMaxIterationsChange={() => {}}
-      globalVisible={false}
-      onGlobalChange={() => {}}
-      conversationStyle="direct"
-      onConversationStyleChange={() => {}}
-      detailLevel="concise"
-      onDetailLevelChange={() => {}}
-      homeFocused={false}
-      onHomeFocusedChange={() => {}}
-      saving={false}
-    />,
+    <>
+      <LlmProviderSettings settings={settings as GlobalSettings} onChange={onSettingChange} saving={false} />
+      <AgentCliSettings
+        routingMode="off"
+        onRoutingChange={() => {}}
+        scrollback={100}
+        onScrollbackChange={() => {}}
+        maxIterations={20}
+        onMaxIterationsChange={() => {}}
+        globalVisible={false}
+        onGlobalChange={() => {}}
+        conversationStyle="direct"
+        onConversationStyleChange={() => {}}
+        detailLevel="concise"
+        onDetailLevelChange={() => {}}
+        homeFocused={false}
+        onHomeFocusedChange={() => {}}
+        saving={false}
+      />
+    </>,
   );
 }
 
@@ -311,7 +320,6 @@ describe("AgentCliSettings", () => {
         saving={false}
       />,
     );
-    await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
     fireEvent.click(screen.getByLabelText("Show Agent Chat throughout Home Assistant"));
     expect(onGlobal).toHaveBeenCalledWith(true);
   });
@@ -384,6 +392,60 @@ describe("AgentCliSettings", () => {
 // The default model can be changed after creation, and the provider's model list
 // (a cheap authenticated GET) is fetched when the card is shown, so a retired model
 // is flagged where the operator can act on it.
+describe("Agent Chat card layout", () => {
+  it("shows routing statistics last, after every other setting", async () => {
+    const { container } = renderCard();
+    await screen.findByLabelText("Check providers for new models");
+    const stats = container.querySelector("details.routing-stats, details");
+    expect(stats?.textContent).toContain("Routing statistics");
+    const chat = stats!.closest(".card") as HTMLElement;
+    // Nothing from the Agent Chat card follows the disclosure.
+    expect(chat.lastElementChild).toBe(stats);
+    // And the provider controls are a different card from the chat settings.
+    expect(chat.textContent).not.toContain("Check providers for new models");
+  });
+});
+
+describe("LLM providers card controls", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getAgentCliProviders.mockResolvedValue(instances());
+    getAgentCliModels.mockResolvedValue({ models: ["deepseek-v4-flash"] });
+  });
+
+  it("has provider checks on at 24 hours by default and reports changes", async () => {
+    renderCard();
+    const toggle = (await screen.findByLabelText("Check providers for new models")) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    const hours = screen.getByLabelText("Hours between provider checks") as HTMLInputElement;
+    expect(hours.value).toBe("24");
+    expect(hours.disabled).toBe(false);
+    fireEvent.click(toggle);
+    expect(onSettingChange).toHaveBeenCalledWith("provider_catalog_refresh_enabled", false);
+    fireEvent.change(hours, { target: { value: "48" } });
+    fireEvent.blur(hours);
+    expect(onSettingChange).toHaveBeenCalledWith("provider_catalog_refresh_hours", 48);
+  });
+
+  it("clamps the period to 6-720 hours and disables it when checks are off", async () => {
+    renderCard({ provider_catalog_refresh_enabled: false, provider_catalog_refresh_hours: 72 });
+    const hours = (await screen.findByLabelText("Hours between provider checks")) as HTMLInputElement;
+    expect(hours.disabled).toBe(true);
+    expect(hours.value).toBe("72");
+  });
+
+  it("clamps an out-of-range period", async () => {
+    renderCard();
+    const hours = (await screen.findByLabelText("Hours between provider checks")) as HTMLInputElement;
+    fireEvent.change(hours, { target: { value: "9999" } });
+    fireEvent.blur(hours);
+    expect(onSettingChange).toHaveBeenCalledWith("provider_catalog_refresh_hours", 720);
+    fireEvent.change(hours, { target: { value: "1" } });
+    fireEvent.blur(hours);
+    expect(onSettingChange).toHaveBeenCalledWith("provider_catalog_refresh_hours", 6);
+  });
+});
+
 describe("AgentCliSettings default model", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1063,7 +1063,8 @@ class TestSettings:
             voice_agent_tool_routing_mode="observe",
             ai_task_tool_routing_mode="advise",
             agentcli_routing_mode="auto", voice_agent_routing_mode="auto",
-            decision_provider_id="decision-account", mesa_mode="enforced",
+            decision_provider_id="decision-account", decision_provider_default_id="decision-account",
+            mesa_mode="enforced",
         ).to_dict()
         assert "command_routing_version" not in settings
         assert "tool_routing_version" not in settings

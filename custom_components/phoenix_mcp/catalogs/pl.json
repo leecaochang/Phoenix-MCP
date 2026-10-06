@@ -6,7 +6,6 @@
   },
   "voice": {
     "answer_truncated": "Musiałem przerwać przed zakończeniem.",
-    "focus_answer_anyway": "Aby kontynuować, powtórz całe żądanie i wyraźnie powiedz, aby mimo to odpowiedzieć.",
     "focus_declined": "Ta rozmowa działa w trybie skupionym na domu, więc mogę pomagać tylko w sprawach dotyczących domu i Home Assistant.",
     "could_not_complete": "Przepraszam, nie mogłem tego dokończyć.",
     "error": "Przepraszam, agent głosowy Phoenix MCP napotkał błąd.",
@@ -801,7 +800,6 @@
       "tablist": "Widoki zatwierdzeń"
     },
     "agentchat": {
-      "answerAnyway": "Odpowiedz mimo to",
       "announceApproval": "Akcja {name} wymaga Twojego zatwierdzenia.",
       "announceError": "Błąd: {message}",
       "announceResolved": "Zatwierdzenie {status}.",
@@ -953,7 +951,6 @@
       "bodyTooLarge": "Treść żądania jest zbyt duża.",
       "bodyUnreadable": "Nie udało się odczytać treści żądania.",
       "booleanRequired": "{field} musi mieć wartość true lub false.",
-      "homeFocusBypassNewMessage": "Skupienie na domu można pominąć tylko podczas wysyłania nowej wiadomości.",
       "unknownFields": "Nieznane pola: {fields}.",
       "capabilityConfirmUnsupported": "{capability} nie obsługuje trybu Potwierdź.",
       "capabilityModeInvalid": "{capability} musi mieć wartość deny, allow lub confirm.",
@@ -1289,7 +1286,7 @@
       "presetDeleteBody": "Zapisana migawka <strong>{name}</strong> zostanie trwale usunięta. Bieżące ustawienia klucza dostępu nie zostaną naruszone.",
       "presetDeleteTitle": "Usuń ustawienie wstępne: {name}",
       "presetEmpty": "Nie ma jeszcze ustawień wstępnych. Zapisz bieżące ustawienia jako pierwsze ustawienie wstępne tego klucza dostępu.",
-      "presetHint": "Zmiany wprowadzane w tym kluczu dostępu są zapisywane do aktywnego ustawienia wstępnego przy przełączaniu. Zastosowanie aktywnego ustawienia przywraca jego zapisany stan.",
+      "presetHint": "Po przełączeniu ustawień wstępnych niezapisane zmiany tego klucza dostępu są najpierw zapisywane w aktywnym ustawieniu wstępnym. Zastosowanie aktywnego ustawienia wstępnego przywraca natomiast jego zapisany stan.",
       "presetMax": "Klucz dostępu może mieć co najwyżej {max} ustawień wstępnych.",
       "presetModified": "Zmodyfikowane",
       "presetModifiedTitle": "Ustawienia tego klucza dostępu mają niezapisane zmiany; przełączenie ustawień zapisuje je w tym ustawieniu.",
@@ -1720,7 +1717,7 @@
       "detailLevelAria": "Poziom szczegółowości dla {surface}",
       "homeFocused": "Skupienie na domu",
       "homeFocusedAria": "Tryb skupienia na domu dla {surface}",
-      "homeFocusedHelp": "Preferencja zakresu, a nie kontrola bezpieczeństwa. Wyraźnie niezwiązane prośby są odrzucane; prawdopodobne lub niejednoznaczne prośby domowe są obsługiwane normalnie.",
+      "homeFocusedHelp": "Preferencja skupienia, a nie mechanizm bezpieczeństwa. Prośby niedotyczące bezpośrednio Twojej instalacji Home Assistant są odrzucane i nie ma sposobu, aby to obejść.",
       "assistIntro": "Daj istniejącej integracji LLM Home Assistant dostęp do ograniczonych narzędzi Phoenix MCP. Wybierz <strong>Phoenix MCP (scoped)</strong> podczas konfigurowania tego agenta. Użyj Agenta głosowego (powyżej), jeśli chcesz, aby Phoenix MCP zarządzał modelem.",
       "assistNotBound": "Niepowiązany",
       "assistUnsupported": "Ta funkcja nie jest obsługiwana przez Twoją wersję Home Assistant.",
@@ -1778,8 +1775,8 @@
       "notifyApprovalLabel": "Powiadamiaj, gdy potrzebne jest zatwierdzenie",
       "notifyRateLimitHelp": "Wysyłaj powiadomienie Home Assistant, gdy klucz dostępu osiągnie limit szybkości, co najwyżej raz na klucz dostępu w ciągu minuty.",
       "notifyRateLimitLabel": "Powiadamiaj po osiągnięciu limitu szybkości",
-      "presetsHelp": "Zapisuj nazwane wersje możliwości, uprawnień, limitów szybkości i ustawienia pass-through klucza dostępu. Włączenie tworzy ustawienie wstępne z bieżących ustawień każdego klucza dostępu. Przełączanie ustawień najpierw zapisuje bieżące zmiany.",
-      "presetsLabel": "Ustawienia wstępne ustawień klucza dostępu",
+      "presetsHelp": "Pozwala zapisać kilka nazwanych konfiguracji dla każdego klucza dostępu i przełączać się między nimi, na przykład restrykcyjną konfigurację codzienną i szerszą do konserwacji. Ustawienie wstępne zapisuje możliwości, uprawnienia, limity żądań i ustawienie pass-through klucza. Po włączeniu każdy klucz dostępu otrzymuje jedno ustawienie wstępne utworzone z jego bieżących ustawień. Przy przełączaniu niezapisane zmiany są najpierw zapisywane w ustawieniu wstępnym, które opuszczasz.",
+      "presetsLabel": "Włącz ustawienia wstępne",
       "providerAccount": "Konto dostawcy",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1887,7 +1884,14 @@
       "agentcliRegionUs": "Stany Zjednoczone",
       "agentcliZaiChina": "Chiny (BigModel)",
       "agentcliMimoPayg": "Płatność za użycie",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "Dostawcy LLM",
+      "providersIntro": "Konta dostawców AI używane przez Agent Chat, agenta głosowego i zadanie AI. Dodaj konto, wybierz jego model lub zostaw Automatycznie i zarządzaj nim tutaj.",
+      "providerChecksLabel": "Sprawdzaj dostawców pod kątem nowych modeli",
+      "providerChecksHelp": "Okresowo odczytuje ponownie listę modeli każdego dostawcy, aby konta w trybie automatycznym podążały za nowymi modelami i zastępowały wycofane. Wyłącz, aby sprawdzać tylko po naciśnięciu Odśwież.",
+      "providerChecksHoursLabel": "Sprawdzaj co (godziny)",
+      "providerChecksHoursHelp": "Od {min} do {max} godzin.",
+      "providerChecksHoursAria": "Godziny między sprawdzeniami dostawców"
     },
     "approvalSummary": {
       "action.approve": "Zatwierdź i wykonaj",
@@ -2176,7 +2180,6 @@
       "providerSection": "Dostawca decyzji",
       "providerHint": "Opcjonalny do bezpośredniej obsługi poleceń w {voice} i {chat}. W razie potrzeby otrzymuje nierozpoznane polecenia, dane odpowiednich encji i historię rozmowy. Mogą obowiązywać opłaty za API.",
       "decisionAccount": "Konto dostawcy decyzji",
-      "localOnly": "Tylko lokalnie (bez dostawcy decyzji)",
       "removeAccount": "Usuń {name}",
       "connectionSettings": "Ustawienia połączenia",
       "decisionBudget": "Limit czasu decyzji (ms)",
@@ -2185,7 +2188,10 @@
       "accountModel": "Model dla {name}",
       "commandHelp": "Najpierw wypróbuj lokalne intencje, a następnie opcjonalnego dostawcę decyzji. Pozostałe żądania trafiają do zwykłego dostawcy AI. Uprawnienia i zatwierdzenia nadal obowiązują.",
       "requestLimit": "Żądania decyzyjne na godzinę (0 = bez limitu)",
-      "requestLimitHint": "Wspólny limit dla głosu, czatu, podglądów i kontroli w tle. Po włączeniu liczy próby, także nieudane, i zachowuje licznik po ponownym uruchomieniu. Zeruje się o każdej pełnej godzinie UTC. Zwykły dostawca ma osobny limit. To limit żądań, a nie kwoty wydatków."
+      "requestLimitHint": "Wspólny limit dla głosu, czatu, podglądów i kontroli w tle. Po włączeniu liczy próby, także nieudane, i zachowuje licznik po ponownym uruchomieniu. Zeruje się o każdej pełnej godzinie UTC. Zwykły dostawca ma osobny limit. To limit żądań, a nie kwoty wydatków.",
+      "useProvider": "Używaj dostawcy decyzji",
+      "useProviderHelp": "Włączone: wybrany dostawca decyzji obsługuje prośby, których Phoenix nie może dopasować lokalnie. Wyłączone: żaden dostawca decyzji nie jest używany, nawet jeśli jeden jest wybrany.",
+      "useProviderNone": "Dodaj dostawcę decyzji, aby to włączyć."
     },
     "routingStats": {
       "title": "Statystyki routingu",

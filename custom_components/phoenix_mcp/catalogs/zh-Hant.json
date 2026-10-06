@@ -37,7 +37,6 @@
       "bodyTooLarge": "請求體過大。",
       "bodyUnreadable": "讀取請求體失敗。",
       "booleanRequired": "{field} 必須為 true 或 false。",
-      "homeFocusBypassNewMessage": "僅可在傳送新訊息時略過專注家庭模式。",
       "unknownFields": "未知欄位：{fields}。",
       "capabilityConfirmUnsupported": "{capability} 不支援「確認」模式。",
       "capabilityModeInvalid": "{capability} 必須為 deny、allow 或 confirm。",
@@ -150,7 +149,6 @@
       "providerModelOrAuto": "請只傳送 model 或 auto 其中之一。"
     },
     "agentchat": {
-      "answerAnyway": "仍然回答",
       "announceApproval": "操作 {name} 需要您的核准。",
       "announceError": "錯誤：{message}",
       "announceResolved": "核准 {status}。",
@@ -1561,7 +1559,7 @@
       "detailLevelAria": "{surface} 詳細程度",
       "homeFocused": "專注家庭",
       "homeFocusedAria": "{surface} 專注家庭模式",
-      "homeFocusedHelp": "這是一項關注偏好，而非安全控制。系統會拒絕明顯無關的要求；對於與家庭可能相關或含意不明的要求，將正常提供協助。",
+      "homeFocusedHelp": "這是專注偏好，不是安全控制。與你的 Home Assistant 安裝沒有直接關係的請求會被拒絕，且無法繞過。",
       "assistIntro": "讓現有的 Home Assistant LLM 整合能夠使用 Phoenix MCP 的受限工具。設定該代理時請選擇 <strong>Phoenix MCP (scoped)</strong>。如果希望由 Phoenix MCP 管理模型，請使用上方的「語音智慧體」。",
       "assistNotBound": "未繫結",
       "assistUnsupported": "您的 Home Assistant 版本不支援此功能。",
@@ -1619,8 +1617,8 @@
       "notifyApprovalLabel": "需要核准時通知我",
       "notifyRateLimitHelp": "當存取金鑰達到速率限制時傳送 Home Assistant 通知，每個存取金鑰每分鐘最多一次。",
       "notifyRateLimitLabel": "達到速率限制時通知我",
-      "presetsHelp": "為存取金鑰的能力、權限、速率限制和直通設定儲存具名版本。啟用後會用每個存取金鑰的目前設定各建立一個預設。切換預設時會先儲存目前的更改。",
-      "presetsLabel": "存取金鑰設定預設",
+      "presetsHelp": "可為每個存取金鑰儲存多組命名設定並在它們之間切換，例如一組嚴格的日常設定和一組較寬鬆的維護設定。預設會儲存金鑰的功能、權限、速率限制和直通設定。啟用後，每個存取金鑰會先得到一個依其目前設定建立的預設。切換預設時，未儲存的變更會先儲存到你要離開的預設中。",
+      "presetsLabel": "啟用預設",
       "providerAccount": "提供者帳戶",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1728,7 +1726,14 @@
       "agentcliRegionUs": "美國",
       "agentcliZaiChina": "中國（BigModel）",
       "agentcliMimoPayg": "按用量付費",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "LLM 供應商",
+      "providersIntro": "Agent Chat、語音代理和 AI 任務使用的 AI 供應商帳戶。在此新增帳戶、選擇其模型或保持自動，並進行管理。",
+      "providerChecksLabel": "檢查供應商的新模型",
+      "providerChecksHelp": "定期重新讀取每個供應商的模型清單，使自動模式的帳戶跟隨新模型並取代已下線的模型。關閉後僅在按下重新整理時檢查。",
+      "providerChecksHoursLabel": "檢查間隔（小時）",
+      "providerChecksHoursHelp": "介於 {min} 到 {max} 小時之間。",
+      "providerChecksHoursAria": "供應商檢查間隔（小時）"
     },
     "shell": {
       "agentChat": "智慧體對話",
@@ -1864,7 +1869,7 @@
       "presetDeleteBody": "已儲存的快照 <strong>{name}</strong> 將被永久刪除。存取金鑰的目前設定不受影響。",
       "presetDeleteTitle": "刪除預設：{name}",
       "presetEmpty": "尚無預設。將目前設定儲存為此存取金鑰的第一個預設。",
-      "presetHint": "您對此存取金鑰所做的更改會在切換時儲存到目前預設中。套用目前預設會恢復到它儲存時的狀態。",
+      "presetHint": "切換預設時，此存取金鑰未儲存的變更會先儲存到目前的預設中。而套用目前的預設則會還原到它已儲存的狀態。",
       "presetMax": "一個存取金鑰最多可以有 {max} 個預設。",
       "presetModified": "已修改",
       "presetModifiedTitle": "此存取金鑰的設定有未儲存的更改；切換預設時會先把它們儲存到本預設中。",
@@ -2077,7 +2082,6 @@
       "providerSection": "決策提供者",
       "providerHint": "選用，用於在 {voice} 和 {chat} 中直接處理命令。必要時接收未匹配的命令、符合條件的實體詳細資料及對話歷程。可能產生 API 費用。",
       "decisionAccount": "決策帳戶",
-      "localOnly": "僅本機（不使用決策提供者）",
       "removeAccount": "刪除 {name}",
       "connectionSettings": "連線設定",
       "decisionBudget": "決策逾時（毫秒）",
@@ -2086,7 +2090,10 @@
       "accountModel": "{name} 的模型",
       "commandHelp": "先嘗試本機意圖，再使用選用的決策供應商。其他請求交給慣用的 AI 供應商。權限與核准要求仍然適用。",
       "requestLimit": "每小時決策請求數（0 = 不限制）",
-      "requestLimitHint": "語音、聊天、預覽和影子檢查共用此限額。啟用時會統計所有嘗試，包括失敗請求，重新啟動後仍保留計數。每個 UTC 整點重設。常用提供者有獨立的額度。這是請求數量限制，不是金額上限。"
+      "requestLimitHint": "語音、聊天、預覽和影子檢查共用此限額。啟用時會統計所有嘗試，包括失敗請求，重新啟動後仍保留計數。每個 UTC 整點重設。常用提供者有獨立的額度。這是請求數量限制，不是金額上限。",
+      "useProvider": "使用決策供應商",
+      "useProviderHelp": "開啟：所選決策供應商處理 Phoenix 無法在本機比對的請求。關閉：即使已選擇決策供應商，也不會使用它。",
+      "useProviderNone": "新增決策供應商後才能開啟。"
     },
     "routingStats": {
       "title": "路由統計",
@@ -2306,7 +2313,6 @@
   },
   "voice": {
     "answer_truncated": "我不得不提前停下。",
-    "focus_answer_anyway": "若要繼續，請重複完整要求，並明確說明仍然回答。",
     "focus_declined": "此對話處於居家專注模式，因此我只能協助處理與您的住宅和 Home Assistant 有關的要求。",
     "could_not_complete": "抱歉，我沒能完成這個操作。",
     "error": "抱歉，Phoenix MCP 語音智慧體出現錯誤。",

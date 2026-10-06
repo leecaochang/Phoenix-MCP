@@ -28,15 +28,20 @@ beforeEach(() => {
 it("offers only local routing and TypeSafe / JEV", async () => {
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
-  expect(screen.getByRole("button", { name: "Local only (no decision provider)" })).toHaveAttribute("aria-pressed", "true");
+  // With no account added, the switch is off and cannot be turned on.
+  const use = screen.getByRole("checkbox", { name: "Use decision provider" });
+  expect(use).not.toBeChecked();
+  expect(use).toBeDisabled();
+  expect(screen.getByText("Add a decision provider to turn this on.")).toBeTruthy();
   const picker = screen.getByLabelText("Provider type");
   expect(within(picker).getAllByRole("option").map(option => option.getAttribute("value"))).toEqual(["", "typesafe"]);
   expect(mocks.probe).not.toHaveBeenCalled();
 });
 
 it("saves an hourly request limit and rejects empty or fractional drafts", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: types });
   const change = vi.fn();
-  const props = { settings: { ...settings, decision_provider_id: "decision", decision_request_budget: 12 }, onChange: change, saving: false };
+  const props = { settings: { ...settings, decision_provider_id: "decision", decision_provider_default_id: "decision", decision_request_budget: 12 }, onChange: change, saving: false };
   const view = render(<DecisionProviderSettings {...props} />);
   await screen.findByText("TypeSafe / JEV");
   fireEvent.click(screen.getByText("Connection settings"));
@@ -60,7 +65,7 @@ it("keeps remote observation opt-in and sends no completion on mount", async () 
   render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
   fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "typesafe" } });
-  expect(screen.getByRole("button", { name: "Local only (no decision provider)" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("checkbox", { name: "Use decision provider" })).not.toBeChecked();
   expect(mocks.create).not.toHaveBeenCalled();
   expect(change).not.toHaveBeenCalled();
 });
@@ -94,20 +99,40 @@ it("keeps the selected account when creation fails", async () => {
   expect(change).not.toHaveBeenCalled();
 });
 
-it("preserves a newer manual choice while account creation is pending", async () => {
+const two = [
+  { id: "a", kind: "typesafe", name: "TypeSafe / JEV (a)", model: "jev-latest" },
+  { id: "b", kind: "typesafe", name: "TypeSafe / JEV (b)", model: "jev-latest" },
+];
+
+it("turns the provider on with the selected default and off without forgetting it", async () => {
   const change = vi.fn();
-  let done!: (value: unknown) => void;
-  mocks.create.mockReturnValue(new Promise(resolve => { done = resolve; }));
-  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "previous" }} onChange={change} saving={false} />);
-  await screen.findByText("TypeSafe / JEV");
-  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "typesafe" } });
-  fireEvent.change(screen.getByLabelText("API key"), { target: { value: "key" } });
-  fireEvent.click(screen.getByText("Validate"));
-  await screen.findByLabelText("Select default model:");
-  fireEvent.click(screen.getByText("Done"));
-  fireEvent.click(screen.getByRole("button", { name: "Local only (no decision provider)" }));
-  await act(async () => done({ instance: { id: "new" } }));
-  expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "");
+  mocks.list.mockResolvedValue({ instances: two, provider_types: types });
+  const base = { ...settings, decision_provider_default_id: "b" };
+  const view = render(<DecisionProviderSettings settings={base} onChange={change} saving={false} />);
+  const use = await screen.findByRole("checkbox", { name: "Use decision provider" });
+  expect(use).not.toBeChecked();
+  expect(use).toBeEnabled();
+  expect(screen.getByRole("radio", { name: "TypeSafe / JEV (b)" })).toBeChecked();
+  fireEvent.click(use);
+  expect(change).toHaveBeenLastCalledWith("decision_provider_id", "b");
+  view.rerender(<DecisionProviderSettings settings={{ ...base, decision_provider_id: "b" }} onChange={change} saving={false} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Use decision provider" }));
+  // Off clears only the account in use: the default is never sent as null.
+  expect(change).toHaveBeenLastCalledWith("decision_provider_id", "");
+  expect(change).not.toHaveBeenCalledWith("decision_provider_default_id", expect.anything());
+});
+
+it("selects exactly one default account and always has one selected", async () => {
+  const change = vi.fn();
+  mocks.list.mockResolvedValue({ instances: two, provider_types: types });
+  // Nothing stored yet: the first account is selected for the operator.
+  render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
+  await waitFor(() => expect(change).toHaveBeenCalledWith("decision_provider_default_id", "a"));
+  expect(screen.getAllByRole("radio")).toHaveLength(2);
+  expect(screen.getByRole("radio", { name: "TypeSafe / JEV (a)" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "TypeSafe / JEV (b)" })).not.toBeChecked();
+  fireEvent.click(screen.getByRole("radio", { name: "TypeSafe / JEV (b)" }));
+  expect(change).toHaveBeenLastCalledWith("decision_provider_default_id", "b");
 });
 
 it("discovers compatible models before saving and invalidates them when credentials change", async () => {
@@ -173,11 +198,12 @@ it("makes account selection explicit and deletion available on each account row"
   mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "My decision account", model: "jev-latest" }], provider_types: types });
   mocks.remove.mockResolvedValue({});
   const change = vi.fn();
-  render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
-  const account = await screen.findByRole("button", { name: "My decision account" });
-  expect(account).toHaveAttribute("aria-pressed", "false");
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_default_id: "decision" }} onChange={change} saving={false} />);
+  expect(await screen.findByRole("radio", { name: "My decision account" })).toBeChecked();
   expect(screen.queryByLabelText("API key")).toBeNull();
-  fireEvent.click(account);
+  // Selecting an account does not by itself start using it.
+  expect(screen.getByRole("checkbox", { name: "Use decision provider" })).not.toBeChecked();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Use decision provider" }));
   expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "decision");
   fireEvent.click(screen.getByRole("button", { name: "Remove My decision account" }));
   expect(mocks.remove).not.toHaveBeenCalled();
@@ -186,8 +212,9 @@ it("makes account selection explicit and deletion available on each account row"
 });
 
 it("keeps connection timing optional and rejects invalid values", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: types });
   const change = vi.fn();
-  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={change} saving={false} />);
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision", decision_provider_default_id: "decision" }} onChange={change} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
   const timeout = screen.getByLabelText("Decision timeout (ms)");
   expect(timeout).not.toBeVisible();
@@ -277,13 +304,14 @@ it("opens saved accounts without contacting an offline decision server", async (
   ], provider_types: types });
   mocks.models.mockRejectedValue(new Error("Connection failed."));
   const change = vi.fn();
-  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "remote" }} onChange={change} saving={false} />);
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "remote", decision_provider_default_id: "remote" }} onChange={change} saving={false} />);
   await screen.findByText("Default model: jev-1.13.0");
   expect(mocks.models).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
-  expect(screen.getByRole("button", { name: "JEV" })).toHaveAttribute("aria-pressed", "true");
-  const row = screen.getByRole("button", { name: "Second JEV account" }).closest(".agentcli-settings-provider") as HTMLElement;
+  expect(screen.getByRole("radio", { name: "JEV" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "Use decision provider" })).toBeChecked();
+  const row = screen.getByRole("radio", { name: "Second JEV account" }).closest(".agentcli-settings-provider") as HTMLElement;
   fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
   await screen.findByText("Connection failed.");
   expect(mocks.models).toHaveBeenCalledExactlyOnceWith("second");
@@ -299,53 +327,50 @@ it("opens saved accounts without contacting an offline decision server", async (
 });
 
 
-it("lets local-only clear an unsupported saved selection", async () => {
+it("shows an unsupported saved selection as off and locked", async () => {
   const change = vi.fn();
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "retired" }} onChange={change} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
-  const local = screen.getByRole("button", { name: "Local only (no decision provider)" });
-  expect(local).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(local);
-  expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "");
+  const use = screen.getByRole("checkbox", { name: "Use decision provider" });
+  expect(use).not.toBeChecked();
+  expect(use).toBeDisabled();
+  expect(change).not.toHaveBeenCalled();
 });
 
-it("does not show local-only as selected after a failed account read", async () => {
+it("does not claim the provider is off after a failed account read", async () => {
   mocks.list.mockRejectedValue(new Error("Offline"));
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
   await screen.findByRole("alert");
-  expect(screen.getByRole("button", { name: "Local only (no decision provider)" })).toHaveAttribute("aria-pressed", "false");
+  const use = screen.getByRole("checkbox", { name: "Use decision provider" });
+  expect(use).toBeChecked();
+  expect(use).toBeDisabled();
 });
-
 
 it("hides setup after JEV is configured and retains account management", async () => {
   mocks.list.mockResolvedValue({ instances: [{ id: "decision", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: types });
-  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
-  expect(await screen.findByRole("button", { name: "TypeSafe / JEV" })).toHaveAttribute("aria-pressed", "true");
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision", decision_provider_default_id: "decision" }} onChange={vi.fn()} saving={false} />);
+  expect(await screen.findByRole("radio", { name: "TypeSafe / JEV" })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "Use decision provider" })).toBeChecked();
   expect(screen.queryByLabelText("Provider type")).toBeNull();
   expect(screen.queryByRole("option", { name: "TypeSafe / JEV" })).toBeNull();
   expect(screen.getByRole("button", { name: "Change default model" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Remove TypeSafe / JEV" })).toBeEnabled();
 });
 
-
-it("requires explicit activation when choosing a decision account with the keyboard", async () => {
+it("moves the default with the keyboard but never switches the provider on by itself", async () => {
   mocks.list.mockResolvedValue({ instances: [
     { id: "one", name: "First account", model: "model" },
     { id: "two", name: "Second account", model: "model" },
   ], provider_types: types });
   const onChange = vi.fn();
-  render(<DecisionProviderSettings settings={settings} onChange={onChange} saving={false} />);
-  const first = await screen.findByRole("button", { name: "First account" });
-  const second = screen.getByRole("button", { name: "Second account" });
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_default_id: "one" }} onChange={onChange} saving={false} />);
+  const first = await screen.findByRole("radio", { name: "First account" });
   const user = userEvent.setup();
   first.focus();
-  await user.keyboard("{ArrowDown}{ArrowRight}");
-  expect(onChange).not.toHaveBeenCalled();
-  second.focus();
-  await user.keyboard(" ");
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "two");
+  await user.keyboard("{ArrowDown}");
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("decision_provider_default_id", "two");
+  expect(onChange).not.toHaveBeenCalledWith("decision_provider_id", expect.anything());
 });
-
 
 it("keeps refresh focused while blocking duplicate provider actions", async () => {
   mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "jev-latest" }], provider_types: types });

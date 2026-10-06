@@ -7,6 +7,7 @@ import { LoggingSettings } from "../components/LoggingSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { KillSwitch } from "../components/KillSwitch";
 import { AgentCliSettings } from "../components/AgentCliSettings";
+import { LlmProviderSettings } from "../components/LlmProviderSettings";
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
 import { CommandRoutingSettings } from "../components/CommandRoutingSettings";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
@@ -134,8 +135,12 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
       {error && <div className="banner banner-error">{error}</div>}
 
       <div className="settings-grid">
-        {/* Left column: Agent Chat, Voice Agent, Command Routing, AI Task, Assist Bridge */}
+        {/* Left column: LLM Providers, Decision Provider, Agent Chat, Voice Agent, AI Task, Assist Bridge */}
         <div>
+          <LlmProviderSettings settings={settings} onChange={patchSetting} saving={saving} />
+
+          <CommandRoutingSettings settings={settings} onChange={patchSetting} saving={saving} />
+
           <AgentCliSettings
             routingMode={settings.agentcli_routing_mode}
             onRoutingChange={value => patchSetting("agentcli_routing_mode", value)}
@@ -159,8 +164,6 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
             onChange={patchSetting}
             saving={saving}
           />
-
-          <CommandRoutingSettings settings={settings} onChange={patchSetting} saving={saving} />
 
           <AiTaskSettings
             settings={settings}

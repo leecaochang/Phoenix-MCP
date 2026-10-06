@@ -26,6 +26,9 @@ from .const import (
     AGENTCLI_MAX_ITERATIONS_MAX,
     AGENTCLI_MAX_ITERATIONS_MIN,
     AGENTCLI_SCROLLBACK_DEFAULT,
+    PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
+    PROVIDER_CATALOG_REFRESH_HOURS_MAX,
+    PROVIDER_CATALOG_REFRESH_HOURS_MIN,
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
     COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
@@ -643,7 +646,14 @@ class GlobalSettings:
     agentcli_tool_routing_mode: str = "off"
     voice_agent_tool_routing_mode: str = "off"
     ai_task_tool_routing_mode: str = "off"
+    # The decision provider in USE (None means none is used) and the account that
+    # is selected as the default. The default survives the toggle: turning the
+    # decision provider off clears `decision_provider_id`, never the default.
     decision_provider_id: str | None = None
+    decision_provider_default_id: str | None = None
+    # Periodic re-read of each provider's model list (see model_selection.py).
+    provider_catalog_refresh_enabled: bool = True
+    provider_catalog_refresh_hours: int = PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT
     decision_shadow_enabled: bool = False
     decision_timeout_ms: int = DECISION_TIMEOUT_DEFAULT_MS
     decision_request_budget: int = 0
@@ -706,6 +716,9 @@ class GlobalSettings:
             "voice_agent_tool_routing_mode": self.voice_agent_tool_routing_mode,
             "ai_task_tool_routing_mode": self.ai_task_tool_routing_mode,
             "decision_provider_id": self.decision_provider_id,
+            "decision_provider_default_id": self.decision_provider_default_id,
+            "provider_catalog_refresh_enabled": self.provider_catalog_refresh_enabled,
+            "provider_catalog_refresh_hours": self.provider_catalog_refresh_hours,
             "decision_shadow_enabled": self.decision_shadow_enabled,
             "decision_timeout_ms": self.decision_timeout_ms,
             "decision_request_budget": self.decision_request_budget,
@@ -772,6 +785,18 @@ class GlobalSettings:
             voice_agent_tool_routing_mode=_closed_choice(data.get("voice_agent_tool_routing_mode"), TOOL_ROUTING_MODES, "off"),
             ai_task_tool_routing_mode=_closed_choice(data.get("ai_task_tool_routing_mode"), TOOL_ROUTING_MODES, "off"),
             decision_provider_id=data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) else None,
+            # Older stores had only the active id; it was also the selection.
+            decision_provider_default_id=(
+                data.get("decision_provider_default_id") if isinstance(data.get("decision_provider_default_id"), str) and data.get("decision_provider_default_id")
+                else data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) and data.get("decision_provider_id")
+                else None
+            ),
+            provider_catalog_refresh_enabled=data.get("provider_catalog_refresh_enabled", True) is not False,
+            provider_catalog_refresh_hours=_clamp_range(
+                data.get("provider_catalog_refresh_hours", PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT),
+                PROVIDER_CATALOG_REFRESH_HOURS_MIN, PROVIDER_CATALOG_REFRESH_HOURS_MAX,
+                PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
+            ),
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,
             decision_timeout_ms=_clamp_range(data.get("decision_timeout_ms", DECISION_TIMEOUT_DEFAULT_MS),
                                             DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS, DECISION_TIMEOUT_DEFAULT_MS),

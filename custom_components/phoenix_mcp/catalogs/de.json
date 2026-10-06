@@ -103,7 +103,6 @@
       "mesaProfile": "MESA-Profil"
     },
     "agentchat": {
-      "answerAnyway": "Trotzdem antworten",
       "announceApproval": "Aktion {name} benötigt Ihre Genehmigung.",
       "announceError": "Fehler: {message}",
       "announceResolved": "Genehmigung {status}.",
@@ -635,7 +634,7 @@
       "presetDeleteBody": "Der gespeicherte Schnappschuss <strong>{name}</strong> wird endgültig entfernt. Die aktuellen Einstellungen des Zugriffsschlüssels sind nicht betroffen.",
       "presetDeleteTitle": "Voreinstellung löschen: {name}",
       "presetEmpty": "Noch keine Voreinstellungen. Speichern Sie die aktuellen Einstellungen als erste Voreinstellung dieses Zugriffsschlüssels.",
-      "presetHint": "Änderungen, die Sie an diesem Zugriffsschlüssel vornehmen, werden beim Wechseln in die aktive Voreinstellung gespeichert. Das Anwenden der aktiven Voreinstellung stellt ihren gespeicherten Zustand wieder her.",
+      "presetHint": "Beim Wechseln der Voreinstellung werden ungespeicherte Änderungen an diesem Zugriffsschlüssel zuerst in der aktiven Voreinstellung gespeichert. Wenn Sie stattdessen die aktive Voreinstellung anwenden, wird ihr gespeicherter Zustand wiederhergestellt.",
       "presetMax": "Ein Zugriffsschlüssel kann höchstens {max} Voreinstellungen haben.",
       "presetModified": "Geändert",
       "presetModifiedTitle": "Die Einstellungen dieses Zugriffsschlüssels weisen ungespeicherte Änderungen auf; beim Wechseln der Voreinstellung werden sie in dieser Voreinstellung gespeichert.",
@@ -1050,7 +1049,7 @@
       "detailLevelAria": "Detailgrad für {surface}",
       "homeFocused": "Auf Zuhause fokussiert",
       "homeFocusedAria": "Zuhause-Fokus für {surface}",
-      "homeFocusedHelp": "Fokuspräferenz, keine Sicherheitskontrolle. Eindeutig sachfremde Anfragen werden abgelehnt; plausible oder mehrdeutige Anfragen zum Zuhause werden normal bearbeitet.",
+      "homeFocusedHelp": "Fokus-Einstellung, keine Sicherheitskontrolle. Anfragen, die nicht direkt Ihre Home-Assistant-Installation betreffen, werden abgelehnt, und es gibt keine Möglichkeit, das zu übergehen.",
       "assistIntro": "Geben Sie einer bestehenden Home-Assistant-LLM-Integration Zugriff auf die eingeschränkten Tools von Phoenix MCP. Wählen Sie <strong>Phoenix MCP (scoped)</strong> beim Konfigurieren dieses Agenten. Verwenden Sie den Sprachagenten (oben), wenn Phoenix MCP das Modell verwalten soll.",
       "assistNotBound": "Nicht gebunden",
       "assistUnsupported": "Diese Funktion wird von Ihrer Home-Assistant-Version nicht unterstützt.",
@@ -1108,8 +1107,8 @@
       "notifyApprovalLabel": "Benachrichtigen, wenn eine Genehmigung erforderlich ist",
       "notifyRateLimitHelp": "Eine Home-Assistant-Benachrichtigung senden, wenn ein Zugriffsschlüssel sein Ratenlimit erreicht, höchstens einmal pro Zugriffsschlüssel und Minute.",
       "notifyRateLimitLabel": "Benachrichtigen, wenn ein Ratenlimit erreicht wird",
-      "presetsHelp": "Benannte Versionen der Fähigkeiten, Berechtigungen, Ratenlimits und Durchreichungs-Einstellung eines Zugriffsschlüssels speichern. Beim Aktivieren wird aus den aktuellen Einstellungen jedes Zugriffsschlüssels eine Voreinstellung erstellt. Beim Wechseln der Voreinstellungen werden die aktuellen Änderungen zuerst gespeichert.",
-      "presetsLabel": "Voreinstellungen für Zugriffsschlüssel-Einstellungen",
+      "presetsHelp": "Ermöglicht es, für jeden Zugriffsschlüssel mehrere benannte Konfigurationen zu speichern und zwischen ihnen zu wechseln, zum Beispiel eine restriktive Alltagskonfiguration und eine umfassendere für Wartungsarbeiten. Eine Voreinstellung speichert Fähigkeiten, Berechtigungen, Ratenlimits und die Pass-through-Einstellung des Schlüssels. Beim Aktivieren erhält jeder Zugriffsschlüssel zunächst eine Voreinstellung, die aus seinen aktuellen Einstellungen erstellt wird. Beim Wechseln werden ungespeicherte Änderungen zuerst in der Voreinstellung gespeichert, die Sie verlassen.",
+      "presetsLabel": "Voreinstellungen aktivieren",
       "providerAccount": "Anbieterkonto",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
@@ -1217,7 +1216,14 @@
       "agentcliRegionUs": "Vereinigte Staaten",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Nutzungsbasiert",
-      "agentcliMimoTokenPlan": "Token Plan"
+      "agentcliMimoTokenPlan": "Token Plan",
+      "providersCard": "LLM-Anbieter",
+      "providersIntro": "Die KI-Anbieterkonten, die Agent-Chat, Sprachagent und KI-Aufgabe verwenden. Fügen Sie hier ein Konto hinzu, wählen Sie sein Modell oder lassen Sie es auf Automatisch, und verwalten Sie es.",
+      "providerChecksLabel": "Anbieter auf neue Modelle prüfen",
+      "providerChecksHelp": "Liest die Modellliste jedes Anbieters regelmäßig neu, damit Konten im Automatikmodus neuen Modellen folgen und eingestellte ersetzen. Ausschalten, um nur beim Klick auf Aktualisieren zu prüfen.",
+      "providerChecksHoursLabel": "Prüfen alle (Stunden)",
+      "providerChecksHoursHelp": "Zwischen {min} und {max} Stunden.",
+      "providerChecksHoursAria": "Stunden zwischen den Anbieterprüfungen"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -1369,7 +1375,6 @@
       "assistExposurePassThroughOnly": "use_assist_exposure ist nur für pass_through-Zugriffsschlüssel gültig.",
       "assistPipelineFailed": "Die Assist-Pipeline konnte nicht erstellt werden.",
       "booleanRequired": "{field} muss true oder false sein.",
-      "homeFocusBypassNewMessage": "Der Zuhause-Fokus kann nur beim Senden einer neuen Nachricht umgangen werden.",
       "unknownFields": "Unbekannte Felder: {fields}.",
       "capabilityConfirmUnsupported": "{capability} unterstützt den Bestätigungsmodus nicht.",
       "capabilityModeInvalid": "{capability} muss deny, allow oder confirm sein.",
@@ -2072,7 +2077,6 @@
       "providerSection": "Entscheidungsanbieter",
       "providerHint": "Optional für die direkte Befehlsverarbeitung in {voice} und {chat}. Erhält bei Bedarf nicht erkannte Befehle, Angaben zu geeigneten Entitäten und den Gesprächsverlauf. API-Kosten können anfallen.",
       "decisionAccount": "Entscheidungskonto",
-      "localOnly": "Nur lokal (kein Entscheidungsanbieter)",
       "removeAccount": "{name} löschen",
       "connectionSettings": "Verbindungseinstellungen",
       "decisionBudget": "Zeitlimit für Entscheidungen (ms)",
@@ -2081,7 +2085,10 @@
       "accountModel": "Modell für {name}",
       "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin.",
       "requestLimit": "Entscheidungsanfragen pro Stunde (0 = unbegrenzt)",
-      "requestLimitHint": "Gemeinsam für Sprache, Chat, Vorschauen und Schattenprüfungen. Zählt bei Aktivierung alle Versuche einschließlich Fehlern und bleibt nach einem Neustart erhalten. Wird zu jeder vollen UTC-Stunde zurückgesetzt. Dein üblicher Anbieter hat ein separates Kontingent. Dies begrenzt Anfragen, keine Geldbeträge."
+      "requestLimitHint": "Gemeinsam für Sprache, Chat, Vorschauen und Schattenprüfungen. Zählt bei Aktivierung alle Versuche einschließlich Fehlern und bleibt nach einem Neustart erhalten. Wird zu jeder vollen UTC-Stunde zurückgesetzt. Dein üblicher Anbieter hat ein separates Kontingent. Dies begrenzt Anfragen, keine Geldbeträge.",
+      "useProvider": "Entscheidungsanbieter verwenden",
+      "useProviderHelp": "An: Der ausgewählte Entscheidungsanbieter bearbeitet Anfragen, die Phoenix lokal nicht zuordnen kann. Aus: Es wird kein Entscheidungsanbieter verwendet, auch wenn einer ausgewählt ist.",
+      "useProviderNone": "Fügen Sie einen Entscheidungsanbieter hinzu, um dies einzuschalten."
     },
     "routingStats": {
       "title": "Routing-Statistik",
@@ -2306,7 +2313,6 @@
   },
   "voice": {
     "answer_truncated": "Ich musste abbrechen, bevor ich fertig war.",
-    "focus_answer_anyway": "Um fortzufahren, wiederholen Sie Ihre vollständige Anfrage und sagen Sie ausdrücklich, dass trotzdem geantwortet werden soll.",
     "focus_declined": "Diese Unterhaltung ist im Zuhause-Fokusmodus, daher kann ich nur bei Anfragen zu Ihrem Zuhause und Home Assistant helfen.",
     "could_not_complete": "Entschuldigung, das konnte ich nicht abschließen.",
     "error": "Entschuldigung, beim Phoenix-MCP-Sprachassistenten ist ein Fehler aufgetreten.",

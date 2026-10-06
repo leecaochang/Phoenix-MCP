@@ -335,6 +335,46 @@ async def test_hybrid_settings_require_account_and_clearing_disables_mode(hass, 
     assert data.store.get_settings().decision_provider_id == account
 
 
+async def test_decision_default_follows_use_and_survives_switching_off(hass, hybrid_home):
+    data, _, _, account, _ = hybrid_home
+    # Using an account also selects it as the default.
+    changes, error = await _validated_settings_patch({"decision_provider_id": account}, data, hass, "rid")
+    assert error is None and changes["decision_provider_default_id"] == account
+    # Switching off clears only the one in use; the default is not touched.
+    changes, error = await _validated_settings_patch({"decision_provider_id": None}, data, hass, "rid")
+    assert error is None and "decision_provider_default_id" not in changes
+    assert changes["decision_provider_id"] is None
+    # Re-selecting the default while the provider is in use keeps using it.
+    assert data.store.get_settings().decision_provider_id == account
+    changes, error = await _validated_settings_patch({"decision_provider_default_id": account}, data, hass, "rid")
+    assert error is None and changes["decision_provider_id"] == account
+    # An account that does not exist cannot be the default.
+    _, error = await _validated_settings_patch({"decision_provider_default_id": "missing"}, data, hass, "rid")
+    assert error is not None and error.status == 400
+
+
+async def test_selecting_a_default_does_not_turn_the_provider_on(hass, hybrid_home):
+    data, _, _, account, _ = hybrid_home
+    await data.store.async_patch_settings(decision_provider_id=None, decision_provider_default_id=None)
+    changes, error = await _validated_settings_patch({"decision_provider_default_id": account}, data, hass, "rid")
+    assert error is None
+    assert changes == {"decision_provider_default_id": account}
+
+
+async def test_provider_check_settings_are_validated_and_defaulted(hass, hybrid_home):
+    data = hybrid_home[0]
+    settings = data.store.get_settings()
+    assert settings.provider_catalog_refresh_enabled is True
+    assert settings.provider_catalog_refresh_hours == 24
+    changes, error = await _validated_settings_patch(
+        {"provider_catalog_refresh_hours": 5000, "provider_catalog_refresh_enabled": False}, data, hass, "rid")
+    assert error is None and changes["provider_catalog_refresh_hours"] == 720
+    changes, error = await _validated_settings_patch({"provider_catalog_refresh_hours": 1}, data, hass, "rid")
+    assert error is None and changes["provider_catalog_refresh_hours"] == 6
+    _, error = await _validated_settings_patch({"provider_catalog_refresh_hours": "soon"}, data, hass, "rid")
+    assert error is not None and error.status == 400
+
+
 @pytest.mark.parametrize("language,sentence,reply", [
     ("zh-Hans", "请打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
     ("es", "enciende la lámpara", "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."),

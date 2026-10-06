@@ -31,6 +31,8 @@ from .const import (
     AGENTCLI_MAX_ITERATIONS_MIN,
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
+    PROVIDER_CATALOG_REFRESH_HOURS_MAX,
+    PROVIDER_CATALOG_REFRESH_HOURS_MIN,
     PHOENIX_VERSION,
     BLOCKED_DOMAINS,
     CAP_CONFIRM,
@@ -2077,6 +2079,7 @@ _BOOL_SETTINGS = frozenset({
     "agentcli_global", "agentcli_home_focused", "voice_agent_enabled",
     "voice_agent_home_focused", "ai_task_enabled", "decision_shadow_enabled",
     "agentcli_routing_shadow_enabled", "conversation_log_enabled",
+    "provider_catalog_refresh_enabled",
 })
 
 _CONVERSATION_STYLE_SETTINGS = frozenset({
@@ -2093,6 +2096,7 @@ _DETAIL_LEVEL_SETTINGS = frozenset({
 _NULLABLE_STRING_SETTINGS = (
     "voice_agent_access_key_id", "voice_agent_provider_id", "voice_agent_model",
     "ai_task_access_key_id", "ai_task_provider_id", "ai_task_model", "decision_provider_id",
+    "decision_provider_default_id",
 )
 
 # (access key setting, provider setting) pairs validated against live records.
@@ -2106,6 +2110,7 @@ _PATCHABLE_SETTINGS = _BOOL_SETTINGS | set(CONVERSATION_LOG_LIMITS) | {
     "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_access_key_id",
+    "provider_catalog_refresh_hours",
     *_NULLABLE_STRING_SETTINGS,
 } | _CONVERSATION_STYLE_SETTINGS | _DETAIL_LEVEL_SETTINGS
 
@@ -2242,6 +2247,8 @@ async def _validated_settings_patch(
          {"bounds": (AGENTCLI_SCROLLBACK_MIN, AGENTCLI_SCROLLBACK_MAX)}),
         ("agentcli_max_iterations",
          {"bounds": (AGENTCLI_MAX_ITERATIONS_MIN, AGENTCLI_MAX_ITERATIONS_MAX)}),
+        ("provider_catalog_refresh_hours",
+         {"bounds": (PROVIDER_CATALOG_REFRESH_HOURS_MIN, PROVIDER_CATALOG_REFRESH_HOURS_MAX)}),
     )
     for key, kwargs in int_checks:
         if key in patchable:
@@ -2305,12 +2312,22 @@ async def _validated_settings_patch(
                     400, rid, key="configuredProviderRequired", params={"field": pkey},
                 )
 
-    if patchable.get("decision_provider_id"):
-        from .agentcli import _get_secret_store
-        provider_store = await _get_secret_store(hass)
-        if provider_store.resolve(patchable["decision_provider_id"], purpose="decision") is None:
-            return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
-                            key="configuredProviderRequired", params={"field": "decision_provider_id"})
+    for decision_key in ("decision_provider_id", "decision_provider_default_id"):
+        if patchable.get(decision_key):
+            from .agentcli import _get_secret_store
+            provider_store = await _get_secret_store(hass)
+            if provider_store.resolve(patchable[decision_key], purpose="decision") is None:
+                return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
+                                key="configuredProviderRequired", params={"field": decision_key})
+    # The selected default and the account in use move together: using an account
+    # selects it, and re-selecting while one is in use switches the one in use.
+    # Turning the provider off (decision_provider_id null) keeps the selection.
+    current = data.store.get_settings()
+    if patchable.get("decision_provider_id") and "decision_provider_default_id" not in patchable:
+        patchable["decision_provider_default_id"] = patchable["decision_provider_id"]
+    elif (patchable.get("decision_provider_default_id") and "decision_provider_id" not in patchable
+            and current.decision_provider_id):
+        patchable["decision_provider_id"] = patchable["decision_provider_default_id"]
     if (patchable.get("decision_shadow_enabled") or patchable.get("voice_agent_routing_mode") == "hybrid"
             or patchable.get("agentcli_routing_mode") == "hybrid"
             or any(patchable.get(key) in ("observe", "advise") for key in TOOL_ROUTING_SETTINGS.values())):
@@ -2881,6 +2898,8 @@ class PhoenixAdminWipeView(PhoenixView):
                         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
                             if getattr(settings, key) == "hybrid":
                                 provider_patch[key] = "off"
+                    if settings.decision_provider_default_id:
+                        provider_patch["decision_provider_default_id"] = None
                     if provider_patch:
                         await data.store.async_patch_settings(**provider_patch)
 

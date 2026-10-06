@@ -54,9 +54,19 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     return () => { mounted.current = false; pendingGeneration.current++; };
   }, []);
 
+  // Selecting an account makes it the default. While the provider is in use the
+  // server moves the account in use with it, so the radio group never disagrees
+  // with what is actually used.
   function selectAccount(id: string) {
     selectionVersion.current++;
-    onChange("decision_provider_id", id);
+    onChange("decision_provider_default_id", id);
+  }
+
+  // Using the provider is a separate switch from which account is the default.
+  // Off clears only the account in use; the default stays selected.
+  function setInUse(on: boolean) {
+    selectionVersion.current++;
+    onChange("decision_provider_id", on ? defaultId : "");
   }
 
   async function editModel(account: AgentCliInstance) {
@@ -121,24 +131,48 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     finally { if (mounted.current) setBusy(false); }
   }
 
-  const selectedAccountMissing = accountsLoaded && !!settings.decision_provider_id && !accounts.some(account => account.id === settings.decision_provider_id);
+  const hasAccounts = accounts.length > 0;
+  // One account must always be selected while any exists. The stored default can
+  // be absent (older installs, or the default account was removed), so the first
+  // account is selected for the operator rather than leaving the group empty.
+  const storedDefault = settings.decision_provider_default_id || settings.decision_provider_id || "";
+  const defaultId = accounts.some(account => account.id === storedDefault) ? storedDefault : (accounts[0]?.id ?? "");
+  // Until the accounts have loaded, show what the setting says rather than
+  // claiming the provider is off; a failed read leaves the switch locked.
+  const inUse = accountsLoaded
+    ? hasAccounts && !!settings.decision_provider_id && accounts.some(account => account.id === settings.decision_provider_id)
+    : !!settings.decision_provider_id;
+  useEffect(() => {
+    if (accountsLoaded && hasAccounts && !saving && defaultId && defaultId !== settings.decision_provider_default_id) {
+      onChange("decision_provider_default_id", defaultId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountsLoaded, hasAccounts, defaultId, settings.decision_provider_default_id, saving]);
 
   return <div className="routing-provider-section">
     <p className="agentcli-settings-hint" id="routing-provider-hint">{t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") })}</p>
-    <div className="agentcli-settings-providers" role="group" aria-label={t("routing.decisionAccount")}
+    <div className="toggle-row toggle-row-plain">
+      <div className="toggle-label">
+        <span id="routing-use-label">{t("routing.useProvider")}</span>
+        <small>{hasAccounts ? t("routing.useProviderHelp") : t("routing.useProviderNone")}</small>
+      </div>
+      <label className={`toggle-switch${saving || !hasAccounts || !accountsLoaded ? " disabled" : ""}`}>
+        <BusyInput type="checkbox" aria-labelledby="routing-use-label"
+          checked={inUse} busy={saving || busy} disabled={!hasAccounts || !accountsLoaded}
+          onChange={event => setInUse(event.target.checked)} />
+        <span className="toggle-switch-track" />
+      </label>
+    </div>
+    <div className="agentcli-settings-providers" role="radiogroup" aria-label={t("routing.decisionAccount")}
       aria-describedby="routing-provider-hint">
-      <BusyButton type="button" className="btn btn-secondary routing-account-choice"
-        aria-pressed={!settings.decision_provider_id || selectedAccountMissing}
-        busy={saving || busy} onClick={() => selectAccount("")}>
-        {t("routing.localOnly")}
-      </BusyButton>
       {accounts.map(account => <div className="agentcli-settings-provider" key={account.id}>
         <div className="agentcli-settings-provider-main">
-        <BusyButton type="button" className="btn btn-secondary routing-account-choice"
-          aria-pressed={account.id === settings.decision_provider_id}
-          busy={saving || busy} onClick={() => selectAccount(account.id)}>
+        <label className="routing-account-choice">
+          <BusyInput type="radio" name="decision-default-account"
+            checked={account.id === defaultId} busy={saving || busy}
+            onChange={() => selectAccount(account.id)} />
           <span className="agentcli-settings-provider-head">{account.name}</span>
-        </BusyButton>
+        </label>
         {editing === account.id ? <div className="agentcli-settings-model-edit">
           <BusySelect className="input input-auto" value={modelDraft} autoFocus
             aria-label={t("routing.accountModel", { name: account.name })}
@@ -197,10 +231,11 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       completeLabel={t("settings.agentcliDone")} addingLabelKey="settings.agentcliAdding"
       onCreated={async instance => {
         if (!mounted.current) return;
-        if (selectionVersion.current === currentSelectionVersion) selectAccount(instance.id);
+        // A first account is selected and put in use, as adding it always did.
+        if (selectionVersion.current === currentSelectionVersion) onChange("decision_provider_id", instance.id);
         await load();
       }} />}
-    {settings.decision_provider_id && <details className="routing-disclosure">
+    {inUse && <details className="routing-disclosure">
       <summary>{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor="routing-decision-timeout">
         <span>{t("routing.decisionBudget")}</span>

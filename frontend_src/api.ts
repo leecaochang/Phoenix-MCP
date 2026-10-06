@@ -489,7 +489,6 @@ export interface AgentCliChatBody {
   user?: string;
   continue?: boolean;
   // One-turn Home-focused override. Valid only alongside a new user message.
-  home_focus_bypass?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options?: Record<string, any>;
 }

@@ -174,3 +174,15 @@ describe("VoiceAgentSettings", () => {
   });
 
 });
+
+describe("VoiceAgentSettings layout", () => {
+  it("puts routing statistics at the bottom of the card", async () => {
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-access-key" }]);
+    getAgentCliProviders.mockResolvedValue({ instances: [] });
+    const { container } = render(<VoiceAgentSettings settings={settings(FULL)} onChange={vi.fn()} saving={false} />);
+    await screen.findByText("Routing statistics");
+    const stats = container.querySelector("details") as HTMLElement;
+    expect(stats.textContent).toContain("Routing statistics");
+    expect((stats.closest(".card") as HTMLElement).lastElementChild).toBe(stats);
+  });
+});

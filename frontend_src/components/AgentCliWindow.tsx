@@ -43,7 +43,6 @@ type ChatEntry =
   | { kind: "progress"; id: string; message: string; activity?: boolean }
   | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; checking?: boolean }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
-  | { kind: "focus_declined"; prompt: string }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
       rateLimit?: ProviderRateLimit };
 
@@ -1044,7 +1043,7 @@ export function AgentCliWindow({
   // that paused at the round-cap checkpoint (mode "continue", no new user
   // message; the model continues from the existing conversation).
   const runTurn = useCallback(async (
-    mode: "user" | "continue" | "bypass",
+    mode: "user" | "continue",
     text: string,
     memoryOverride?: unknown[],
   ) => {
@@ -1070,7 +1069,6 @@ export function AgentCliWindow({
     const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines);
     const sentLen = sentMessages.length;
     let newMessages: unknown[] = [];
-    let focusDeclined = false;
     const ac = new AbortController();
     abortRef.current = ac;
 
@@ -1120,7 +1118,6 @@ export function AgentCliWindow({
           messages: sentMessages,
           log_conversation_id: getLogConversationId(sentMessages.length > 0, persistenceOwner),
           ...(mode === "continue" ? { continue: true } : { user: text }),
-          ...(mode === "bypass" ? { home_focus_bypass: true } : {}),
           options: buildOptions(kind, options, caps),
         },
         (name, payload) => {
@@ -1208,7 +1205,7 @@ export function AgentCliWindow({
                        ? p.message_params as Record<string, string | number> : undefined });
               break;
             case "focus_declined":
-              focusDeclined = true;
+              // The refusal text is the whole response; nothing more to show.
               break;
             case "continue_required":
               // The turn paused at the round-cap checkpoint. Show the
@@ -1259,7 +1256,6 @@ export function AgentCliWindow({
         }
         // Finalize the turn: fold live entries into the turn history, then trim.
         const entries = stripActivity(liveRef.current);
-        if (focusDeclined && text) entries.push({ kind: "focus_declined", prompt: text });
         const turn: Turn = { entries, messages: newMessages, lines: countLines(entries) };
         setTurns((prev) => trimTurns([...prev, turn], scrollbackLines));
         setLive([]);
@@ -1270,18 +1266,6 @@ export function AgentCliWindow({
       }
     }
   }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
-
-  const answerAnyway = useCallback((prompt: string) => {
-    if (sending || !prompt) return;
-    const latest = turns[turns.length - 1];
-    if (!latest || latest.entries[latest.entries.length - 1]?.kind !== "focus_declined") return;
-    const priorMemory = memoryMessages(turns.slice(0, -1), scrollbackLines);
-    // Keep the refusal visible, but remove its provider messages before this
-    // retry and every later turn so the model never sees its own refusal again.
-    setTurns((prev) => prev.map((turn, index) =>
-      index === prev.length - 1 ? { ...turn, messages: [] } : turn));
-    void runTurn("bypass", prompt, priorMemory);
-  }, [sending, turns, scrollbackLines, runTurn]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -1895,9 +1879,7 @@ export function AgentCliWindow({
             {displayed.map((e, i) => (
               <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps}
                         onResolve={resolveApproval} onReview={openReview}
-                        onAnswerAnyway={answerAnyway}
-                        showAnswerAnyway={e.kind === "focus_declined"
-                          && i === displayed.length - 1 && !sending} />
+                      />
             ))}
             {sending && (
               <div className="agentcli-working" role="status" aria-live="polite">
@@ -2088,15 +2070,13 @@ function CopyResponseButton({ text }: { text: string }) {
 }
 
 function ChatItem({
-  entry, verbose, showTs, onResolve, onReview, onAnswerAnyway, showAnswerAnyway,
+  entry, verbose, showTs, onResolve, onReview,
 }: {
   entry: ChatEntry;
   verbose: boolean;
   showTs: boolean;
   onResolve: (id: string, approve: boolean) => void;
   onReview: (approvalId: string) => void;
-  onAnswerAnyway: (prompt: string) => void;
-  showAnswerAnyway: boolean;
 }) {
   // Wall-clock label under a message bubble; entries without a ts (restored
   // from a session transcript) show none.
@@ -2204,15 +2184,6 @@ function ChatItem({
       );
     case "notice":
       return <div className="agentcli-notice">{serverText(entry.code, entry.message, entry.messageParams)}</div>;
-    case "focus_declined":
-      return showAnswerAnyway ? (
-        <div className="agentcli-focus-action">
-          <button type="button" className="btn btn-outline btn-sm"
-                  onClick={() => onAnswerAnyway(entry.prompt)}>
-            {t("agentchat.answerAnyway")}
-          </button>
-        </div>
-      ) : null;
     case "error":
       return <div className="agentcli-error">{
         serverText(entry.code, entry.message, entry.messageParams, entry.rateLimit)

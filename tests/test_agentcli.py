@@ -2405,41 +2405,14 @@ async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
     kwargs = rat.call_args.kwargs
     assert kwargs["conversation_style"] == "warm"
     assert kwargs["detail_level"] == "detailed"
-    assert kwargs["home_focused"] is (mode != "bypass")
-    assert kwargs["routing_language"] == ("en" if mode == "new" else None)
+    # A client-supplied bypass flag is ignored: Home-focused mode has no override.
+    assert kwargs["home_focused"] is True
+    assert kwargs["routing_language"] == ("en" if mode in ("new", "bypass") else None)
     assert kwargs["messages"] == [
         {"role": "user", "content": "earlier"},
         {"role": "assistant", "content": "retained"},
         *([] if mode == "continue" else [{"role": "user", "content": "hi"}]),
     ]
-
-
-@pytest.mark.asyncio
-async def test_chat_view_rejects_focus_bypass_without_new_message(hass):
-    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
-
-    data = MagicMock(ready=True, shutting_down=False)
-    data.store.get_settings.return_value = GlobalSettings()
-    access_key = MagicMock(id="t1")
-    access_key.is_valid.return_value = True
-    data.store.get_access_key_by_id.return_value = access_key
-    store = MagicMock()
-    store.resolve.return_value = ProviderConfig(
-        kind="claude", model="m", base_url="https://x", api_key="k",
-    )
-    view = PhoenixAgentCliChatView()
-    view.hass = hass
-    hass.data[agentcli.DOMAIN] = data
-    body = json.dumps({
-        "access_key_id": "t1", "instance_id": "i1", "continue": True,
-        "messages": [{"role": "user", "content": "hi"}],
-        "home_focus_bypass": True,
-    }).encode()
-    with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
-               AsyncMock(return_value=store)):
-        response = await view.post(_make_chat_request(body))
-    assert response.status == 400
-    assert json.loads(response.text)["message_key"] == "adminError.homeFocusBypassNewMessage"
 
 
 @pytest.mark.asyncio
@@ -4456,3 +4429,65 @@ async def test_provider_validation_refuses_value_error_without_secret_echo(kind)
     assert message == "Invalid provider connection settings."
     assert "private" not in message
     session.get.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_deleting_the_default_decision_account_passes_the_default_on_but_stays_off(hass, access_key_store):
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.data import PhoenixData
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    store = agentcli.AgentCliStore(AsyncMock())
+    first = await store.add("typesafe", {"api_key": "k1", "model": "jev-latest"})
+    second = await store.add("typesafe", {"api_key": "k2", "model": "jev-latest"})
+    await access_key_store.async_patch_settings(decision_provider_id=first, decision_provider_default_id=first)
+    delete = agentcli.PhoenixAgentCliProviderView(); delete.hass = hass
+    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
+        assert (await delete.delete(_admin_request(), instance_id=first)).status == 200
+    settings = access_key_store.get_settings()
+    # One account must stay selected while any exists; using it is a separate switch.
+    assert settings.decision_provider_default_id == second
+    assert settings.decision_provider_id is None
+    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
+        assert (await delete.delete(_admin_request(), instance_id=second)).status == 200
+    assert access_key_store.get_settings().decision_provider_default_id is None
+
+
+def test_older_settings_with_only_an_active_decision_account_select_it_as_default():
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    loaded = GlobalSettings.from_dict({"decision_provider_id": "abc"})
+    assert loaded.decision_provider_default_id == "abc"
+    assert GlobalSettings.from_dict({}).decision_provider_default_id is None
+    off = GlobalSettings.from_dict({"decision_provider_default_id": "abc", "decision_provider_id": None})
+    assert off.decision_provider_default_id == "abc" and off.decision_provider_id is None
+
+
+@pytest.mark.asyncio
+async def test_scheduled_catalog_refresh_honours_the_operator_settings(hass, access_key_store):
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.data import PhoenixData
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    store = agentcli.AgentCliStore(AsyncMock())
+    fresh = await store.add("claude", {"api_key": "a"})
+    stale = await store.add("deepseek", {"api_key": "b"})
+    new = await store.add("groq", {"api_key": "c"})
+    now = agentcli.utcnow()
+    await store.set_catalog(fresh, ["m"], {}, (now - timedelta(hours=2)).isoformat())
+    await store.set_catalog(stale, ["m"], {}, (now - timedelta(hours=30)).isoformat())
+
+    async def refreshed(**settings):
+        await access_key_store.async_patch_settings(**settings)
+        with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
+             patch.object(agentcli, "async_refresh_catalog", AsyncMock()) as refresh:
+            await agentcli.async_refresh_all_catalogs(hass)
+        return {call.args[1] for call in refresh.await_args_list}
+
+    # Default: every 24 hours, so only the 30-hour-old catalogue and the missing one.
+    assert await refreshed() == {stale, new}
+    # A longer period leaves the stale one alone, but a missing catalogue is never optional.
+    assert await refreshed(provider_catalog_refresh_hours=48) == {new}
+    # The shortest period (6 hours) still leaves a 2-hour-old catalogue alone.
+    assert await refreshed(provider_catalog_refresh_hours=6) == {stale, new}
+    # Checks off: only the account that has no catalogue yet.
+    assert await refreshed(provider_catalog_refresh_enabled=False, provider_catalog_refresh_hours=6) == {new}

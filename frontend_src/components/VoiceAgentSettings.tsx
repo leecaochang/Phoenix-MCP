@@ -177,7 +177,6 @@ export function VoiceAgentSettings({
 
       {!companion && <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
         onChange={value => onChange("voice_agent_routing_mode", value)} saving={saving} />}
-      <RoutingStatistics surface="voice" />
 
       <ConversationBehaviorControls
         surface={t("settings.voiceCard")}
@@ -216,6 +215,8 @@ export function VoiceAgentSettings({
           )}
         </div>
       )}
+
+      <RoutingStatistics surface="voice" />
 
       {showSetup && (
         <VoiceAgentSetupModal

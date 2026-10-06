@@ -2636,7 +2636,6 @@ select.input {
   font-size: var(--phx-agentcli-text-size, 13px);
 }
 .agentcli-approval-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.agentcli-focus-action { display: flex; justify-content: flex-start; margin: -2px 0 8px; }
 .agentcli-approval-status { margin-top: 4px; font-size: inherit; color: var(--phx-text-2); }
 /* The admin's rejection reason or the executor's failure detail; selectable so
    it can be copied out of the transcript. */
@@ -2789,8 +2788,8 @@ select.input {
 
 /* Routing keeps switches and accounts visible; connection timing expands in place. */
 .command-routing-settings .agentcli-settings-hint { line-height: 1.5; }
-.routing-account-choice { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; background: transparent; color: var(--phx-text); border: 1px solid var(--phx-border); }
-.routing-account-choice[aria-pressed="true"] { background: var(--phx-accent-lt); color: var(--phx-accent); border-color: var(--phx-accent); }
+.routing-account-choice { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; color: var(--phx-text); }
+.routing-account-choice input[type="radio"] { accent-color: var(--phx-accent); flex: none; }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
 .routing-disclosure { border-top: 1px solid var(--phx-divider); margin-top: 12px; }
