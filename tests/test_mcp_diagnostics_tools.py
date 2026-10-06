@@ -224,6 +224,80 @@ class TestGetAutomationTraces:
         assert outcome == "not_found"
 
 
+class TestTraceScopeAndScripts:
+    """Real HA traces: a readable run must not reveal what it saw of hidden entities."""
+
+    async def _setup(self, hass):
+        from homeassistant.setup import async_setup_component
+        assert await async_setup_component(hass, "automation", {"automation": [{
+            "id": "vault_watch", "alias": "Vault watch",
+            "triggers": [{"trigger": "state", "entity_id": "binary_sensor.vault"}],
+            "actions": [{"variables": {"seen": "{{ trigger.to_state.state }} on binary_sensor.vault"}}],
+        }, {
+            "id": "porch_watch", "alias": "Porch watch",
+            "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+            "actions": [{"variables": {"seen": "{{ trigger.to_state.state }}"}}],
+        }]})
+        assert await async_setup_component(hass, "script", {"script": {
+            "porch_lights": {"sequence": [{"variables": {"done": True}}]}}})
+        await hass.async_block_till_done()
+
+    def _key(self):
+        return _access_key(permissions=PermissionTree(domains={
+            "automation": PermissionNode(state="GREEN"), "script": PermissionNode(state="GREEN"),
+            "binary_sensor": PermissionNode(state="GREEN"),
+        }, entities={"binary_sensor.vault": PermissionNode(state="RED")}), cap_traces="allow")
+
+    async def _run(self, hass, entity_id, name):
+        hass.states.async_set(entity_id, "on", {"friendly_name": name, "access_token": "secret-value"})
+        await hass.async_block_till_done()
+
+    async def test_hidden_trigger_state_is_redacted_from_a_readable_run(self, hass):
+        await self._setup(hass)
+        await self._run(hass, "binary_sensor.vault", "Vault door")
+        listed = _json((await _call("get_automation_traces", {"automation_id": "automation.vault_watch"}, self._key(), hass))[0])
+        assert listed["count"] == 1
+        content, outcome, _ = await _call("get_automation_traces", {
+            "automation_id": "automation.vault_watch", "run_id": listed["traces"][0]["run_id"]}, self._key(), hass)
+        assert outcome == "allowed"
+        text = content["content"][0]["text"]
+        assert "Vault door" not in text and "binary_sensor.vault" not in text
+        assert "secret-value" not in text
+        assert "<redacted" in text
+
+    async def test_readable_trigger_state_survives_but_secrets_do_not(self, hass):
+        await self._setup(hass)
+        await self._run(hass, "binary_sensor.porch", "Porch motion")
+        listed = _json((await _call("get_automation_traces", {"automation_id": "automation.porch_watch"}, self._key(), hass))[0])
+        content, _, _ = await _call("get_automation_traces", {
+            "automation_id": "automation.porch_watch", "run_id": listed["traces"][0]["run_id"]}, self._key(), hass)
+        text = content["content"][0]["text"]
+        assert "Porch motion" in text and "binary_sensor.porch" in text
+        assert "secret-value" not in text
+
+    async def test_script_traces_are_readable_by_script_entity_id(self, hass):
+        await self._setup(hass)
+        await hass.services.async_call("script", "porch_lights", blocking=True)
+        content, outcome, _ = await _call("get_automation_traces", {"automation_id": "script.porch_lights"}, self._key(), hass)
+        assert outcome == "allowed"
+        body = _json(content)
+        assert (body["domain"], body["script_id"], body["count"]) == ("script", "porch_lights", 1)
+
+    async def test_never_run_and_disabled_automations_explain_an_empty_list(self, hass):
+        await self._setup(hass)
+        body = _json((await _call("get_automation_traces", {"automation_id": "automation.porch_watch"}, self._key(), hass))[0])
+        assert body["count"] == 0 and "never run" in body["diagnosis"]
+        await hass.services.async_call("automation", "turn_off", {"entity_id": "automation.porch_watch"}, blocking=True)
+        body = _json((await _call("get_automation_traces", {"automation_id": "automation.porch_watch"}, self._key(), hass))[0])
+        assert "disabled" in body["diagnosis"]
+
+    async def test_hidden_script_is_not_found(self, hass):
+        await self._setup(hass)
+        key = _access_key(permissions=PermissionTree(domains={"automation": PermissionNode(state="GREEN")}), cap_traces="allow")
+        _, outcome, _ = await _call("get_automation_traces", {"automation_id": "script.porch_lights"}, key, hass)
+        assert outcome == "not_found"
+
+
 class TestTraceStorageShapes:
     """HA 2026.7 replaced the per-automation dict with TraceBuckets.
 

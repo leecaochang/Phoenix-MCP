@@ -237,3 +237,34 @@ def test_diagnostics_escape_names_and_cap_findings():
     error = unknown_argument_error("get_dashboard_config", mistakes)
     assert error.count("Unknown argument") == 8
     assert len(error) < 2000
+
+
+async def test_misspelt_optional_argument_on_any_tool_is_reported(hass):
+    hass.states.async_set('light.kitchen', 'on', {})
+    key = access_key(cap_search='allow')
+    result, outcome, _ = await _call_tool('search_entities', {'query': 'kitchen', 'limt': 5}, key, hass, MagicMock())
+    assert outcome == 'invalid_request'
+    assert 'Unknown argument "limt". Use limit.' in result['content'][0]['text']
+    result, outcome, _ = await _call_tool('search_entities', {'query': 'kitchen', 'unrelated_extra': 5}, key, hass, MagicMock())
+    assert outcome == 'allowed'
+
+
+async def test_generic_near_miss_never_precedes_capability_denial(hass):
+    result, outcome, _ = await _call_tool('get_logs', {'limt': 5}, access_key(cap_log_read='deny'), hass, MagicMock())
+    assert outcome == 'denied'
+    assert 'Valid parameters' not in result['content'][0]['text']
+    result, outcome, _ = await _call_tool(
+        'get_phoenix_diagnostics', {'limt': 5}, access_key(cap_log_read='allow', cap_diagnostics='deny'), hass, MagicMock())
+    assert outcome == 'denied'
+
+
+def test_native_tool_transposition_is_reported():
+    error = unknown_argument_error('intent__HassTurnOn', {'nmae': 'Kitchen'})
+    assert error and 'Use name.' in error
+
+
+def test_every_declared_parameter_is_its_own_valid_spelling():
+    from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
+    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS):
+        properties = definition['inputSchema'].get('properties', {})
+        assert unknown_argument_error(definition['name'], {key: None for key in properties}) is None

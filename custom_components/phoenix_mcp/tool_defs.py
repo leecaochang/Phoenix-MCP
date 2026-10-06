@@ -1928,16 +1928,18 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "get_automation_traces",
         "description": (
-            "Get execution traces for an accessible automation, to debug why it did or did not run. "
-            "Without run_id, returns a list of recent run summaries (newest first). With run_id, returns "
-            "that run; set summary true for a condensed view that highlights the error and last step. "
-            "Returns 'not found' if the automation is not accessible."
+            "Get execution traces for an accessible automation or script, to debug why it did or did not run. "
+            "Without run_id, returns a list of recent run summaries (newest first); an empty list comes with a "
+            "diagnosis (disabled, never run, or no retained trace). With run_id, returns that run; set summary "
+            "true for a condensed view that highlights the error and last step. Values recorded for entities "
+            "outside this access key's read scope are redacted. Returns 'not found' if the automation or script "
+            "is not accessible."
         ),
         "cap": "cap_traces",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id."},
+                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id, or a script entity_id (script.x) for script traces."},
                 "run_id": {"type": "string", "description": "Optional specific run to fetch."},
                 "summary": {"type": "boolean", "description": "Condensed view highlighting error and last step.", "default": False},
             },
@@ -2762,14 +2764,14 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "edit_helper",
-        "description": "Update an existing helper's config by its helper_type and helper_id. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only.",
+        "description": "Update an existing helper's config by its helper_type and helper_id. Send only the fields to change: every other stored field keeps its current value, and null clears an optional field. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "helper_type": {"type": "string", "description": "Helper domain, such as input_boolean, counter, timer, zone, tag, or person."},
                 "helper_id": {"type": "string", "description": "The helper id (from list_helpers)."},
-                "config": {"type": "object", "description": "Complete helper configuration to apply."},
+                "config": {"type": "object", "description": "Fields to change, e.g. {\"icon\": \"mdi:sofa\"}. Omitted fields keep their current values; null clears an optional field."},
             },
             "required": ["helper_type", "helper_id", "config"],
         },

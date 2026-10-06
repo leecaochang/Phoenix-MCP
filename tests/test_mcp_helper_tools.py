@@ -386,6 +386,79 @@ class TestConfigFlowHelperCreation:
         assert "live confirmation code" in content["content"][0]["text"]
 
 
+class TestEditHelperKeepsUnnamedFields:
+    """HA rebuilds most storage helpers from the update alone; edits must not reset fields."""
+
+    async def _stored(self, hass, helper_type, helper_id):
+        from custom_components.phoenix_mcp.tools.helper import _read_helper_config
+        return await _read_helper_config(hass, helper_type, helper_id)
+
+    async def test_name_only_edit_keeps_icon_and_initial(self, hass, helper_env, hass_admin_user):
+        created = _json((await _call("create_helper", {"helper_type": "input_boolean", "config": {
+            "name": "Guest", "icon": "mdi:sofa", "initial": True}}, _access_key(), hass))[0])
+        hid = created["helper"]["id"]
+        await hass.async_block_till_done()
+        _, outcome, _ = await _call("edit_helper", {
+            "helper_type": "input_boolean", "helper_id": hid, "config": {"name": "Visitor"}}, _access_key(), hass)
+        assert outcome == "allowed"
+        stored = await self._stored(hass, "input_boolean", hid)
+        assert stored == {"id": hid, "name": "Visitor", "icon": "mdi:sofa", "initial": True}
+
+    async def test_null_clears_an_optional_field(self, hass, helper_env, hass_admin_user):
+        created = _json((await _call("create_helper", {"helper_type": "input_boolean", "config": {
+            "name": "Guest", "icon": "mdi:sofa"}}, _access_key(), hass))[0])
+        hid = created["helper"]["id"]
+        await hass.async_block_till_done()
+        _, outcome, _ = await _call("edit_helper", {
+            "helper_type": "input_boolean", "helper_id": hid, "config": {"icon": None}}, _access_key(), hass)
+        assert outcome == "allowed"
+        stored = await self._stored(hass, "input_boolean", hid)
+        assert stored == {"id": hid, "name": "Guest"}
+
+    async def test_partial_input_number_edit_keeps_its_required_range(self, hass, hass_admin_user):
+        assert await async_setup_component(hass, "input_number", {"input_number": {}})
+        tree = PermissionTree(domains={"input_number": PermissionNode(state="GREEN")})
+        created = _json((await _call("create_helper", {"helper_type": "input_number", "config": {
+            "name": "Target", "min": 5, "max": 30, "step": 0.5}}, _access_key(permissions=tree), hass))[0])
+        hid = created["helper"]["id"]
+        await hass.async_block_till_done()
+        _, outcome, _ = await _call("edit_helper", {
+            "helper_type": "input_number", "helper_id": hid, "config": {"name": "Setpoint"}},
+            _access_key(permissions=tree), hass)
+        assert outcome == "allowed"
+        stored = await self._stored(hass, "input_number", hid)
+        assert stored["name"] == "Setpoint"
+        assert (stored["min"], stored["max"], stored["step"]) == (5, 30, 0.5)
+
+    async def test_schedule_rename_keeps_its_time_blocks(self, hass, hass_admin_user):
+        assert await async_setup_component(hass, "schedule", {"schedule": {}})
+        created = _json((await _call("create_helper", {"helper_type": "schedule", "config": {
+            "name": "Heating", "monday": [{"from": "07:00:00", "to": "09:00:00"}]}}, _access_key(), hass))[0])
+        hid = created["helper"]["id"]
+        await hass.async_block_till_done()
+        _, outcome, _ = await _call("edit_helper", {
+            "helper_type": "schedule", "helper_id": hid, "config": {"name": "Heating plan"}}, _access_key(), hass)
+        assert outcome == "allowed"
+        stored = await self._stored(hass, "schedule", hid)
+        assert stored["name"] == "Heating plan"
+        assert stored["monday"] == [{"from": "07:00:00", "to": "09:00:00"}]
+        # Removing the entity cancels its next-transition timer before teardown.
+        await _call("delete_helper", {"helper_type": "schedule", "helper_id": hid}, _access_key(), hass)
+        await hass.async_block_till_done()
+
+    async def test_approval_diff_shows_the_resulting_whole_item(self, hass, helper_env, hass_admin_user):
+        from custom_components.phoenix_mcp.tools.helper import _build_diff_edit_helper
+        created = _json((await _call("create_helper", {"helper_type": "input_boolean", "config": {
+            "name": "Guest", "icon": "mdi:sofa"}}, _access_key(), hass))[0])
+        hid = created["helper"]["id"]
+        current = await self._stored(hass, "input_boolean", hid)
+        diff = _build_diff_edit_helper(
+            {"helper_type": "input_boolean", "helper_id": hid, "config": {"name": "Visitor"}},
+            _access_key(), hass, current)
+        assert json.loads(diff["before"]) == {"id": hid, "name": "Guest", "icon": "mdi:sofa"}
+        assert json.loads(diff["after"]) == {"id": hid, "name": "Visitor", "icon": "mdi:sofa"}
+
+
 class TestEditDeleteHelper:
     async def test_delete_diff_uses_live_friendly_name(self, hass, helper_env, hass_admin_user):
         created = _json((await _call(
@@ -1714,7 +1787,9 @@ class TestScheduleLifecycle:
         assert [record.action for record in history] == ["delete", "edit", "create"]
         assert history[0].before["tuesday"] == edited_config["tuesday"]
         assert history[1].before["monday"] == initial_config["monday"]
-        assert history[1].after == edited_config
+        # The edit named no monday blocks, so they survive it.
+        assert {key: history[1].after[key] for key in edited_config} == edited_config
+        assert history[1].after["monday"] == initial_config["monday"]
 
         restored_result, outcome, _ = await async_restore_version(
             history[0], "admin-schedule", hass, data,

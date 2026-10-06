@@ -54,10 +54,11 @@ from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
 from .tool_common import _create_registry_mesa_approval
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
-from .tool_input import tool_arguments_error
+from .tool_input import decode_container_strings, tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args, unknown_argument_error
+from .const import UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -7678,6 +7679,23 @@ async def _tool_mesa(
         return await async_call_mesa_tool(mesa_tool_name, args, access_key, hass, data, request_id)
 
 
+_TOOL_DEFS_BY_NAME: dict[str, dict] = {
+    definition["name"]: definition
+    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS)
+}
+
+
+def _tool_capability_denied(tool_name: str, access_key: AccessKeyRecord) -> bool:
+    """Whether a declared capability already refuses this tool for the access key."""
+    tool_def = _TOOL_DEFS_BY_NAME.get(tool_name)
+    if tool_def is None:
+        return False
+    any_caps = _tool_any_caps(tool_def)
+    return any(effective_cap(access_key, cap) == CAP_DENY for cap in _tool_required_caps(tool_def)) or bool(
+        any_caps and all(effective_cap(access_key, cap) == CAP_DENY for cap in any_caps)
+    )
+
+
 async def _call_tool(
     tool_name: str,
     arguments: dict,
@@ -7704,6 +7722,11 @@ async def _call_tool(
         return _tool_error("Forbidden."), "denied", tool_name
     if error := tool_arguments_error(arguments):
         return _tool_error(error), "invalid_request", tool_name
+    decoded = decode_container_strings(tool_name, arguments)
+    if decoded is not arguments:
+        if error := tool_arguments_error(decoded):
+            return _tool_error(error), "invalid_request", tool_name
+        arguments = decoded
     from .const import APPROVAL_TARGETS_KEY
     if APPROVAL_TARGETS_KEY in arguments:
         return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
@@ -7722,6 +7745,12 @@ async def _call_tool(
     if entry is None:
         return _tool_error(f"Unknown tool: {tool_name}"), "denied", tool_name
     handler, wanted, bound = entry
+    # Curated tools diagnose inside their handlers, after their own capability
+    # checks; every other tool is checked here, but never for a denied capability.
+    if (tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+            and not _tool_capability_denied(tool_name, access_key)
+            and (error := unknown_argument_error(tool_name, arguments))):
+        return _tool_error(error), "invalid_request", tool_name
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     from .request_authority import dispatch_request_id
     request_context = dispatch_request_id.set(request_id)

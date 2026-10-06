@@ -42,7 +42,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_DENY, DOMAIN
+from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
@@ -954,6 +954,9 @@ async def _execute_delete_script(
 # not_triggered field in as_short_dict(), so the caller can tell them apart.
 
 
+_TRACE_ENTITY_ID_RE = re.compile(r"[a-z0-9_]+\.[a-z0-9_]+")
+
+
 def _traces_for_automation(bucket: Any) -> list[Any]:
     """Every trace object stored for one automation, newest-shape or legacy."""
     all_traces = getattr(bucket, "all_traces", None)
@@ -982,10 +985,81 @@ def _trace_summary(short: dict) -> dict:
     }
 
 
+def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0) -> Any:
+    """Remove what a readable run recorded about entities this access key cannot read.
+
+    A trace holds live data, not just configuration: trigger variables carry
+    whole State objects, results echo service data, and errors and templates are
+    free text. A State, or a dict shaped like one, for an inaccessible entity is
+    replaced whole, since its attributes would still identify it; inaccessible
+    entity IDs elsewhere are redacted in place, entries keyed by them are
+    dropped, and sensitive keys keep no value.
+    """
+    from homeassistant.core import Context, State  # noqa: PLC0415
+
+    from ..helpers import redact_inaccessible_entity_ids_in_text  # noqa: PLC0415
+    from ..policy_engine import is_sensitive_key, scrub_sensitive_attributes  # noqa: PLC0415
+
+    def readable(entity_id: str) -> bool:
+        return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+
+    if depth > TRACE_SCOPE_MAX_DEPTH:
+        return "<redacted>"
+    if isinstance(value, State):
+        value = scrub_sensitive_attributes(value)
+    elif isinstance(value, Context):
+        value = value.as_dict()
+    if isinstance(value, dict):
+        entity_id = value.get("entity_id")
+        if (isinstance(entity_id, str) and ("state" in value or "attributes" in value)
+                and not readable(entity_id)):
+            return "<redacted>"
+        scoped: dict = {}
+        for key, item in value.items():
+            if isinstance(key, str) and _TRACE_ENTITY_ID_RE.fullmatch(key) and not readable(key):
+                continue
+            scoped[key] = "<redacted>" if is_sensitive_key(key) else _scope_trace(item, access_key, hass, depth + 1)
+        return scoped
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_scope_trace(item, access_key, hass, depth + 1) for item in value]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    text = value if isinstance(value, str) else str(value)
+    if _TRACE_ENTITY_ID_RE.fullmatch(text):
+        return text if readable(text) else "<redacted>"
+    return redact_inaccessible_entity_ids_in_text(text, access_key, hass)
+
+
+def _resolve_trace_target(raw: str, hass: HomeAssistant) -> tuple[str | None, str | None]:
+    """Map an automation/script entity id, or an automation id, to (entity_id, trace key)."""
+    registry = er.async_get(hass)
+    if raw.startswith(("automation.", "script.")):
+        entry = registry.async_get(raw)
+        if entry is None or entry.unique_id is None:
+            return None, None
+        return entry.entity_id, f"{entry.domain}.{entry.unique_id}"
+    for e in registry.entities.values():
+        if e.domain == "automation" and e.unique_id == raw:
+            return e.entity_id, f"automation.{raw}"
+    return None, None
+
+
+def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str, trace_key: str) -> str:
+    """Explain an empty trace list from facts the access key may already read."""
+    state = hass.states.get(entity_id)
+    if entity_id.startswith("automation.") and state is not None and state.state == "off":
+        return "The automation is disabled, so it has not run since it was turned off."
+    if state is not None and state.attributes.get("last_triggered") is None:
+        kind = "automation" if entity_id.startswith("automation.") else "script"
+        return f"The {kind} has never run. Wait for it to run, or run it once, to record a trace."
+    return ("It has run before, but no trace of those runs is retained. Home Assistant keeps only "
+            "the most recent runs, as many as the stored_traces trace option allows (default 5).")
+
+
 async def _tool_get_automation_traces(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: execution traces for an accessible automation."""
+    """MCP tool: execution traces for an accessible automation or script."""
     if effective_cap(access_key, "cap_traces") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_automation_traces"
 
@@ -993,28 +1067,16 @@ async def _tool_get_automation_traces(
     if not raw:
         return _tool_error("Missing required argument: automation_id"), "invalid_request", "get_automation_traces"
 
-    registry = er.async_get(hass)
-    if raw.startswith("automation."):
-        entity_id = raw
-        entry = registry.async_get(entity_id)
-        unique_id = entry.unique_id if entry is not None else None
-    else:
-        unique_id = raw
-        entity_id = None
-        for e in registry.entities.values():
-            if e.domain == "automation" and e.unique_id == raw:
-                entity_id = e.entity_id
-                break
-
+    entity_id, trace_key = _resolve_trace_target(raw, hass)
     # Scope: nonexistent and inaccessible look identical (no oracle).
-    if entity_id is None or unique_id is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
-        return _tool_error("Automation not found."), "not_found", raw
+    if entity_id is None or trace_key is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+        return _tool_error("Automation or script not found."), "not_found", raw
 
     from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
     # An absent DATA_TRACE key means the trace component is not loaded, which would
     # otherwise look like an automation that never ran; it is reported as a warning.
     trace_loaded = DATA_TRACE in hass.data
-    runs: Any = hass.data.get(DATA_TRACE, {}).get(f"automation.{unique_id}", {})
+    runs: Any = hass.data.get(DATA_TRACE, {}).get(trace_key, {})
     summary = bool(args.get("summary"))
     run_id = args.get("run_id")
 
@@ -1023,7 +1085,7 @@ async def _tool_get_automation_traces(
         if trace is None:
             return _tool_error("Trace run not found."), "not_found", raw
         run_body = _trace_summary(trace.as_short_dict()) if summary else trace.as_dict()
-        return _tool_success(json.dumps(run_body, default=str)), "allowed", entity_id
+        return _tool_success(json.dumps(_scope_trace(run_body, access_key, hass), default=str)), "allowed", entity_id
 
     items = sorted(
         (t.as_short_dict() for t in _traces_for_automation(runs)),
@@ -1032,12 +1094,16 @@ async def _tool_get_automation_traces(
     )
     if summary:
         items = [_trace_summary(d) for d in items]
+    domain, item_id = trace_key.split(".", 1)
     body: dict[str, Any] = {
-        "automation_id": unique_id, "entity_id": entity_id, "count": len(items), "traces": items,
+        "domain": domain, f"{domain}_id": item_id, "entity_id": entity_id,
+        "count": len(items), "traces": items,
     }
     if not trace_loaded:
         body["warnings"] = ["The trace component is not loaded; trace history is unavailable."]
-    return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
+    elif not items:
+        body["diagnosis"] = _empty_trace_diagnosis(hass, entity_id, trace_key)
+    return _tool_success(json.dumps(_scope_trace(body, access_key, hass), default=str)), "allowed", entity_id
 
 
 # ---------------------------------------------------------------------------

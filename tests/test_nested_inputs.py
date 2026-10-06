@@ -175,3 +175,59 @@ async def test_dashboard_executor_rechecks_metadata_shape(hass):
     assert outcome == "invalid_request"
     assert result["isError"]
     snapshot.assert_not_called()
+
+
+class TestJsonEncodedContainers:
+    """Weak clients send containers as JSON text; decode only where text is impossible."""
+
+    def test_object_and_array_text_decode_to_their_declared_types(self):
+        from custom_components.phoenix_mcp.tool_input import decode_container_strings
+        decoded = decode_container_strings("call_service", {
+            "service": ' {"domain": "light", "name": "turn_on"}',
+            "targets": '[{"kind": "entity", "ids": ["light.kitchen"]}]',
+        })
+        assert decoded == {
+            "service": {"domain": "light", "name": "turn_on"},
+            "targets": [{"kind": "entity", "ids": ["light.kitchen"]}],
+        }
+        _, error = normalize_tool_args("call_service", decoded)
+        assert error is None
+
+    @pytest.mark.parametrize("tool,arguments", [
+        ("search_entities", {"query": '{"looks": "like json"}'}),
+        ("get_state", {"entity_id": "light.kitchen", "projection": '{"kind": '}),
+        ("get_state", {"entity_id": "light.kitchen", "projection": '["compact"]'}),
+        ("call_service", {"targets": '"[1]"'}),
+        ("unknown_tool", {"projection": '{"kind": "full"}'}),
+    ])
+    def test_text_parameters_and_wrong_shapes_are_left_untouched(self, tool, arguments):
+        from custom_components.phoenix_mcp.tool_input import decode_container_strings
+        assert decode_container_strings(tool, arguments) is arguments
+
+    def test_native_tool_arrays_decode(self):
+        from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
+        from custom_components.phoenix_mcp.tool_input import decode_container_strings
+        name, field = next((d["name"], key) for d in _NATIVE_TOOL_DEFS
+                           for key, schema in d["inputSchema"].get("properties", {}).items()
+                           if schema.get("type") == "array")
+        assert decode_container_strings(name, {field: '["light"]'}) == {field: ["light"]}
+
+    async def test_dispatch_accepts_a_stringified_projection(self, hass):
+        from homeassistant.util.dt import utcnow as now
+        from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+        key = AccessKeyRecord(id="weak", name="weak", access_key_hash="x", created_at=now(), created_by="admin",
+                              permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        hass.states.async_set("light.kitchen", "on", {"brightness": 128})
+        result, outcome, _ = await mcp_view._call_tool(
+            "get_state", {"entity_id": "light.kitchen", "projection": '{"kind": "full"}'}, key, hass, MagicMock())
+        assert outcome == "allowed", result
+        assert '"brightness": 128' in result["content"][0]["text"]
+
+    async def test_decoded_arguments_are_bounded_again(self, hass):
+        deep = "[" * (TOOL_INPUT_MAX_DEPTH + 5) + "]" * (TOOL_INPUT_MAX_DEPTH + 5)
+        result, outcome, _ = await mcp_view._call_tool(
+            "call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": deep},
+            AccessKeyRecord(id="weak", name="weak", access_key_hash="x", created_at=utcnow(), created_by="admin"),
+            hass, MagicMock())
+        assert outcome == "invalid_request"
+        assert "nesting" in result["content"][0]["text"]

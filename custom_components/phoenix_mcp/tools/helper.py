@@ -38,6 +38,7 @@ from homeassistant.util import slugify
 
 from ..const import (
     CAP_DENY,
+    STORAGE_HELPER_MERGING_TYPES,
     STORAGE_HELPER_REQUEST_FIELDS,
     STORAGE_HELPER_TYPES as HELPER_TYPES,
     TEMPLATE_RECOVERY_TYPES,
@@ -1217,6 +1218,21 @@ async def _tool_create_helper(
     return await _execute_create_helper(approval_args, access_key, hass, data)
 
 
+def _edit_helper_update(helper_type: str, before: Any, config: dict) -> dict:
+    """Return the update HA needs so that only the fields the caller named change.
+
+    Most storage collections rebuild the item from the update payload alone, so
+    the stored fields are resent beneath the caller's changes; an explicit null
+    clears an optional field. Zone, tag and person merge in HA itself and receive
+    the caller's fields unchanged.
+    """
+    if helper_type in STORAGE_HELPER_MERGING_TYPES or not isinstance(before, dict):
+        return dict(config)
+    merged = {key: value for key, value in before.items() if key != "id"}
+    merged.update(config)
+    return {key: value for key, value in merged.items() if value is not None}
+
+
 async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: str) -> dict | None:
     """Return a helper's current stored config (for version-history `before`), or None.
 
@@ -1755,6 +1771,7 @@ async def _tool_edit_helper(
     )
     if isinstance(mesa_context, tuple):
         return mesa_context
+    current = await _read_helper_config(hass, helper_type, helper_id)
     approval_args, blocked = await _helper_mesa_approval_gate(
         approval_args,
         access_key,
@@ -1764,7 +1781,7 @@ async def _tool_edit_helper(
         tool_name="edit_helper",
         request_id=request_id,
         client_ip=client_ip,
-        diff_builder=lambda: _build_diff_edit_helper(approval_args, access_key, hass),
+        diff_builder=lambda: _build_diff_edit_helper(approval_args, access_key, hass, current),
     )
     if blocked is not None:
         return blocked
@@ -1798,6 +1815,10 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
         raise ConfigurationRecoveryError("A complete helper safety copy is unavailable; nothing was dispatched.")
     # Private person bindings intentionally remain outside Phoenix storage.
     public = _public_helper_config(helper_type, before) if helper_type == "person" else before
+    update = {k: v for k, v in payload.items() if k != target_field}
+    # Mirror HA's own update rule: merging collections keep unnamed fields, the
+    # rest store exactly the (already merged) update beneath the item id.
+    intended = {**before, **update} if helper_type in STORAGE_HELPER_MERGING_TYPES else {"id": helper_id, **update}
     rid = None
     async with recovery.resource(key):
         rid = await recovery.begin(key, operation, access_key.id, {
@@ -1805,8 +1826,7 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
             "helper_id": helper_id, "config": public,
         }, expected={
             "snapshot_type": "storage_helper", "helper_type": helper_type, "helper_id": helper_id,
-            "config": None if deleting else _public_helper_config(helper_type,
-                {**before, **{k: v for k, v in payload.items() if k != f"{helper_type}_id"}}),
+            "config": None if deleting else _public_helper_config(helper_type, intended),
         })
         try:
             await recovery.mark(rid, "dispatching")
@@ -1903,6 +1923,7 @@ async def _execute_edit_helper(
                 config.get("device_trackers", current.get("device_trackers", []))
             ),
         }
+    config = _edit_helper_update(str(helper_type), before_cfg, config)
     payload = {**config, f"{helper_type}_id": helper_id}
     try:
         item = await _protected_storage_helper_write(args, access_key, hass, data, before_cfg, payload)
@@ -2066,15 +2087,25 @@ def _build_diff_create_helper(args: dict, access_key: AccessKeyRecord, hass: Hom
     }
 
 
-def _build_diff_edit_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    helper_type = args.get("helper_type")
+def _build_diff_edit_helper(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, current: dict | None = None,
+) -> dict:
+    helper_type = str(args.get("helper_type"))
     helper_id = str(args.get("helper_id") or "").strip()
     config = dict_arg(args.get("config"))
+    before = None
+    if isinstance(current, dict):
+        # Show the whole resulting item, so unnamed fields visibly survive.
+        before = _public_helper_config(helper_type, current)
+        config = _public_helper_config(helper_type, {
+            **({"id": current["id"]} if "id" in current else {}),
+            **_edit_helper_update(helper_type, current, config),
+        }) if helper_type not in STORAGE_HELPER_MERGING_TYPES else {**before, **config}
     return {
         "kind": "yaml_diff",
         **_summary("edit_helper", helper_type=helper_type, helper_id=helper_id),
         "target": {"type": "helper", "id": helper_id, "label": config.get("name")},
-        "before": None,
+        "before": _truncate(json.dumps(before, indent=2, default=str)) if before is not None else None,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"helper_type": helper_type},
     }

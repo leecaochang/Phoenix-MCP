@@ -45,6 +45,9 @@ STORAGE_HELPER_TYPES = frozenset({
     "input_datetime", "input_button", "counter", "timer", "schedule",
     "zone", "tag", "person",
 })
+# HA merges an update into these stored items; every other storage helper is
+# rebuilt from the update payload alone, so an omitted field would be reset.
+STORAGE_HELPER_MERGING_TYPES = frozenset({"zone", "tag", "person"})
 WS_REQUEST_CONTROL_FIELDS = frozenset({"id", "type"})
 STORAGE_HELPER_REQUEST_FIELDS = WS_REQUEST_CONTROL_FIELDS | frozenset(
     f"{domain}_id" for domain in STORAGE_HELPER_TYPES
@@ -2466,6 +2469,8 @@ UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 # Value-free authoring error projection budgets.
 AUTHORING_MAX_ERRORS = 8
 AUTHORING_MAX_PATH_DEPTH = 8
+# Trace scoping replaces anything nested deeper than this with a sentinel.
+TRACE_SCOPE_MAX_DEPTH = 32
 
 # Tool advice has separate qualification from direct-command execution.
 TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})

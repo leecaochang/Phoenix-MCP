@@ -13,8 +13,7 @@ from .const import (
     UNKNOWN_ARGUMENT_MAX_NAME,
     UNKNOWN_ARGUMENT_PROTECTED_FIELDS,
 )
-from .tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
-from .tool_input import nested_argument_error
+from .tool_input import _PUBLIC_SCHEMAS, nested_argument_error
 
 
 _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
@@ -142,20 +141,22 @@ def _near_parameter(name: str, candidate: str) -> bool:
 
 
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
-    """Diagnose targeted public-name mistakes without rewriting caller input.
+    """Diagnose public-name mistakes without rewriting caller input.
 
-    Callers run it after the capability-deny check (so a denied access key learns
+    Tools with a curated field list get alias-aware diagnostics for those fields,
+    where an ignored argument would silently retarget the call. Every other tool
+    gets the same one-edit near-miss check against all of its declared
+    parameters, so a misspelt optional argument is reported rather than quietly
+    replaced by its default. Unrelated extra arguments stay tolerated. Callers
+    run it after the capability-deny check (so a denied access key learns
     nothing about its arguments) and before an approval is created. It is
     deliberately not a validator for arbitrary nested configuration.
     """
-    protected = UNKNOWN_ARGUMENT_PROTECTED_FIELDS.get(tool)
-    if protected is None:
+    schema = _PUBLIC_SCHEMAS.get(tool)
+    if schema is None:
         return None
-    schema = next(
-        definition["inputSchema"] for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)
-        if definition["name"] == tool
-    )
     properties = schema.get("properties", {})
+    protected = UNKNOWN_ARGUMENT_PROTECTED_FIELDS.get(tool, tuple(properties))
     findings: list[str] = []
 
     def examine(values: dict, declared: dict, fields: tuple[str, ...], prefix: str = "") -> None:

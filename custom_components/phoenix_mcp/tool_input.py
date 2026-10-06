@@ -7,11 +7,47 @@ import json
 from typing import Any
 
 from .const import MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES
-from .tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
+from .tool_defs import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
 
 
 _SCHEMAS = {definition["name"]: definition["inputSchema"]
             for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)}
+_PUBLIC_SCHEMAS = {**_SCHEMAS, **{definition["name"]: definition["inputSchema"]
+                                  for definition in _NATIVE_TOOL_DEFS}}
+_CONTAINER_TYPES = ("object", "array")
+
+
+def decode_container_strings(tool: str, arguments: dict) -> dict:
+    """Accept an object or array argument that a client sent as JSON text.
+
+    Some MCP clients serialize every argument as a string. The published schema
+    stays strictly object/array; a string is decoded only for a top-level
+    parameter that cannot itself be a string, and only when it parses to a
+    declared container type, so text meant as text is never reinterpreted.
+    The caller re-applies the admission bounds to the decoded arguments.
+    """
+    properties = _PUBLIC_SCHEMAS.get(tool, {}).get("properties", {})
+    decoded_arguments: dict | None = None
+    for name, value in arguments.items():
+        schema = properties.get(name)
+        if not isinstance(value, str) or not isinstance(schema, dict):
+            continue
+        kinds = schema.get("type")
+        kinds = [kinds] if isinstance(kinds, str) else kinds
+        if not isinstance(kinds, list) or "string" in kinds:
+            continue
+        wanted = [kind for kind in kinds if kind in _CONTAINER_TYPES]
+        text = value.strip()
+        if not wanted or not text.startswith(("{", "[")):
+            continue
+        try:
+            decoded = json.loads(text)
+        except (ValueError, RecursionError):
+            continue
+        if any(_matches_type(decoded, kind) for kind in wanted):
+            decoded_arguments = decoded_arguments if decoded_arguments is not None else dict(arguments)
+            decoded_arguments[name] = decoded
+    return arguments if decoded_arguments is None else decoded_arguments
 
 
 def tool_arguments_error(arguments: object) -> str | None:
