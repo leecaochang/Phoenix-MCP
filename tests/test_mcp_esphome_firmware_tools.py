@@ -337,9 +337,10 @@ class TestInstall:
     async def test_a_caller_supplied_port_is_ignored(self, hass, esphome_dir):
         """Phoenix MCP only ever flashes over the air; a serial path is not reachable."""
         builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
-        await _run("install_esphome_firmware", {"file": FILE, "port": "/dev/ttyUSB0"},
-                   _flash_access_key(), hass, builder)
-        assert builder.args_for("firmware/install")["port"] == "OTA"
+        content, outcome, _ = await _run("install_esphome_firmware", {"file": FILE, "port": "/dev/ttyUSB0"},
+                                         _flash_access_key(), hass, builder)
+        assert outcome == "invalid_request" and 'Unknown argument "port"' in content["content"][0]["text"]
+        assert builder.calls == []
 
     async def test_executor_rechecks_for_a_build_started_during_the_window(self, hass, esphome_dir):
         """An approval can sit for minutes; the world moves while it does."""
@@ -760,7 +761,7 @@ class TestJobLookupByFile:
         content, outcome, _ = await _run(
             "get_esphome_job", {}, _yaml_access_key(), hass, builder)
         assert outcome == "invalid_request"
-        assert "lookup must contain kind job or file" in content["content"][0]["text"]
+        assert "Missing required argument: lookup." in content["content"][0]["text"]
 
     async def test_an_explicit_job_id_still_wins(self, hass, esphome_dir):
         # Passing both must not silently prefer the newest job for the file.
@@ -808,7 +809,7 @@ class TestJobLookupByFile:
             "cancel_esphome_job", {"file": FILE}, _yaml_access_key(), hass, builder)
 
         assert outcome == "invalid_request"
-        assert "job_id is required" in content["content"][0]["text"]
+        assert 'Unknown argument "file"' in content["content"][0]["text"]
         assert builder.calls == []
 
 

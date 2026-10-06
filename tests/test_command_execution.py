@@ -232,7 +232,8 @@ async def test_external_tool_cannot_supply_private_local_plan(hass, local_home):
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, outcome, _ = await mcp_view._tool_call_service(args, access_key, hass, data)
-    assert outcome == "denied"
+    # Refused as an unknown argument before the dedicated private-plan guard.
+    assert outcome == "invalid_request"
     call.assert_not_called()
 
 

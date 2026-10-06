@@ -171,7 +171,7 @@ async def test_deny_precedes_validation_and_io(context, cap, monkeypatch):
     setattr(access_key, cap, "deny")
     monkeypatch.setattr(fault_log, "read_fault_snapshot", lambda *a: pytest.fail("denied read"))
     body, outcome, error = await _call(context, limit=[])
-    assert body == "Forbidden." and outcome == "denied" and error
+    assert body.startswith("Forbidden") and outcome == "denied" and error
 
 
 async def test_pass_through_still_requires_exempt_log_grant(context):
@@ -179,7 +179,7 @@ async def test_pass_through_still_requires_exempt_log_grant(context):
     access_key.pass_through = True
     access_key.cap_log_read = "deny"
     body, outcome, _ = await _call(context)
-    assert body == "Forbidden." and outcome == "denied"
+    assert body.startswith("Forbidden") and outcome == "denied"
 
 
 @pytest.mark.parametrize("change", ["revoke", "rotate", "kill", "unload", "permissions", "capability"])

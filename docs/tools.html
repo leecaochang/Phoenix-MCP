@@ -26,6 +26,7 @@
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
           <p class="lede">Search all 169 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 146 additional scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
+          <p>Every tool accepts only the parameters listed for it. An unknown parameter, a missing required one, or a value of the wrong type or outside its documented range is refused with the parameter named, never ignored or quietly adjusted. A call that a missing capability blocks is refused before its parameters are checked.</p>
         </header>
 
         <div class="tool-toolbar" role="search">

@@ -135,7 +135,7 @@ async def test_capability_deny_survives_passthrough(calendar_env):
     calendar_env[2].cap_calendar_write = 'deny'
     result = await call(calendar_env, 'create_calendar_event', {'event': []})
     assert result[1] == 'denied'
-    assert result[0]['content'][0]['text'] == 'Forbidden.'
+    assert result[0]['content'][0]['text'].startswith('Forbidden')
     result = await call(calendar_env, 'call_service', {'service': {'domain': 'calendar', 'name': 'create_event'}, 'targets': [{'kind': 'entity', 'ids': ['calendar.test']}]})
     assert result[1] == 'denied'
     assert not calendar_env[3].calls

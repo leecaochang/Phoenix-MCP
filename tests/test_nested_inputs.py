@@ -109,14 +109,19 @@ def test_service_batch_limits(tool, field):
 @pytest.mark.parametrize("tool,args", [
     ("get_logbook", {}),
     ("call_service", {"service": {"domain": "light", "name": "turn_on", "data": {"custom": {"nested": [1, None]}}}}),
-    ("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": None, "categories": {"automation": None}}, "outer_extra": {"anything": 1}}),
-    ("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": "Updated"}, "projection": {"unrelated": True}, "change": {"kind": "remove", "unused": True}}),
+    ("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": None, "categories": {"automation": None}}}),
     ("edit_energy_config", {"operation": "set_source", "target": {"kind": "source", "source_type": "grid"}, "changes": {"number_energy_price": None, "stat_energy_to": None}}),
     ("patch_dashboard", {"changes": [{"path": ["views", 0], "kind": "set", "value": None}]}),
 ])
 def test_documented_absence_null_and_open_data_remain_valid(tool, args):
     _, error = normalize_tool_args(tool, args)
     assert error is None
+
+
+def test_outer_extra_fields_are_refused_by_name():
+    for extra in ({"outer_extra": {"anything": 1}}, {"projection": {"unrelated": True}}):
+        _, error = normalize_tool_args("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": "Updated"}, **extra})
+        assert error and f'Unknown argument "{next(iter(extra))}"' in error
 
 
 def _deep_value():

@@ -139,16 +139,16 @@ def _near_parameter(name: str, candidate: str) -> bool:
 
 
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
-    """Diagnose public-name mistakes without rewriting caller input.
+    """Refuse undeclared top-level arguments, naming the intended one when it is a near miss.
 
-    Tools with a curated field list get alias-aware diagnostics for those fields,
-    where an ignored argument would silently retarget the call. Every other tool
-    gets the same one-edit near-miss check against all of its declared
-    parameters, so a misspelt optional argument is reported rather than quietly
-    replaced by its default. Unrelated extra arguments stay tolerated. Callers
-    run it after the capability-deny check (so a denied access key learns
-    nothing about its arguments) and before an approval is created. It is
-    deliberately not a validator for arbitrary nested configuration.
+    Every tool root is closed (additionalProperties false), as HA's Assist engine
+    already enforces, so an unknown argument is refused rather than silently
+    ignored. Tools with a curated field list get alias-aware suggestions for those
+    fields; every other tool gets the one-edit near-miss check against all of its
+    declared parameters. Retired public forms are left to their migration
+    guidance. Callers run it after the capability-deny check (so a denied access
+    key learns nothing about its arguments) and before an approval is created.
+    It is deliberately not a validator for arbitrary nested configuration.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -161,7 +161,12 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
         for name in values:
             if len(findings) >= UNKNOWN_ARGUMENT_MAX_ERRORS:
                 break
-            if not isinstance(name, str) or name in declared or len(name) > UNKNOWN_ARGUMENT_MAX_NAME:
+            if isinstance(name, str) and name in declared:
+                continue
+            if not isinstance(name, str) or len(name) > UNKNOWN_ARGUMENT_MAX_NAME:
+                # Refused without echoing a name too long or odd to quote.
+                if "An unknown argument was supplied." not in findings:
+                    findings.append("An unknown argument was supplied.")
                 continue
             # Retired public forms keep their more specific migration guidance.
             if not prefix and name in _RETIRED_REPLACEMENTS.get(tool, {}):
@@ -171,11 +176,11 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
             )]
             if not prefix and tool == "patch_dashboard" and name in UNKNOWN_ARGUMENT_ALIASES["url_path"]:
                 candidates = ["target.url_path"]
-            if not candidates:
-                continue
             # JSON quoting prevents control characters from becoming error formatting.
             label = json.dumps(prefix + name, ensure_ascii=True)
-            if len(candidates) == 1:
+            if not candidates:
+                findings.append(f"Unknown argument {label}.")
+            elif len(candidates) == 1:
                 destination = prefix + candidates[0]
                 suffix = " (already supplied; remove the conflicting argument)" if candidates[0] in values else ""
                 findings.append(f"Unknown argument {label}. Use {destination}{suffix}.")

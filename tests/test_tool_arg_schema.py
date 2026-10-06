@@ -248,12 +248,11 @@ def test_all_service_target_cannot_be_mixed_with_narrower_groups(tool):
     )
 
 
-def test_unrelated_unknown_fields_remain_tolerated():
-    normalized, error = normalize_tool_args(
+def test_unrelated_unknown_fields_are_refused():
+    _normalized, error = normalize_tool_args(
         "get_logbook", {"unrelated_future_field": True}
     )
-    assert error is None
-    assert normalized["unrelated_future_field"] is True
+    assert error and 'Unknown argument "unrelated_future_field".' in error
 
 
 def test_remove_device_publishes_only_owner_selection():

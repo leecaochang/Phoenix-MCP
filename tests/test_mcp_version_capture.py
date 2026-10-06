@@ -972,8 +972,8 @@ class TestEntityRegistryWrite:
         assert outcome == "invalid_request"
         assert "Provide at least one of" in content["content"][0]["text"]
 
-    async def test_set_entity_unknown_argument_is_ignored_with_supported_edit(self, hass, env):
-        """Unrelated outer fields do not block a valid supported update."""
+    async def test_set_entity_unknown_argument_is_refused_before_any_edit(self, hass, env):
+        """An unrelated outer field is refused; nothing is written."""
         eid, _area = env
         data, _ = _data()
         content, outcome, _ = await _call_tool(
@@ -984,9 +984,9 @@ class TestEntityRegistryWrite:
             data,
         )
 
-        assert outcome == "allowed"
-        assert json.loads(content["content"][0]["text"])["updated"]["name"] == "Desk Lamp"
-        assert er.async_get(hass).async_get(eid).name == "Desk Lamp"
+        assert outcome == "invalid_request"
+        assert 'Unknown argument "outer_extra"' in content["content"][0]["text"]
+        assert er.async_get(hass).async_get(eid).name != "Desk Lamp"
 
     async def test_set_entity_area_revalidated_after_precheck(self, hass, env):
         """An area deleted during an approval window is not written back."""

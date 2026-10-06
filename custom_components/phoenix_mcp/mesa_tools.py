@@ -122,6 +122,8 @@ def _described_mesa_schema(name: str) -> dict[str, Any]:
     schema = copy.deepcopy(TOOL_SCHEMAS[name])
     for parameter, description in _MESA_PARAM_DESCRIPTIONS.get(name, {}).items():
         schema["properties"][parameter]["description"] = description
+    # Phoenix's copy: a closed root like every other tool.
+    schema.setdefault("additionalProperties", False)
     return schema
 
 

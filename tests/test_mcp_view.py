@@ -1848,9 +1848,8 @@ async def test_get_logs_denied_access_key_never_learns_about_its_own_level():
 
 
 @pytest.mark.asyncio
-async def test_get_logs_wrong_shaped_level_degrades_to_the_default():
-    """A wrong SHAPE is absent (str_arg), not a value to refuse: a message about
-    "True" describes an argument nobody typed."""
+async def test_get_logs_wrong_shaped_level_is_refused_without_echo():
+    """A wrong SHAPE is refused by field name; the message never quotes the value."""
     access_key, _ = _make_access_key(cap_log_read="allow")
     data = _make_data(access_key)
     hass = _make_hass(data)
@@ -1859,7 +1858,8 @@ async def test_get_logs_wrong_shaped_level_degrades_to_the_default():
         "tools/call", 3, {"name": "get_logs", "arguments": {"level": ["INFO"]}},
         access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
-    assert outcome == "allowed"
+    assert outcome == "invalid_request"
+    assert "level must be a string." in json.dumps(res) and "INFO" not in json.dumps(res)
 
 
 def test_get_logs_schema_offers_only_the_collected_levels():

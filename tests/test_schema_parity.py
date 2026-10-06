@@ -62,20 +62,19 @@ CASES = [
     ("set_entity", {"entity_id": LAMP, "changes": {"enabled": None}}, "invalid_request"),
     ("set_entity", {"entity_id": LAMP, "changes": {"nmae": "x"}}, "invalid_request"),
     ("set_entity", {"entity_id": LAMP, "changes": {"categories": {"automation": 5}}}, "invalid_request"),
-    # Known differences, MCP more lenient: out-of-range or mistyped scalars are
-    # clamped or treated as absent instead of refused (Assist refuses them first).
-    ("search_entities", {"query": "kitchen", "limit": 501}, "allowed"),
-    ("search_entities", {"query": "kitchen", "limit": "5"}, "allowed"),
-    ("search_entities", {"query": "kitchen", "offset": -1}, "allowed"),
-    ("search_entities", {"unavailable": "true"}, "allowed"),
+    # Out-of-range and mistyped scalars are refused by name on every route.
+    ("search_entities", {"query": "kitchen", "limit": 501}, "invalid_request"),
+    ("search_entities", {"query": "kitchen", "limit": "5"}, "invalid_request"),
+    ("search_entities", {"query": "kitchen", "offset": -1}, "invalid_request"),
+    ("search_entities", {"unavailable": "true"}, "invalid_request"),
+    ("watch_entity", {"entity_id": LAMP, "timeout": 31}, "invalid_request"),
+    # Every root is closed, so an unknown argument is refused on every route.
+    ("get_state", {"entity_id": LAMP, "projection": {"kind": "compact"}, "verbose": True}, "invalid_request"),
     # Known difference, MCP stricter: projection fields only pair with kind fields,
-    # which the schema does not express.
+    # which the schema states in prose rather than structure (a union would hide
+    # the tool from Gemini).
     ("get_state", {"entity_id": LAMP, "projection": {"kind": "compact", "fields": ["state"]}}, "invalid_request"),
-    # Known difference, Assist stricter: Probatio closes an object that lists
-    # properties, though the root schema leaves additional properties open.
-    ("get_state", {"entity_id": LAMP, "projection": {"kind": "compact"}, "verbose": True}, "allowed"),
 ]
-_ASSIST_STRICTER = {"verbose"}
 
 
 def _schema(tool: str) -> dict:
@@ -92,11 +91,7 @@ def _assist_accepts(tool: str, args: dict) -> bool:
 
 @pytest.mark.parametrize(("tool", "args", "_outcome"), CASES)
 def test_assist_engine_matches_the_advertised_schema(tool, args, _outcome):
-    advertised = Draft202012Validator(_schema(tool)).is_valid(args)
-    if _ASSIST_STRICTER & set(args):
-        assert advertised and not _assist_accepts(tool, args)
-    else:
-        assert _assist_accepts(tool, args) is advertised
+    assert _assist_accepts(tool, args) is Draft202012Validator(_schema(tool)).is_valid(args)
 
 
 def test_assist_defaults_do_not_refuse_an_exception_detail():
@@ -130,6 +125,7 @@ async def test_mcp_route_outcomes(hass, hass_admin_user):
         id=str(uuid.uuid4()), name="parity", access_key_hash="x", created_at=utcnow(), created_by="t",
         permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}), confirm_inline_wait_seconds=0,
         cap_registry_write="confirm", cap_search="allow", cap_registry_read="allow", cap_log_read="allow",
+        cap_config_read="allow",
     )
     mismatched = []
     for tool, args, expected in CASES:

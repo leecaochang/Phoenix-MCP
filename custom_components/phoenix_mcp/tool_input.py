@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 from typing import Any
 
 from .const import MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES
@@ -109,9 +110,99 @@ def _matches_type(value: Any, kind: str) -> bool:
         "array": isinstance(value, list),
         "string": isinstance(value, str),
         "boolean": isinstance(value, bool),
-        "integer": isinstance(value, int) and not isinstance(value, bool),
+        # JSON Schema counts a whole-valued float as an integer, as Assist's engine does.
+        "integer": (isinstance(value, int) and not isinstance(value, bool))
+        or (isinstance(value, float) and value.is_integer()),
         "number": isinstance(value, (int, float)) and not isinstance(value, bool),
     }.get(kind, False)
+
+
+_SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean", "null"})
+
+
+def _kinds(schema: dict) -> list[str]:
+    kinds = schema.get("type")
+    return [kinds] if isinstance(kinds, str) else list(kinds) if isinstance(kinds, list) else []
+
+
+def _whole_integers(value: Any, schema: Any) -> Any:
+    """Turn whole-valued floats into ints wherever the schema allows an integer but no other number."""
+    if not isinstance(schema, dict):
+        return value
+    kinds = _kinds(schema)
+    if isinstance(value, float) and value.is_integer() and "integer" in kinds and "number" not in kinds:
+        return int(value)
+    if isinstance(value, dict) and isinstance(schema.get("properties"), dict):
+        properties = schema["properties"]
+        changed = {key: _whole_integers(item, properties.get(key)) for key, item in value.items()}
+        return changed if any(changed[key] is not value[key] for key in value) else value
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        changed_items = [_whole_integers(item, schema["items"]) for item in value]
+        return changed_items if any(new is not old for new, old in zip(changed_items, value)) else value
+    return value
+
+
+def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str | None:
+    """Name the schema field and its rule, never the value."""
+    if value is None:
+        return None if "null" in kinds else f"{name} must not be null."
+    if not any(_matches_type(value, kind) for kind in kinds if kind != "null"):
+        wanted = {"string": "a string", "integer": "an integer", "number": "a number", "boolean": "true or false"}
+        return f"{name} must be {' or '.join(wanted.get(kind, kind) for kind in kinds if kind != 'null')}."
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "minimum" in schema and value < schema["minimum"]:
+            return f"{name} must be at least {schema['minimum']}."
+        if "maximum" in schema and value > schema["maximum"]:
+            return f"{name} must be at most {schema['maximum']}."
+        if "exclusiveMinimum" in schema and value <= schema["exclusiveMinimum"]:
+            return f"{name} must be greater than {schema['exclusiveMinimum']}."
+        if "exclusiveMaximum" in schema and value >= schema["exclusiveMaximum"]:
+            return f"{name} must be less than {schema['exclusiveMaximum']}."
+    if isinstance(value, str):
+        if len(value) < schema.get("minLength", 0):
+            return f"{name} must be at least {schema['minLength']} characters."
+        if "maxLength" in schema and len(value) > schema["maxLength"]:
+            return f"{name} must be at most {schema['maxLength']} characters."
+        if isinstance(schema.get("pattern"), str) and re.search(schema["pattern"], value) is None:
+            return f"{name} has an invalid format."
+    return None
+
+
+def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
+    """Hold top-level arguments to the advertised schema, the one contract on every route.
+
+    Required arguments must be present and not null. A scalar the schema refuses
+    by type, bound, length or pattern is refused with the field named, rather
+    than clamped or ignored; enum values and null stay with their handlers, whose
+    messages explain the choice and for whom null can be a refused value (a
+    compare-and-swap expected_hash) as well as absence. Whole-valued
+    floats become ints wherever the schema expects an integer, nested ones
+    included. Union-typed fields are left to their handler. Call after the
+    owning capability's denial check.
+    """
+    schema = _PUBLIC_SCHEMAS.get(tool)
+    if schema is None:
+        return arguments, None
+    properties = schema.get("properties", {})
+    required = schema.get("required", [])
+    for name in required:
+        if name not in arguments:
+            return arguments, f"Missing required argument: {name}."
+    result = dict(arguments)
+    for name, value in arguments.items():
+        field = properties.get(name)
+        if not isinstance(field, dict) or any(key in field for key in ("anyOf", "oneOf", "allOf")):
+            continue
+        kinds = _kinds(field)
+        if value is None:
+            # What null means stays the handler's call: for some fields it is
+            # absence, for a safety token such as expected_hash it must refuse.
+            continue
+        converted = _whole_integers(value, field)
+        if kinds and set(kinds) <= _SCALAR_TYPES and (error := _scalar_error(name, converted, field, kinds)):
+            return arguments, error
+        result[name] = converted
+    return (arguments if result == arguments and all(result[k] is arguments[k] for k in result) else result), None
 
 
 def _schema_error(value: Any, schema: dict, path: str) -> str | None:

@@ -159,9 +159,13 @@ class TestValidate:
         """
         command = _builder()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            await _call("validate_esphome_yaml",
+            content, outcome, _ = await _call("validate_esphome_yaml",
                         {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: evil\n"},
                         _yaml_access_key(), hass)
+        assert outcome == "invalid_request" and 'Unknown argument "content"' in content["content"][0]["text"]
+        command.assert_not_awaited()
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
+            await _call("validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         _hass_arg, _url, cmd, payload = command.await_args.args
         assert cmd == "devices/validate"
         assert payload == {"configuration": "rf-blaster1.yaml"}
@@ -232,14 +236,18 @@ class TestBoards:
         assert payload["query"] == "esp32"
 
     @pytest.mark.parametrize(("given", "expected"), [
-        (500, 50), (0, 20), (-3, 20), ("many", 20), (None, 20), (7, 7),
+        (None, 20), (7, 7), (50, 50), (500, None), (0, None), (-3, None), ("many", None),
     ])
-    async def test_limit_is_clamped(self, hass, esphome_dir, given, expected):
+    async def test_limit_is_bounded_or_refused(self, hass, esphome_dir, given, expected):
         command = _builder({"boards": []})
         args = {"query": "esp"} if given is None else {"query": "esp", "limit": given}
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            await _call("get_esphome_board", args, _yaml_access_key(), hass)
-        assert command.await_args.args[3]["limit"] == expected
+            content, outcome, _ = await _call("get_esphome_board", args, _yaml_access_key(), hass)
+        if expected is None:
+            assert outcome == "invalid_request" and content["content"][0]["text"].startswith("limit must be")
+            command.assert_not_awaited()
+        else:
+            assert command.await_args.args[3]["limit"] == expected
 
 
 class TestComponents:
@@ -291,9 +299,13 @@ class TestAutomations:
         """Never the draft-yaml variant: same config-time evaluation validate refuses."""
         command = _builder({})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
-            await _call("get_esphome_automations",
+            content, outcome, _ = await _call("get_esphome_automations",
                         {"file": "rf-blaster1.yaml", "yaml": "esphome:\n  name: evil\n"},
                         _yaml_access_key(), hass)
+        assert outcome == "invalid_request" and 'Unknown argument "yaml"' in content["content"][0]["text"]
+        command.assert_not_awaited()
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
+            await _call("get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         _h, _u, cmd, payload = command.await_args.args
         assert cmd == "automations/get_available"
         assert payload == {"configuration": "rf-blaster1.yaml"}

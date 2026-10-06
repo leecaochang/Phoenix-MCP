@@ -68,7 +68,8 @@ class TestGating:
     async def test_missing_or_wrong_shaped_arguments(self, hass, args):
         content, outcome, _ = await _call_tool("compare_entities", args, _access_key(), hass, MagicMock())
         assert outcome == "invalid_request"
-        assert "Missing required argument" in content["content"][0]["text"]
+        text = content["content"][0]["text"]
+        assert "Missing required argument" in text or "must be a string" in text
 
 
 class TestScopeRefusalsAreIndistinguishable:

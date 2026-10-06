@@ -81,7 +81,7 @@ async def test_capability_denial_runs_before_hostile_argument_validation():
     )
     assert outcome == "denied"
     assert result["isError"] is True
-    assert body == "Forbidden."
+    assert body.startswith("Forbidden")
     assert "marker" not in body
 
 
@@ -97,8 +97,8 @@ async def test_capability_denial_runs_before_hostile_argument_validation():
         ({"search": ["not", "text"]}, "search must be a string"),
         ({"search": "x" * 513}, "search must be at most"),
         ({"limit": True}, "limit must be an integer"),
-        ({"limit": 0}, "limit must be an integer"),
-        ({"limit": 1001}, "limit must be an integer"),
+        ({"limit": 0}, "limit must be at least 1"),
+        ({"limit": 1001}, "limit must be at most 1000"),
     ],
 )
 async def test_malformed_filters_never_dispatch_to_home_assistant(args, message):

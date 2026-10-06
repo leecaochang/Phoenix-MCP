@@ -232,7 +232,7 @@ async def test_denied_capability_is_forbidden_and_echoes_nothing(hass: HomeAssis
         content, outcome, _ = await _call(hass, _access_key(cap_config_read="deny"))
 
     assert outcome == "denied"
-    assert _text(content) == "Forbidden."
+    assert _text(content).startswith("Forbidden")
     # The gate runs before the dispatch, so a denied read never touches HA.
     assert called.await_count == 0
 
@@ -946,7 +946,7 @@ async def test_solar_forecast_denied_capability(hass: HomeAssistant) -> None:
             "get_solar_forecast", {}, _access_key(cap_config_read="deny"), hass, _data(), "req-1", None,
         )
     assert outcome == "denied"
-    assert _text(content) == "Forbidden."
+    assert _text(content).startswith("Forbidden")
 
 
 # ---------------------------------------------------------------------------

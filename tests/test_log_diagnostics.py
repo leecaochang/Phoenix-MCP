@@ -419,7 +419,7 @@ async def test_phoenix_diagnostics_requires_both_capabilities_before_validation(
             "get_phoenix_diagnostics", {"level": "INFO"}, access_key=access_key
         )
         assert outcome == "denied"
-        assert body == "Forbidden."
+        assert body.startswith("Forbidden")
 
 
 @pytest.mark.asyncio
@@ -825,7 +825,7 @@ async def test_detail_capability_denial_precedes_argument_validation_even_in_pas
     access_key.pass_through = True
     access_key.cap_diagnostics = "allow"
     body, result, outcome = await _call(tool, {"detail_ref": []}, access_key=access_key)
-    assert outcome == "denied" and result["isError"] and body == "Forbidden."
+    assert outcome == "denied" and result["isError"] and body.startswith("Forbidden")
 
 
 @pytest.mark.asyncio

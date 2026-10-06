@@ -87,7 +87,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": GET_STATE_MAX_IDS,
                      "description": "Several entity IDs, read in one call."},
                 ], "description": "Entity ID, e.g. light.living_room, or a list of entity IDs."},
-                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
+                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields; only with kind fields, and refused with compact or full."}}, "required": ["kind"]},
             },
             "required": ["entity_id", "projection"],
         },
@@ -829,6 +829,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "They have no timestamps or log levels; absent/empty differs from unreadable."
         ),
         "cap": "cap_log_read",
+        # Sources beyond the system log also need Diagnostics; decided before any argument check.
+        "caps_when": {"source": {"fault_log": ["cap_diagnostics"], "integration_debug": ["cap_diagnostics"]}},
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2065,7 +2067,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Offset into authorized matches."
                 },
                 "limit": {
-                    "type": "integer",
+                    "type": "integer", "minimum": 1, "maximum": 50,
                     "description": "Page size (default 20, max 50)."
                 }
             },
@@ -2104,7 +2106,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Offset into authorized devices."
                 },
                 "limit": {
-                    "type": "integer",
+                    "type": "integer", "minimum": 1, "maximum": 50,
                     "description": "Page size (default 20, max 50)."
                 }
             }
@@ -2138,7 +2140,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Offset into authorized jobs."
                 },
                 "limit": {
-                    "type": "integer",
+                    "type": "integer", "minimum": 1, "maximum": 50,
                     "description": "Page size (default 20, max 50)."
                 }
             }
@@ -2243,7 +2245,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "query": {"type": "string", "description": "Search text when no board_id is given."},
                 "platform": {"type": "string", "description": "Filter by platform, e.g. esp32, esp8266, rp2040."},
                 "offset": {"type": "integer", "description": "Result offset for paging."},
-                "limit": {"type": "integer", "description": "Max results (default 20, max 50)."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Max results (default 20, max 50)."},
             },
         },
     },
@@ -2270,7 +2272,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "platform": {"type": "string", "description": "Filter by platform, e.g. esp32."},
                 "board_id": {"type": "string", "description": "Restrict to what this board supports."},
                 "offset": {"type": "integer", "description": "Result offset for paging."},
-                "limit": {"type": "integer", "description": "Max results (default 20, max 50)."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Max results (default 20, max 50)."},
             },
         },
     },
@@ -4048,3 +4050,9 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     _NATIVE_TOOL_NAMES["HassVacuumReturnToBase"]: _annot(False, True, True),
     _NATIVE_TOOL_NAMES["HassVacuumCleanArea"]: _annot(False, True, True),
 }
+
+
+# One argument contract on every route: an undeclared top-level argument is
+# refused, as HA's Assist engine already refuses it.
+for _definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS):
+    _definition["inputSchema"].setdefault("additionalProperties", False)

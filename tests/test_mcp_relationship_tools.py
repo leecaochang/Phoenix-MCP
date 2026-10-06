@@ -288,7 +288,7 @@ class TestRelationshipSelectors:
             assert outcome == "invalid_request"
             assert any(
                 phrase in content["content"][0]["text"]
-                for phrase in ("scope must", "no longer accepts")
+                for phrase in ("scope must", "no longer accepts", "Missing required argument: scope")
             )
 
     async def test_integration_scope_covers_every_entity_at_once(self, hass, rel_env):

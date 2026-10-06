@@ -265,7 +265,7 @@ async def test_buffered_batch_write_keeps_receipt_when_later_read_loses_authorit
     async def delayed_read(*args, **kwargs):
         access_key.settings_version += 1
         return {"content": [{"type": "text", "text": "private-stale-result"}]}, "allowed", "sensor.lifecycle"
-    batch = [_write(), {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_state", "arguments": {"entity_id": "light.lifecycle"}}}]
+    batch = [_write(), {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_state", "arguments": {"entity_id": "light.lifecycle", "projection": {"kind": "compact"}}}}]
     with patch.dict(mcp_view._TOOL_HANDLERS, {"get_state": (delayed_read, (), {})}):
         response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=batch)
     result = await response.json()

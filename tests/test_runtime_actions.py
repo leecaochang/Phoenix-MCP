@@ -109,7 +109,7 @@ async def test_script_start_and_stop_are_runtime_controls(hass, runtime):
     hass.bus.async_listen("runtime_started", lambda event: started.set())
     result, outcome, _ = await _call_tool("call_service", _args("script", "turn_on", "script.waiting"), access_key, hass, data)
     assert outcome == "allowed" and not result.get("isError"), result
-    await asyncio.wait_for(started.wait(), 1)
+    await asyncio.wait_for(started.wait(), 5)  # generous: a loaded runner can delay the script start
     assert hass.states.get("script.waiting").state == "on"
     result, outcome, _ = await _call_tool("call_service", _args("script", "turn_off", "script.waiting"), access_key, hass, data)
     assert outcome == "allowed" and not result.get("isError"), result

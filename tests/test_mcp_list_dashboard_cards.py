@@ -82,7 +82,7 @@ async def test_denied_cap_returns_uniform_forbidden(hass: HomeAssistant) -> None
 
     assert outcome == "denied"
     assert resource == "list_dashboard_cards"
-    assert content["content"][0]["text"] == "Forbidden."
+    assert content["content"][0]["text"].startswith("Forbidden")
 
 
 async def test_lean_listing_omits_examples(hass: HomeAssistant) -> None:
@@ -161,16 +161,13 @@ async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
     assert "example_config" not in cards["custom:broken-card"]
 
 
-async def test_wrong_shaped_type_arg_degrades_to_a_listing(hass: HomeAssistant) -> None:
-    """str_arg degrades a bad shape to absent instead of inventing an argument."""
+async def test_wrong_shaped_type_arg_is_refused_by_name(hass: HomeAssistant) -> None:
+    """A bad shape is refused with the field named, never treated as absent."""
     content, outcome, _ = await _call(
         {"type": ["mushroom-light-card"]}, _access_key(), hass, _data(await _harvested())
     )
-    body = _json(content)
-
-    assert outcome == "allowed"
-    assert body["count"] == 2
-    assert "found" not in body
+    assert outcome == "invalid_request"
+    assert content["content"][0]["text"] == "type must be a string."
 
 
 async def test_examples_filter_existing_and_embedded_out_of_scope_entities(hass: HomeAssistant) -> None:

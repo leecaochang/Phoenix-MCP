@@ -1,4 +1,4 @@
-"""Targeted argument diagnostics prevent accidental fallback without strict schemas."""
+"""Unknown arguments are refused, with the intended parameter named when it is a near miss."""
 
 from __future__ import annotations
 
@@ -59,10 +59,11 @@ def test_diagnostic_is_actionable_and_does_not_rewrite(name, args, expected):
 
 
 @pytest.mark.parametrize('name', UNKNOWN_ARGUMENT_PROTECTED_FIELDS)
-def test_policy_matches_schema_and_tolerates_unrelated_fields(name):
+def test_policy_matches_schema_and_refuses_unrelated_fields(name):
     properties = DEFINITIONS[name]['inputSchema']['properties']
     assert set(UNKNOWN_ARGUMENT_PROTECTED_FIELDS[name]) <= properties.keys()
-    assert unknown_argument_error(name, {'unrelated_future_field': True}) is None
+    assert DEFINITIONS[name]['inputSchema']['additionalProperties'] is False
+    assert 'Unknown argument "unrelated_future_field".' in unknown_argument_error(name, {'unrelated_future_field': True})
     assert unknown_argument_error(name, {key: None for key in properties}) is None
 
 
@@ -103,7 +104,7 @@ async def test_denied_capability_precedes_existing_normalization_errors(hass, na
 def test_hash_typos_and_conflicting_selectors_are_not_ignored(name):
     assert 'expected_hash' in unknown_argument_error(name, {'expected_hahs': 'secret'})
     assert 'expected_hash' in unknown_argument_error(name, {'expected_hash': 'valid', 'expected_hahs': 'secret'})
-    assert unknown_argument_error(name, {'expected_hash': 'valid', 'unrelated': 'extra'}) is None
+    assert 'Unknown argument "unrelated".' in unknown_argument_error(name, {'expected_hash': 'valid', 'unrelated': 'extra'})
 
 
 def test_nested_dashboard_and_retired_forms():
@@ -118,8 +119,9 @@ def test_error_bounds_and_nested_parameter_names():
     error = unknown_argument_error('patch_dashboard', {'target': {'urlpath': 'x', 'dashboard': 'x'}})
     assert 'target.url_path' in error
     assert len(error) < 2000
-    assert unknown_argument_error('get_dashboard_config', {'x' * 10000: 'secret'}) is None
-    assert unknown_argument_error('get_dashboard_config', {3: 'secret'}) is None
+    for odd in ({'x' * 10000: 'secret'}, {3: 'secret'}):
+        error = unknown_argument_error('get_dashboard_config', odd)
+        assert 'An unknown argument was supplied.' in error and 'xxxx' not in error and 'secret' not in error
 
 
 @pytest.mark.parametrize('domain,service,cap', [
@@ -161,9 +163,12 @@ async def test_yaml_typo_leaves_default_file_unchanged(hass):
     assert path.read_text() == 'default_config: {}\n'
 
 
-async def test_intentional_default_and_unrelated_extra_still_reach_read(hass):
+async def test_intentional_default_reaches_read_and_unrelated_extra_is_refused(hass):
     with patch('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock, return_value={'views': []}) as read:
         _, outcome, _ = await _call_tool('get_dashboard_config', {'unrelated': True}, access_key(cap_lovelace_write='allow'), hass, MagicMock())
+        assert outcome == 'invalid_request'
+        read.assert_not_awaited()
+        _, outcome, _ = await _call_tool('get_dashboard_config', {}, access_key(cap_lovelace_write='allow'), hass, MagicMock())
     assert outcome == 'allowed'
     read.assert_awaited_once_with(hass, None)
 
@@ -246,7 +251,8 @@ async def test_misspelt_optional_argument_on_any_tool_is_reported(hass):
     assert outcome == 'invalid_request'
     assert 'Unknown argument "limt". Use limit.' in result['content'][0]['text']
     result, outcome, _ = await _call_tool('search_entities', {'query': 'kitchen', 'unrelated_extra': 5}, key, hass, MagicMock())
-    assert outcome == 'allowed'
+    assert outcome == 'invalid_request'
+    assert 'Unknown argument "unrelated_extra".' in result['content'][0]['text']
 
 
 async def test_generic_near_miss_never_precedes_capability_denial(hass):

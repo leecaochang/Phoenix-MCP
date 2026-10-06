@@ -303,10 +303,11 @@ class TestResult:
         # As with install, which always sends port OTA, the caller cannot choose
         # the quiet path.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
-        await _run(
+        content, outcome, _ = await _run(
             {"file": FILE, "new_name": "new-name", "config_only": True},
             _flash_access_key(), hass, builder)
-        assert "config_only" not in builder.args_for("devices/rename")
+        assert outcome == "invalid_request" and 'Unknown argument "config_only"' in content["content"][0]["text"]
+        assert builder.calls == []
 
     async def test_it_says_a_failed_rename_reverts_itself(self, hass, esphome_dir):
         # If the OTA flash fails the add-on reverts the configuration to the old

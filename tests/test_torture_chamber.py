@@ -515,13 +515,11 @@ async def test_concurrent_identical_calls_do_not_break_each_other(
         _assert_contract(result, outcome, resource, f"{name}/concurrent-{i}")
 
 
-async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant):
-    """A stray argument must not turn a valid call into an error.
+async def test_unknown_arguments_are_refused_without_echoing_values(hass: HomeAssistant):
+    """A stray argument is refused by name, never silently ignored.
 
-    Pinned separately from the sweep because tolerating unknown arguments is a
-    DELIBERATE decision (no per-tool additionalProperties: false) that reads like
-    an oversight, and the sweep only asserts the call survives, not that it
-    succeeds.
+    Every tool root is closed (additionalProperties false), the contract Assist
+    already enforced. The refusal names the stray key but never its value.
     """
     access_key, data = _access_key("allow"), _data()
     hass.states.async_set("light.kitchen", "on")
@@ -540,5 +538,6 @@ async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant)
         hass,
         data,
     )
-    assert outcome == "allowed"
-    assert dirty["content"][0]["text"] == clean["content"][0]["text"]
+    assert outcome == "invalid_request" and clean["content"][0]["text"] != dirty["content"][0]["text"]
+    assert f'Unknown argument "{MARKER}_unknown"' in dirty["content"][0]["text"]
+    assert dirty["content"][0]["text"].count(MARKER) == 1

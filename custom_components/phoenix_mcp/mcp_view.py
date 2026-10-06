@@ -54,10 +54,10 @@ from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
 from .tool_common import _create_registry_mesa_approval, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
-from .tool_input import decode_container_strings, tool_arguments_error
+from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
-from .tool_contracts import normalize_tool_args, unknown_argument_error
+from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
@@ -879,7 +879,7 @@ async def _tool_get_state(
         return _tool_success(json.dumps(body, default=str)), "allowed", f"entities:{len(rows)}"
     entity_id = str_arg(requested)
     if not entity_id:
-        return _tool_error("Missing required argument: entity_id"), "denied", "get_state"
+        return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_state"
     state, perm = _readable_state(entity_id, access_key, hass)
     if state is None:
         # Audit-only distinction; the reply is identical for missing and hidden.
@@ -895,7 +895,7 @@ async def _tool_get_history(
     """MCP tool: fetch one bounded page of state history."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
-        return _tool_error("Missing required argument: entity_id"), "denied", "get_history"
+        return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_history"
 
     perm = resolve_read(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
@@ -1023,7 +1023,7 @@ async def _tool_get_statistics(
     """MCP tool: fetch one aligned and bounded page of Recorder statistics."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
-        return _tool_error("Missing required argument: entity_id"), "denied", "get_statistics"
+        return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_statistics"
 
     perm = resolve_read(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
@@ -1205,7 +1205,7 @@ async def _tool_call_service(
     domain = str_arg(args.get("domain"))
     service = str_arg(args.get("service"))
     if not domain or not service:
-        return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
+        return _tool_error("Missing required arguments: domain and service"), "invalid_request", "call_service"
 
     try:
         household_service_kwargs(hass, domain, service)
@@ -1367,7 +1367,7 @@ async def _execute_call_service(
     domain = str_arg(args.get("domain"))
     service = str_arg(args.get("service"))
     if not domain or not service:
-        return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
+        return _tool_error("Missing required arguments: domain and service"), "invalid_request", "call_service"
 
     if domain == "calendar" and service != "get_events":
         if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
@@ -7891,13 +7891,22 @@ _TOOL_DEFS_BY_NAME: dict[str, dict] = {
 }
 
 
-def _tool_capability_denied(tool_name: str, access_key: AccessKeyRecord) -> bool:
-    """Whether a declared capability already refuses this tool for the access key."""
+def _tool_capability_denied(tool_name: str, access_key: AccessKeyRecord, arguments: dict | None = None) -> bool:
+    """Whether a declared capability already refuses this tool (and these arguments) for the access key.
+
+    `caps_when` declares extra capabilities an argument value needs, such as a
+    log source that also requires Diagnostics, so they are refused here too.
+    """
     tool_def = _TOOL_DEFS_BY_NAME.get(tool_name)
     if tool_def is None:
         return False
+    required = list(_tool_required_caps(tool_def))
+    for name, by_value in (tool_def.get("caps_when") or {}).items():
+        value = (arguments or {}).get(name)
+        if isinstance(value, str):
+            required.extend(by_value.get(value, ()))
     any_caps = _tool_any_caps(tool_def)
-    return any(effective_cap(access_key, cap) == CAP_DENY for cap in _tool_required_caps(tool_def)) or bool(
+    return any(effective_cap(access_key, cap) == CAP_DENY for cap in required) or bool(
         any_caps and all(effective_cap(access_key, cap) == CAP_DENY for cap in any_caps)
     )
 
@@ -7951,12 +7960,22 @@ async def _call_tool(
     if entry is None:
         return _tool_error(f"Unknown tool: {tool_name}"), "denied", tool_name
     handler, wanted, bound = entry
-    # Curated tools diagnose inside their handlers, after their own capability
-    # checks; every other tool is checked here, but never for a denied capability.
-    if (tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS
-            and not _tool_capability_denied(tool_name, access_key)
-            and (error := unknown_argument_error(tool_name, arguments))):
-        return _tool_error(error), "invalid_request", tool_name
+    # A denied capability learns nothing about its arguments: it is refused here,
+    # before any argument check or handler can describe its input.
+    if _tool_capability_denied(tool_name, access_key, arguments):
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+    # Curated tools diagnose their arguments inside their handlers, after the
+    # capability checks only they can make (call_service's depend on the
+    # service). Every other tool is checked here: unknown names first, so a
+    # misspelt required argument is named as such. Retired forms keep the
+    # handler's migration guidance.
+    if tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS:
+        if error := unknown_argument_error(tool_name, arguments):
+            return _tool_error(error), "invalid_request", tool_name
+        if not set(arguments) & set(_RETIRED_REPLACEMENTS.get(tool_name, {})):
+            arguments, error = scalar_arguments(tool_name, arguments)
+            if error:
+                return _tool_error(error), "invalid_request", tool_name
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     from .request_authority import dispatch_request_id
     request_context = dispatch_request_id.set(request_id)
