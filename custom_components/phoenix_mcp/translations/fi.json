@@ -1,0 +1,53 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Phoenix MCP on jo määritetty."
+    },
+    "create_entry": {
+      "default": "Hallitse käyttöavaimiasi Phoenix MCP -paneelissa"
+    },
+    "step": {
+      "user": {
+        "description": "Määritä Phoenix MCP. Vain yksi instanssi voidaan määrittää kerrallaan."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Aktiivinen",
+          "expired": "Vanhentunut",
+          "revoked": "Mitätöity"
+        }
+      }
+    }
+  },
+  "issues": {
+    "agent_recovery": {
+      "description": "Toimintoja on saatettu suorittaa. Tarkista Home Assistant -järjestelmän tila ja hyväksyntätulokset ennen uudelleenyritystä. Ratkaise epävarmat toiminnot kohdassa Asetukset > Järjestelmä > Korjaukset.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "abort": {
+          "not_ready": "Phoenix MCP ei ole valmis."
+        },
+        "error": {
+          "check_required": "Tarkistin toiminnon tuloksen Home Assistant -järjestelmässä ja ymmärrän, että tämä mahdollistaa vain uudet pyynnöt; se ei toista eikä kumoa mitään toimintoa.",
+          "operation_active": "Toiminto on edelleen käynnissä tai se on jo selvitetty."
+        },
+        "step": {
+          "confirm": {
+            "data": {
+              "checked_home_assistant": "Tarkistin toiminnon tuloksen Home Assistant -järjestelmässä ja ymmärrän, että tämä mahdollistaa vain uudet pyynnöt; se ei toista eikä kumoa mitään toimintoa."
+            },
+            "description": "Toimintoja on saatettu suorittaa. Tarkista Home Assistant -järjestelmän tila ja hyväksyntätulokset ennen uudelleenyritystä. Ratkaise epävarmat toiminnot kohdassa Asetukset > Järjestelmä > Korjaukset.\n\n{tool}\n{request_id}"
+          }
+        }
+      },
+      "title": "Tarkista työkalun {tool} tulos"
+    },
+    "mesa_runtime_unavailable": {
+      "description": "Phoenix MCP ei voinut alustaa MESA-turvan suoritusympäristöä. Lukutoiminnot ja ylläpitäjän palautus ovat edelleen käytettävissä, mutta suojatut tilaa muuttavat toiminnot torjutaan, kun MESA-tila on Neuvova tai Pakotettu. Tarkista Home Assistant -lokit ja lataa sitten Phoenix MCP -integraatio uudelleen. Voit valita Pois-tilan nimenomaisesti vain, jos aiot toimia ilman MESA-suojausta.",
+      "title": "MESA-turvan suoritusympäristö ei ole käytettävissä"
+    }
+  }
+}

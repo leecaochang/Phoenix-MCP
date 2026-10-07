@@ -733,6 +733,8 @@ async def test_invalid_proposal_after_received_control_keeps_receipt_without_rep
     ('nl', 'Zet die lichten uit.'), ('pl', 'Wyłącz te światła.'),
     ('ru', 'Выключи эти светильники.'), ('zh-Hans', '关掉那些灯。'),
     ('zh-Hant', '關掉那些燈。'), ('ja', 'それらのライトを消して。'), ('ko', '그것들을 꺼 주세요.'),
+    ('sv', 'Släck de där lamporna.'), ('da', 'Sluk disse lamper.'),
+    ('nb', 'Slå av disse lampene.'), ('fi', 'Sammuta nuo valot.'),
 ])
 async def test_context_only_request_cannot_actuate_even_an_already_off_device(hass, companion, monkeypatch, language, utterance):
     catalogs = scripted(monkeypatch, [[('intent__HassTurnOff', {'domain': ['light']})]])

@@ -1,0 +1,53 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Phoenix MCP är redan konfigurerad."
+    },
+    "create_entry": {
+      "default": "Använd Phoenix MCP-panelen för att hantera dina åtkomstnycklar"
+    },
+    "step": {
+      "user": {
+        "description": "Konfigurera Phoenix MCP. Endast en instans kan konfigureras i taget."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Aktiv",
+          "expired": "Utgången",
+          "revoked": "Återkallad"
+        }
+      }
+    }
+  },
+  "issues": {
+    "agent_recovery": {
+      "description": "Åtgärder kan ha körts. Kontrollera Home Assistant och godkännanderesultat innan du försöker igen. Lös osäkra åtgärder i Inställningar > System > Reparationer.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "abort": {
+          "not_ready": "Phoenix MCP är inte redo."
+        },
+        "error": {
+          "check_required": "Jag har kontrollerat åtgärdens utfall i Home Assistant och förstår att detta endast aktiverar nya begäranden; det upprepar eller ångrar inte någon åtgärd.",
+          "operation_active": "Åtgärden körs fortfarande eller har redan hanterats."
+        },
+        "step": {
+          "confirm": {
+            "data": {
+              "checked_home_assistant": "Jag har kontrollerat åtgärdens utfall i Home Assistant och förstår att detta endast aktiverar nya begäranden; det upprepar eller ångrar inte någon åtgärd."
+            },
+            "description": "Åtgärder kan ha körts. Kontrollera Home Assistant och godkännanderesultat innan du försöker igen. Lös osäkra åtgärder i Inställningar > System > Reparationer.\n\n{tool}\n{request_id}"
+          }
+        }
+      },
+      "title": "Kontrollera utfallet av {tool}"
+    },
+    "mesa_runtime_unavailable": {
+      "description": "Phoenix MCP kunde inte initiera sin MESA-säkerhetskörtid. Läsningar och administratörsåterställning är fortfarande tillgängliga, men skyddade tillståndsändrande åtgärder avvisas medan MESA-läget är Rådgivande eller Påtvingat. Granska Home Assistant-loggarna och ladda sedan om Phoenix MCP-integrationen. Du får bara uttryckligen välja läget Av om du avser att arbeta utan MESA-skydd.",
+      "title": "MESA-säkerhetskörtiden är otillgänglig"
+    }
+  }
+}

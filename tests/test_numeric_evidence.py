@@ -189,6 +189,10 @@ def test_explicit_unit_markers_never_convert_values(sentence, unit, expected):
     ('pl', 'Ustaw lampę na trzydzieści siedem procent.'),
     ('ru', 'Установи яркость на тридцать семь процентов.'),
     ('zh-TW', '請設為百分之三十七。'),
+    ('sv', 'Ställ lampan på trettiosju procent.'),
+    ('da', 'Sæt lampen til syvogtredive procent.'),
+    ('nb', 'Sett lampen til trettisju prosent.'),
+    ('fi', 'Aseta lamppu kolmekymmentäseitsemän prosenttia.'),
 ])
 def test_remaining_ui_languages_read_native_number_words(language, sentence):
     assert read_explicit_percentage(sentence, language) == 37
@@ -200,9 +204,47 @@ def test_remaining_ui_languages_read_native_number_words(language, sentence):
     ('it', 'meno trentasette', 'per cento'), ('nl', 'min zevenendertig', 'procent'),
     ('pl', 'minus trzydzieści siedem', 'procent'), ('ru', 'минус тридцать семь', 'процентов'),
     ('ja', '三十七点五', 'パーセント'), ('ko', '마이너스 삼십칠', '퍼센트'),
+    ('sv', 'minus trettiosju', 'procent'), ('sv', 'trettiosju och en halv', 'procent'),
+    ('da', 'minus syvogtredive', 'procent'), ('da', 'syvogtredive og en halv', 'procent'),
+    ('nb', 'minus trettisju', 'prosent'), ('nb', 'trettisju og en halv', 'prosent'),
+    ('fi', 'miinus kolmekymmentäseitsemän', 'prosenttia'),
+    ('fi', 'kolmekymmentäseitsemän ja puoli', 'prosenttia'),
 ])
 def test_added_language_signs_and_fractions_never_become_positive_integers(language, number, unit):
     assert read_explicit_percentage(f'{number} {unit}', language) is None
+
+
+@pytest.mark.parametrize('sentence', [
+    # Assist's own Finnish grammar marks the percent noun with each of these
+    # cases, depending on the setting verb. Without the unit the value has no
+    # evidence and an otherwise ordinary command is refused.
+    'Aseta lamppu 37 prosenttiin.',
+    'Aseta lamppu 37 prosentiksi.',
+    'Aseta lamppu 37 prosentille.',
+    'Aseta lamppu kolmekymmentäseitsemän prosentiksi.',
+    'Aseta lamppu kolmekymmentäseitsemän prosentille.',
+])
+def test_finnish_percent_cases_used_by_assist_are_recognized(sentence):
+    assert read_explicit_percentage(sentence, 'fi') == 37
+
+
+@pytest.mark.parametrize('language,sentence,expected', [
+    # RBNF spells 101 as "one hundred and one" and Danish/Norwegian as
+    # "et hundrede og en", so the conjunction is a number word to the reader.
+    # On its own it is not a competing number, and treating it as one would
+    # refuse an ordinary single-value Danish or Norwegian command.
+    ('da', 'Sæt lampen på 50 procent og sluk den.', 50),
+    ('nb', 'Sett lampen på 50 prosent og slå den av.', 50),
+    ('sv', 'Ställ lampan på 50 procent och stäng av den.', 50),
+    ('fi', 'Aseta valo 50 prosenttia ja sulje verho.', 50),
+    ('en', 'set it to 37 percent and turn it off', 37),
+    # A real competing number, sign or fraction after the conjunction still refuses.
+    ('da', 'Sæt lampen på 50 procent og 60 procent.', None),
+    ('nb', 'Senk til 37 prosent klokka 22.', None),
+    ('da', 'syvogtredive og en halv procent', None),
+])
+def test_conjunction_is_not_a_competing_number(language, sentence, expected):
+    assert read_explicit_percentage(sentence, language) == expected
 
 
 def test_all_assist_languages_can_read_literal_percent_symbols():

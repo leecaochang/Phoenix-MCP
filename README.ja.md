@@ -7,7 +7,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
-[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | **日本語** | [한국어](README.ko.md) | [Русский](README.ru.md)
+[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | **日本語** | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
 Phoenix MCP は、AI エージェントに対して、範囲を限定した最小権限の Home Assistant アクセスを提供します。クライアントごとに専用のアクセスキーが発行され、明示的に許可したエンティティだけにアクセスできます。各アクセスキーには、個別の機能、レート制限、任意の有効期限を設定できます。監査はデフォルトで有効になっており、結果ごとに設定できます。どのアクセスキーも即座に取り消せます。また、エンティティ単位のセマンティック安全レイヤー（MESA）により、アクセスキーに付与された権限にかかわらず、デバイスの性質に応じて操作を確認必須または禁止にできます。 MESA の既定モードはアドバイザリです。強制を選択するまで、ほとんどのポリシー制限は警告のみになります。読み取り専用の性質と明示的なプライバシー拒否は引き続き操作をブロックします。
 
@@ -15,7 +15,7 @@ Phoenix MCP は Home Assistant 内で完結して動作します。別途デプ�
 
 ## 言語
 
-パネルは現在、英語、スペイン語、フランス語、イタリア語、ドイツ語、オランダ語、ポーランド語、ロシア語、簡体字中国語、繁体字中国語、韓国語、日本語に対応しています。パネルの言語を手動で変更するには、**Phoenix MCP > 設定 > 言語**を開いて言語を選択します。**自動**を選ぶと、Home Assistant プロファイルの言語に戻ります。
+パネルは現在、英語、スペイン語、フランス語、イタリア語、ドイツ語、オランダ語、ポーランド語、ロシア語、簡体字中国語、繁体字中国語、韓国語、日本語、スウェーデン語、デンマーク語、ノルウェー語、フィンランド語に対応しています。パネルの言語を手動で変更するには、**Phoenix MCP > 設定 > 言語**を開いて言語を選択します。**自動**を選ぶと、Home Assistant プロファイルの言語に戻ります。
 
 ## ドキュメント
 

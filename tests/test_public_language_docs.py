@@ -15,16 +15,20 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 # The locale codes are deliberately the keys so the test can require this list
 # to be updated whenever the shipped catalog set changes.
 PUBLIC_LANGUAGE_NAMES = {
+    "da": "Danish",
     "de": "German",
     "en": "English",
     "es": "Spanish",
+    "fi": "Finnish",
     "fr": "French",
     "it": "Italian",
     "ja": "Japanese",
     "ko": "Korean",
+    "nb": "Norwegian",
     "nl": "Dutch",
     "pl": "Polish",
     "ru": "Russian",
+    "sv": "Swedish",
     "zh-Hans": "Simplified Chinese",
     "zh-Hant": "Traditional Chinese",
 }
@@ -44,7 +48,8 @@ def _shipped_codes() -> set[str]:
 
 def _documented_names() -> str:
     names = [PUBLIC_LANGUAGE_NAMES[code] for code in (
-        "en", "es", "fr", "it", "de", "nl", "pl", "ru", "zh-Hans", "zh-Hant", "ko", "ja"
+        "en", "es", "fr", "it", "de", "nl", "pl", "ru", "zh-Hans", "zh-Hant", "ko", "ja",
+        "sv", "da", "nb", "fi",
     )]
     return ", ".join(names[:-1]) + f", and {names[-1]}"
 
@@ -83,5 +88,5 @@ def test_english_public_docs_list_every_shipped_language() -> None:
     assert (
         "Phoenix MCP ships English, Spanish, French, Italian, German, Dutch, Polish, Russian, "
         "Simplified Chinese (<code>zh-Hans</code>), Traditional Chinese "
-        "(<code>zh-Hant</code>), Korean, and Japanese."
+        "(<code>zh-Hant</code>), Korean, Japanese, Swedish, Danish, Norwegian, and Finnish."
     ) in panel

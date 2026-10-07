@@ -7,7 +7,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
-[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | **Nederlands** | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
+[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | **Nederlands** | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
 Phoenix MCP geeft je AI-agents afgebakende toegang tot Home Assistant volgens het principe van minimale rechten. Elke client krijgt een eigen toegangssleutel, beperkt tot precies de entiteiten die je toestaat, met eigen mogelijkheden, snelheidslimiet en optionele verloopdatum. Auditing is standaard ingeschakeld en per uitkomst configureerbaar, elke toegangssleutel kan direct worden ingetrokken, en de semantische veiligheidslaag per entiteit (MESA) kan een apparaat op basis van zijn aard op alleen-bevestigen of verboden zetten, ongeacht de machtigingen die een toegangssleutel krijgt. De standaardmodus van MESA is Adviserend: de meeste beleidsbeperkingen geven alleen waarschuwingen totdat Afgedwongen is geselecteerd; alleen-lezen-eigenschappen en expliciete privacyweigeringen blijven blokkeren.
 
@@ -15,7 +15,7 @@ Phoenix MCP draait volledig binnen Home Assistant, zonder aparte service om uit 
 
 ## Talen
 
-Het paneel ondersteunt momenteel Engels, Spaans, Frans, Italiaans, Duits, Nederlands, Pools, Russisch, vereenvoudigd Chinees, traditioneel Chinees, Koreaans en Japans. Om de paneeltaal handmatig te wijzigen, open je **Phoenix MCP > Instellingen > Taal** en kies je een taal. Kies **Auto** om weer de taal van je Home Assistant-profiel te volgen.
+Het paneel ondersteunt momenteel Engels, Spaans, Frans, Italiaans, Duits, Nederlands, Pools, Russisch, vereenvoudigd Chinees, traditioneel Chinees, Koreaans, Japans, Zweeds, Deens, Noors en Fins. Om de paneeltaal handmatig te wijzigen, open je **Phoenix MCP > Instellingen > Taal** en kies je een taal. Kies **Auto** om weer de taal van je Home Assistant-profiel te volgen.
 
 ## Documentatie
 

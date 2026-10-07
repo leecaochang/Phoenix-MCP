@@ -9,7 +9,8 @@ _TRADITIONAL_CHINESE_REGIONS = frozenset({"HK", "MO", "TW"})
 # checks that adding a catalog also updates this mapping without touching the
 # request path or scanning the filesystem.
 SHIPPED_LOCALES = frozenset({
-    "de", "en", "es", "fr", "it", "ja", "ko", "nl", "pl", "ru", "zh-Hans", "zh-Hant",
+    "da", "de", "en", "es", "fi", "fr", "it", "ja", "ko", "nb", "nl", "pl", "ru", "sv",
+    "zh-Hans", "zh-Hant",
 })
 
 

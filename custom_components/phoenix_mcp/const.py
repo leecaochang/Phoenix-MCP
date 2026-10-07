@@ -2387,8 +2387,19 @@ DECISION_PERCENTAGE_LANGUAGE_UNITS = {
     "pl": ("procent", "procenty", "procentów"), "ru": ("процент", "процента", "процентов"),
     "ja": ("パーセント",), "ko": ("퍼센트", "프로"),
     "zh-CN": ("百分之",), "zh-TW": ("百分之",), "zh-HK": ("百分之",),
+    "sv": ("procent",), "da": ("procent",), "nb": ("prosent",),
+    # Finnish marks the percent noun for case: partitive for a value, illative,
+    # translative or allative for the target of a setting verb, and genitive in
+    # a compound. Assist's own sentences use each of these forms.
+    "fi": ("prosenttia", "prosentti", "prosenttiin", "prosentiksi", "prosentille", "prosentin"),
 }
 DECISION_PERCENTAGE_HYPHEN_LANGUAGES = frozenset({"en", "fr"})
+# The RBNF locale a routing language's number spellings are read from. Only the
+# exceptions are listed: unicode-rbnf ships no separate Bokmal ruleset, so `nb`
+# borrows Norwegian `no`, whose cardinals are identical to written Bokmal. `nn`
+# (Nynorsk) has the same spellings but no Home Assistant Assist intent data, so
+# it is not a routable Phoenix language. Swedish, Danish and Finnish have their
+# own rulesets and need no alias.
 DECISION_NUMBER_LANGUAGE_ALIASES = {"zh-CN": "zh", "zh-TW": "zh_Hant", "zh-HK": "zh_Hant", "de-CH": "de", "nb": "no", "pt-BR": "pt", "sr-Latn": "sr_Latn"}
 
 DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
@@ -2407,10 +2418,18 @@ DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.update({
     "ru": frozenset({"минус", "плюс", "запятая", "половина", "половиной", "четверть"}),
     "ja": frozenset({"マイナス", "プラス", "点", "半", "約"}),
     "ko": frozenset({"마이너스", "플러스", "점", "반"}),
+    "sv": frozenset({"minus", "plus", "komma", "halv", "halvt", "halva", "hälft", "hälften", "kvart"}),
+    "da": frozenset({"minus", "plus", "komma", "halv", "halvt", "halvdel", "kvart"}),
+    "nb": frozenset({"minus", "pluss", "komma", "halv", "halvt", "halvdel", "kvart"}),
+    "fi": frozenset({"miinus", "plus", "pilkku", "puoli", "puolikas", "puolikkaan", "neljännes", "neljännestä"}),
 })
 for _language, _source in (("zh-TW", "zh-CN"), ("zh-HK", "zh-CN"), ("de-CH", "de")):
     DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_language] = DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_source]
-DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {"en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset()}
+DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {
+    "en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset(),
+    "sv": frozenset({"och"}), "da": frozenset({"og"}),
+    "nb": frozenset({"og"}), "fi": frozenset({"ja"}),
+}
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
@@ -2570,6 +2589,10 @@ HOME_COMPANION_GROUP_WORDS = frozenset({
     "todos", "todas", "ambas", "ambos", "luces", "ventiladores", "tous", "toutes", "lumières", "lampes",
     "ventilateurs", "tutti", "tutte", "luci", "ventilatori", "allemaal", "lichten",
     "wszystkie", "oba", "obie", "światła", "wentylatory", "все", "оба", "обе", "светильники", "вентиляторы",
+    "alla", "båda", "samtliga", "lampor", "lamporna", "fläktar", "fläktarna",
+    "samtlige", "begge", "lamper", "lamperne", "ventilatorer", "ventilatorerne",
+    "lampene", "lysene", "vifter", "viftene",
+    "kaikki", "kaikkia", "molemmat", "valot", "valoja", "lamput", "tuulettimet",
 })
 HOME_COMPANION_GROUP_PHRASES = ("所有", "全部", "すべて", "全て", "모든", "전부")
 HOME_COMPANION_CONTEXT_PATTERNS = {
@@ -2580,6 +2603,10 @@ HOME_COMPANION_CONTEXT_PATTERNS = {
     'it': r'\b(queste|questi|quelle|quelli|questo|quello|precedenti)\b',
     'nl': r'\b(die|deze|dat|dit|vorige)\b',
     'pl': r'\b(te|tamte|to|poprzednie)\b',
+    'sv': r'\b(dessa|detta|denna|dem|den|det|de|samma|föregående|förra)\b',
+    'da': r'\b(disse|dette|denne|dem|den|det|de|samme|forrige|tidligere)\b',
+    'nb': r'\b(disse|dette|denne|dem|den|det|de|samme|forrige|tidligere)\b',
+    'fi': r'\b(nämä|näitä|nuo|noita|ne|niitä|tämä|tätä|tuo|tuota|se|sitä|sama|samat|edellinen|edelliset|aiemmat)\b',
     'ru': r'\b(эти|те|их|это|тот|та|предыдущие)\b',
     'zh': r'那些|这些|它们|那个|这个|之前',
     'ja': r'それら|あれら|それ|あれ|これ|前の',
@@ -2601,6 +2628,10 @@ HOME_COMPANION_GENERIC_TARGET_WORDS = HOME_COMPANION_GROUP_WORDS | frozenset({
     'licht', 'lampe', 'ein', 'aus', 'schalte', 'luz', 'enciende', 'apaga', 'las', 'los',
     'lumière', 'allume', 'éteins', 'les', 'la', 'luce', 'accendi', 'spegni', 'le', 'i',
     'zet', 'aan', 'uit', 'włącz', 'wyłącz', 'światło', 'включи', 'выключи', 'свет',
+    'lampa', 'lampan', 'tänd', 'släck', 'fläkt', 'brytare', 'termostat', 'persienn', 'ventil', 'högtalare', 'dammsugare',
+    'lampe', 'lampen', 'tænd', 'sluk', 'ventilator', 'kontakt', 'persienne', 'højttaler', 'støvsuger',
+    'slå', 'skru', 'vifte', 'bryter', 'høyttaler',
+    'valo', 'lamppu', 'sytytä', 'sammuta', 'tuuletin', 'kytkin', 'termostaatti', 'verho', 'venttiili', 'kaiutin', 'imuri',
 })
 HOME_COMPANION_SENSOR_CLASSES = frozenset({
     "temperature", "humidity", "illuminance", "power", "energy", "battery",

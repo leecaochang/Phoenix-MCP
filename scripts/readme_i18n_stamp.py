@@ -30,17 +30,21 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SOURCE = REPO / "README.md"
 TRANSLATIONS = {
+    "da": REPO / "README.da.md",
     "de": REPO / "README.de.md",
     "es": REPO / "README.es.md",
+    "fi": REPO / "README.fi.md",
     "fr": REPO / "README.fr.md",
     "it": REPO / "README.it.md",
     "zh-CN": REPO / "README.zh-CN.md",
     "zh-Hant": REPO / "README.zh-Hant.md",
     "ja": REPO / "README.ja.md",
     "ko": REPO / "README.ko.md",
+    "nb": REPO / "README.nb.md",
     "nl": REPO / "README.nl.md",
     "pl": REPO / "README.pl.md",
     "ru": REPO / "README.ru.md",
+    "sv": REPO / "README.sv.md",
 }
 BASELINE = REPO / "tests" / "contract" / "readme_i18n_source_hashes.json"
 
@@ -94,7 +98,7 @@ def _is_metadata(chunk: str) -> bool:
         chunk == "# Phoenix MCP"
         or all(line.startswith("[![") for line in lines)
         or sum(
-            name in chunk for name in ("README.md", "README.de.md", "README.es.md", "README.fr.md", "README.it.md", "README.zh-CN.md", "README.zh-Hant.md", "README.ja.md", "README.ko.md", "README.nl.md", "README.pl.md", "README.ru.md")
+            name in chunk for name in ("README.md", "README.da.md", "README.de.md", "README.es.md", "README.fi.md", "README.fr.md", "README.it.md", "README.zh-CN.md", "README.zh-Hant.md", "README.ja.md", "README.ko.md", "README.nb.md", "README.nl.md", "README.pl.md", "README.ru.md", "README.sv.md")
         ) >= 2
     )
 

@@ -7,7 +7,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
-[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
+[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
 Phoenix MCP 為您的 AI 智慧體提供限定範圍、最小權限的 Home Assistant 存取方式。每個用戶端都有自己的存取金鑰，只能存取您明確允許的實體，並各自擁有獨立的能力、速率限制和可選的有效期限。稽核預設開啟，並可按結果類型分別設定；任何存取金鑰都可以立即撤銷；逐實體的語意安全層（MESA）還能根據裝置本身的性質，將其設為僅可在確認後操作或完全禁止操作，無論存取金鑰被授予了什麼權限。 MESA 預設使用建議模式：大多數策略限制僅發出警告，選擇強制模式後才會阻止操作；唯讀屬性和明確的隱私拒絕仍會阻止操作。
 
@@ -15,7 +15,7 @@ Phoenix MCP 完全執行於 Home Assistant 內部：無需另行部署服務，�
 
 ## 語言
 
-面板目前支援英文、西班牙文、法文、義大利文、德文、荷蘭文、波蘭文、俄文、簡體中文、繁體中文、韓文和日文。如要手動變更面板語言，請開啟 **Phoenix MCP > 設定 > 語言** 並選擇語言。選擇 **自動** 即可恢復跟隨 Home Assistant 個人資料語言。
+面板目前支援英文、西班牙文、法文、義大利文、德文、荷蘭文、波蘭文、俄文、簡體中文、繁體中文、韓文、日文、瑞典文、丹麥文、挪威文和芬蘭文。如要手動變更面板語言，請開啟 **Phoenix MCP > 設定 > 語言** 並選擇語言。選擇 **自動** 即可恢復跟隨 Home Assistant 個人資料語言。
 
 ## 文件
 

@@ -7,7 +7,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
-[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | **한국어** | [Русский](README.ru.md)
+[English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | **한국어** | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
 Phoenix MCP는 AI 에이전트에 범위가 제한된 최소 권한의 Home Assistant 접근을 제공합니다. 각 클라이언트는 고유한 액세스 키를 가지며, 허용한 엔티티로만 제한되고, 개별 기능, 속도 제한, 선택적 만료 기간을 갖습니다. 감사는 기본적으로 활성화되어 있으며 결과별로 구성할 수 있고, 모든 액세스 키는 즉시 철회할 수 있습니다. 엔티티별 시맨틱 안전 계층(MESA)은 액세스 키에 부여된 권한과 관계없이 기기의 특성에 따라 확인 전용 또는 접근 금지로 만들 수 있습니다. MESA의 기본 모드는 권고입니다. 강제 모드를 선택하기 전에는 대부분의 정책 제한이 경고만 표시하며, 읽기 전용 속성과 명시적인 개인정보 거부는 계속 작업을 차단합니다.
 
@@ -15,7 +15,7 @@ Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 별도로 
 
 ## 언어
 
-패널은 현재 영어, 스페인어, 프랑스어, 이탈리아어, 독일어, 네덜란드어, 폴란드어, 러시아어, 중국어 간체, 중국어 번체, 한국어, 일본어를 지원합니다. 패널 언어를 수동으로 변경하려면 **Phoenix MCP > 설정 > 언어**를 열고 언어를 선택하세요. **자동**을 선택하면 다시 Home Assistant 프로필 언어를 따릅니다.
+패널은 현재 영어, 스페인어, 프랑스어, 이탈리아어, 독일어, 네덜란드어, 폴란드어, 러시아어, 중국어 간체, 중국어 번체, 한국어, 일본어, 스웨덴어, 덴마크어, 노르웨이어, 핀란드어를 지원합니다. 패널 언어를 수동으로 변경하려면 **Phoenix MCP > 설정 > 언어**를 열고 언어를 선택하세요. **자동**을 선택하면 다시 Home Assistant 프로필 언어를 따릅니다.
 
 ## 문서
 

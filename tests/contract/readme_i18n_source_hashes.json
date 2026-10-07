@@ -1,6 +1,72 @@
 {
   "_comment": "Fingerprints of each English README block and its localized counterpart. Written by scripts/readme_i18n_stamp.py and checked by tests/test_readme_i18n.py. A source mismatch means English changed after translation.",
   "locales": {
+    "README.da.md": {
+      "intro.block.1": {
+        "source": "8983da1b4f12",
+        "translation": "450085b7036a"
+      },
+      "intro.block.2": {
+        "source": "aff2f74cc45b",
+        "translation": "6f41cbf6ea59"
+      },
+      "section.1.block.1": {
+        "source": "fabe04bb576e",
+        "translation": "ece828f2cb23"
+      },
+      "section.1.heading": {
+        "source": "779a2b2bf00d",
+        "translation": "313b3f85f882"
+      },
+      "section.2.block.1": {
+        "source": "311b2a61f789",
+        "translation": "aa3329f6184a"
+      },
+      "section.2.block.2": {
+        "source": "d15f01c6272d",
+        "translation": "8ac14bfc0820"
+      },
+      "section.2.heading": {
+        "source": "060d66a4f3c0",
+        "translation": "150f73a94c54"
+      },
+      "section.3.block.1": {
+        "source": "fa7de75243ca",
+        "translation": "2f79079db117"
+      },
+      "section.3.heading": {
+        "source": "98c33b0a0714",
+        "translation": "8b9e64533914"
+      },
+      "section.4.block.1": {
+        "source": "0405c6b29b8c",
+        "translation": "23b5e16dcfb1"
+      },
+      "section.4.block.2": {
+        "source": "cbbc1d220611",
+        "translation": "80b592a43fc0"
+      },
+      "section.4.heading": {
+        "source": "7f8ee2187914",
+        "translation": "e7e472965387"
+      },
+      "section.4.subsection.1.block.1": {
+        "source": "a632c7564490",
+        "translation": "78bab8869ee7"
+      },
+      "section.4.subsection.1.heading": {
+        "source": "489d485c7937",
+        "translation": "3957ac19e656"
+      },
+      "section.5.block.1": {
+        "source": "78a002bc6b0a",
+        "translation": "95457fb97b6e"
+      },
+      "section.5.heading": {
+        "source": "9713f695ad92",
+        "translation": "1747587757a4"
+      }
+    },
     "README.de.md": {
       "intro.block.1": {
         "source": "8983da1b4f12",
@@ -11,8 +77,8 @@
         "translation": "f468f1b2a60e"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "46554bd27386"
+        "source": "fabe04bb576e",
+        "translation": "2e6b9d216b96"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -77,8 +143,8 @@
         "translation": "a7ec08eb2bb8"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "6f89d76229d0"
+        "source": "fabe04bb576e",
+        "translation": "ec84f38eb1f1"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -133,6 +199,72 @@
         "translation": "43f9f7473ce8"
       }
     },
+    "README.fi.md": {
+      "intro.block.1": {
+        "source": "8983da1b4f12",
+        "translation": "bba8379b4a2e"
+      },
+      "intro.block.2": {
+        "source": "aff2f74cc45b",
+        "translation": "978df2c31e84"
+      },
+      "section.1.block.1": {
+        "source": "fabe04bb576e",
+        "translation": "379689cafd82"
+      },
+      "section.1.heading": {
+        "source": "779a2b2bf00d",
+        "translation": "c25a6b773383"
+      },
+      "section.2.block.1": {
+        "source": "311b2a61f789",
+        "translation": "52f70894daeb"
+      },
+      "section.2.block.2": {
+        "source": "d15f01c6272d",
+        "translation": "43696374ca98"
+      },
+      "section.2.heading": {
+        "source": "060d66a4f3c0",
+        "translation": "7d85de997818"
+      },
+      "section.3.block.1": {
+        "source": "fa7de75243ca",
+        "translation": "a5a432a74b48"
+      },
+      "section.3.heading": {
+        "source": "98c33b0a0714",
+        "translation": "a12a037f2fc2"
+      },
+      "section.4.block.1": {
+        "source": "0405c6b29b8c",
+        "translation": "60235533a194"
+      },
+      "section.4.block.2": {
+        "source": "cbbc1d220611",
+        "translation": "20f36d2cc620"
+      },
+      "section.4.heading": {
+        "source": "7f8ee2187914",
+        "translation": "83f265ed0035"
+      },
+      "section.4.subsection.1.block.1": {
+        "source": "a632c7564490",
+        "translation": "04efea728716"
+      },
+      "section.4.subsection.1.heading": {
+        "source": "489d485c7937",
+        "translation": "b5f2f76ca2bb"
+      },
+      "section.5.block.1": {
+        "source": "78a002bc6b0a",
+        "translation": "f3bb7e063a1e"
+      },
+      "section.5.heading": {
+        "source": "9713f695ad92",
+        "translation": "3594dcf5d3a6"
+      }
+    },
     "README.fr.md": {
       "intro.block.1": {
         "source": "8983da1b4f12",
@@ -143,8 +275,8 @@
         "translation": "e3aa03f5891e"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "0ee7c3a71e64"
+        "source": "fabe04bb576e",
+        "translation": "cb0e2913878a"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -209,8 +341,8 @@
         "translation": "66d6d7e95afa"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "91e839dbf959"
+        "source": "fabe04bb576e",
+        "translation": "868858257e36"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -275,8 +407,8 @@
         "translation": "a80e18e5b42c"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "e57b2820993b"
+        "source": "fabe04bb576e",
+        "translation": "4c8344cfecde"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -341,8 +473,8 @@
         "translation": "6ac37c380a93"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "804e8b7ecca0"
+        "source": "fabe04bb576e",
+        "translation": "fc24622440e3"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -397,6 +529,72 @@
         "translation": "f086f1b59289"
       }
     },
+    "README.nb.md": {
+      "intro.block.1": {
+        "source": "8983da1b4f12",
+        "translation": "06881107df57"
+      },
+      "intro.block.2": {
+        "source": "aff2f74cc45b",
+        "translation": "d9d25a50bf42"
+      },
+      "section.1.block.1": {
+        "source": "fabe04bb576e",
+        "translation": "032f405c3e76"
+      },
+      "section.1.heading": {
+        "source": "779a2b2bf00d",
+        "translation": "944cff04d69f"
+      },
+      "section.2.block.1": {
+        "source": "311b2a61f789",
+        "translation": "1ec3e5296c69"
+      },
+      "section.2.block.2": {
+        "source": "d15f01c6272d",
+        "translation": "163c3de7d5ce"
+      },
+      "section.2.heading": {
+        "source": "060d66a4f3c0",
+        "translation": "5a27eb41da99"
+      },
+      "section.3.block.1": {
+        "source": "fa7de75243ca",
+        "translation": "4896d7572665"
+      },
+      "section.3.heading": {
+        "source": "98c33b0a0714",
+        "translation": "8b9e64533914"
+      },
+      "section.4.block.1": {
+        "source": "0405c6b29b8c",
+        "translation": "0eb028ad83ab"
+      },
+      "section.4.block.2": {
+        "source": "cbbc1d220611",
+        "translation": "9c92a00af56c"
+      },
+      "section.4.heading": {
+        "source": "7f8ee2187914",
+        "translation": "e7e472965387"
+      },
+      "section.4.subsection.1.block.1": {
+        "source": "a632c7564490",
+        "translation": "bc7b8fc6d550"
+      },
+      "section.4.subsection.1.heading": {
+        "source": "489d485c7937",
+        "translation": "6ad11752d784"
+      },
+      "section.5.block.1": {
+        "source": "78a002bc6b0a",
+        "translation": "34751277e332"
+      },
+      "section.5.heading": {
+        "source": "9713f695ad92",
+        "translation": "e3caae9c4847"
+      }
+    },
     "README.nl.md": {
       "intro.block.1": {
         "source": "8983da1b4f12",
@@ -407,8 +605,8 @@
         "translation": "5aaef0d0cf0d"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "56cbd62184d7"
+        "source": "fabe04bb576e",
+        "translation": "bf1db136d01f"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -473,8 +671,8 @@
         "translation": "3b211e411774"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "bf79879452e3"
+        "source": "fabe04bb576e",
+        "translation": "8e5528de2fc7"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -539,8 +737,8 @@
         "translation": "e8152db880b9"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "691e875ee060"
+        "source": "fabe04bb576e",
+        "translation": "d7e763d1cbe3"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -595,6 +793,72 @@
         "translation": "afc99fdb7919"
       }
     },
+    "README.sv.md": {
+      "intro.block.1": {
+        "source": "8983da1b4f12",
+        "translation": "44b88a4497ba"
+      },
+      "intro.block.2": {
+        "source": "aff2f74cc45b",
+        "translation": "ac456e6efa95"
+      },
+      "section.1.block.1": {
+        "source": "fabe04bb576e",
+        "translation": "b4a54a36f693"
+      },
+      "section.1.heading": {
+        "source": "779a2b2bf00d",
+        "translation": "944cff04d69f"
+      },
+      "section.2.block.1": {
+        "source": "311b2a61f789",
+        "translation": "6ef652107847"
+      },
+      "section.2.block.2": {
+        "source": "d15f01c6272d",
+        "translation": "e5f2e500e2e0"
+      },
+      "section.2.heading": {
+        "source": "060d66a4f3c0",
+        "translation": "150f73a94c54"
+      },
+      "section.3.block.1": {
+        "source": "fa7de75243ca",
+        "translation": "c2d728407582"
+      },
+      "section.3.heading": {
+        "source": "98c33b0a0714",
+        "translation": "8b9e64533914"
+      },
+      "section.4.block.1": {
+        "source": "0405c6b29b8c",
+        "translation": "025e16477c42"
+      },
+      "section.4.block.2": {
+        "source": "cbbc1d220611",
+        "translation": "38333ca6f9c4"
+      },
+      "section.4.heading": {
+        "source": "7f8ee2187914",
+        "translation": "751c0c15c0e2"
+      },
+      "section.4.subsection.1.block.1": {
+        "source": "a632c7564490",
+        "translation": "d66356967cf2"
+      },
+      "section.4.subsection.1.heading": {
+        "source": "489d485c7937",
+        "translation": "b65bea8791f0"
+      },
+      "section.5.block.1": {
+        "source": "78a002bc6b0a",
+        "translation": "5516c6f00da9"
+      },
+      "section.5.heading": {
+        "source": "9713f695ad92",
+        "translation": "b5c703c479c5"
+      }
+    },
     "README.zh-CN.md": {
       "intro.block.1": {
         "source": "8983da1b4f12",
@@ -605,8 +869,8 @@
         "translation": "a101b5626a71"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "2100214c9d4b"
+        "source": "fabe04bb576e",
+        "translation": "409f87d92c98"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",
@@ -671,8 +935,8 @@
         "translation": "12fbcd3ecbff"
       },
       "section.1.block.1": {
-        "source": "38c9aa1ee4d8",
-        "translation": "697cf415da25"
+        "source": "fabe04bb576e",
+        "translation": "5d91b69dece2"
       },
       "section.1.heading": {
         "source": "779a2b2bf00d",

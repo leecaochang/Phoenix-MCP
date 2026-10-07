@@ -52,16 +52,20 @@ export type Params = Record<string, string | number>;
  * contract test fails if it drifts.
  */
 export const LANGUAGES: ReadonlyArray<{ code: string; endonym: string }> = [
+  { code: "da", endonym: "Dansk" },
   { code: "de", endonym: "Deutsch" },
   { code: "en", endonym: "English" },
   { code: "es", endonym: "Español" },
+  { code: "fi", endonym: "Suomi" },
   { code: "fr", endonym: "Français" },
   { code: "it", endonym: "Italiano" },
   { code: "ja", endonym: "日本語" },
   { code: "ko", endonym: "한국어" },
+  { code: "nb", endonym: "Norsk Bokmål" },
   { code: "nl", endonym: "Nederlands" },
   { code: "pl", endonym: "Polski" },
   { code: "ru", endonym: "Русский" },
+  { code: "sv", endonym: "Svenska" },
   { code: "zh-Hans", endonym: "中文（简体）" },
   { code: "zh-Hant", endonym: "繁體中文" },
 ];

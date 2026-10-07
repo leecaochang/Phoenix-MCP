@@ -1,0 +1,53 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Phoenix MCP er allerede konfigureret."
+    },
+    "create_entry": {
+      "default": "Brug panelet Phoenix MCP til at administrere dine adgangsnøgler"
+    },
+    "step": {
+      "user": {
+        "description": "Opsæt Phoenix MCP. Der kan kun konfigureres én instans ad gangen."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Aktiv",
+          "expired": "Udløbet",
+          "revoked": "Tilbagekaldt"
+        }
+      }
+    }
+  },
+  "issues": {
+    "agent_recovery": {
+      "description": "Handlinger kan være blevet udført. Kontrollér Home Assistant og godkendelsesresultater, før du prøver igen. Afklar usikre handlinger under Indstillinger > System > Reparationer.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "abort": {
+          "not_ready": "Phoenix MCP er ikke klar."
+        },
+        "error": {
+          "check_required": "Jeg har kontrolleret handlingens udfald i Home Assistant og forstår, at dette kun aktiverer nye anmodninger; det gentager eller fortryder ikke nogen handling.",
+          "operation_active": "Handlingen kører stadig eller er allerede afstemt."
+        },
+        "step": {
+          "confirm": {
+            "data": {
+              "checked_home_assistant": "Jeg har kontrolleret handlingens udfald i Home Assistant og forstår, at dette kun aktiverer nye anmodninger; det gentager eller fortryder ikke nogen handling."
+            },
+            "description": "Handlinger kan være blevet udført. Kontrollér Home Assistant og godkendelsesresultater, før du prøver igen. Afklar usikre handlinger under Indstillinger > System > Reparationer.\n\n{tool}\n{request_id}"
+          }
+        }
+      },
+      "title": "Kontrollér udfaldet af {tool}"
+    },
+    "mesa_runtime_unavailable": {
+      "description": "Phoenix MCP kunne ikke initialisere kørselsmiljøet for MESA-sikkerhed. Læsning og administrativ gendannelse er stadig tilgængelig, men beskyttede tilstandsændrende handlinger afvises, mens MESA-tilstand er Rådgivende eller Håndhævet. Gennemgå Home Assistant-loggen, og genindlæs derefter Phoenix MCP-integrationen. Du må kun vælge tilstanden Fra, hvis du har til hensigt at køre uden MESA-beskyttelse.",
+      "title": "Kørselsmiljøet for MESA-sikkerhed er ikke tilgængeligt"
+    }
+  }
+}

@@ -99,8 +99,14 @@ def read_explicit_percentage(sentence: str, language: str) -> int | None:
     prefix = unit == ('百', '分', '之')
     if prefix and language not in ('zh-CN', 'zh-TW', 'zh-HK'):
         return None
-    numeric_words = words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset())
-    separators = DECISION_PERCENTAGE_EVIDENCE_CONNECTORS.get(language, frozenset()) | {'-', '+', '.', '/', '\u2212'}
+    connectors = DECISION_PERCENTAGE_EVIDENCE_CONNECTORS.get(language, frozenset())
+    # A connector joins the parts of a spelled number ("one hundred and one",
+    # Danish "et hundrede og en"), so RBNF lists it among the number words. On
+    # its own it is never a competing number, and Danish/Norwegian "og" is too
+    # common to refuse an ordinary single command such as "sæt lampen på 50
+    # procent og sluk den"; the number words it joined are still checked.
+    numeric_words = (words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset())) - connectors
+    separators = connectors | {'-', '+', '.', '/', '\u2212'}
     if language != 'en':
         separators = separators | {','}
 
@@ -182,7 +188,10 @@ def read_explicit_scalar(sentence: str, language: str) -> int | float | None:
         return None
     tokens = _tokens(rest)
     unit_tokens = {index for start, end in _units(tokens, language) for index in range(start, end)}
-    forbidden = words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset()) | {'+', '-', '\u2212', '/'}
+    # The language's connector joins parts of a spelled number, so it is a
+    # number word to RBNF but not a competing number by itself.
+    forbidden = ((words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset()))
+                 - DECISION_PERCENTAGE_EVIDENCE_CONNECTORS.get(language, frozenset())) | {'+', '-', '\u2212', '/'}
     if any(token in forbidden for index, token in enumerate(tokens) if index not in unit_tokens):
         return None
     before, after = sentence[:match.start()], sentence[match.end():]

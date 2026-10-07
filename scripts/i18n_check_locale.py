@@ -188,6 +188,55 @@ ALLOW_IDENTICAL = frozenset({
 # every other locale. A global allowlist would let an untranslated Korean or
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
+    "da": frozenset({
+        # Bare templates and shared technical fragments with no prose to translate.
+        "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Danish
+        "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
+        "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
+        # Product and feature names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        # Danish spells or borrows these exactly as English does. Each is the
+        # word a Danish reader sees, not an untranslated sentence.
+        "panel.accessKeys.colStatus",  # "Status", the access-key status column
+        "panel.agentchat.levelMinimal",  # "Minimal"
+        "panel.agentchat.model",  # "Model"
+        "panel.agentchat.resultOk",  # "ok"
+        "panel.agentchat.send",  # "Send", the Danish imperative
+        "panel.agentchat.stop",  # "Stop", the Danish imperative
+        "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
+        "panel.approvalSummary.named.kind.script",  # "script", the HA entity type
+        "panel.approvals.detailTabDiff",  # "Diff"
+        "panel.approvals.energyGas",  # "Gas"
+        "panel.approvals.metaStatus",  # "Status"
+        "panel.changes.colType",  # "Type"
+        "panel.changes.typeBlueprint",  # "Blueprint"
+        "panel.changes.typeScene",  # "Scene"
+        "panel.changes.typeScript",  # "Script"
+        "panel.common.diff",  # "Diff"
+        "panel.conversations.modelLabel",  # "Model"
+        "panel.mesa.addIntegrationShort",  # "+ Integration"
+        "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
+        "panel.mesa.privNormal",  # "Normal"
+        "panel.mesa.scopeLabelIntegration",  # "Integration"
+        "panel.mesaSuggestion.noun.scene",  # "scene"
+        "panel.mesaSuggestion.noun.script",  # "script"
+        "panel.perms.colType",  # "Type"
+        "panel.routing.accountModel",  # "Model for {name}", correct Danish with the placeholder kept
+        "panel.selectBy.integration",  # "Integration"
+        "panel.selectBy.label",  # "Label"
+        "panel.settings.model",  # "Model"
+        "panel.wizard.agentTablist",  # "Agent"
+        "panel.wizard.stepPersona",  # "Persona"
+        "panel.wizard.stepTest",  # "Test"
+        "panel.accessKeys.cardPersona",  # "Persona"
+        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.prompt",  # "Prompt", the established loanword
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
+    }),
     "de": frozenset({
         "panel.settings.agentcliRegion",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionChina",  # Region name or label spelled the same as English in this language.
@@ -227,6 +276,24 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.nameLabel",              # "Name"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
+    }),
+    "fi": frozenset({
+        # Bare templates and shared technical fragments with no prose to translate.
+        "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Finnish
+        "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
+        "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
+        # Product and feature names kept in English, as the localized READMEs do.
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        # Finnish uses these loanwords unchanged; each is the word a Finnish
+        # reader sees, not an untranslated sentence.
+        "panel.accessKeys.cardPersona",  # "Persona", the established UX loanword
+        "panel.agentchat.resultOk",  # "ok"
+        "panel.wizard.stepPersona",  # "Persona"
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
         "panel.settings.agentcliRegionEu",  # Region name or label spelled the same as English in this language.
@@ -298,6 +365,42 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
+    }),
+    "nb": frozenset({
+        # Bare templates and shared technical fragments with no prose to translate.
+        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
+        "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Norwegian
+        "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
+        "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
+        # Product and feature names kept in English, as the localized READMEs do.
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
+        # Norwegian Bokmal spells or borrows these exactly as English does. Each
+        # is the word a Norwegian reader sees, not an untranslated sentence.
+        "panel.accessKeys.cardPersona",  # "Persona"
+        "panel.accessKeys.colStatus",  # "Status"
+        "panel.agentchat.levelMinimal",  # "Minimal"
+        "panel.agentchat.resultOk",  # "ok"
+        "panel.agentchat.send",  # "Send", the Norwegian imperative
+        "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
+        "panel.approvals.detailTabDiff",  # "Diff"
+        "panel.approvals.metaStatus",  # "Status"
+        "panel.changes.colType",  # "Type"
+        "panel.changes.typeScene",  # "Scene"
+        "panel.common.diff",  # "Diff"
+        "panel.mesa.privNormal",  # "Normal"
+        "panel.mesaSuggestion.noun.scene",  # "scene"
+        "panel.perms.colType",  # "Type"
+        "panel.settings.agentcliRegion",  # "Region"
+        "panel.settings.agentcliRegionGlobal",  # "Global"
+        "panel.settings.loggingCard",  # "Logging", used unchanged in Norwegian
+        "panel.wizard.agentTablist",  # "Agent"
+        "panel.wizard.stepPersona",  # "Persona"
+        "panel.wizard.stepTest",  # "Test"
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
         "panel.settings.agentcliRegionChina",  # Region name or label spelled the same as English in this language.
@@ -383,6 +486,44 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         # translatable prose; Russian keeps the same separator and colon.
         "panel.agentchat.approvalReason",  # " - {reason}"
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
+    }),
+    "sv": frozenset({
+        # Bare templates and shared technical fragments with no prose to translate.
+        "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Swedish
+        "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
+        "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
+        # Product and feature names kept in English, as the localized READMEs do.
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        # Swedish spells or borrows these exactly as English does. Each is the
+        # word a Swedish reader sees, not an untranslated sentence.
+        "panel.accessKeys.cardPersona",  # "Persona"
+        "panel.accessKeys.colStatus",  # "Status"
+        "panel.agentchat.levelMax",  # "Max"
+        "panel.agentchat.levelMinimal",  # "Minimal"
+        "panel.agentchat.resultOk",  # "ok"
+        "panel.approvals.detailTabDiff",  # "Diff"
+        "panel.approvals.energyGas",  # "Gas"
+        "panel.approvals.metaStatus",  # "Status"
+        "panel.changes.typeBlueprint",  # "Blueprint", Home Assistant's own Swedish term
+        "panel.common.diff",  # "Diff"
+        "panel.mesa.addIntegrationShort",  # "+ Integration"
+        "panel.mesa.costTrivial",  # "Trivial"
+        "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
+        "panel.mesa.privNormal",  # "Normal"
+        "panel.mesa.scopeLabelIntegration",  # "Integration"
+        "panel.selectBy.integration",  # "Integration"
+        "panel.settings.agentcliRegion",  # "Region"
+        "panel.settings.agentcliRegionGlobal",  # "Global"
+        "panel.wizard.agentTablist",  # "Agent"
+        "panel.wizard.stepPersona",  # "Persona"
+        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
+        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.prompt",  # "Prompt", the established loanword
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
 }
 

@@ -1,0 +1,53 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Phoenix MCP er allerede konfigurert."
+    },
+    "create_entry": {
+      "default": "Bruk Phoenix MCP-panelet til å administrere tilgangsnøklene dine"
+    },
+    "step": {
+      "user": {
+        "description": "Sett opp Phoenix MCP. Bare én forekomst kan konfigureres om gangen."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Aktiv",
+          "expired": "Utløpt",
+          "revoked": "Tilbakekalt"
+        }
+      }
+    }
+  },
+  "issues": {
+    "agent_recovery": {
+      "description": "Handlinger kan ha blitt utført. Sjekk Home Assistant og godkjenningsresultatene før du prøver på nytt. Løs uavklarte handlinger i Innstillinger > System > Repairs.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "abort": {
+          "not_ready": "Phoenix MCP er ikke klar."
+        },
+        "error": {
+          "check_required": "Jeg har sjekket resultatet av handlingen i Home Assistant og forstår at dette bare aktiverer nye forespørsler; det gjentar eller angrer ingen handling.",
+          "operation_active": "Operasjonen kjører fortsatt eller er allerede avstemt."
+        },
+        "step": {
+          "confirm": {
+            "data": {
+              "checked_home_assistant": "Jeg har sjekket resultatet av handlingen i Home Assistant og forstår at dette bare aktiverer nye forespørsler; det gjentar eller angrer ingen handling."
+            },
+            "description": "Handlinger kan ha blitt utført. Sjekk Home Assistant og godkjenningsresultatene før du prøver på nytt. Løs uavklarte handlinger i Innstillinger > System > Repairs.\n\n{tool}\n{request_id}"
+          }
+        }
+      },
+      "title": "Sjekk resultatet av {tool}"
+    },
+    "mesa_runtime_unavailable": {
+      "description": "Phoenix MCP kunne ikke initialisere MESAs sikkerhetsruntime. Lesing og administratorgjenoppretting er fortsatt tilgjengelig, men beskyttede tilstandsendrende operasjoner avslås mens MESA-modus er Rådgivende eller Håndhevet. Se gjennom Home Assistant-loggene, og last deretter inn Phoenix MCP-integrasjonen på nytt. Du kan bare velge Av-modus eksplisitt hvis du har til hensikt å kjøre uten MESA-beskyttelse.",
+      "title": "MESAs sikkerhetsruntime er utilgjengelig"
+    }
+  }
+}
