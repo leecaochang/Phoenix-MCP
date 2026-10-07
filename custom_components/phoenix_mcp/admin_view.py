@@ -4998,10 +4998,13 @@ class PhoenixAdminCardCatalogView(PhoenixView):
                 "invalid_request", "entries must be a list.", 400, rid,
                 key="entriesListRequired",
             )
+        from .ws_dispatch import async_lovelace_resource_urls  # noqa: PLC0415
+
         catalog = await data.card_catalog.async_replace(
             entries=body.get("entries"),
             resource_count=body.get("resource_count"),
             failed_imports=body.get("failed_imports"),
+            resource_urls=await async_lovelace_resource_urls(self.hass),
         )
         _audit_admin(self.hass, request, rid, request.path)
         return _ok({

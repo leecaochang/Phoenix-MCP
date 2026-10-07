@@ -11,8 +11,11 @@ import json
 import uuid
 from unittest.mock import MagicMock
 
+import pytest
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore
@@ -54,8 +57,24 @@ async def _harvested(**over) -> CardCatalogStore:
         },
         {"type": "broken-card", "name": "Broken", "available": False},
     ])
-    await store.async_replace(entries=entries, resource_count=31, failed_imports=[])
+    await store.async_replace(
+        entries=entries, resource_count=31,
+        failed_imports=over.pop("failed_imports", []),
+        resource_urls=over.pop("resource_urls", RESOURCES),
+    )
     return store
+
+
+RESOURCES = ["/hacsfiles/mushroom/mushroom.js"]
+
+
+@pytest.fixture
+async def lovelace(hass: HomeAssistant):
+    """Real lovelace registering the resources the default harvest reported against."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    for url in RESOURCES:
+        await hass.data[LOVELACE_DATA].resources.async_create_item({"res_type": "module", "url": url})
+    return hass
 
 
 async def _call(args, access_key, hass, data):
@@ -140,15 +159,75 @@ async def test_single_type_lookup_accepts_custom_prefix(hass: HomeAssistant) -> 
     assert _json(content)["found"] is True
 
 
-async def test_missing_type_reports_not_installed(hass: HomeAssistant) -> None:
+async def test_missing_type_on_a_complete_harvest_is_most_likely_not_installed(lovelace) -> None:
     content, outcome, _ = await _call(
-        {"type": "custom:nope-card"}, _access_key(), hass, _data(await _harvested())
+        {"type": "custom:nope-card"}, _access_key(), lovelace, _data(await _harvested())
     )
     body = _json(content)
 
     assert outcome == "allowed"
     assert body["found"] is False
-    assert "not installed" in body["notice"].lower()
+    assert body["state"] == "not_observed"
+    assert body["catalog_complete"] is True
+    assert "incomplete_reasons" not in body
+    assert "most likely not installed" in body["notice"]
+
+
+async def test_missing_type_after_a_resource_change_may_still_be_installed(lovelace) -> None:
+    """Not seen proves little once a resource was added after the harvest."""
+    data = _data(await _harvested())
+    await lovelace.data[LOVELACE_DATA].resources.async_create_item(
+        {"res_type": "module", "url": "/hacsfiles/nope-card/nope-card.js"}
+    )
+
+    content, _, _ = await _call({"type": "custom:nope-card"}, _access_key(), lovelace, data)
+    body = _json(content)
+
+    assert body["found"] is False
+    assert body["state"] == "not_observed"
+    assert body["catalog_complete"] is False
+    assert body["incomplete_reasons"] == ["resources_changed"]
+    assert "may still be installed" in body["notice"]
+    assert "most likely" not in body["notice"]
+
+
+async def test_failed_imports_and_unknown_provenance_are_both_reported(hass: HomeAssistant) -> None:
+    """Lovelace not loaded here, so the current resources are unknown, not empty."""
+    data = _data(await _harvested(failed_imports=[{"url": "/local/gone.js", "error": "404"}]))
+
+    content, _, _ = await _call({"type": "custom:nope-card"}, _access_key(), hass, data)
+    body = _json(content)
+
+    assert body["incomplete_reasons"] == ["provenance_unknown", "failed_imports"]
+    assert "may still be installed" in body["notice"]
+
+
+async def test_listing_reports_an_incomplete_catalog(lovelace) -> None:
+    data = _data(await _harvested(resource_urls=None))
+
+    content, _, _ = await _call({}, _access_key(), lovelace, data)
+    body = _json(content)
+
+    assert body["catalog_complete"] is False
+    assert body["incomplete_reasons"] == ["provenance_unknown"]
+    assert "may still be installed" in body["notice"]
+
+
+async def test_listing_of_a_complete_catalog_says_so_without_a_caveat(lovelace) -> None:
+    content, _, _ = await _call({}, _access_key(), lovelace, _data(await _harvested()))
+    body = _json(content)
+
+    assert body["catalog_complete"] is True
+    assert "incomplete" not in body["notice"]
+
+
+async def test_found_lookups_report_their_state(lovelace) -> None:
+    data = _data(await _harvested())
+    available, _, _ = await _call({"type": "mushroom-light-card"}, _access_key(), lovelace, data)
+    broken, _, _ = await _call({"type": "broken-card"}, _access_key(), lovelace, data)
+
+    assert _json(available)["state"] == "available"
+    assert _json(broken)["state"] == "registered_not_loaded"
 
 
 async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
@@ -216,3 +295,50 @@ async def test_examples_preserve_placeholders_urls_and_css_but_redact_attribute_
         assert hidden.entity_id not in json.dumps(example)
         assert example["private"]["nested"] == [{}]
         assert example["private"]["password"] == "<redacted>"
+
+
+def _admin_post(body: dict):
+    from unittest.mock import AsyncMock
+
+    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+
+    raw = json.dumps(body).encode()
+    user = MagicMock(is_admin=True, id="admin-user")
+    state: dict = {KEY_HASS_USER: user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "rid"}
+    request = MagicMock()
+    request.method = "POST"
+    request.path = "/api/phoenix-mcp/admin/card_catalog"
+    request.remote = "127.0.0.1"
+    request.query = {}
+    request.content_length = len(raw)
+    request.content = MagicMock()
+    request.content.read = AsyncMock(return_value=raw)
+    request.__getitem__ = MagicMock(side_effect=lambda k: state.get(k))
+    request.__setitem__ = MagicMock(side_effect=lambda k, v: state.__setitem__(k, v))
+    request.get = MagicMock(side_effect=lambda k, default=None: state.get(k, default))
+    return request
+
+
+async def test_harvest_report_records_the_servers_own_resource_list(lovelace) -> None:
+    """Provenance comes from the server's read at report time, not the browser's claim."""
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminCardCatalogView
+    from custom_components.phoenix_mcp.const import DOMAIN
+
+    data = _data()
+    lovelace.data[DOMAIN] = data
+    view = PhoenixAdminCardCatalogView()
+    view.hass = lovelace
+    response = await view.post(_admin_post({
+        "entries": [{"type": "mushroom-light-card"}],
+        "resource_count": 1,
+        "failed_imports": [],
+        "resource_urls": ["/a-browser-claim.js"],
+    }))
+    assert response.status == 200
+
+    content, _, _ = await _call({"type": "custom:nope-card"}, _access_key(), lovelace, data)
+    assert _json(content)["catalog_complete"] is True
+
+    await lovelace.data[LOVELACE_DATA].resources.async_create_item({"res_type": "module", "url": "/local/later.js"})
+    content, _, _ = await _call({"type": "custom:nope-card"}, _access_key(), lovelace, data)
+    assert _json(content)["incomplete_reasons"] == ["resources_changed"]

@@ -17,12 +17,20 @@ from third-party card code, so every field is coerced, bounded, and dropped on d
 A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE. `harvested_at is None` means no browser
 has reported yet, and callers must say so rather than report zero cards: an agent told
 "you have no custom cards" avoids every custom card on the system.
+
+A HARVESTED CATALOG IS NOT NECESSARILY A COMPLETE ONE. Each harvest records a
+fingerprint of the dashboard resources registered when it reported, so a reader can
+tell whether resources changed since; `assess_freshness` combines that with failed
+imports into the evidence a "not seen" answer may rely on.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 
 from homeassistant.helpers.storage import Store
@@ -76,11 +84,60 @@ class CardCatalog:
     # as a cleanup hint: a registered resource whose file is gone is common,
     # typically a stale duplicate of a card served from a different path.
     failed_imports: list[dict] = field(default_factory=list)
+    # Fingerprint of the dashboard resource URLs registered when the harvest
+    # reported, or None when they could not be read (or the cache predates it).
+    resource_fingerprint: str | None = None
 
     @property
     def harvested(self) -> bool:
         """True once a browser has reported, even if it found nothing."""
         return self.harvested_at is not None
+
+
+# Why a harvested catalog may not have seen every installed card. The order is
+# the order reasons are reported in.
+FRESHNESS_REASONS = ("provenance_unknown", "resources_changed", "failed_imports")
+
+_FINGERPRINT = re.compile(r"[0-9a-f]{64}")
+
+
+def resource_fingerprint(urls: Iterable[str] | None) -> str | None:
+    """Order-independent fingerprint of a resource URL list, or None if unknown."""
+    if urls is None:
+        return None
+    canonical = json.dumps(sorted({u for u in urls if isinstance(u, str)}))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class CatalogFreshness:
+    """How far a harvested catalog can be trusted for a card it did not see.
+
+    Complete means the last harvest reported against the dashboard resources
+    registered now and every one of them imported. Even then "not seen" is
+    strong evidence rather than proof: a card can register later than every
+    follow-up harvest waited, or come from an integration rather than a
+    dashboard resource.
+    """
+
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def complete(self) -> bool:
+        return not self.reasons
+
+
+def assess_freshness(catalog: CardCatalog, current_urls: list[str] | None) -> CatalogFreshness:
+    """Compare a harvested catalog with the dashboard resources registered now."""
+    reasons: list[str] = []
+    current = resource_fingerprint(current_urls)
+    if catalog.resource_fingerprint is None or current is None:
+        reasons.append("provenance_unknown")
+    elif current != catalog.resource_fingerprint:
+        reasons.append("resources_changed")
+    if catalog.failed_imports:
+        reasons.append("failed_imports")
+    return CatalogFreshness(tuple(reasons))
 
 
 def _clean_str(value: object, limit: int = 300) -> str | None:
@@ -182,6 +239,11 @@ def _resource_count(value: object) -> int:
         return 0
 
 
+def _clean_fingerprint(value: object) -> str | None:
+    """A stored resource fingerprint, or None for an absent or malformed one."""
+    return value if isinstance(value, str) and _FINGERPRINT.fullmatch(value) else None
+
+
 class CardCatalogStore:
     """Persisted card catalog, replaced wholesale by each harvest.
 
@@ -218,6 +280,7 @@ class CardCatalogStore:
             harvested_at=_clean_str(data.get("harvested_at"), limit=64),
             resource_count=_resource_count(data.get("resource_count")),
             failed_imports=sanitize_failures(data.get("failed_imports")),
+            resource_fingerprint=_clean_fingerprint(data.get("resource_fingerprint")),
         )
 
     async def async_save(self) -> None:
@@ -226,14 +289,20 @@ class CardCatalogStore:
         await self._store.async_save(self.as_dict())
 
     async def async_replace(
-        self, *, entries: object, resource_count: object, failed_imports: object
+        self, *, entries: object, resource_count: object, failed_imports: object,
+        resource_urls: list[str] | None = None,
     ) -> CardCatalog:
-        """Replace the catalog from a harvest payload and persist it."""
+        """Replace the catalog from a harvest payload and persist it.
+
+        `resource_urls` is the server's own read of the registered dashboard
+        resources at report time, never the browser's claim, or None if unread.
+        """
         self._catalog = CardCatalog(
             entries=sanitize_entries(entries),
             harvested_at=utcnow().isoformat(),
             resource_count=_resource_count(resource_count),
             failed_imports=sanitize_failures(failed_imports),
+            resource_fingerprint=resource_fingerprint(resource_urls),
         )
         await self.async_save()
         return self._catalog
@@ -262,4 +331,5 @@ class CardCatalogStore:
             "harvested_at": self._catalog.harvested_at,
             "resource_count": self._catalog.resource_count,
             "failed_imports": list(self._catalog.failed_imports),
+            "resource_fingerprint": self._catalog.resource_fingerprint,
         }

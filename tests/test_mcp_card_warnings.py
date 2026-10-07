@@ -11,6 +11,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+from homeassistant.components.lovelace.const import LOVELACE_DATA
+from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
+
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tools.lovelace import _card_warnings, _collect_card_types
@@ -23,7 +28,20 @@ def _data(catalog: CardCatalogStore | None = None) -> PhoenixData:
     )
 
 
-async def _catalog() -> CardCatalogStore:
+RESOURCES = ["/hacsfiles/mushroom/mushroom.js", "/local/tts-card.js"]
+
+
+@pytest.fixture
+async def lovelace(hass: HomeAssistant):
+    """Real lovelace with the resources a complete harvest reported against."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    resources = hass.data[LOVELACE_DATA].resources
+    for url in RESOURCES:
+        await resources.async_create_item({"res_type": "module", "url": url})
+    return hass
+
+
+async def _catalog(resource_urls: list[str] | None = RESOURCES, failed: list | None = None) -> CardCatalogStore:
     store = CardCatalogStore()
     await store.async_replace(
         entries=[
@@ -31,7 +49,8 @@ async def _catalog() -> CardCatalogStore:
             {"type": "tiktoktts-card", "name": "TikTok TTS", "available": False},
         ],
         resource_count=31,
-        failed_imports=[],
+        failed_imports=failed or [],
+        resource_urls=resource_urls,
     )
     return store
 
@@ -58,43 +77,88 @@ def test_collects_nested_custom_types() -> None:
     assert "tile" not in types
 
 
-async def test_installed_card_warns_nothing() -> None:
+async def test_installed_card_warns_nothing(lovelace) -> None:
     data = _data(await _catalog())
-    assert _card_warnings({"type": "custom:mushroom-light-card"}, data) == []
+    assert await _card_warnings({"type": "custom:mushroom-light-card"}, data, lovelace) == []
 
 
-async def test_uninstalled_card_warns() -> None:
+async def test_unseen_card_on_a_complete_harvest_is_most_likely_not_installed(lovelace) -> None:
     data = _data(await _catalog())
-    (warning,) = _card_warnings({"type": "custom:not-installed-card"}, data)
+    (warning,) = await _card_warnings({"type": "custom:not-installed-card"}, data, lovelace)
 
-    assert "not installed" in warning
+    assert "most likely not installed" in warning
+    assert "may be incomplete" not in warning
     assert "list_dashboard_cards" in warning
 
 
-async def test_registered_but_unavailable_card_warns() -> None:
+async def test_resource_added_after_the_harvest_qualifies_the_warning(lovelace) -> None:
+    """A newly added resource may provide the very card the harvest never saw."""
     data = _data(await _catalog())
-    (warning,) = _card_warnings({"type": "custom:tiktoktts-card"}, data)
+    await lovelace.data[LOVELACE_DATA].resources.async_create_item(
+        {"res_type": "module", "url": "/hacsfiles/new-card/new-card.js"}
+    )
+
+    (warning,) = await _card_warnings({"type": "custom:new-card"}, data, lovelace)
+
+    assert "most likely not installed" not in warning
+    assert "may not be installed" in warning
+    assert "dashboard resources changed after it ran" in warning
+
+
+async def test_failed_import_qualifies_the_warning(lovelace) -> None:
+    data = _data(await _catalog(failed=[{"url": "/local/tts-card.js", "error": "404"}]))
+
+    (warning,) = await _card_warnings({"type": "custom:not-installed-card"}, data, lovelace)
+
+    assert "most likely not installed" not in warning
+    assert "failed to import" in warning
+
+
+async def test_catalog_without_resource_provenance_qualifies_the_warning(lovelace) -> None:
+    """A cache written before provenance was recorded cannot claim completeness."""
+    data = _data(await _catalog(resource_urls=None))
+
+    (warning,) = await _card_warnings({"type": "custom:not-installed-card"}, data, lovelace)
+
+    assert "most likely not installed" not in warning
+    assert "could not be compared" in warning
+
+
+async def test_unreadable_current_resources_qualify_the_warning(hass: HomeAssistant) -> None:
+    """Lovelace not loaded: the current resources are unknown, not empty."""
+    data = _data(await _catalog())
+
+    (warning,) = await _card_warnings({"type": "custom:not-installed-card"}, data, hass)
+
+    assert "most likely not installed" not in warning
+    assert "could not be compared" in warning
+
+
+async def test_registered_but_unavailable_card_warns(lovelace) -> None:
+    data = _data(await _catalog())
+    (warning,) = await _card_warnings({"type": "custom:tiktoktts-card"}, data, lovelace)
 
     assert "did not load" in warning
+    assert "may be incomplete" not in warning
 
 
-async def test_builtin_types_never_warn() -> None:
+async def test_builtin_types_never_warn(lovelace) -> None:
     data = _data(await _catalog())
-    assert _card_warnings({"type": "tile", "entity": "light.a"}, data) == []
-    assert _card_warnings({"type": "entities", "entities": ["light.a"]}, data) == []
+    assert await _card_warnings({"type": "tile", "entity": "light.a"}, data, lovelace) == []
+    assert await _card_warnings({"type": "entities", "entities": ["light.a"]}, data, lovelace) == []
 
 
-async def test_unharvested_catalog_stays_silent() -> None:
+async def test_unharvested_catalog_stays_silent(hass: HomeAssistant) -> None:
     """With nothing to compare against, every custom card would look unknown.
 
     Warning on all of them would train the reader to ignore the field exactly
     when it starts being accurate.
     """
     data = _data()  # never harvested
-    assert _card_warnings({"type": "custom:anything-at-all"}, data) == []
+    assert await _card_warnings({"type": "custom:anything-at-all"}, data, hass) == []
 
 
-async def test_warns_once_per_type_sorted() -> None:
+async def test_warns_once_per_type_sorted(lovelace) -> None:
     data = _data(await _catalog())
     config = {
         "views": [{"cards": [
@@ -104,14 +168,14 @@ async def test_warns_once_per_type_sorted() -> None:
         ]}]
     }
 
-    warnings = _card_warnings(config, data)
+    warnings = await _card_warnings(config, data, lovelace)
 
     assert len(warnings) == 2
     assert "aaa-card" in warnings[0]
     assert "zzz-card" in warnings[1]
 
 
-async def test_malformed_payload_does_not_raise() -> None:
+async def test_malformed_payload_does_not_raise(lovelace) -> None:
     data = _data(await _catalog())
     for payload in (None, "string", 42, [], {"type": 7}, {"cards": None}):
-        assert _card_warnings(payload, data) == []
+        assert await _card_warnings(payload, data, lovelace) == []

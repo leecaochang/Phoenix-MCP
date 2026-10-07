@@ -10,7 +10,10 @@ from __future__ import annotations
 import pytest
 
 from custom_components.phoenix_mcp.card_catalog import (
+    CardCatalog,
     CardCatalogStore,
+    assess_freshness,
+    resource_fingerprint,
     sanitize_entries,
     sanitize_failures,
 )
@@ -198,3 +201,61 @@ async def test_round_trip_through_as_dict() -> None:
     assert data["resource_count"] == 31
     assert data["failed_imports"][0]["url"] == "/hacsfiles/gone/gone.js"
     assert data["harvested_at"] is not None
+
+
+async def test_harvest_records_an_order_independent_resource_fingerprint() -> None:
+    store = CardCatalogStore()
+    await store.async_replace(entries=[], resource_count=2, failed_imports=[], resource_urls=["/b.js", "/a.js"])
+
+    assert store.catalog.resource_fingerprint == resource_fingerprint(["/a.js", "/b.js", "/a.js"])
+    assert store.as_dict()["resource_fingerprint"] == store.catalog.resource_fingerprint
+
+
+async def test_unread_resources_record_no_fingerprint() -> None:
+    store = CardCatalogStore()
+    await store.async_replace(entries=[], resource_count=2, failed_imports=[])
+
+    assert store.catalog.resource_fingerprint is None
+
+
+def test_freshness_is_complete_only_against_the_same_resources_without_failures() -> None:
+    harvested = CardCatalog(harvested_at="t", resource_fingerprint=resource_fingerprint(["/a.js"]))
+
+    assert assess_freshness(harvested, ["/a.js"]).complete is True
+    assert assess_freshness(harvested, ["/a.js", "/b.js"]).reasons == ("resources_changed",)
+    assert assess_freshness(harvested, []).reasons == ("resources_changed",)
+    # An unreadable current list is unknown, never "no resources".
+    assert assess_freshness(harvested, None).reasons == ("provenance_unknown",)
+
+    failed = CardCatalog(
+        harvested_at="t", resource_fingerprint=resource_fingerprint(["/a.js"]),
+        failed_imports=[{"url": "/a.js", "error": "404"}],
+    )
+    assert assess_freshness(failed, ["/a.js"]).reasons == ("failed_imports",)
+    assert assess_freshness(CardCatalog(harvested_at="t"), ["/a.js"]).reasons == ("provenance_unknown",)
+
+
+@pytest.mark.parametrize("stored", ["", "abc", "Z" * 64, 7, None, ["x"], "A" * 64])
+async def test_a_malformed_stored_fingerprint_loads_as_unknown(stored) -> None:
+    class _Store:
+        async def async_load(self):
+            return {"entries": [], "harvested_at": "2026-01-01T00:00:00", "resource_fingerprint": stored}
+
+    store = CardCatalogStore(_Store())  # type: ignore[arg-type]
+    await store.async_load()
+
+    assert store.catalog.harvested is True
+    assert store.catalog.resource_fingerprint is None
+
+
+async def test_a_stored_fingerprint_survives_a_reload() -> None:
+    fingerprint = resource_fingerprint(["/a.js"])
+
+    class _Store:
+        async def async_load(self):
+            return {"entries": [], "harvested_at": "2026-01-01T00:00:00", "resource_fingerprint": fingerprint}
+
+    store = CardCatalogStore(_Store())  # type: ignore[arg-type]
+    await store.async_load()
+
+    assert store.catalog.resource_fingerprint == fingerprint

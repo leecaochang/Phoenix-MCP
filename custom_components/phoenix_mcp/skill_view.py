@@ -482,6 +482,10 @@ mode: single
 - If the response says the catalog has not been harvested, the installed cards
   are UNKNOWN, not absent. Prefer built-in card types and tell the user to open
   the Phoenix MCP panel once so the catalog builds.
+- `catalog_complete: false` means the last harvest may have missed cards, for
+  example because dashboard resources changed after it ran. A card it did not
+  see may still be installed: ask the user before relying on one, rather than
+  telling them it is missing.
 
 ### Voice names for an entity
 

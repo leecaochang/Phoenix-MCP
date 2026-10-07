@@ -442,6 +442,30 @@ def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
     return dashboards.get(url_path)
 
 
+async def async_lovelace_resource_urls(hass: HomeAssistant) -> list[str] | None:
+    """Return the URL of every registered dashboard resource, or None if unknown.
+
+    Mirrors HA's lovelace/resources handler, including its empty answer in safe
+    mode, through the collection's own loading method. None covers both an
+    unavailable lovelace and a failed read: the card catalog uses this only to
+    judge whether a harvest is still current, and an unknown answer must make
+    that judgment unknown rather than look like an instance with no resources.
+    """
+    try:
+        from homeassistant.components.lovelace.const import LOVELACE_DATA  # noqa: PLC0415
+
+        data = hass.data.get(LOVELACE_DATA)
+        if data is None or hass.config.safe_mode:
+            return None
+        resources = data.resources
+        await resources.async_get_info()
+        items = resources.async_items() or []
+    except Exception:  # noqa: BLE001 - an advisory read must never fail a tool call
+        _LOGGER.debug("Could not read the dashboard resource list", exc_info=True)
+        return None
+    return [item["url"] for item in items if isinstance(item, dict) and isinstance(item.get("url"), str)]
+
+
 async def async_get_lovelace_config(hass: HomeAssistant, url_path: str | None) -> dict[str, Any] | None:
     """Return a dashboard's stored view/card config, or None if it has none.
 

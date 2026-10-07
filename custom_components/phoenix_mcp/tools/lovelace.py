@@ -27,7 +27,7 @@ from typing import Any, TypeGuard
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from ..card_catalog import CardEntry
+from ..card_catalog import CardEntry, CatalogFreshness, assess_freshness
 from ..const import CAP_DENY, LAYOUT_SHAPE_MAX_DEPTH, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
@@ -60,6 +60,7 @@ from ..ws_dispatch import (
     WsDashboardNotFoundError,
     WsDispatchError,
     async_get_lovelace_config,
+    async_lovelace_resource_urls,
     async_save_lovelace_config,
     async_ws_command,
 )
@@ -295,6 +296,30 @@ def _card_row(entry: CardEntry, *, detailed: bool, access_key: AccessKeyRecord, 
     return row
 
 
+# Why a harvested catalog may have missed an installed card, in agent-facing words.
+_FRESHNESS_TEXT = {
+    "provenance_unknown": "its dashboard resources could not be compared with the current ones",
+    "resources_changed": "dashboard resources changed after it ran",
+    "failed_imports": "some dashboard resources failed to import during it",
+}
+
+
+async def _catalog_freshness(hass: HomeAssistant, data: PhoenixData) -> CatalogFreshness:
+    """Judge the harvested catalog against the dashboard resources registered now."""
+    return assess_freshness(data.card_catalog.catalog, await async_lovelace_resource_urls(hass))
+
+
+def _freshness_clause(freshness: CatalogFreshness) -> str:
+    return "; ".join(_FRESHNESS_TEXT[reason] for reason in freshness.reasons)
+
+
+def _freshness_fields(freshness: CatalogFreshness) -> dict[str, Any]:
+    fields: dict[str, Any] = {"catalog_complete": freshness.complete}
+    if not freshness.complete:
+        fields["incomplete_reasons"] = list(freshness.reasons)
+    return fields
+
+
 async def _tool_list_dashboard_cards(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -328,19 +353,42 @@ async def _tool_list_dashboard_cards(
             ),
         }, default=str)), "allowed", tool
 
+    freshness = await _catalog_freshness(hass, data)
     if wanted:
         entry = data.card_catalog.get(wanted)
         if entry is None:
             # Card types are deployment metadata; examples are separately scoped.
+            # Not seen is evidence of absence only as far as the harvest was
+            # complete, so the notice says which of the two this answer is.
+            if freshness.complete:
+                notice = (
+                    "The last card harvest did not see this card type and the dashboard "
+                    "resources have not changed since, so it is most likely not installed. "
+                    "Choose a listed or built-in card instead."
+                )
+            else:
+                notice = (
+                    "The last card harvest did not see this card type, but that harvest may "
+                    f"be incomplete ({_freshness_clause(freshness)}), so it may still be "
+                    "installed. Prefer a listed or built-in card unless the operator confirms "
+                    "it; the catalog refreshes when an administrator next loads the Phoenix MCP "
+                    "panel, at most once every ten minutes per browser."
+                )
             return _tool_success(json.dumps({
                 "harvested": True,
+                "harvested_at": catalog.harvested_at,
                 "found": False,
                 "type": wanted,
-                "notice": "That card type is not installed on this instance.",
+                "state": "not_observed",
+                **_freshness_fields(freshness),
+                "notice": notice,
             }, default=str)), "allowed", tool
         return _tool_success(json.dumps({
             "harvested": True,
+            "harvested_at": catalog.harvested_at,
             "found": True,
+            "state": "available" if entry.available else "registered_not_loaded",
+            **_freshness_fields(freshness),
             "card": _card_row(entry, detailed=True, access_key=access_key, hass=hass),
         }, default=str)), "allowed", tool
 
@@ -348,14 +396,23 @@ async def _tool_list_dashboard_cards(
     body: dict[str, Any] = {
         "harvested": True,
         "harvested_at": catalog.harvested_at,
+        **_freshness_fields(freshness),
         "count": len(rows),
         "cards": rows,
     }
+    notices: list[str] = []
+    if not freshness.complete:
+        notices.append(
+            f"This catalog may be incomplete ({_freshness_clause(freshness)}), so a card "
+            "missing from it may still be installed."
+        )
     if not detailed:
-        body["notice"] = (
+        notices.append(
             "Built-in Home Assistant card types are always available in addition to these. "
             "Call this tool with a type to get that card's example config before authoring it."
         )
+    if notices:
+        body["notice"] = " ".join(notices)
     return _tool_success(json.dumps(body, default=str)), "allowed", tool
 
 
@@ -372,36 +429,50 @@ def _collect_card_types(node: Any, out: set[str]) -> None:
             _collect_card_types(child, out)
 
 
-def _card_warnings(payload: Any, data: PhoenixData) -> list[str]:
-    """Advisory notes about custom cards this instance cannot render.
+async def _card_warnings(payload: Any, data: PhoenixData, hass: HomeAssistant) -> list[str]:
+    """Advisory notes about custom cards this instance may not render.
 
     ADVISORY, NEVER A REFUSAL. The catalog is a cache of what one browser could
     see, so failing the write closed would block a legitimate card whenever the
     cache is cold, stale, or harvested from a page that saw a partial registry,
     with no way to override. The cost of the advisory direction is only a warning
-    next to a card that does render.
+    next to a card that does render. Each warning states how complete the
+    harvest behind it was, so "not seen" never reads as "not installed" when
+    resources changed or failed to import.
 
     Silent when the catalog has never been harvested: with nothing to compare
     against, every custom card would be reported as unknown, which trains the
-    reader to ignore the field.
+    reader to ignore the field. An empty list is therefore not a validation.
     """
     catalog = data.card_catalog
     if not catalog.catalog.harvested:
         return []
     types: set[str] = set()
     _collect_card_types(payload, types)
+    flagged = [(t, catalog.get(t)) for t in sorted(types)]
+    flagged = [(t, entry) for t, entry in flagged if entry is None or not entry.available]
+    if not flagged:
+        return []
+    freshness = await _catalog_freshness(hass, data)
+    caveat = "" if freshness.complete else f" That harvest may be incomplete ({_freshness_clause(freshness)})."
     warnings: list[str] = []
-    for card_type in sorted(types):
-        entry = catalog.get(card_type)
-        if entry is None:
+    for card_type, entry in flagged:
+        if entry is None and freshness.complete:
             warnings.append(
-                f"'custom:{card_type}' is not installed on this instance and will render as an "
-                f"error. Call list_dashboard_cards to see what is available."
+                f"'custom:{card_type}' was not seen by the last card harvest and the dashboard "
+                f"resources have not changed since, so it is most likely not installed and would "
+                f"render as an error. Call list_dashboard_cards to see what is available."
             )
-        elif not entry.available:
+        elif entry is None:
             warnings.append(
-                f"'custom:{card_type}' is registered but its element did not load, so it will "
-                f"render as an error."
+                f"'custom:{card_type}' was not seen by the last card harvest, so it may not be "
+                f"installed and would then render as an error.{caveat} Call list_dashboard_cards "
+                f"to see what is available."
+            )
+        else:
+            warnings.append(
+                f"'custom:{card_type}' registered with the card picker but its element did not "
+                f"load during the last card harvest, so it will likely render as an error.{caveat}"
             )
     return warnings
 
@@ -765,7 +836,7 @@ async def _execute_set_dashboard_config(
         before=before, after=config, alias=url_path or "(default)",
     )
     body: dict[str, Any] = {"url_path": url_path, "saved": True, **recovery_receipt}
-    warnings = _card_warnings(config, data)
+    warnings = await _card_warnings(config, data, hass)
     if warnings:
         body["warnings"] = warnings
     return _tool_success(json.dumps(body, default=str)), "allowed", f"dashboard:{resource_id}"
@@ -1090,7 +1161,7 @@ async def _execute_dashboard_card(
         body["section_index"] = args.get("section_index")
     # Emitted only when non-empty, the mesa_advisory convention. A delete names
     # no new card, so only add/edit can warn.
-    warnings = _card_warnings(args.get("card"), data) if op in ("add", "edit") else []
+    warnings = await _card_warnings(args.get("card"), data, hass) if op in ("add", "edit") else []
     if warnings:
         body["warnings"] = warnings
     return _tool_success(json.dumps(body, default=str)), "allowed", f"dashboard:{resource_id}"
@@ -1324,7 +1395,7 @@ async def _execute_patch_dashboard(
         "content_hash": content_hash(new_config),
     }
     warnings = [warning for change in changes if _patch_op_arg(change) != "remove"
-                for warning in _card_warnings(change.get("value"), data)]
+                for warning in await _card_warnings(change.get("value"), data, hass)]
     if warnings:
         body["warnings"] = list(dict.fromkeys(warnings))
     return _tool_success(json.dumps(body, default=str)), "allowed", f"dashboard:{resource_id}"
