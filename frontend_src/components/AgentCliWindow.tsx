@@ -1946,14 +1946,14 @@ export function AgentCliWindow({
           )}
 
           <div className="agentcli-input">
+            {/* Stays editable while a turn runs so the next message can be drafted;
+                send() and runTurn() refuse a second turn until this one ends. */}
             <textarea
               ref={inputRef}
               value={input}
               aria-label={t("agentchat.messageAria")}
               placeholder={noInstances ? t("agentchat.configureFirst") : t("agentchat.messagePlaceholder")}
               disabled={noInstances}
-              readOnly={sending}
-              aria-disabled={sending}
               rows={2}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}

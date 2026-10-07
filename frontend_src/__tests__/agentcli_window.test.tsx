@@ -2037,7 +2037,7 @@ describe("agentCLI cancellation on close/unmount", () => {
     return { signal, onClose, utils };
   }
 
-  it("keeps the composer focusable while a request runs and refuses a duplicate turn", async () => {
+  it("keeps the composer editable while a request runs and refuses a duplicate turn", async () => {
     patchDurable({ open: true });
     render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
                            initialAccessKeyId="t1" onClose={() => {}} />);
@@ -2048,9 +2048,12 @@ describe("agentCLI cancellation on close/unmount", () => {
     await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
     expect(composer).toHaveFocus();
     expect(composer).not.toBeDisabled();
-    expect(composer).toHaveAttribute("readonly");
+    expect(composer).not.toHaveAttribute("readonly");
+    fireEvent.change(composer, { target: { value: "next" } });
+    expect(composer).toHaveValue("next");
     fireEvent.keyDown(composer, { key: "Enter" });
     expect(agentCliChat).toHaveBeenCalledTimes(1);
+    expect(composer).toHaveValue("next");
   });
 
   it("Close aborts the in-flight request and calls onClose", async () => {
