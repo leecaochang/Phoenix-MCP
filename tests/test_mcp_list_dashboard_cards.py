@@ -342,3 +342,22 @@ async def test_harvest_report_records_the_servers_own_resource_list(lovelace) ->
     await lovelace.data[LOVELACE_DATA].resources.async_create_item({"res_type": "module", "url": "/local/later.js"})
     content, _, _ = await _call({"type": "custom:nope-card"}, _access_key(), lovelace, data)
     assert _json(content)["incomplete_reasons"] == ["resources_changed"]
+
+
+async def test_builtin_type_is_known_before_any_harvest(hass: HomeAssistant) -> None:
+    """Asking for 'tile' must never read as an uninstalled custom card."""
+    content, outcome, _ = await _call({"type": "tile"}, _access_key(), hass, _data())
+    body = _json(content)
+
+    assert outcome == "allowed"
+    assert body["found"] is True
+    assert body["state"] == "builtin"
+    assert "built-in" in body["notice"]
+
+
+async def test_custom_prefix_never_resolves_to_a_builtin(lovelace) -> None:
+    content, _, _ = await _call({"type": "custom:tile"}, _access_key(), lovelace, _data(await _harvested()))
+    body = _json(content)
+
+    assert body["found"] is False
+    assert body["state"] == "not_observed"

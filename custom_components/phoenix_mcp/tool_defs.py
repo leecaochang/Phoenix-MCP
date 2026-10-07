@@ -3254,7 +3254,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "type": {"type": "string", "description": "Optional. One card type (with or without the 'custom:' prefix) to return in full, including its example config."},
+                "type": {"type": "string", "description": "Optional. One card type to return in full, including its example config. A bare built-in type such as tile reports the built-in card; prefix custom: for a custom card."},
                 "detailed": {"type": "boolean", "description": "Optional. Include every card's example config. Verbose; prefer passing type for the one card you intend to use."},
             },
         },

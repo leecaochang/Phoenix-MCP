@@ -28,7 +28,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from ..card_catalog import CardEntry, CatalogFreshness, assess_freshness
-from ..const import CAP_DENY, LAYOUT_SHAPE_MAX_DEPTH, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
+from ..const import BUILTIN_CARD_TYPES, CAP_DENY, LAYOUT_SHAPE_MAX_DEPTH, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..tool_input import nested_argument_error
@@ -337,6 +337,20 @@ async def _tool_list_dashboard_cards(
     catalog = data.card_catalog.catalog
     wanted = str_arg(args.get("type")).strip()
     detailed = bool(args.get("detailed"))
+
+    # A bare built-in type is HA's own card, known without any harvest, so it must
+    # never read as an unseen custom card. The custom: prefix asks for a custom
+    # card of the same name.
+    if wanted in BUILTIN_CARD_TYPES:
+        return _tool_success(json.dumps({
+            "found": True,
+            "type": wanted,
+            "state": "builtin",
+            "notice": (
+                "This is a built-in Home Assistant card type, always available. Write it "
+                "without the custom: prefix."
+            ),
+        }, default=str)), "allowed", tool
 
     if not catalog.harvested:
         # NEVER report this as an empty catalog. An agent told the instance has

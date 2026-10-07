@@ -248,6 +248,23 @@ CARD_CATALOG_STORAGE_VERSION = 1
 MAX_CARD_CATALOG_ENTRIES = 500
 MAX_CARD_STUB_CONFIG_BYTES = 2000
 MAX_CARD_CATALOG_FAILURES = 50
+# HA's own card types: the card picker's core cards plus the Energy cards. A bare
+# type in this set is a built-in card, available without any harvest.
+# tests/test_builtin_card_types.py checks it covers the installed HA frontend's
+# card picker; a type an older HA lacks only misses its built-in answer.
+BUILTIN_CARD_TYPES = frozenset({
+    "alarm-panel", "area", "button", "calendar", "clock", "conditional", "distribution",
+    "entities", "entity", "entity-filter", "gauge", "glance", "grid", "heading",
+    "history-graph", "horizontal-stack", "humidifier", "iframe", "light", "logbook", "map",
+    "markdown", "media-control", "picture", "picture-elements", "picture-entity",
+    "picture-glance", "plant-status", "sensor", "shortcut", "statistic", "statistics-graph",
+    "thermostat", "tile", "todo-list", "vertical-stack", "weather-forecast",
+    "energy-compare", "energy-carbon-consumed-gauge", "energy-date-selection",
+    "energy-devices-graph", "energy-distribution", "energy-gas-graph", "energy-grid-balance",
+    "energy-grid-neutrality-gauge", "energy-sankey", "energy-self-sufficiency-gauge",
+    "energy-solar-consumed-gauge", "energy-solar-graph", "energy-sources-table",
+    "energy-usage-graph", "energy-water-graph", "water-flow-sankey", "water-sankey",
+})
 
 # agentCLI: the in-panel LLM chat that runs an agentic loop server-side on
 # behalf of a chosen access key. Provider API keys / base URLs persist in a dedicated
