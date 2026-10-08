@@ -23,8 +23,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -32,6 +30,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.json import json_loads
 
 from .const import DOMAIN
+from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -275,7 +274,7 @@ def _selector_json_schema(value: Any) -> dict[str, Any]:
 
 def _selector_structure_to_json(structure: Any) -> dict[str, Any] | None:
     """Convert HA's selector-backed top-level AI Task structure, if present."""
-    raw = structure.schema if isinstance(structure, vol.Schema) else structure
+    raw = getattr(structure, "schema", structure)
     if not isinstance(raw, dict) or not any(
         isinstance(getattr(value, "selector_type", None), str) for value in raw.values()
     ):
@@ -283,8 +282,9 @@ def _selector_structure_to_json(structure: Any) -> dict[str, Any] | None:
 
     properties: dict[str, Any] = {}
     required: list[str] = []
+    engine = schema_engine(structure) if hasattr(structure, "schema") else schema_engine()
     for key, value in raw.items():
-        name = key.schema if isinstance(key, vol.Marker) else key
+        name = key.schema if isinstance(key, engine.Marker) else key
         if not isinstance(name, str):
             raise TypeError("AI Task structure field names must be strings")
         field_schema = _selector_json_schema(value)
@@ -292,7 +292,7 @@ def _selector_structure_to_json(structure: Any) -> dict[str, Any] | None:
         if isinstance(description, str) and description:
             field_schema["description"] = description
         properties[name] = field_schema
-        if isinstance(key, vol.Required):
+        if isinstance(key, engine.Required):
             required.append(name)
 
     result: dict[str, Any] = {
@@ -306,15 +306,15 @@ def _selector_structure_to_json(structure: Any) -> dict[str, Any] | None:
 
 
 def _structure_to_json(structure: Any) -> dict | None:
-    """Convert a task's voluptuous structure schema to a JSON schema, or None."""
+    """Convert a task's native structure schema to JSON Schema, or None."""
     if structure is None:
         return None
     try:
         if selector_schema := _selector_structure_to_json(structure):
             return selector_schema
-        if vol.Schema.__module__.startswith("probatio."):
-            from probatio import to_openapi
-            return to_openapi(structure)
+        engine = schema_engine(structure)
+        if engine.__name__ == "probatio":
+            return engine.to_openapi(structure)
         from voluptuous_openapi import convert
         return convert(structure)
     except Exception as err:  # noqa: BLE001 - unavailable/unconvertible schema
@@ -350,7 +350,7 @@ def _parse_structured(text: str, structure: Any) -> Any:
         return parsed
     try:
         structure(parsed)
-    except vol.Invalid as err:
+    except schema_engine(structure).Invalid as err:
         _LOGGER.error("Phoenix MCP AI Task: structured output does not match the structure: %s", err)
         raise HomeAssistantError(
             f"The Phoenix MCP AI Task's output did not match the requested structure: {err}"

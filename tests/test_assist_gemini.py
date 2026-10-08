@@ -6,7 +6,6 @@ import copy
 from unittest.mock import MagicMock, patch
 
 import pytest
-import voluptuous as vol
 
 from custom_components.phoenix_mcp.assist_api import PhoenixAssistAPI, PhoenixAssistTool
 from custom_components.phoenix_mcp.assist_gemini import GeminiUnrepresentable, gemini_schema, unwrap_json_fields
@@ -61,7 +60,8 @@ async def _gemini_instance(hass):
 
 async def test_validation_still_uses_the_full_schema(hass):
     tools = await _gemini_instance(hass)
-    with pytest.raises(vol.Invalid):
+    from custom_components.phoenix_mcp.schema_compat import schema_engine
+    with pytest.raises(schema_engine().Invalid):
         tools["intent__HassTurnOn"].parameters({})
     assert tools["set_entity"].parameters({"entity_id": "light.a", "changes": {"name": None}})
 

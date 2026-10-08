@@ -415,7 +415,10 @@ def test_parse_structured_plain_and_fenced_and_bad():
 
 def _ha_structure():
     """The schema HA's ai_task.generate_data service builds from a structure field map."""
-    from homeassistant.components.ai_task import _validate_structure_fields
+    try:
+        from homeassistant.components.ai_task.services import _validate_structure_fields
+    except ImportError:
+        from homeassistant.components.ai_task import _validate_structure_fields
 
     return _validate_structure_fields({
         "summary": {"required": True, "selector": {"text": {}}},
@@ -750,10 +753,12 @@ async def test_run_ai_task_error_raises_aitaskerror():
 def test_probatio_structure_serialization_does_not_import_legacy_converter(monkeypatch):
     import sys
 
-    if not vol.Schema.__module__.startswith("probatio."):
+    from custom_components.phoenix_mcp.schema_compat import schema_engine
+    engine = schema_engine()
+    if engine.__name__ != "probatio":
         pytest.skip("The installed HA uses the original Voluptuous engine")
     monkeypatch.setitem(sys.modules, "voluptuous_openapi", None)
-    schema = vol.Schema({vol.Required("count"): int})
+    schema = engine.Schema({engine.Required("count"): int})
     result = ai_task._structure_to_json(schema)
     assert result["properties"]["count"]["type"] == "integer"
     assert result["required"] == ["count"]

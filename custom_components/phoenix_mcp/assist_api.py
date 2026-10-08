@@ -20,7 +20,6 @@ and schemas that cannot be supported are omitted individually.
 """
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 from collections.abc import Callable
@@ -29,12 +28,12 @@ from functools import cache
 from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
-import voluptuous as vol
 
 from .assist_gemini import gemini_schema, unwrap_json_fields
 from .const import ASSIST_CLIENT_IP, DOMAIN
 from .household_authority import household_scope
 from .request_authority import AuthorityChangedError
+from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,9 +49,9 @@ except ImportError:  # pragma: no cover - depends on HA version
 @cache
 def _schema_converter() -> Callable[[Any], Any]:
     """Select a schema validator compatible with Home Assistant's engine."""
-    if vol.Schema.__module__.startswith("probatio."):
-        probatio = importlib.import_module("probatio")
-        return cast(Callable[[Any], Any], probatio.from_openapi)
+    engine = schema_engine()
+    if engine.__name__ == "probatio":
+        return cast(Callable[[Any], Any], engine.from_openapi)
     from .assist_schema import legacy_schema
 
     return legacy_schema
@@ -162,6 +161,8 @@ if _ASSIST_API_SUPPORTED:
 
     class PhoenixAssistTool(_llm.Tool):
         """One announced Phoenix MCP tool, dispatched through the bound access key's scope."""
+
+        integration = DOMAIN
 
         def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str,
                      json_paths: tuple[tuple[str, ...], ...] = ()) -> None:
@@ -283,7 +284,8 @@ if _ASSIST_API_SUPPORTED:
                         parameters = _convert_to_voluptuous(deepcopy(schema))
                         # HA serializers unwrap Schema before invoking the hook.
                         node = parameters
-                        while isinstance(node, vol.Schema):
+                        engine = schema_engine(parameters)
+                        while isinstance(node, engine.Schema):
                             node = node.schema
                         public_schemas[id(node)] = (node, advertised)
                     except Exception as err:  # noqa: BLE001 - one bad schema must not

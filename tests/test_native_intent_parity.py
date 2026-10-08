@@ -76,6 +76,10 @@ NOT_PUBLISHED: dict[str, str] = {
     "HassTimerStatus": "needs voice-device timer context",
 }
 
+# HA 2026.10 replaces this intent's LLM declaration with separate search and
+# play tools. Phoenix retains its scoped combined adapter for existing clients.
+COMPATIBILITY_INTENTS = {"HassMediaSearchAndPlay"}
+
 # HassBroadcast's component cannot be set up here: assist_satellite pulls audio
 # dependencies (tts, ffmpeg) that the test environment does not install. Its
 # handler declares the description as a plain class attribute, so it is read off
@@ -156,7 +160,7 @@ async def test_native_public_names_match_installed_ha_llm_platforms(hass, ha_int
         "GetDateTime",
         "HassBroadcast",
     }
-    assert set(owners) == expected_intents
+    assert set(owners) | COMPATIBILITY_INTENTS == expected_intents
     for intent_name, domains in owners.items():
         assert len(domains) == 1
         domain = next(iter(domains))
@@ -255,7 +259,9 @@ async def test_phoenix_publishes_nothing_ha_withholds_from_llm_apis(ha_intents):
     # it publishes. Publishing outside those declarations should be a deliberate
     # departure, not something that arrives by copying a registered intent.
     outside_ha = sorted(set(_published_hass_tools()) - _ha_llm_intents(ha_intents))
-    assert not outside_ha, f"publishing intents HA withholds from LLM APIs: {outside_ha}"
+    assert not set(outside_ha) - COMPATIBILITY_INTENTS, (
+        f"publishing intents HA withholds from LLM APIs: {outside_ha}"
+    )
 
 
 async def test_every_unpublished_ha_intent_has_a_written_reason(ha_intents):

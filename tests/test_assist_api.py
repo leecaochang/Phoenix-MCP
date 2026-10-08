@@ -20,7 +20,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from jsonschema import Draft202012Validator
-import voluptuous as vol
+from custom_components.phoenix_mcp.schema_compat import schema_engine
+
+vol = schema_engine()
 
 Invalid = vol.Invalid
 if vol.Schema.__module__.startswith("probatio."):
@@ -97,10 +99,10 @@ async def test_schema_converter_probe_runs_off_the_event_loop(hass):
 def test_schema_converter_matches_installed_probatio_engine(monkeypatch):
     probatio = pytest.importorskip("probatio")
     assist_api._schema_converter.cache_clear()
-    imported = MagicMock(return_value=probatio)
-    monkeypatch.setattr(assist_api.importlib, "import_module", imported)
+    engine = MagicMock(return_value=probatio)
+    monkeypatch.setattr(assist_api, "schema_engine", engine)
     assert assist_api._schema_converter() is probatio.from_openapi
-    imported.assert_called_once_with("probatio")
+    engine.assert_called_once_with()
     assist_api._schema_converter.cache_clear()
 
 
@@ -108,7 +110,8 @@ def test_schema_converter_uses_lossless_wrapper_on_original_engine(monkeypatch):
     from custom_components.phoenix_mcp.assist_schema import legacy_schema
 
     assist_api._schema_converter.cache_clear()
-    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
+    import voluptuous as legacy_vol
+    monkeypatch.setattr(assist_api, "schema_engine", lambda: legacy_vol)
     assert assist_api._schema_converter() is legacy_schema
     assist_api._schema_converter.cache_clear()
 

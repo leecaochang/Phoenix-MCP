@@ -1157,6 +1157,7 @@ SECONDARY_TARGET_SELECTOR_KEYS = frozenset({
     "snapshot_entities",
     "source_player",
     "target_device",
+    "tts_entity_id",
     "transfer_id",
     "vehicle",
 })

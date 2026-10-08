@@ -31,7 +31,7 @@ async def satellite_home(hass, access_key_store):
         identifiers={('test', 'satellite')}, name='Voice satellite')
     dr.async_get(hass).async_update_device(device.id, area_id=kitchen.id)
     satellite = er.async_get(hass).async_get_or_create('assist_satellite', 'test', 'satellite',
-        config_entry=config, device_id=device.id)
+        config_entry=config, device_id=device.id, original_name='Microphone')
     lights = {}
     for area in (kitchen, bedroom):
         light = er.async_get(hass).async_get_or_create('light', 'test', area.id, original_name=area.name+' lamp')

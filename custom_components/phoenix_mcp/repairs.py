@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-import voluptuous as vol
 
 from homeassistant.components.repairs import RepairsFlow
 
@@ -12,6 +11,7 @@ if TYPE_CHECKING:
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
+from .schema_compat import schema_engine
 
 
 class AgentRecoveryFlow(RepairsFlow):
@@ -39,9 +39,10 @@ class AgentRecoveryFlow(RepairsFlow):
                 return self.async_create_entry(data={})
             else:
                 errors["base"] = "operation_active"
+        engine = schema_engine()
         return self.async_show_form(
             step_id="confirm",
-            data_schema=vol.Schema({vol.Required("checked_home_assistant", default=False): bool}),
+            data_schema=engine.Schema({engine.Required("checked_home_assistant", default=False): bool}),
             errors=errors, description_placeholders=placeholders,
         )
 

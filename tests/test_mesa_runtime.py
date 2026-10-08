@@ -263,7 +263,7 @@ def _registry_env(hass: HomeAssistant):
         suggested_object_id="rack", device_id=device.id)
     second = ent_reg.async_get_or_create(
         "sensor", "test_integration", "u2", config_entry=entry,
-        suggested_object_id="rack_temp", device_id=device.id)
+        suggested_object_id="rack_temp", device_id=device.id, original_name="Rack temperature")
     return device, on_device, second, area, floor.floor_id, label.label_id
 
 
@@ -503,7 +503,8 @@ async def test_get_entity_device_maps_to_the_owning_device(hass: HomeAssistant):
 
     device = _make_device(hass)
     entry = er.async_get(hass).async_get_or_create(
-        "lock", "demo", "uid_lock", device_id=device.id, suggested_object_id="front"
+        "lock", "demo", "uid_lock", device_id=device.id, suggested_object_id="front",
+        original_name="Front lock",
     )
     er.async_get(hass).async_update_entity(entry.entity_id, area_id="hallway")
 
@@ -570,7 +571,8 @@ async def test_device_layer_tightens_and_scope_only_breaks_ties(hass: HomeAssist
 
     device = _make_device(hass)
     entry = er.async_get(hass).async_get_or_create(
-        "lock", "demo", "uid_rank", device_id=device.id, suggested_object_id="rank"
+        "lock", "demo", "uid_rank", device_id=device.id, suggested_object_id="rank",
+        original_name="Rank lock",
     )
     er.async_get(hass).async_update_entity(entry.entity_id, area_id="hallway")
     runtime = await async_setup_mesa(hass, "advisory")

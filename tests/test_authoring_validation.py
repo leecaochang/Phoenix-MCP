@@ -55,6 +55,17 @@ def test_error_projection_bounds_and_hides_dynamic_names_and_messages():
     assert text.count("is required") < AUTHORING_MAX_ERRORS
 
 
+def test_error_projection_unwraps_known_markers_and_hides_dynamic_markers():
+    errors = [
+        vol.RequiredFieldInvalid("secret", path=[vol.Required("triggers")]),
+        vol.RequiredFieldInvalid("secret", path=[vol.Required("token=secret")]),
+    ]
+    text = validation_message("automation", vol.MultipleInvalid(errors))
+    assert "config.triggers is required" in text
+    assert "config.[field] is required" in text
+    assert "secret" not in text
+
+
 @pytest.mark.parametrize("domain", ["automation", "script"])
 @pytest.mark.parametrize("operation", ["create", "edit"])
 @pytest.mark.parametrize("cap", ["confirm", "deny"])

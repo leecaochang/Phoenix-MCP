@@ -573,9 +573,9 @@ def test_schema_serializer_follows_the_schema_engine_not_package_presence(monkey
     import sys
     import types
 
-    import probatio
     from custom_components.phoenix_mcp.tool_common import serialize_ha_schema
 
+    monkeypatch.setitem(sys.modules, "probatio", types.ModuleType("probatio"))
     legacy = types.ModuleType("voluptuous_serialize")
     legacy.convert = lambda schema, custom_serializer=None: ["legacy", schema]
     monkeypatch.setitem(sys.modules, "voluptuous_serialize", legacy)
@@ -585,5 +585,14 @@ def test_schema_serializer_follows_the_schema_engine_not_package_presence(monkey
 
     genuine = GenuineVoluptuousSchema()
     assert serialize_ha_schema(genuine, None) == ["legacy", genuine]
+
+
+def test_schema_serializer_uses_probatio_without_the_legacy_converter(monkeypatch):
+    import sys
+
+    probatio = pytest.importorskip("probatio")
+    from custom_components.phoenix_mcp.tool_common import serialize_ha_schema
+
+    monkeypatch.setitem(sys.modules, "voluptuous_serialize", None)
     current = probatio.Schema({probatio.Required("name"): str})
     assert serialize_ha_schema(current, None) == [{"type": "string", "name": "name", "required": True}]

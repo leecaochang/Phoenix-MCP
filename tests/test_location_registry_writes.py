@@ -41,6 +41,7 @@ def location_env(hass):
     dr.async_get(hass).async_update_device(device.id, area_id=area.id)
     entity = er.async_get(hass).async_get_or_create(
         "light", owner.domain, "location-light", config_entry=owner, device_id=device.id,
+        original_name="Location light",
     )
     hass.states.async_set(entity.entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("first", "second")]

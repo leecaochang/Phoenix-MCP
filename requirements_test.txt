@@ -6,7 +6,9 @@
 # pinning PHACC pins the primary test stack; deeper transitive packages can
 # still float within the ranges their dependents allow.
 #
-#   PHACC 0.13.367  ->  homeassistant==2026.9.4
+#   PHACC 0.13.370 pins homeassistant==2026.10.0b4.
+#   The latest published harness still targets beta 4; keep its matched pins
+#   until a harness for stable 2026.10.0 is published.
 #   Python: 3.14
 #
 # This is a TEST pin only. hacs.json and const.MIN_HA_VERSION declare the
@@ -21,7 +23,7 @@
 #   # then pip freeze the two lines back into this file)
 #   venv/bin/python -m pytest
 
-pytest-homeassistant-custom-component==0.13.367
+pytest-homeassistant-custom-component==0.13.370
 
 # Dependencies of HA's `conversation` component, needed by the Phoenix MCP voice-agent
 # tests (voice_agent.py imports homeassistant.components.conversation). PHACC does
@@ -29,7 +31,7 @@ pytest-homeassistant-custom-component==0.13.367
 # manifest for the pinned HA version. Re-verify on HA bumps.
 gazetteer-matcher==1.1.0
 hassil==3.12.1
-home-assistant-intents==2026.8.28
+home-assistant-intents==2026.10.6
 
 # Draft 2020-12 validation for legacy Assist and independent modern-engine checks.
 jsonschema==4.26.0
@@ -38,20 +40,20 @@ jsonschema==4.26.0
 PyTurboJPEG==1.8.3
 
 # Real integration setup/reload tests; matches the pinned HA frontend manifest.
-home-assistant-frontend==20260826.7
+home-assistant-frontend==20260930.1
 
 # Native Local Calendar update and recurrence regression tests; matches pinned HA.
-ical==14.1.1
+ical==14.3.0
 
 # Standalone lint tool used by the dev workflow (not pulled in by PHACC).
-pyflakes==3.4.0
+pyflakes==4.0.3
 
 # Standalone type checker, same rationale as pyflakes above (not pulled in by
 # PHACC). Config lives in pyproject.toml.
-mypy==2.3.1
+mypy==2.4.0
 
 # Locale-aware routing replies; matches the integration manifest.
 Babel==2.18.0
 
 # Subprocess instrumentation uses coverage.py's supported patch mechanism.
-coverage==7.15.4
+coverage==7.16.2

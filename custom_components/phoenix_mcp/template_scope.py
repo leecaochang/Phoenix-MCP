@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
-import voluptuous as vol
 
 from .const import (
     HELPER_TEMPLATE_MAX_CHARS, HELPER_TEMPLATE_MAX_DEPTH, HELPER_TEMPLATE_MAX_NODES,
@@ -15,6 +14,7 @@ from .const import (
     HELPER_TEMPLATE_TIME_FUNCTIONS, HELPER_TEMPLATE_TIME_METHODS,
 )
 from .policy_engine import _ENTITY_ID_RE, is_sensitive_key
+from .schema_compat import schema_engine
 
 
 class HelperScopeError(PermissionError):
@@ -175,11 +175,12 @@ def validate_template_selectors(options: Any, template_type: str) -> None:
     from homeassistant.components.template.config_flow import config_schema
     from homeassistant.helpers.selector import ActionSelector, DeviceSelector
 
-    def walk(schema: vol.Schema, values: Any) -> None:
+    def walk(schema: Any, values: Any) -> None:
         if not isinstance(values, dict):
             return
+        engine = schema_engine(schema)
         for marker, validator in schema.schema.items():
-            name = marker.schema if isinstance(marker, vol.Marker) else marker
+            name = marker.schema if isinstance(marker, engine.Marker) else marker
             value = values.get(name)
             if isinstance(validator, (ActionSelector, DeviceSelector)) and value:
                 raise HelperScopeError(
@@ -187,7 +188,7 @@ def validate_template_selectors(options: Any, template_type: str) -> None:
                     "because their future authority cannot be established safely."
                 )
             nested = getattr(validator, "schema", None)
-            if isinstance(nested, vol.Schema):
+            if isinstance(nested, engine.Schema):
                 walk(nested, value)
                 # HA also accepts section fields flattened into stored options.
                 walk(nested, values)

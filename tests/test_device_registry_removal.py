@@ -175,9 +175,7 @@ async def test_hook_rejection_or_exception_leaves_registry_ownership(
         )
     assert outcome == "denied"
     assert "integration" in content["content"][0]["text"].lower()
-    assert removal_env["owner"].entry_id in dr.async_get(hass).async_get(
-        device_id
-    ).config_entries
+    assert dr.async_get(hass).async_get(device_id) == removal_env["device"]
     assert data.versions.list_for("device", device_id) == []
 
 

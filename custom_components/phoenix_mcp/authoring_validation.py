@@ -34,6 +34,8 @@ def validation_message(domain: str, error: vol.Invalid | None = None) -> str:
         path = "config"
         if item is not None:
             for part in item.path[:AUTHORING_MAX_PATH_DEPTH]:
+                if isinstance(part, vol.Marker):
+                    part = part.schema
                 if type(part) is int and 0 <= part <= 100000:
                     path += f"[{part}]"
                 elif isinstance(part, str) and part in _FIELDS:
