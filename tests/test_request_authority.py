@@ -23,6 +23,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree, AccessKeyStore
 from tests.test_mcp_sse import _make_request as _transport_request, _view
+from tests.runtime_fixtures import assist_result_parts
 
 
 def _make_request(*args, **kwargs):
@@ -295,7 +296,9 @@ async def _internal_ingress(kind, hass, data, access_key, name, arguments):
         from homeassistant.auth.const import GROUP_ID_ADMIN
         from homeassistant.core import Context
         user = await hass.auth.async_create_user('authority-test-admin', group_ids=[GROUP_ID_ADMIN])
-        return await tool.async_call(hass, SimpleNamespace(id='call', tool_args=arguments), SimpleNamespace(context=Context(user_id=user.id)))
+        result, _error = assist_result_parts(await tool.async_call(
+            hass, SimpleNamespace(id='call', tool_args=arguments), SimpleNamespace(context=Context(user_id=user.id))))
+        return result
     call = {'id': 'call', 'name': name, 'input': arguments}
     if kind == 'interactive':
         result = await agentcli._run_tool_batch(

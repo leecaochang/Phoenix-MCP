@@ -29,6 +29,7 @@ from custom_components.phoenix_mcp.policy_engine import Permission, resolve, res
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.request_authority import AuthorityChangedError, check_request_authority
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, AccessKeyStore
+from tests.runtime_fixtures import assist_result_parts
 
 
 async def _environment(hass):
@@ -89,13 +90,15 @@ async def test_assist_gate_and_audit_use_requesting_user(hass, hass_admin_user, 
     downstream = AsyncMock(return_value=({"content": [{"type": "text", "text": "private-log-fixture"}]}, "allowed", "get_logs"))
     # Keep the owning capability gate, replace only the admin-only backend read.
     with patch.object(mcp_view, "_tool_log_query", downstream):
-        result = await tool.async_call(hass, llm.ToolInput(tool_name="get_logs", tool_args={}), _context(user.id if identity != "unknown" else None))
+        result, error = assist_result_parts(await tool.async_call(
+            hass, llm.ToolInput(tool_name="get_logs", tool_args={}), _context(user.id if identity != "unknown" else None)))
     if identity == "admin":
         assert "private-log-fixture" in json.dumps(result)
         downstream.assert_awaited_once()
     else:
         assert "private-log-fixture" not in json.dumps(result)
         assert result.get("error")
+        assert error is not False
         downstream.assert_not_awaited()
     row = data.audit.query()[-1]
     assert row.ha_user_id == (user.id if identity != "unknown" else None)
@@ -135,9 +138,11 @@ async def test_shared_access_key_history_requires_household_admin(hass, hass_adm
                        ("get_approval_status", {"approval_id": record.id}),
                        ("wait_for_approval", {"approval_ids": ["missing"]})):
         tool = assist_api.PhoenixAssistTool(name, "", {}, access_key.id)
-        result = await tool.async_call(hass, llm.ToolInput(tool_name=name, tool_args=args), context)
+        result, error = assist_result_parts(
+            await tool.async_call(hass, llm.ToolInput(tool_name=name, tool_args=args), context))
         if identity != "admin":
             assert result == {"error": "Forbidden."}
+            assert error is not False
         elif name == "get_audit_summary":
             assert "private-path" in json.dumps(result)
         elif name == "get_approval_status":
@@ -237,8 +242,9 @@ async def test_service_authority_uses_native_admin_registration(
     else:
         await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)
         tool = assist_api.PhoenixAssistTool("call_service", "", {}, access_key.id)
-        result = await tool.async_call(hass, llm.ToolInput(tool_name="call_service", tool_args=args),
-                                      _context(user.id if identity != "unknown" else None))
+        result, _error = assist_result_parts(await tool.async_call(
+            hass, llm.ToolInput(tool_name="call_service", tool_args=args),
+            _context(user.id if identity != "unknown" else None)))
         outcome = data.audit.query()[-1].outcome
     permitted = not admin_only or identity in {"admin", "bearer"}
     assert outcome == ("allowed" if permitted else "denied"), result

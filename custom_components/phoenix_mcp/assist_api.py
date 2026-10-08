@@ -134,6 +134,36 @@ def _base_url(hass: HomeAssistant) -> str:
         return ""
 
 
+_MCP_HINTS = (
+    ("read_only", "readOnlyHint"),
+    ("destructive", "destructiveHint"),
+    ("idempotent", "idempotentHint"),
+    ("open_world", "openWorldHint"),
+)
+
+
+def _tool_annotations(hints: Any) -> Any:
+    """Map a tool's MCP hints onto HA's tool annotations, or None before HA has them.
+
+    HA 2026.10 forwards these through its own MCP server. Phoenix states every hint;
+    one that is missing or malformed keeps HA's least-safe default, as HA's own MCP
+    client does.
+    """
+    annotations_type = getattr(_llm, "ToolAnnotations", None)
+    if annotations_type is None:
+        return None
+    hints = hints if isinstance(hints, dict) else {}
+    return annotations_type(**{
+        field: hints[hint] for field, hint in _MCP_HINTS if isinstance(hints.get(hint), bool)
+    })
+
+
+def _tool_result(data: dict, *, error: bool) -> Any:
+    """Return HA's ToolResult where it exists (HA 2026.10), the plain object before."""
+    result_type = getattr(_llm, "ToolResult", None)
+    return data if result_type is None else result_type(data=data, error=error)
+
+
 def _unwrap_result(result: dict) -> dict:
     """Turn an MCP CallToolResult into the JSON object HA's Tool contract expects.
 
@@ -165,15 +195,17 @@ if _ASSIST_API_SUPPORTED:
         integration = DOMAIN
 
         def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str,
-                     json_paths: tuple[tuple[str, ...], ...] = ()) -> None:
+                     json_paths: tuple[tuple[str, ...], ...] = (), annotations: Any = None) -> None:
             self.name = name
             self.description = description
             self.parameters = parameters
+            if (mapped := _tool_annotations(annotations)) is not None:
+                self.annotations = mapped
             self._access_key_id = access_key_id
             # Open objects Gemini was shown as JSON text, decoded before dispatch.
             self._json_paths = json_paths
 
-        async def async_call(self, hass, tool_input, llm_context) -> dict:
+        async def async_call(self, hass, tool_input, llm_context) -> Any:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
             from .agentcli import _current_dispatch_access_key, _parse_pending, dispatch_tool_result  # noqa: PLC0415
             from .audit import generate_request_id  # noqa: PLC0415
@@ -188,11 +220,16 @@ if _ASSIST_API_SUPPORTED:
                 # the result is reported as queued below.
                 access_key = _current_dispatch_access_key(data, self._access_key_id)
                 if access_key is None:
-                    return {"error": "This Phoenix MCP access key is no longer available."}
+                    return _tool_result(
+                        {"error": "This Phoenix MCP access key is no longer available."}, error=True
+                    )
                 # A tool built before a rebind or unbind still carries the old key;
                 # the binding, not the key's own validity, is what grants Assist it.
                 if data.store.get_settings().assist_bound_access_key_id != self._access_key_id:
-                    return {"error": "The Phoenix MCP Assist binding changed. Start a new conversation."}
+                    return _tool_result(
+                        {"error": "The Phoenix MCP Assist binding changed. Start a new conversation."},
+                        error=True,
+                    )
 
                 request_id = generate_request_id()
                 resp_msg, _m, _r, outcome = await _dispatch_mcp(
@@ -216,15 +253,15 @@ if _ASSIST_API_SUPPORTED:
                     request_id=request_id,
                 )
                 if pending:
-                    return {
+                    return _tool_result({
                         "status": "queued_for_approval",
                         "approval_id": pending["approval_id"],
                         "message": (
                             "This action is queued for approval. An administrator must "
                             "approve it in the Phoenix MCP panel before it takes effect."
                         ),
-                    }
-                return _unwrap_result(result)
+                    }, error=False)
+                return _tool_result(_unwrap_result(result), error=bool(result.get("isError")))
 
     class PhoenixAssistAPI(_llm.API):
         """An llm.API whose tools are the bound Phoenix MCP access key's scoped tool surface."""
@@ -302,7 +339,7 @@ if _ASSIST_API_SUPPORTED:
                     tools.append(
                         PhoenixAssistTool(
                             str(name), tool_def.get("description"), parameters, access_key.id,
-                            json_paths=json_paths,
+                            json_paths=json_paths, annotations=tool_def.get("annotations"),
                         )
                     )
 

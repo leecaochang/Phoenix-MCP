@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from jsonschema import Draft202012Validator
+from tests.runtime_fixtures import assist_result_parts
 from custom_components.phoenix_mcp.schema_compat import schema_engine
 
 vol = schema_engine()
@@ -455,7 +456,9 @@ async def test_tool_call_dispatches_with_assist_sentinel(hass):
 
     assert captured["client_ip"] == ASSIST_CLIENT_IP
     assert captured["name"] == "get_state"
-    assert result == {"state": "on"}
+    body, error = assist_result_parts(result)
+    assert body == {"state": "on"}
+    assert not error
 
 
 @pytest.mark.asyncio
@@ -485,8 +488,11 @@ async def test_confirm_gated_call_returns_queued(hass):
          patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
 
-    assert result["status"] == "queued_for_approval"
-    assert result["approval_id"] == "ap-1"
+    body, error = assist_result_parts(result)
+    assert body["status"] == "queued_for_approval"
+    assert body["approval_id"] == "ap-1"
+    # Queued is not a failure: the provider must not tell the model the call failed.
+    assert not error
 
 
 @pytest.mark.asyncio
@@ -497,8 +503,9 @@ async def test_tool_call_on_revoked_access_key_returns_error(hass):
     hass.data[DOMAIN] = data
 
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
-    result = await tool.async_call(hass, _tool_input({}), _ctx())
-    assert "error" in result
+    body, error = assist_result_parts(await tool.async_call(hass, _tool_input({}), _ctx()))
+    assert "error" in body
+    assert error is not False
 
 
 @pytest.mark.asyncio
@@ -517,7 +524,9 @@ async def test_retained_tool_refuses_after_rebind_or_unbind(hass, rebound_to):
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
         result = await tool.async_call(hass, _tool_input({"entity_id": "light.x"}), _ctx())
 
-    assert "binding changed" in result["error"]
+    body, error = assist_result_parts(result)
+    assert "binding changed" in body["error"]
+    assert error is not False
     dispatch.assert_not_called()
 
 
@@ -531,6 +540,70 @@ async def test_error_result_is_surfaced_not_raised(hass):
         return ({"result": {"content": [{"type": "text", "text": "Forbidden."}], "isError": True}}, "x", "x", "denied")
 
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
+    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+        result = await tool.async_call(hass, _tool_input({}), _ctx())
+    body, error = assist_result_parts(result)
+    assert body == {"error": "Forbidden."}
+    assert error is not False
+
+
+@pytest.mark.asyncio
+async def test_assist_tools_carry_phoenix_hints_as_ha_annotations(hass, hass_admin_user):
+    """HA 2026.10 forwards annotations through its own MCP server; an omitted one reads as destructive."""
+    from homeassistant.helpers import llm
+    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+
+    if not hasattr(llm, "ToolAnnotations"):
+        pytest.skip("Home Assistant before 2026.10 has no tool annotations")
+    access_key = _make_access_key(announce_all=True)
+    data = _make_data(access_key, bound_id=access_key.id)
+    data.mesa = MagicMock()
+    hints = {d["name"]: d["annotations"] for d in build_mcp_tool_list(access_key, data)}
+    context = _ctx()
+    context.context.user_id = hass_admin_user.id
+    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
+    assert len(instance.tools) == len(hints)
+    for tool in instance.tools:
+        expected = hints[tool.name]
+        assert tool.annotations == llm.ToolAnnotations(
+            read_only=expected["readOnlyHint"],
+            destructive=expected["destructiveHint"],
+            idempotent=expected["idempotentHint"],
+            open_world=expected["openWorldHint"],
+        ), tool.name
+    by_name = {tool.name: tool.annotations for tool in instance.tools}
+    assert by_name["get_state"].read_only and not by_name["get_state"].destructive
+    assert not by_name["call_service"].read_only and by_name["call_service"].destructive
+
+
+def test_missing_or_malformed_hints_keep_ha_least_safe_defaults():
+    from homeassistant.helpers import llm
+
+    if not hasattr(llm, "ToolAnnotations"):
+        pytest.skip("Home Assistant before 2026.10 has no tool annotations")
+    assert assist_api._tool_annotations({"readOnlyHint": True, "destructiveHint": "no"}) == llm.ToolAnnotations(
+        read_only=True,
+    )
+    assert assist_api._tool_annotations(None) == llm.ToolAnnotations()
+
+
+@pytest.mark.asyncio
+async def test_older_home_assistant_keeps_plain_results_and_no_annotations(hass, monkeypatch):
+    from homeassistant.helpers import llm
+
+    monkeypatch.delattr(llm, "ToolAnnotations", raising=False)
+    monkeypatch.delattr(llm, "ToolResult", raising=False)
+    access_key = _make_access_key()
+    data = _make_data(access_key, bound_id=access_key.id)
+    hass.data[DOMAIN] = data
+    tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id,
+                             annotations={"readOnlyHint": True, "destructiveHint": False,
+                                          "idempotentHint": True, "openWorldHint": False})
+    assert "annotations" not in vars(tool)
+
+    async def fake_dispatch(*a, **k):
+        return ({"result": {"content": [{"type": "text", "text": "Forbidden."}], "isError": True}}, "x", "x", "denied")
+
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
     assert result == {"error": "Forbidden."}
