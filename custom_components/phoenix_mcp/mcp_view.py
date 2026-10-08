@@ -55,7 +55,12 @@ from .request_authority import DispatchProgress, dispatch_progress, mark_dispatc
 from .tool_common import _create_registry_mesa_approval, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
-from .device_semantics import device_registry_snapshot, update_device_registry_entry
+from .device_semantics import (
+    device_registry_snapshot,
+    entity_follows_device_name,
+    entity_name_source,
+    update_device_registry_entry,
+)
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
@@ -2646,8 +2651,8 @@ def _registry_area_id_error(
 
 _SET_ENTITY_UPDATE_ARGUMENTS = frozenset(
     {
-        "name", "icon", "area_id", "device_class", "enabled", "hidden",
-        "add_aliases", "remove_aliases", "add_labels", "remove_labels",
+        "name", "use_device_name", "icon", "area_id", "device_class", "enabled",
+        "hidden", "add_aliases", "remove_aliases", "add_labels", "remove_labels",
         "categories", "new_entity_id",
     }
 )
@@ -2704,6 +2709,16 @@ def _set_entity_value_error(
     name_error = _registry_name_error(args.get("name"))
     if name_error is not None:
         return name_error
+    if "use_device_name" in args:
+        if not isinstance(args["use_device_name"], bool):
+            return "use_device_name must be true or false."
+        if "name" in args:
+            return "Send either name or use_device_name, not both."
+        if args["use_device_name"] and not entity_follows_device_name(hass, entry):
+            return (
+                "use_device_name needs an entity on a named device and Home Assistant "
+                "2026.10 or later, which shows such an entity under its device's name."
+            )
     for field in ("icon", "device_class"):
         if field in args and args[field] is not None and not isinstance(args[field], str):
             return f"{field} must be a string or null."
@@ -4415,6 +4430,12 @@ async def _build_diff_set_entity(
     preview: dict[str, Any] = {
         f: {"before": before.get(f), "after": args.get(f)} for f in fields
     }
+    if entry is not None and "use_device_name" in args:
+        fields.append("use_device_name")
+        preview["use_device_name"] = {
+            "before": entity_name_source(hass, entry) == "device",
+            "after": args["use_device_name"],
+        }
     if "enabled" in args:
         fields.append("enabled")
         preview["enabled"] = {
@@ -4701,7 +4722,11 @@ def _commit_set_entity(
 
     updates: dict = {}
     if "name" in args:
-        updates["name"] = args["name"] or None
+        # A restore replays the captured override exactly: an empty name is Home
+        # Assistant's "Use device name", not a cleared override.
+        updates["name"] = args["name"] if restoring else args["name"] or None
+    if "use_device_name" in args:
+        updates["name"] = "" if args["use_device_name"] else None
     if "icon" in args:
         updates["icon"] = args["icon"] or None
     if "area_id" in args:
@@ -4806,7 +4831,11 @@ def _commit_set_entity(
         return _tool_error("Failed to read updated entity."), "denied", entity_id
     after = _entity_meta_snapshot(updated_entry)
 
-    public_after = {**after, "aliases": er.async_get_entity_aliases(hass, updated_entry)}
+    public_after = {
+        **after,
+        "name_source": entity_name_source(hass, updated_entry),
+        "aliases": er.async_get_entity_aliases(hass, updated_entry),
+    }
     body: dict = {"entity_id": updated_id, "updated": public_after}
     if updated_id != entity_id:
         body["previous_entity_id"] = entity_id

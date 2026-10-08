@@ -85,9 +85,9 @@ _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
     },
     "set_entity": {
         field: f"changes.{field}" for field in (
-            "name", "icon", "area_id", "device_class", "new_entity_id", "enabled",
-            "hidden", "add_aliases", "remove_aliases", "add_labels", "remove_labels",
-            "categories",
+            "name", "use_device_name", "icon", "area_id", "device_class", "new_entity_id",
+            "enabled", "hidden", "add_aliases", "remove_aliases", "add_labels",
+            "remove_labels", "categories",
         )
     },
     "set_device": {

@@ -92,7 +92,7 @@ UNPUBLISHED_ARGS = {
 # Catalog v2 handlers normalize structured public inputs to the internal executor
 # shape after the public-schema boundary. These keys are deliberately internal.
 NORMALIZED_ARGS = {
-    "mcp_view.py": {"add_aliases", "add_labels", "area_id", "categories", "context_id", "detailed", "device_class", "domain", "fields", "hidden", "icon", "new_entity_id", "remove_aliases", "remove_labels", "service_data", "title"},
+    "mcp_view.py": {"add_aliases", "add_labels", "area_id", "categories", "context_id", "detailed", "device_class", "domain", "fields", "hidden", "icon", "new_entity_id", "remove_aliases", "remove_labels", "service_data", "title", "use_device_name"},
     "discovery.py": {"area_id", "service_data"},
     "energy.py": {"device_name", "name", "new_statistic", "op", "source_type", "statistic"},
     "config_files.py": {"op"},

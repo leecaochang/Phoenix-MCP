@@ -503,7 +503,11 @@ mode: single
 
 - `set_entity` can clear name, icon, area, and device-class overrides with an
   explicit null; omitting a field leaves it unchanged. Use `changes.name: null`
-  to restore the integration-provided name. Non-empty names containing only
+  to restore the integration-provided name. To name an entity after its device,
+  so it also follows device renames, send `changes.use_device_name: true`
+  instead of a name; it needs Home Assistant 2026.10 or later and a named
+  device. `describe_entity` reports the current state as
+  `registry.name_source`. Non-empty names containing only
   single/double quotes and whitespace are refused before any fields change.
   Names containing quotes alongside other text are allowed. Labels are edited with
   `add_labels` / `remove_labels`, while `categories` is a scope-keyed patch whose

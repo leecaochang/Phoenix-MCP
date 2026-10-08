@@ -7,8 +7,11 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import attr
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,6 +201,40 @@ def update_device_registry_entry(
     ):
         return registry.async_update_child_device(device_id, **updates)
     return registry.async_update_device(device_id, **updates)
+
+
+def entity_device_name(hass: HomeAssistant, entry: Any) -> str | None:
+    """Return the name of the device an entity belongs to, if it has one."""
+    device = device_registry_snapshot(hass).get(getattr(entry, "device_id", None))
+    if device is None:
+        return None
+    name = device_entry_value(device, "name_by_user") or device_entry_value(device, "name")
+    return name if isinstance(name, str) and name else None
+
+
+def entity_follows_device_name(hass: HomeAssistant, entry: Any) -> bool:
+    """Whether Home Assistant shows this entity under its device's name when its name override is empty.
+
+    Home Assistant 2026.10 reads an empty override as "Use device name"; earlier
+    releases leave such an entity with no friendly name at all. Rather than compare
+    versions, ask Home Assistant's own friendly-name helper what the empty override
+    would produce for this entity.
+    """
+    friendly_name = getattr(er, "async_get_legacy_friendly_name", None)
+    device_name = entity_device_name(hass, entry)
+    if friendly_name is None or device_name is None:
+        return False
+    return bool(friendly_name(hass, attr.evolve(entry, name="")) == device_name)
+
+
+def entity_name_source(hass: HomeAssistant, entry: Any) -> str:
+    """Name an entity's naming state: custom, device, integration, or none."""
+    name = getattr(entry, "name", None)
+    if name:
+        return "custom"
+    if name is None:
+        return "integration"
+    return "device" if entity_follows_device_name(hass, entry) else "none"
 
 
 def effective_entity_area_id(entry: Any, snapshot: DeviceRegistrySnapshot) -> str | None:

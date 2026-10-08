@@ -56,6 +56,7 @@ from ..device_semantics import (
     DeviceRegistrySnapshot,
     device_entry_value,
     device_registry_snapshot,
+    entity_name_source,
 )
 from ..service_targets import secondary_target_error, unsupported_secondary_targets
 from ..tool_contracts import normalize_tool_args
@@ -2389,7 +2390,10 @@ async def _tool_describe_entity(
         body["entity_category"] = entry.entity_category.value
 
     if entry is not None:
-        body["registry"] = _registry_projection(entry)
+        body["registry"] = {
+            **_registry_projection(entry),
+            "name_source": entity_name_source(hass, entry),
+        }
 
     # The spoken names HA matches this entity by, RESOLVED: the entity's own name
     # appears as the name itself, not as the registry sentinel that stands for it,

@@ -1192,7 +1192,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "entity_id": {"type": "string", "description": "Entity registry ID to update."},
                 "changes": {"type": "object", "minProperties": 1, "description": "User-controlled metadata changes.", "additionalProperties": False, "properties": {
-                "name": {"type": ["string", "null"], "description": "Friendly-name override; null restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."},
+                "name": {"type": ["string", "null"], "description": "Friendly-name override; null or an empty string restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."},
+                "use_device_name": {"type": "boolean", "description": "true names the entity after its device, following renames (Home Assistant 2026.10+, named device); false restores the integration name. Not with name."},
                 "icon": {"type": ["string", "null"], "description": "New icon, or null to clear it."},
                 "area_id": {"type": ["string", "null"], "description": "Area assignment, or null to clear it."},
                 "device_class": {"type": ["string", "null"], "description": "User device-class override, or null to clear it."},
@@ -2537,7 +2538,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "A comprehensive summary of one accessible entity, including disabled and registry-only "
             "entries when access is inherited from their device or domain: its state when available, "
-            "an allowlisted registry projection, area, domain services, references, and MESA control_mode. "
+            "an allowlisted registry projection with name_source (custom, device, integration or none), area, "
+            "domain services, references, and MESA control_mode. "
             "If configuration branches could not be read, 'referenced_by_not_searched' explains why the "
             "reverse-reference list is incomplete. For full "
             "semantic profile data use mesa_get_profile (requires cap_config_read). 'not found' if not accessible."

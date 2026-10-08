@@ -832,11 +832,12 @@ class TestDescribeRegistryOnlyEntity:
         assert body["registry"]["device_id"] == reg_env["hub"].id
         assert body["registry"]["labels"] == ["safe-label"]
         assert body["registry"]["categories"] == {"scope": "safe-category"}
+        assert body["registry"]["name_source"] == "integration"
         assert set(body["registry"]) == {
             "platform", "name", "original_name", "icon", "original_icon",
             "area_id", "device_id", "device_class", "original_device_class",
             "entity_category", "disabled_by", "hidden_by", "labels",
-            "categories", "has_entity_name",
+            "categories", "has_entity_name", "name_source",
         }
         wire = json.dumps(body)
         assert "secret-unique-id" not in wire
