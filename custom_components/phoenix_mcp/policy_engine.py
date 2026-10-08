@@ -250,14 +250,21 @@ def resolve_registry_access(
 
 
 def device_config_entry_ids(device: Any) -> list[str]:
-    """Return a device's owning config-entry ids across supported HA versions."""
+    """Return a device's owning config-entry ids across supported HA versions.
+
+    From HA 2026.9 a device has one owner in config_entry_id, and 2026.10 reports
+    every config_entries read as deprecated. Only a restored pre-migration
+    composite still holds several owners, which it reports through
+    config_entries without that warning. Releases before 2026.9 have
+    config_entries alone.
+    """
+    if hasattr(device, "config_entry_id") and getattr(device, "is_composite_device", False) is not True:
+        config_entry_id = device.config_entry_id
+        return [config_entry_id] if isinstance(config_entry_id, str) else []
     config_entries = getattr(device, "config_entries", None)
-    if config_entries is not None:
-        return sorted(
-            entry_id for entry_id in config_entries if isinstance(entry_id, str)
-        )
-    config_entry_id = getattr(device, "config_entry_id", None)
-    return [config_entry_id] if isinstance(config_entry_id, str) else []
+    if config_entries is None:
+        return []
+    return sorted(entry_id for entry_id in config_entries if isinstance(entry_id, str))
 
 
 def device_registry_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]:

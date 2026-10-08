@@ -2129,6 +2129,38 @@ class TestSetZigbeeBinding:
         assert self_binding[1] == "invalid_request"
         assert "must be different" in _text(self_binding)
 
+    async def test_zha_devices_on_different_config_entries_are_rejected(
+        self, hass, radio_env, broker, monkeypatch
+    ):
+        dispatch = AsyncMock(return_value=None)
+        monkeypatch.setattr(radio, "async_ws_command", dispatch)
+        other = MockConfigEntry(domain="zha", entry_id="e_other_zha")
+        other.add_to_hass(hass)
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=other.entry_id,
+            identifiers={("zha", "00:11:22:33:44:55:66:99")},
+            name="Other Network Bulb",
+        )
+        entity = er.async_get(hass).async_get_or_create(
+            "light", "zha", "other-network-bulb", config_entry=other,
+            device_id=device.id, suggested_object_id="other_network_bulb",
+        )
+        hass.states.async_set(entity.entity_id, "on", {})
+        result = await _call_tool(
+            "set_zigbee_binding",
+            {
+                "operation": "bind",
+                "source_device_id": radio_env["zha_bulb"],
+                "target_device_id": device.id,
+            },
+            _light_access_key(cap_radio_write="allow", cap_physical_control="allow"),
+            hass,
+            _data(),
+        )
+        assert result[1] == "invalid_request"
+        assert "same Zigbee network" in _text(result)
+        dispatch.assert_not_awaited()
+
 
 class TestConfigureZigbeeReporting:
     async def _current(self, hass, radio_env, access_key) -> dict:

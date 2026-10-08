@@ -59,7 +59,7 @@ from ..tool_common import (
     _tool_success,
     _truncate,
 )
-from ..policy_engine import Permission, resolve
+from ..policy_engine import Permission, device_config_entry_ids, resolve
 from ..access_key_store import AccessKeyRecord
 from .. import radio as radio_backend
 
@@ -616,9 +616,7 @@ def _same_radio_network(
         return source_via is not None and source_via == target_via
     if source_via is not None or target_via is not None:
         return source_via is not None and source_via == target_via
-    source_entries = set(getattr(source.device, "config_entries", ()) or ())
-    target_entries = set(getattr(target.device, "config_entries", ()) or ())
-    return bool(source_entries & target_entries)
+    return bool(set(device_config_entry_ids(source.device)) & set(device_config_entry_ids(target.device)))
 
 
 def _mqtt_discovery_payload(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:

@@ -13,6 +13,7 @@ import secrets
 import uuid
 from copy import deepcopy
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -26,9 +27,18 @@ vol = schema_engine()
 
 Invalid = vol.Invalid
 if vol.Schema.__module__.startswith("probatio."):
-    from probatio import to_openapi
+    from probatio import to_openapi as _DEFAULT_RENDERING
+
+    # HA 2026.9 providers rendered OpenAPI 3.0; 2026.10 providers pass
+    # openapi_version="3.1.0". Phoenix's serializer hook must win in both.
+    _PROVIDER_RENDERINGS = {
+        "openapi-3.0": _DEFAULT_RENDERING,
+        "openapi-3.1": partial(_DEFAULT_RENDERING, openapi_version="3.1.0"),
+    }
 else:
-    from voluptuous_openapi import convert as to_openapi
+    from voluptuous_openapi import convert as _DEFAULT_RENDERING
+
+    _PROVIDER_RENDERINGS = {"voluptuous-openapi": _DEFAULT_RENDERING}
 
 from custom_components.phoenix_mcp import assist_api
 from custom_components.phoenix_mcp.assist_gemini import gemini_schema
@@ -42,6 +52,12 @@ from custom_components.phoenix_mcp.assist_api import (
 )
 from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP, DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
+
+
+@pytest.fixture(params=list(_PROVIDER_RENDERINGS))
+def to_openapi(request):
+    """Render a tool schema the way each installed HA provider generation does."""
+    return _PROVIDER_RENDERINGS[request.param]
 
 
 def _make_access_key(*, announce_all: bool = False, cap_config_read: str = "allow") -> AccessKeyRecord:
@@ -167,7 +183,7 @@ def test_installed_assist_converter_preserves_json_schema_validation(schema, acc
 
 
 @pytest.mark.asyncio
-async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admin_user):
+async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admin_user, to_openapi):
     """Exercise HA's serializer hook for the whole native, Phoenix and MESA catalog."""
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
@@ -187,7 +203,7 @@ async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admi
 
 
 @pytest.mark.asyncio
-async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass):
+async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass, to_openapi):
     schema = {"type": "object", "properties": {"value": {"type": ["integer", "null"],
               "exclusiveMinimum": 0, "description": "A positive integer or null."}},
               "x-provider": {"type": "example", "notes": "Retained extension."}, "required": ["value"]}
@@ -207,7 +223,7 @@ async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass
 
 
 @pytest.mark.asyncio
-async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(hass):
+async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(hass, to_openapi):
     from homeassistant.helpers import llm, selector
 
     access_key = _make_access_key()
@@ -224,7 +240,7 @@ async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(has
 
 
 @pytest.mark.asyncio
-async def test_assist_schema_snapshots_are_isolated_between_turns(hass):
+async def test_assist_schema_snapshots_are_isolated_between_turns(hass, to_openapi):
     access_key = _make_access_key()
     data = _make_data(access_key, bound_id=access_key.id)
     first_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 3}}}
@@ -259,6 +275,14 @@ async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_fo
     namespace = {"Schema": dict, "Any": Any, "cast": cast}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), namespace)
     format_schema = namespace["_format_schema"]
+    # Render as the installed formatter does: its own call names any OpenAPI version.
+    format_tool = next(node for node in tree.body
+                       if isinstance(node, ast.FunctionDef) and node.name == "_format_tool")
+    (render_call,) = [node for node in ast.walk(format_tool) if isinstance(node, ast.Call) and getattr(
+        node.func, "attr", getattr(node.func, "id", None)) in {"to_openapi", "convert"}]
+    version = next((ast.literal_eval(keyword.value) for keyword in render_call.keywords
+                    if keyword.arg == "openapi_version"), None)
+    to_openapi = _DEFAULT_RENDERING if version is None else partial(_DEFAULT_RENDERING, openapi_version=version)
     with pytest.raises(AttributeError, match="upper"):
         format_schema({"type": ["string", "null"]})
     assert format_schema({"anyOf": [{"type": "string"}, {"type": "integer"}]}) == {}

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from itertools import product
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import attr
 import pytest
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, State
@@ -21,6 +23,7 @@ from custom_components.phoenix_mcp.policy_engine import (
     Permission,
     call_needs_physical_gate,
     config_entry_registry_context,
+    device_config_entry_ids,
     filter_entities_for_access_key,
     filter_service_response,
     parse_relative_time,
@@ -33,6 +36,8 @@ from custom_components.phoenix_mcp.policy_engine import (
     scrub_sensitive_attributes,
 )
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.policy_engine import _phoenix_owned_device
 
 
 # ---------------------------------------------------------------------------
@@ -1603,3 +1608,40 @@ class TestCallNeedsPhysicalGate:
             domain="homeassistant", service="turn_on",
             entity_id="cover.garage", access_key=access_key, hass=object(),
         ) is False
+
+
+# ---------------------------------------------------------------------------
+# Device ownership across registry generations
+# ---------------------------------------------------------------------------
+
+async def test_single_owner_device_never_reads_deprecated_owner_fields(hass: HomeAssistant, monkeypatch):
+    """HA 2026.10 reports config_entries reads; a plain device answers from config_entry_id."""
+    reports: list[str] = []
+    if hasattr(dr, "_report_deprecated_config_entries_property"):
+        monkeypatch.setattr(dr, "_report_deprecated_config_entries_property",
+                            lambda _device, name, *_replacements: reports.append(name))
+    owner = MockConfigEntry(domain="test_integration", entry_id="device-owner")
+    owner.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=owner.entry_id, identifiers={("test_integration", "owned")})
+    assert device_config_entry_ids(device) == ["device-owner"]
+    assert reports == []
+
+
+async def test_restored_composite_device_keeps_every_owner(hass: HomeAssistant):
+    """A pre-migration composite id still answers with all owners, Phoenix's included."""
+    if "config_entry_id" not in attr.fields_dict(dr.DeviceEntry):
+        pytest.skip("registries before HA 2026.9 have no restored composite devices")
+    MockConfigEntry(domain=DOMAIN, entry_id="phoenix-owner").add_to_hass(hass)
+    device = dr.DeviceEntry(
+        config_entry_id="b-owner",
+        composite_subentries={"b-owner": {None}, "a-owner": {None}, "phoenix-owner": {None}},
+    )
+    assert device.is_composite_device is True
+    assert device_config_entry_ids(device) == ["a-owner", "b-owner", "phoenix-owner"]
+    assert _phoenix_owned_device(device, hass) is True
+
+
+def test_registry_shape_without_single_owner_uses_owner_set():
+    assert device_config_entry_ids(SimpleNamespace(config_entries={"b", "a", None})) == ["a", "b"]
+    assert device_config_entry_ids(SimpleNamespace()) == []
