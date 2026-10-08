@@ -37,15 +37,16 @@
         <p>Use an HTTPS Home Assistant URL for remote clients or any network you do not fully trust. Plain HTTP carries bearer credentials without transport encryption. The addresses and <code>phx_...</code> values below are placeholders: enter your own URL and use a separate, narrowly scoped access key for each client.</p>
         <p>Prefer your client's secret store or environment-variable interpolation when supported. Pasting a raw access key into a terminal command can retain it in shell history; reading it interactively into a variable avoids typing the value into the command. A client may still save the expanded header in its configuration. Keep such files private, restrict file access, and exclude them from version control. Do not put real access keys in shared project configuration, screenshots or support logs. Rotate an access key if its full value was disclosed.</p>
         <details class="advanced" id="claude-compatibility">
-          <summary>Advanced: Claude web/app (limited beta)</summary>
+          <summary>Advanced: Claude web, Desktop and mobile</summary>
           <div class="advanced-content">
-        <p><strong>Claude Code works directly.</strong> Claude's hosted custom connector is available for Phoenix only when your organization has Anthropic's limited Request headers beta. It is therefore omitted from the panel's normal client chooser.</p>
+        <p><strong>Claude Code works directly.</strong> Claude's hosted custom connector can reach Phoenix in two ways: directly with an access key, when your organization has Anthropic's limited Request headers beta, or through Home Assistant's MCP Server integration on Home Assistant 2026.10 or later. Neither is in the panel's normal client chooser.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Claude client</th><th scope="col">Status</th><th scope="col">What to do</th></tr></thead>
             <tbody>
               <tr><td>Claude Code</td><td><span class="badge badge-success">Supported</span></td><td>Use the generated <code>claude mcp add</code> command. It sends the access key in the <code>Authorization</code> header.</td></tr>
-              <tr><td>Claude web, Desktop remote connectors, mobile, and Cowork</td><td><span class="badge badge-neutral">Limited beta</span></td><td>An organization owner must add the connector with a required <code>Authorization</code> request header. If the dialog has no <strong>Request headers</strong> section, use Claude Code or Agent Chat.</td></tr>
+              <tr><td>Claude web, Desktop remote connectors, mobile, and Cowork, with an access key</td><td><span class="badge badge-neutral">Limited beta</span></td><td>An organization owner adds the connector with a required <code>Authorization</code> request header. Recommended where available: Claude holds one scoped Phoenix access key.</td></tr>
+              <tr><td>The same clients, through Home Assistant's MCP Server</td><td><span class="badge badge-neutral">Alternative</span></td><td>Home Assistant 2026.10 or later. Claude signs in with a Home Assistant administrator account and uses the access key bound to Assist. See <a href="#claude-through-ha-mcp-server">below</a>.</td></tr>
             </tbody>
           </table>
         </div>
@@ -53,11 +54,27 @@
               <li>Claude now uses one hosted remote-connector system across the web app, Desktop, mobile apps, and Cowork. Connections originate from Anthropic's cloud, so the MCP endpoint must be public.</li>
               <li>Personal plans add connectors under <strong>Customize &gt; Connectors</strong>. Team and Enterprise owners add them for the organization before members connect.</li>
               <li>Users can control connector access and individual tool permissions.</li>
-              <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_access_key_here</code>. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
+              <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong> first, then pick <code>authorization</code> from the header-name list and enter the full value <code>Bearer phx_your_access_key_here</code>. The list offers <code>authorization</code> only with No sign-in; entering it as a custom header name needs Anthropic's approval. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
+              <li>The connector URL is your public Home Assistant address followed by <code>/api/phoenix-mcp</code>. Any proxy or tunnel in front of Home Assistant must pass streamed responses through; a Cloudflare quick tunnel, for example, does not.</li>
               <li>The access key is shared by everyone in the organization who uses the connector. Create a dedicated least-privilege Phoenix access key for this connector.</li>
               <li>Do not put the access key in the connector URL. Claude sends request-header values exactly as entered and does not add the <code>Bearer</code> prefix for you.</li>
             </ul>
-            <p>See Anthropic's <a href="https://claude.com/docs/connectors/custom/add-unlisted" target="_blank" rel="noopener">remote connector setup</a> and <a href="https://claude.com/docs/connectors/building/authentication" target="_blank" rel="noopener">connector authentication</a> documentation.</p>
+            <h3 id="claude-through-ha-mcp-server">Through Home Assistant's MCP Server</h3>
+            <p>Without the Request headers beta, Claude can sign in to Home Assistant itself and reach Phoenix's Assist tools through Home Assistant's own MCP Server integration. This needs Home Assistant 2026.10 or later, reachable over public HTTPS. Behind a reverse proxy or tunnel, open <strong>Settings &gt; System &gt; Network</strong>, turn on <strong>Trust X-Forwarded-For</strong>, add the proxy's network under <strong>Trusted proxies</strong>, and set the external URL to the public address.</p>
+            <ol>
+              <li>In the Phoenix MCP panel, open <strong>Settings &gt; Assist Tool Provider</strong> and bind a least-privilege access key. Claude uses this key.</li>
+              <li>In Home Assistant, add the <strong>Model Context Protocol Server</strong> integration. In its options, turn off <strong>Expose all LLM APIs</strong>, set <strong>Control Home Assistant</strong> to only <strong>Phoenix MCP (scoped)</strong>, and keep <strong>Require an administrator account</strong> on.</li>
+              <li>In Claude, add a custom connector with the URL <code>https://your-home-assistant/api/mcp/phoenix_mcp</code>. Keep the sign-in authentication, choose Claude's published identity for the OAuth client, and leave any client ID and secret empty.</li>
+              <li>Connect and sign in with a Home Assistant administrator account.</li>
+            </ol>
+            <ul>
+              <li><strong>Claude holds a Home Assistant administrator credential.</strong> Selecting the Phoenix API limits the tools Claude is offered, not what the credential can do in Home Assistant's own API.</li>
+              <li>The Phoenix kill switch and revoking the bound access key stop Phoenix's tools but do not revoke Claude's Home Assistant sign-in. Disconnecting the connector in Claude does not revoke it either: delete its refresh tokens in your Home Assistant profile under <strong>Security</strong>, where each sign-in appears separately.</li>
+              <li>Everyone using the connector shares the Assist-bound access key, and changing that binding also changes what Assist voice uses. Phoenix's per-key request limits do not apply on this route.</li>
+              <li>Home Assistant publishes each tool's fields and required list but drops rules stated for the tool as a whole, such as "give at least one of these". Phoenix still checks every call against its full rules and refuses one that breaks them. Confirm-gated actions return <code>queued_for_approval</code> for an administrator to review.</li>
+              <li>Home Assistant describes the whole instance, not the MCP URL, as the protected resource. Claude accepted this in testing, but it differs from Claude's published requirement and may change.</li>
+            </ul>
+            <p>See Anthropic's <a href="https://claude.com/docs/connectors/custom/add-unlisted" target="_blank" rel="noopener">remote connector setup</a> and <a href="https://claude.com/docs/connectors/building/authentication" target="_blank" rel="noopener">connector authentication</a> documentation, and Home Assistant's <a href="https://www.home-assistant.io/integrations/mcp_server/" target="_blank" rel="noopener">MCP Server integration</a>.</p>
           </div>
         </details>
 
