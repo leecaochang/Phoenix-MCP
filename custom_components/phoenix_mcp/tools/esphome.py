@@ -411,7 +411,7 @@ async def _tool_get_esphome_overview(
         loaded = entry.state is ConfigEntryState.LOADED
         record: dict = {
             "title": entry.title,
-            "state": str(entry.state),
+            "state": entry.state.value,
             "loaded": loaded,
             "accessible_entity_count": visible,
         }

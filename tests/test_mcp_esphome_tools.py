@@ -175,6 +175,8 @@ class TestOverviewScoping:
         assert body["count"] == 1
         assert body["devices"][0]["accessible_entity_count"] == 2
         assert body["devices"][0]["name"] == "rf-blaster1"
+        # HA's own value, not the enum's repr ("ConfigEntryState.LOADED").
+        assert body["devices"][0]["state"] == "loaded"
 
 
 class TestOverviewUnloadedEntries:
@@ -187,6 +189,7 @@ class TestOverviewUnloadedEntries:
         assert outcome == "allowed"
         device = _json(content)["devices"][0]
         assert device["loaded"] is False
+        assert device["state"] == "not_loaded"
         assert device["title"] == "Bluetooth Proxy Steve Office"
         assert "esphome_version" not in device
         assert "available" not in device
@@ -201,6 +204,7 @@ class TestOverviewUnloadedEntries:
             content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         device = _json(content)["devices"][0]
         assert device["loaded"] is False
+        assert device["state"] == "setup_error"
         assert "available" not in device
         assert "esphome_version" not in device
         assert "name" not in device

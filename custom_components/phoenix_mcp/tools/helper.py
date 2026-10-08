@@ -1836,7 +1836,7 @@ async def _execute_config_flow_helper(
                 "entry_id": entry.entry_id,
                 "domain": entry.domain,
                 "title": entry.title,
-                "state": str(entry.state),
+                "state": entry.state.value,
             },
             "entity_ids": entity_ids,
             "note": "The helper is materialized; no restart is needed.",

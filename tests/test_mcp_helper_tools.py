@@ -211,6 +211,7 @@ class TestConfigFlowHelperCreation:
         try:
             assert body["config_entry"]["domain"] == "mold_indicator"
             assert body["config_entry"]["title"] == "Phoenix Mold Probe"
+            assert body["config_entry"]["state"] == "loaded"
             assert len(body["entity_ids"]) == 1
             assert hass.states.get(body["entity_ids"][0]) is not None
             assert hass.config_entries.async_get_entry(entry_id) is not None
