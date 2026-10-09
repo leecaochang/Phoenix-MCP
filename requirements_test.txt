@@ -43,6 +43,13 @@ home-assistant-frontend==20260930.2
 # Native Local Calendar update and recurrence regression tests; matches pinned HA.
 ical==14.3.0
 
+# Real radio-frequency, Bluetooth and USB serial diagnostics tests (bluetooth imports
+# usb); matches the pinned HA radio_frequency, bluetooth and usb manifests.
+rf-protocols==4.3.0
+aiousbwatcher==1.1.2
+serialx==1.11.0
+dbus-fast==5.0.22
+
 # Standalone lint tool used by the dev workflow (not pulled in by PHACC).
 pyflakes==4.0.3
 

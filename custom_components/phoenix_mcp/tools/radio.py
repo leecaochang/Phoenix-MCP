@@ -60,6 +60,7 @@ from ..tool_common import (
     _truncate,
 )
 from ..policy_engine import Permission, device_config_entry_ids, resolve
+from ..proxy_diagnostics import bluetooth_network, full_pass_through, serial_inventory
 from ..access_key_store import AccessKeyRecord
 from .. import radio as radio_backend
 
@@ -1878,12 +1879,32 @@ async def _build_diff_remove_zigbee_device(
 async def _tool_get_radio_network(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: report every radio network present (safe projection only)."""
+    """MCP tool: report every radio network present (safe projection only).
+
+    A key that sees what HA sees also gets the Bluetooth network (scanners and a
+    bounded nearby snapshot) and the serial port inventory.
+    """
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_radio_network"
     networks = await radio_backend.async_radio_networks(hass)
+    body: dict[str, Any] = {"networks": networks}
+    if full_pass_through(access_key, hass):
+        try:
+            bluetooth = bluetooth_network(hass)
+        except Exception:  # noqa: BLE001 - one backend must not fail the others
+            _LOGGER.exception("Bluetooth snapshot failed")
+            bluetooth = {"protocol": "bluetooth", "error": "The Bluetooth snapshot could not be read."}
+        if bluetooth is not None:
+            networks.append(bluetooth)
+        try:
+            serial = await serial_inventory(hass)
+        except Exception:  # noqa: BLE001 - one backend must not fail the others
+            _LOGGER.exception("Serial port inventory failed")
+            serial = {"error": "The serial port inventory could not be read."}
+        if serial is not None:
+            body["serial_ports"] = serial
     return (
-        _tool_success(json.dumps({"networks": networks}, default=str)),
+        _tool_success(json.dumps(body, default=str)),
         "allowed",
         "get_radio_network",
     )

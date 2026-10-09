@@ -25,7 +25,7 @@ def main() -> None:
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / "custom_components/phoenix_mcp/manifest.json").read_text())
     requirements = set(manifest["requirements"])
-    domains = set(manifest["after_dependencies"]) | set(manifest["dependencies"]) | {"conversation", "tts", "camera", "local_calendar"}
+    domains = set(manifest["after_dependencies"]) | set(manifest["dependencies"]) | {"conversation", "tts", "camera", "local_calendar", "bluetooth", "usb", "radio_frequency"}
     for domain in sorted(domains):
         component = json.loads((ha_root / "components" / domain / "manifest.json").read_text())
         requirements.update(component.get("requirements", []))

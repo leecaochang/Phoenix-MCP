@@ -959,6 +959,15 @@ Z2M_RETAINED_READ_TIMEOUT_SECONDS = 5.0
 # runs; the ordinary 30-second radio timeout would turn healthy large meshes
 # into false failures.
 ZIGBEE_TOPOLOGY_SCAN_TIMEOUT_SECONDS = 125.0
+
+# Proxy diagnostics snapshots (proxy_diagnostics.py). Nearby Bluetooth devices
+# heard within the age limit, newest first; a busy street can advertise hundreds.
+PROXY_NEARBY_MAX_DEVICES = 50
+PROXY_NEARBY_MAX_AGE_SECONDS = 300
+PROXY_NEARBY_MAX_SERVICE_UUIDS = 8
+PROXY_DISCOVERED_MAX_FLOWS = 50
+PROXY_SERIAL_MAX_PORTS = 64
+PROXY_TEXT_MAX_CHARS = 120
 # Device options are a local config write, not a sleepy-device operation. Give
 # the correlated response a short window, then verify the retained config.
 Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0

@@ -74,6 +74,7 @@ from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
 from .helpers import _strict_phoenix_log_text, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     newest_page,
@@ -6467,6 +6468,7 @@ async def _tool_list_integrations(
     domain_filter = (domain_filter or "").strip().lower()
     query = (query or "").strip().lower()
     integrations: list[dict[str, Any]] = []
+    serial_usage = await integration_serial_ports(hass)
     for entry in hass.config_entries.async_entries():
         if domain_filter and entry.domain != domain_filter:
             continue
@@ -6495,7 +6497,7 @@ async def _tool_list_integrations(
             supports_reconfigure,
         ) = await _config_entry_support(entry, hass)
         reason = getattr(entry, "reason", None)
-        integrations.append({
+        row = {
             "entry_id": entry.entry_id,
             "domain": entry.domain,
             # Titles are user/integration supplied and commonly contain an IP,
@@ -6517,7 +6519,10 @@ async def _tool_list_integrations(
             "pref_disable_polling": bool(entry.pref_disable_polling),
             "accessible_entity_count": accessible_entities,
             "accessible_device_count": accessible_devices,
-        })
+        }
+        if serial_usage and entry.entry_id in serial_usage:
+            row["serial_ports"] = serial_usage[entry.entry_id]
+        integrations.append(row)
     if query:
         integrations = [row for row in integrations
                         if query in f"{row['domain']} {row['title'] or ''}".lower()]
@@ -6526,7 +6531,19 @@ async def _tool_list_integrations(
     if isinstance(paged, str):
         return _tool_error(paged), "invalid_request", "list_integrations"
     page, envelope = paged
-    return _tool_success(json.dumps({**envelope, "integrations": page}, default=str)), "allowed", "list_integrations"
+    body: dict[str, Any] = {**envelope, "integrations": page}
+    # HA's discovered-but-not-added list is HA-wide, so only a key that sees what
+    # HA sees gets it, once, on the first page.
+    if (not envelope.get("offset") and full_pass_through(access_key, hass)
+            and effective_cap(access_key, "cap_integration_write") != CAP_DENY):
+        discovered, omitted = discovered_flows(hass)
+        discovered = [
+            row for row in discovered
+            if (not domain_filter or row["domain"] == domain_filter)
+            and (not query or query in f"{row['domain']} {' '.join(str(v) for v in row['title_placeholders'].values())}".lower())
+        ]
+        body["discovered"], body["discovered_omitted"] = discovered, omitted
+    return _tool_success(json.dumps(body, default=str)), "allowed", "list_integrations"
 
 
 def _reconfigure_args_error(args: dict[str, Any]) -> str | None:

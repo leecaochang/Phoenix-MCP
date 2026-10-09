@@ -68,6 +68,7 @@ from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_action
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -1067,6 +1068,8 @@ async def _tool_get_device(
         ],
         "config_entries": _device_config_entry_summaries(device, hass),
     })
+    if (scanners := device_bluetooth_scanners(hass, device, access_key)) is not None:
+        body["bluetooth_scanners"] = scanners
     return _tool_success(json.dumps(body, default=str)), "allowed", device_id
 
 
@@ -2381,6 +2384,8 @@ async def _tool_describe_entity(
     }
     if referenced_by_not_searched:
         body["referenced_by_not_searched"] = referenced_by_not_searched
+    if domain == "radio_frequency" and (rf := rf_capabilities(hass, entity_id)) is not None:
+        body["radio_frequency"] = rf
 
     # entity_category (config/diagnostic) when set: tells the agent this is a
     # setup/health entity, not a primary control. Bulk device/area service calls
