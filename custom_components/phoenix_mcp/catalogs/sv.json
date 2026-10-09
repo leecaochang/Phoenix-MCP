@@ -398,7 +398,9 @@
         "tool_call_cut": "Anslutningen till modellen avbröts mitt i ett verktygsanrop, så åtgärden kördes inte. Inget tillämpades och begäran i sig var inte orsaken; skicka den igen.",
         "tool_call_truncated": "Modellen nådde sin gräns för utdatalängd mitt i ett verktygsanrop, så åtgärden kördes inte. Den begärda ändringen var för stor för att skickas i ett anrop; försök be om en mindre ändring.",
         "unauthorized": "Den här åtkomstnyckeln är inte längre auktoriserad.",
-        "upstream": "Leverantören är tillfälligt otillgänglig."
+        "upstream": "Leverantören är tillfälligt otillgänglig.",
+        "provider_rejected": "Leverantören avvisade den här begäran. Den kommer inte att göras om.",
+        "bad_tool_call_retry": "Modellen skickade ett verktygsanrop vars argument inte var giltig JSON. Inget från det svaret kördes; felet skickades tillbaka så att modellen kan skicka anropet igen."
       },
       "options": "Alternativ",
       "pausedAfter": "Pausad efter {count} steg. Fortsätta undersöka?",
@@ -456,7 +458,8 @@
       "verbose": "Visa utförlig utdata",
       "verboseHint": "Visa agentens verktygsanrop, verktygsresultat och tänkande. Av visar endast det slutliga svaret.",
       "workingOn": "Arbetar: {name}",
-      "workingSpinner": "Arbetar…"
+      "workingSpinner": "Arbetar…",
+      "providerDetail": "Leverantörens detalj: {detail}"
     },
     "approvalSummary": {
       "action.approve": "Godkänn och kör",

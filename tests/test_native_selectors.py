@@ -447,3 +447,40 @@ async def test_cancel_all_timers_refuses_a_malformed_area(hass):
         _, outcome, _ = await _tool_hass_cancel_all_timers({"area": ["Kitchen"]}, _access_key(), hass)
     assert outcome == "invalid_request"
     call.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Rules lowered for Anthropic-format providers stay enforced at dispatch
+# ---------------------------------------------------------------------------
+
+_SAMPLE_OPERATION = {"percentage": 50, "temperature": 21, "position": 50, "volume_level": 50,
+                     "volume_step": "up", "search_query": "News"}
+
+
+def _tools_with_top_level_combinators() -> list[str]:
+    from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
+    return [tool["name"] for tool in _NATIVE_TOOL_DEFS
+            if any(key in tool["inputSchema"] for key in ("anyOf", "oneOf", "allOf"))]
+
+
+@pytest.mark.parametrize("tool_name", _tools_with_top_level_combinators())
+async def test_a_selector_rule_lowered_to_prose_is_still_refused_at_dispatch(tool_name):
+    """Anthropic refuses top-level combinators, so those providers receive these
+    rules as description text instead (agentcli._anthropic_input_schema). That
+    is only safe while the handler itself refuses what the combinator forbade.
+    A new tool with a top-level combinator must keep this true."""
+    from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
+    schema = next(tool["inputSchema"] for tool in _NATIVE_TOOL_DEFS if tool["name"] == tool_name)
+    operation = {name: _SAMPLE_OPERATION[name] for name in schema.get("required", [])}
+    if tool_name == "light__HassLightSet":
+        operation["brightness"] = 50  # isolate the selector rule
+    resolver = MagicMock(return_value=["light.kitchen"])
+    action = AsyncMock(return_value=({}, "allowed", tool_name))
+    with patch(f"{NATIVE}.resolve_intent_entities", resolver), \
+            patch(f"{NATIVE}._tool_intent_action", action):
+        response, outcome, _resource = await _call_tool(
+            tool_name, operation, _access_key(), MagicMock(), MagicMock())
+    assert outcome == "invalid_request"
+    assert "No usable targeting parameter" in _text(response)
+    resolver.assert_not_called()
+    action.assert_not_awaited()

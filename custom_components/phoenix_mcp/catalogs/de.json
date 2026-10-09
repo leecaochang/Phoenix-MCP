@@ -218,9 +218,12 @@
         "rate_limit": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "auth": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
-        "quota": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert."
+        "quota": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
+        "provider_rejected": "Der Anbieter hat diese Anfrage abgelehnt. Sie wird nicht erneut angefordert.",
+        "bad_tool_call_retry": "Das Modell hat einen Tool-Aufruf gesendet, dessen Argumente kein gültiges JSON waren. Aus dieser Antwort wurde nichts ausgeführt; der Fehler wurde zurückgegeben, damit das Modell den Aufruf erneut senden kann."
       },
-      "chatEnded": "Chat beendet."
+      "chatEnded": "Chat beendet.",
+      "providerDetail": "Anbieterdetails: {detail}"
     },
     "caps": {
       "cap_config_read": {

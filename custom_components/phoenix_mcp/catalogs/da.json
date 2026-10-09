@@ -398,7 +398,9 @@
         "tool_call_cut": "Forbindelsen til modellen blev afbrudt midt i et værktøjskald, så handlingen blev ikke udført. Der blev ikke anvendt noget, og selve anmodningen var ikke årsagen; send den igen.",
         "tool_call_truncated": "Modellen nåede sin grænse for svarlængde midt i et værktøjskald, så handlingen blev ikke udført. Den ønskede ændring var for stor til at sende i ét kald; prøv at bede om en mindre ændring.",
         "unauthorized": "Denne adgangsnøgle er ikke længere autoriseret.",
-        "upstream": "Udbyderen er midlertidigt utilgængelig."
+        "upstream": "Udbyderen er midlertidigt utilgængelig.",
+        "provider_rejected": "Udbyderen afviste denne anmodning. Den bliver ikke forsøgt igen.",
+        "bad_tool_call_retry": "Modellen sendte et værktøjskald, hvis argumenter ikke var gyldig JSON. Intet fra det svar blev udført; fejlen blev sendt tilbage, så modellen kan sende kaldet igen."
       },
       "options": "Indstillinger",
       "pausedAfter": "Sat på pause efter {count} trin. Vil du fortsætte undersøgelsen?",
@@ -456,7 +458,8 @@
       "verbose": "Vis udførligt output",
       "verboseHint": "Vis agentens værktøjskald, værktøjsresultater og tænkning. Fra viser kun det endelige svar.",
       "workingOn": "Arbejder: {name}",
-      "workingSpinner": "Arbejder…"
+      "workingSpinner": "Arbejder…",
+      "providerDetail": "Udbyderoplysning: {detail}"
     },
     "approvalSummary": {
       "action.approve": "Godkend og udfør",

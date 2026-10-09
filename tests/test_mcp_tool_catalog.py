@@ -199,13 +199,13 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         "write_capable": {
             "tool_count": 97,
             "canonical_bytes": 108450,
-            "claude_bytes": 98350,
+            "claude_bytes": 97347,
             "openai_bytes": 101163,
         },
         "announce_all": {
             "tool_count": 163,
             "canonical_bytes": 182180,
-            "claude_bytes": 165257,
+            "claude_bytes": 164254,
             "openai_bytes": 169984,
         },
     }

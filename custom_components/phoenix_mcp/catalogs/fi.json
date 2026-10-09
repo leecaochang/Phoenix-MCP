@@ -398,7 +398,9 @@
         "tool_call_cut": "Yhteys malliin katkesi kesken työkalukutsun, joten toimintoa ei suoritettu. Mitään ei muutettu, eikä vika ollut pyynnössä itsessään; lähetä se uudelleen.",
         "tool_call_truncated": "Malli saavutti tulosteen pituusrajan kesken työkalukutsun, joten toimintoa ei suoritettu. Pyydetty muutos oli liian suuri tuotettavaksi yhdellä kutsulla; pyydä pienempää muutosta.",
         "unauthorized": "Tämä käyttöavain ei ole enää valtuutettu.",
-        "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä."
+        "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
+        "provider_rejected": "Palveluntarjoaja torjui tämän pyynnön. Sitä ei yritetä uudelleen.",
+        "bad_tool_call_retry": "Malli lähetti työkalukutsun, jonka argumentit eivät olleet kelvollista JSONia. Mitään siitä vastauksesta ei suoritettu; virhe palautettiin, jotta malli voi lähettää kutsun uudelleen."
       },
       "options": "Asetukset",
       "pausedAfter": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?",
@@ -456,7 +458,8 @@
       "verbose": "Näytä yksityiskohtainen tuloste",
       "verboseHint": "Näytä agentin työkalukutsut, työkalutulokset ja miettiminen. Pois päältä näytetään vain lopullinen vastaus.",
       "workingOn": "Työn alla: {name}",
-      "workingSpinner": "Työskennellään…"
+      "workingSpinner": "Työskennellään…",
+      "providerDetail": "Palveluntarjoajan lisätiedot: {detail}"
     },
     "approvalSummary": {
       "action.approve": "Hyväksy ja suorita",

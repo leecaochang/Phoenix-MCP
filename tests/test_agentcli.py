@@ -1061,9 +1061,9 @@ def test_claude_show_thinking_controls_display():
 
 
 @pytest.mark.asyncio
-async def test_ollama_malformed_tool_args_is_bad_tool_call():
+async def test_malformed_tool_args_withhold_the_batch_and_are_handed_back():
     body = _sse(
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"c2","function":{"name":"get_capability_summary","arguments":"{}"}}]},"finish_reason":null}]}',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"c2","function":{"name":"get_capability_summary","arguments":"{\\"x\\": 1}"}}]},"finish_reason":null}]}',
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{not json"}}]},"finish_reason":null}]}',
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
         "data: [DONE]",
@@ -1073,15 +1073,38 @@ async def test_ollama_malformed_tool_args_is_bad_tool_call():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    err = next(e for e in events if e["type"] == agentcli.EV_ERROR)
-    assert err["code"] == "bad_tool_call"
-    assert err['diagnostic'] == {'category': 'bad_tool_call'}
-    # Malformed JSON is eligible only for the shared, pre-dispatch retry budget.
-    assert err["message"] == "The model produced an invalid tool call."
-    assert err["retryable"] is True
     # The entire malformed batch is withheld, including its valid call.
-    assert not any(e["type"] == agentcli.EV_TOOL for e in events)
-    assert not any(e["type"] == agentcli.EV_DONE for e in events)
+    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE, agentcli.EV_ERROR) for e in events)
+    invalid = events[-1]
+    assert invalid["type"] == agentcli.EV_INVALID_TOOLS and invalid["code"] == "bad_tool_call"
+    calls = invalid["assistant_msg"]["tool_calls"]
+    # Replayed history never carries text a server would fail to parse; the
+    # valid sibling keeps its real arguments.
+    assert [c["function"]["arguments"] for c in calls] == ["{}", '{"x": 1}']
+    results = {r["tool_use_id"]: r for r in invalid["results"]}
+    assert set(results) == {"c1", "c2"} and all(r["is_error"] for r in results.values())
+    assert "not valid JSON" in results["c1"]["result_text"]
+    assert "character 1 of 9" in results["c1"]["result_text"]
+    assert results["c2"]["result_text"] == agentcli._INVALID_BATCH_SIBLING
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("call_id", "finish"), [("c1", "stop"), (None, "tool_calls")])
+async def test_malformed_tool_args_that_cannot_be_handed_back_stay_terminal(call_id, finish):
+    # A tool result needs a usable call ID, and a response that did not finish on
+    # its tool call is not a complete tool-call round to answer.
+    delta = {"index": 0, "function": {"name": "get_state", "arguments": "{not json"}}
+    if call_id:
+        delta["id"] = call_id
+    body = _sse(
+        "data: " + json.dumps({"choices": [{"delta": {"tool_calls": [delta]}, "finish_reason": None}]}),
+        "data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": finish}]}),
+    )
+    provider = OpenAICompatProvider(ProviderConfig("deepseek", "m", "https://d", "k"))
+    events = await _collect(provider.stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    assert events[-1]["type"] == agentcli.EV_ERROR and events[-1]["code"] == "bad_tool_call"
+    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_INVALID_TOOLS) for e in events)
 
 
 @pytest.mark.asyncio
@@ -1151,8 +1174,8 @@ async def test_clean_stream_with_bad_json_is_not_reported_as_a_dropped_connectio
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    err = next(e for e in events if e["type"] == agentcli.EV_ERROR)
-    assert err["code"] == "bad_tool_call"
+    assert events[-1]["type"] == agentcli.EV_INVALID_TOOLS
+    assert events[-1]["code"] == "bad_tool_call"
 
 
 @pytest.mark.asyncio
@@ -3617,12 +3640,13 @@ class TestCapabilityProbe:
 
         caps, _calls, prov, _a = await self._probe(hass, "deepseek", answer)
         assert caps["effort_levels"] == ["low", "high", "max"]
-        # The sentinel went first: the validation question has to be answered
-        # before any level result can be read.
-        assert _effort_of(prov.sent[0]) == AGENTCLI_PROBE_SENTINEL
+        # The control went first, then the sentinel: the validation question has
+        # to be answered before any level result can be read.
+        assert prov.sent[0] == {}
+        assert _effort_of(prov.sent[1]) == AGENTCLI_PROBE_SENTINEL
         # DeepSeek only reads the effort when thinking is on, so a probe that
         # omitted the toggle would test nothing and pass every level.
-        assert prov.sent[0]["thinking"] == {"type": "enabled"}
+        assert prov.sent[1]["thinking"] == {"type": "enabled"}
 
     @pytest.mark.asyncio
     async def test_a_server_that_ignores_unknown_parameters_teaches_nothing(self, hass):
@@ -3631,7 +3655,7 @@ class TestCapabilityProbe:
         caps, calls, prov, _a = await self._probe(hass, "deepseek", lambda extra: 200)
         assert "effort_levels" not in caps
         # One sentinel call, then it gave up on levels entirely.
-        assert calls == 2  # sentinel + temperature
+        assert calls == 3  # control + sentinel + temperature
         assert len([s for s in prov.sent if _effort_of(s)]) == 1
 
     @pytest.mark.asyncio
@@ -3656,7 +3680,7 @@ class TestCapabilityProbe:
         assert caps["temperature"] is False
 
         def accepts_temp(extra):
-            return 200 if "temperature" in extra else 400
+            return 200 if "temperature" in extra or not extra else 400
         caps, _c, _p, _a = await self._probe(hass, "chatgpt", accepts_temp)
         # An accepted temperature may still be ignored, so 200 records nothing.
         assert "temperature" not in caps
@@ -3673,8 +3697,8 @@ class TestCapabilityProbe:
 
         caps, calls, prov, _a = await self._probe(hass, "ollama", answer)
         assert caps["effort_levels"] == ["low", "medium", "high", "max"]
-        assert calls == 7  # sentinel + five candidates + temperature
-        assert _effort_of(prov.sent[0]) == agentcli.AGENTCLI_PROBE_SENTINEL
+        assert calls == 8  # control + sentinel + five candidates + temperature
+        assert _effort_of(prov.sent[1]) == agentcli.AGENTCLI_PROBE_SENTINEL
 
     @pytest.mark.asyncio
     async def test_claude_uses_its_own_nested_effort_field(self, hass):
@@ -3682,7 +3706,7 @@ class TestCapabilityProbe:
             hass, "claude", lambda extra: 400 if _effort_of(extra) == "phoenix-probe-invalid" else 200)
         assert caps["effort_levels"] == list(
             __import__("custom_components.phoenix_mcp.const", fromlist=["x"]).AGENTCLI_EFFORT_LEVEL_ORDER)
-        assert "output_config" in prov.sent[0]
+        assert "output_config" in prov.sent[1]
 
     @pytest.mark.asyncio
     async def test_the_run_is_bounded(self, hass):
@@ -3809,10 +3833,21 @@ class TestProbeAnswered:
         assert answered is False
 
     @pytest.mark.asyncio
-    async def test_a_400_counts_as_an_answer(self, hass):
-        """A refusal IS information: it proves the request reached the model."""
-        _caps, _calls, answered = await self._probe(hass, lambda extra: 400)
+    async def test_a_400_after_an_accepted_control_counts_as_an_answer(self, hass):
+        """A refusal of one option IS information once the plain request works."""
+        caps, _calls, answered = await self._probe(hass, lambda extra: 200 if not extra else 400)
         assert answered is True
+        assert caps == {"temperature": False}
+
+    @pytest.mark.asyncio
+    async def test_a_refused_control_records_nothing(self, hass):
+        """A 400 to everything is a refused model or request, not option evidence.
+
+        Before the control, every 400 here was read as a refused option, so a
+        model the endpoint rejected outright recorded temperature as unsupported.
+        """
+        caps, calls, answered = await self._probe(hass, lambda extra: 400)
+        assert (caps, calls, answered) == ({}, 1, False)
 
     @pytest.mark.asyncio
     async def test_a_200_counts_as_an_answer(self, hass):
@@ -3937,7 +3972,7 @@ async def test_valid_json_tool_without_terminal_stream_never_dispatches():
 
 
 @pytest.mark.asyncio
-async def test_claude_bad_arguments_are_not_replaced_with_empty_object():
+async def test_claude_bad_arguments_never_dispatch_their_placeholder():
     body = _sse(
         'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"a","name":"call_service"}}',
         'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{private"}}',
@@ -3948,8 +3983,13 @@ async def test_claude_bad_arguments_are_not_replaced_with_empty_object():
     provider = ClaudeProvider(ProviderConfig("claude", "model", "https://example", "key"))
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)),
                          system_prompt="s", messages=[], tools=[], options={}))
-    assert events[-1]["code"] == "provider_malformed"
-    assert not any(e["type"] == agentcli.EV_TOOL for e in events)
+    invalid = events[-1]
+    assert invalid["type"] == agentcli.EV_INVALID_TOOLS
+    # The `{}` exists only in replayed history; nothing is dispatchable.
+    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for e in events)
+    assert invalid["assistant_msg"]["content"] == [{"type": "tool_use", "id": "a", "name": "call_service", "input": {}}]
+    # The hand-back names position and structure, never the model's own text.
+    assert "not valid JSON" in invalid["results"][0]["result_text"]
     assert "private" not in json.dumps(events)
 
 
@@ -4491,3 +4531,238 @@ async def test_scheduled_catalog_refresh_honours_the_operator_settings(hass, acc
     assert await refreshed(provider_catalog_refresh_hours=6) == {stale, new}
     # Checks off: only the account that has no catalogue yet.
     assert await refreshed(provider_catalog_refresh_enabled=False, provider_catalog_refresh_hours=6) == {new}
+
+
+# --------------------------------------------------------------------------- #
+# Anthropic top-level schema rule
+# --------------------------------------------------------------------------- #
+
+def _full_catalog() -> list[dict]:
+    from custom_components.phoenix_mcp.mcp_view import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
+    from custom_components.phoenix_mcp.mesa_tools import mesa_tool_defs
+    return [*_ENTITY_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *mesa_tool_defs()]
+
+
+@pytest.mark.parametrize("kind", ["claude", "minimax"])
+def test_anthropic_format_tools_satisfy_the_top_level_schema_rule(kind):
+    """Anthropic answers HTTP 400 to the WHOLE request when any one tool's
+    input_schema has anyOf, oneOf or allOf at the top level. The schemas are
+    valid JSON Schema, so a metaschema check cannot catch it."""
+    catalog = _full_catalog()
+    assert any(key in tool["inputSchema"] for tool in catalog for key in ("anyOf", "oneOf", "allOf"))
+    for tool in ClaudeProvider(ProviderConfig(kind, "m", "https://x", "k")).format_tools(catalog):
+        schema = tool["input_schema"]
+        assert schema.get("type") == "object", tool["name"]
+        assert not {"anyOf", "oneOf", "allOf"} & set(schema), tool["name"]
+
+
+def test_lowered_combinators_keep_every_property_and_state_each_rule():
+    schema = {
+        "type": "object", "additionalProperties": False, "required": ["level"],
+        "properties": {"name": {"type": "string"}, "level": {"type": "integer"}},
+        "allOf": [
+            {"anyOf": [{"required": ["name"]}, {"required": ["area"]}]},
+            {"properties": {"area": {"type": "string"}}, "required": ["mode"]},
+        ],
+        "oneOf": [{"required": ["a"]}, {"required": ["b", "c"]}],
+    }
+    original = json.loads(json.dumps(schema))
+    tool = ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k")).format_tools(
+        [{"name": "t", "description": "Sets a thing", "inputSchema": schema}])[0]
+    assert tool["input_schema"] == {
+        "type": "object", "additionalProperties": False, "required": ["level", "mode"],
+        "properties": {"name": {"type": "string"}, "level": {"type": "integer"}, "area": {"type": "string"}},
+    }
+    assert tool["description"] == (
+        "Sets a thing. Provide exactly one of: a or (b and c). Provide at least one of: name or area.")
+    # The shared catalog definition is never mutated, and providers that accept
+    # the combinators still receive the original schema.
+    assert schema == original
+    openai = OpenAICompatProvider(ProviderConfig("deepseek", "m", "https://d", "k")).format_tools(
+        [{"name": "t", "description": "Sets a thing", "inputSchema": schema}])[0]
+    assert openai["function"]["parameters"] is schema
+    plain = {"type": "object", "properties": {}}
+    assert ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k")).format_tools(
+        [{"name": "p", "description": "Plain", "inputSchema": plain}])[0] == {
+            "name": "p", "description": "Plain", "input_schema": plain}
+
+
+# --------------------------------------------------------------------------- #
+# Provider error detail for administrators
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_a_refused_request_carries_the_provider_sentence_for_the_administrator():
+    envelope = {"type": "error", "error": {"type": "invalid_request_error", "message": (
+        "tools.17.custom.input_schema: input_schema does not support oneOf, allOf, or anyOf at the top level")}}
+    provider = ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k"))
+    events = await _collect(provider.stream_turn(
+        _FakeSession(_FakeResp(400, b"", text_data=json.dumps(envelope))),
+        system_prompt="s", messages=[], tools=[], options={}))
+    err = events[-1]
+    # Not an outage: the same request would be refused again.
+    assert err["code"] == "provider_rejected" and err["retryable"] is False
+    assert err["message"] == "Provider request failed (HTTP 400)."
+    assert err["provider_detail"] == envelope["error"]["message"]
+
+
+@pytest.mark.parametrize(("body", "expected"), [
+    ('{"error": "model not found"}', "model not found"),
+    ('{"message": "Insufficient Balance"}', "Insufficient Balance"),
+    ("<html><body>502 Bad Gateway</body></html>", ""),
+    ("not json at all", ""),
+    ('{"error": {"message": "   "}}', ""),
+])
+def test_provider_detail_comes_only_from_an_error_envelope(body, expected):
+    assert agentcli._provider_error_detail(body) == expected
+
+
+def test_provider_detail_is_scrubbed_and_clipped():
+    echoed = agentcli._provider_error_detail(json.dumps({"error": {"message": (
+        "Incorrect API key provided: sk-proj-abcdefghijklmnopqrstuvwx. Request from 192.168.1.20 refused.")}}))
+    assert "sk-proj-abcdefghijklmnop" not in echoed and "192.168.1.20" not in echoed
+    assert "<redacted>" in echoed
+    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_DETAIL_CHARS
+    long = agentcli._provider_error_detail(json.dumps({"error": {"message": "word " * 400}}))
+    assert len(long) <= AGENTCLI_PROVIDER_DETAIL_CHARS
+
+
+@pytest.mark.asyncio
+async def test_provider_detail_reaches_the_panel_but_never_voice_or_ai_task(hass):
+    failure = {"type": agentcli.EV_ERROR, "status": 400, "code": "provider_rejected", "retryable": False,
+               "message": "Provider request failed (HTTP 400).", "provider_detail": "input_schema does not support oneOf"}
+    data = _loop_data()
+    access_key = data.store.get_access_key_by_id.return_value
+    events = []
+    async def emit(name, payload):
+        events.append((name, payload))
+    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+        await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=_ScriptedProvider([[failure]]),
+            session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
+            emit=emit, cancel=asyncio.Event())
+        result = await agentcli._run_headless_turn(hass, data, access_key, _ScriptedProvider([[failure]]), None,
+            "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
+    errors = [body for name, body in events if name == "error"]
+    assert errors[0]["provider_detail"] == "input_schema does not support oneOf"
+    assert result.outcome == agentcli.TURN_PROVIDER_ERROR
+    assert result.detail == "Provider request failed (HTTP 400)."
+
+
+# --------------------------------------------------------------------------- #
+# Malformed tool-call JSON is handed back to the model
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(("raw", "expected"), [
+    # The production shape: a `]` missing, so the parser meets `}` inside an array.
+    ('{"config": {"triggers": [{"at": "1"}}, "id": "x"}',
+     "innermost open array (the value of \"triggers\") starts at character 24, so ']' is probably missing"),
+    ('{"config": {"triggers": [{"at": "1"}]', "2 unclosed objects or arrays, so '}}' is probably missing at the end"),
+    ('{"a": 1', "1 unclosed object or array, so '}' is probably missing at the end"),
+    ('{"a": [1', "2 unclosed objects or arrays, so ']}' is probably missing at the end"),
+    ('{"a": "unterminated', "closing quote is probably missing"),
+    ('{"a": 1} trailing', "the text after it is extra"),
+])
+def test_json_error_hint_names_the_likely_missing_closer(raw, expected):
+    with pytest.raises(json.JSONDecodeError) as caught:
+        json.loads(raw)
+    hint = agentcli._json_error_hint(raw, caught.value)
+    assert expected in hint
+    assert hint.startswith("Not run:") and "Send the call again" in hint
+
+
+def _invalid_round(call_id: str = "bad", name: str = "edit_automation") -> dict:
+    raw = '{"config": {"triggers": [{"at": "1"}}}'
+    with pytest.raises(json.JSONDecodeError) as caught:
+        json.loads(raw)
+    return agentcli._invalid_tool_calls(
+        [(call_id, name, None, agentcli._json_error_hint(raw, caught.value))],
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": call_id, "type": "function", "function": {"name": name, "arguments": "{}"}}]},
+    )
+
+
+async def _chat(hass, rounds, data=None):
+    data = data or _loop_data()
+    access_key = data.store.get_access_key_by_id.return_value
+    provider = _ScriptedProvider(rounds)
+    dispatch = AsyncMock(side_effect=lambda method, tool_id, params, *a, **k: (
+        {"result": {"content": [{"type": "text", "text": "ok"}]}}, params["name"], params["name"], "allowed"))
+    events = []
+    async def emit(name, payload):
+        events.append((name, payload))
+    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+        messages = await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
+            session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
+            emit=emit, cancel=asyncio.Event())
+    return provider, dispatch, events, messages, data, access_key
+
+
+@pytest.mark.asyncio
+async def test_chat_hands_malformed_tool_json_back_and_runs_the_corrected_call(hass):
+    invalid = _invalid_round()
+    provider, dispatch, events, messages, data, access_key = await _chat(hass, [
+        [invalid],
+        [{"type": agentcli.EV_TOOL, "id": "good", "name": "get_state", "input": {"entity_id": "light.k"}},
+         _done("tool_use")],
+        [{"type": agentcli.EV_TEXT, "text": "Done."}, _done("end_turn")],
+    ])
+    assert provider.i == 3
+    # Only the resent call ran, with the resent arguments.
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.args[2] == {"name": "get_state", "arguments": {"entity_id": "light.k"}}
+    assert not [body for name, body in events if name == "error"]
+    assert [body["code"] for name, body in events if name == "notice"] == ["bad_tool_call_retry"]
+    # The model saw its call (placeholder arguments) answered by the JSON error.
+    assert messages[0] == invalid["assistant_msg"]
+    assert messages[1] == {"role": "user", "tool_results": invalid["results"]}
+    assert "probably missing" in messages[1]["tool_results"][0]["result_text"]
+    # A corrected turn is a successful turn: no recovery barrier.
+    assert not data.agent_recovery.blocks(access_key.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("write_first", [False, True])
+async def test_chat_stops_handing_back_malformed_json_after_the_budget(hass, write_first):
+    from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
+    rounds = [[{"type": agentcli.EV_TOOL, "id": "w", "name": "call_service", "input": {}}, _done("tool_use")]] \
+        if write_first else []
+    rounds += [[_invalid_round(f"bad{i}")] for i in range(AGENTCLI_MAX_TOOL_CALL_CORRECTIONS + 1)]
+    provider, dispatch, events, _messages, data, access_key = await _chat(hass, rounds)
+    assert provider.i == len(rounds)
+    assert dispatch.await_count == (1 if write_first else 0)
+    notices = [body for name, body in events if name == "notice" and body.get("code") == "bad_tool_call_retry"]
+    assert len(notices) == AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
+    errors = [body for name, body in events if name == "error"]
+    assert len(errors) == 1
+    if write_first:
+        # The earlier write keeps the existing after-dispatch uncertainty rule.
+        assert errors[0]["code"] == "provider_after_dispatch" and errors[0]["outcome"] == "outcome_unknown"
+        assert data.agent_recovery.blocks(access_key.id)
+    else:
+        assert errors[0]["code"] == "bad_tool_call"
+        assert not data.agent_recovery.blocks(access_key.id)
+
+
+@pytest.mark.asyncio
+async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
+    data = _loop_data()
+    access_key = data.store.get_access_key_by_id.return_value
+    invalid = _invalid_round()
+    provider = _ScriptedProvider([
+        [invalid],
+        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+    ])
+    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]):
+        result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+            system="s", seed="is it on", client_ip="voice", max_iterations=3)
+    assert result.outcome == agentcli.TURN_OK and result.text == "It is on."
+    assert provider.i == 2
+    # With no round left for the corrected call, the turn ends as a provider error.
+    provider = _ScriptedProvider([[invalid]])
+    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]):
+        result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+            system="s", seed="is it on", client_ip="voice", max_iterations=1)
+    assert result.outcome == agentcli.TURN_PROVIDER_ERROR

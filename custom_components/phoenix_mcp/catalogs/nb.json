@@ -398,7 +398,9 @@
         "tool_call_cut": "Tilkoblingen til modellen ble avsluttet midt i et verktøykall, så handlingen ble ikke utført. Ingenting ble anvendt, og det var ikke noe galt med selve forespørselen; send den på nytt.",
         "tool_call_truncated": "Modellen nådde grensen for utdatalengde midt i et verktøykall, så handlingen ble ikke utført. Den forespurte endringen var for stor til å sendes ut i ett kall; prøv å be om en mindre endring.",
         "unauthorized": "Denne tilgangsnøkkelen er ikke lenger autorisert.",
-        "upstream": "Leverandøren er midlertidig utilgjengelig."
+        "upstream": "Leverandøren er midlertidig utilgjengelig.",
+        "provider_rejected": "Leverandøren avslo denne forespørselen. Den vil ikke bli forsøkt på nytt.",
+        "bad_tool_call_retry": "Modellen sendte et verktøykall der argumentene ikke var gyldig JSON. Ingenting fra det svaret ble utført; feilen ble sendt tilbake slik at modellen kan sende kallet på nytt."
       },
       "options": "Alternativer",
       "pausedAfter": "Satt på pause etter {count} trinn. Fortsette å undersøke?",
@@ -456,7 +458,8 @@
       "verbose": "Vis detaljert utdata",
       "verboseHint": "Vis agentens verktøykall, verktøyresultater og tenkning. Av viser bare det endelige svaret.",
       "workingOn": "Arbeider: {name}",
-      "workingSpinner": "Arbeider…"
+      "workingSpinner": "Arbeider…",
+      "providerDetail": "Leverandørdetalj: {detail}"
     },
     "approvalSummary": {
       "action.approve": "Godkjenn og utfør",

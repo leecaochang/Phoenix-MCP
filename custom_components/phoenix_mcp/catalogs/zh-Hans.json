@@ -1613,7 +1613,9 @@
         "rate_limit": "提供方暂时不可用。",
         "ollama_backend": "提供方暂时不可用。",
         "auth": "提供方拦截了此响应，不会重试。",
-        "quota": "提供方拦截了此响应，不会重试。"
+        "quota": "提供方拦截了此响应，不会重试。",
+        "provider_rejected": "提供商拒绝了此请求，不会重试。",
+        "bad_tool_call_retry": "模型发送的工具调用参数不是有效的 JSON。该响应中的任何内容都未执行；已将错误返回给模型，以便其重新发送该调用。"
       },
       "options": "选项",
       "pausedAfter": "已在 {count} 步后暂停。是否继续处理？",
@@ -1668,7 +1670,8 @@
       "verboseHint": "显示智能体的工具调用、工具结果和思考过程。关闭时只显示最终答案。",
       "workingOn": "处理中：{name}",
       "workingSpinner": "处理中…",
-      "chatEnded": "聊天已结束。"
+      "chatEnded": "聊天已结束。",
+      "providerDetail": "提供商详情：{detail}"
     },
     "wizard": {
       "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择 <strong>W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",

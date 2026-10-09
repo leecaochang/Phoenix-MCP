@@ -904,7 +904,11 @@ def recorded_chat(run: Callable) -> Callable:
                     overflow = True
                     response_status = "size_limit"
             elif name in {"error", "notice", "continue_required"}:
-                record_event(data, name, payload)
+                # A notice with no outcome reads as an uncertain execution. A
+                # malformed call handed back to the model was refused before it
+                # could run, so it carries its known outcome instead.
+                refused = name == "notice" and payload.get("code") == "bad_tool_call_retry"
+                record_event(data, name, payload, **({"outcome": "invalid_request"} if refused else {}))
                 if name == "error":
                     status = "cancelled" if payload.get("code") == "cancelled" else "failed"
                     response_status = status

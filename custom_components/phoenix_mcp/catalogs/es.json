@@ -681,7 +681,9 @@
         "rate_limit": "El proveedor no está disponible temporalmente.",
         "ollama_backend": "El proveedor no está disponible temporalmente.",
         "auth": "El proveedor bloqueó esta respuesta. No se volverá a intentar.",
-        "quota": "El proveedor bloqueó esta respuesta. No se volverá a intentar."
+        "quota": "El proveedor bloqueó esta respuesta. No se volverá a intentar.",
+        "provider_rejected": "El proveedor rechazó esta solicitud. No se volverá a intentar.",
+        "bad_tool_call_retry": "El modelo envió una llamada de herramienta cuyos argumentos no eran JSON válido. No se ejecutó nada de esa respuesta; se devolvió el error para que el modelo pueda volver a enviar la llamada."
       },
       "options": "Opciones",
       "pausedAfter": "Pausado tras {count} pasos. ¿Continuar investigando?",
@@ -742,7 +744,8 @@
       "verboseHint": "Mostrar las llamadas a herramientas, los resultados de las herramientas y el pensamiento del agente. Desactivado muestra solo la respuesta final.",
       "workingOn": "Trabajando: {name}",
       "workingSpinner": "Trabajando…",
-      "chatEnded": "Chat finalizado."
+      "chatEnded": "Chat finalizado.",
+      "providerDetail": "Detalle del proveedor: {detail}"
     },
     "diff": {
       "blueprint.create": "Crear el plano {domain} '{rel}'",

@@ -851,7 +851,9 @@
         "rate_limit": "De provider is tijdelijk niet beschikbaar.",
         "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
         "auth": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
-        "quota": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging."
+        "quota": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
+        "provider_rejected": "De provider heeft dit verzoek geweigerd. Er volgt geen nieuwe poging.",
+        "bad_tool_call_retry": "Het model stuurde een toolaanroep waarvan de argumenten geen geldige JSON waren. Niets uit die reactie is uitgevoerd; de fout is teruggestuurd zodat het model de aanroep opnieuw kan sturen."
       },
       "options": "Opties",
       "pausedAfter": "Gepauzeerd na {count} stappen. Verder onderzoeken?",
@@ -912,7 +914,8 @@
       "verboseHint": "De toolaanroepen, toolresultaten en het nadenken van de agent weergeven. Uit toont alleen het eindantwoord.",
       "workingOn": "Bezig: {name}",
       "workingSpinner": "Bezig…",
-      "chatEnded": "Chat beëindigd."
+      "chatEnded": "Chat beëindigd.",
+      "providerDetail": "Providerdetail: {detail}"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",

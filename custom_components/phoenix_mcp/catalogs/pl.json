@@ -861,7 +861,9 @@
         "rate_limit": "Dostawca jest tymczasowo niedostępny.",
         "ollama_backend": "Dostawca jest tymczasowo niedostępny.",
         "auth": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
-        "quota": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona."
+        "quota": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
+        "provider_rejected": "Dostawca odrzucił to żądanie. Próba nie zostanie ponowiona.",
+        "bad_tool_call_retry": "Model wysłał wywołanie narzędzia, którego argumenty nie były prawidłowym JSON-em. Nic z tej odpowiedzi nie zostało wykonane; błąd został zwrócony, aby model mógł ponownie wysłać wywołanie."
       },
       "options": "Opcje",
       "pausedAfter": "Wstrzymano po {count} krokach. Kontynuować badanie?",
@@ -922,7 +924,8 @@
       "verboseHint": "Pokaż wywołania narzędzi, wyniki narzędzi i myślenie agenta. Wyłączone pokazuje tylko ostateczną odpowiedź.",
       "workingOn": "Praca: {name}",
       "workingSpinner": "Praca…",
-      "chatEnded": "Czat zakończony."
+      "chatEnded": "Czat zakończony.",
+      "providerDetail": "Szczegóły dostawcy: {detail}"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",

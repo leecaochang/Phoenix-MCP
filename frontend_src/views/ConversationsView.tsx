@@ -189,6 +189,8 @@ function RoutingEvidence({ payload }: { payload: Record<string, unknown> }) {
       {typeof payload.text_characters === "number" && typeof payload.tool_call_count === "number"
         ? <p>{t("conversations.routing.output", { characters: localeNumber(payload.text_characters), tools: localeNumber(payload.tool_call_count) })}</p>
         : <p className="conversation-secondary">{t("conversations.routing.legacy")}</p>}
+      {typeof payload.provider_detail === "string" && payload.provider_detail
+        && <p className="conversation-error-message">{t("agentchat.providerDetail", { detail: payload.provider_detail })}</p>}
     </>}
     {payload.route === "assist" && payload.matched === true && <p>{t("conversations.routing.assistMatched")}</p>}
     {ROUTING_REASON[reason] && <p>{t(ROUTING_REASON[reason])}</p>}
@@ -233,6 +235,8 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
     {event.omission && <p className="conversation-secondary">{label("omission", event.omission)}</p>}
     {outcome && <p className={`conversation-outcome conversation-signal-${signal}`}>{event.kind === "routing" && ["provider", "decision_provider"].includes(String(payload?.route)) && outcome === "completed" ? t("conversations.routing.requestCompleted") : label("outcome", outcome)}</p>}
     {event.kind === "error" && typeof payload?.message === "string" && <div className="conversation-prose conversation-error-message">{payload.message}</div>}
+    {event.kind === "error" && typeof payload?.provider_detail === "string" && payload.provider_detail
+      && <div className="conversation-prose conversation-error-message">{t("agentchat.providerDetail", { detail: payload.provider_detail })}</div>}
     {event.payload !== null && event.payload !== undefined
       ? event.kind === "assistant_text" ? <TextEvidence value={event.payload} /> : event.kind === "tool_call" && payload ? <TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /> : <details><summary>{t(event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
           <TextEvidence value={event.payload} code />

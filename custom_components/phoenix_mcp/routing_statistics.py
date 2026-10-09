@@ -199,9 +199,15 @@ async def provider_events(events, *, config=None, messages=None):
                 if event.get("type") == "message_done":
                     receipt["result"] = "completed"
                     receipt["stop_reason"] = event.get("stop_reason")
-                if event.get("type") == "error":
+                # agentcli.EV_ERROR and EV_INVALID_TOOLS; imported names would be circular.
+                if event.get("type") in ("provider_error", "invalid_tool_calls"):
                     receipt["result"] = "failed"
                     receipt["reason"] = event.get("code", "provider_error")
+                    if event.get("status"):
+                        receipt["http_status"] = event["status"]
+                    if event.get("provider_detail"):
+                        # Already clipped and scrubbed by the provider adapter.
+                        receipt["provider_detail"] = event["provider_detail"]
                 yield event
         finally:
             if receipt["result"] == "running":

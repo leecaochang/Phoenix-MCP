@@ -201,7 +201,9 @@
         "rate_limit": "Il fornitore è temporaneamente non disponibile.",
         "ollama_backend": "Il fornitore è temporaneamente non disponibile.",
         "auth": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
-        "quota": "Il fornitore ha bloccato questa risposta. Non verrà ritentata."
+        "quota": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
+        "provider_rejected": "Il provider ha rifiutato questa richiesta. Non verrà ritentata.",
+        "bad_tool_call_retry": "Il modello ha inviato una chiamata a uno strumento i cui argomenti non erano JSON valido. Nulla di quella risposta è stato eseguito; l'errore è stato restituito perché il modello possa inviare di nuovo la chiamata."
       },
       "options": "Opzioni",
       "pausedAfter": "In pausa dopo {count} passaggi. Continuare l'analisi?",
@@ -262,7 +264,8 @@
       "verboseHint": "Mostra le chiamate agli strumenti dell'agente, i risultati degli strumenti e il pensiero. Disattivato mostra solo la risposta finale.",
       "workingOn": "In corso: {name}",
       "workingSpinner": "In corso…",
-      "chatEnded": "Chat terminata."
+      "chatEnded": "Chat terminata.",
+      "providerDetail": "Dettaglio del provider: {detail}"
     },
     "audit": {
       "allOutcomes": "Tutti gli esiti",

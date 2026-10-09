@@ -1307,6 +1307,32 @@ describe("AgentCliWindow streaming", () => {
     expect(screen.queryByText(/must never render/)).not.toBeInTheDocument();
   });
 
+  it("shows the provider's own sentence under a refused request", async () => {
+    agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("error", {
+        code: "provider_rejected",
+        message: "Provider request failed (HTTP 400).",
+        provider_detail: "input_schema does not support oneOf, allOf, or anyOf at the top level",
+      });
+      onEvent("messages", { messages: [] });
+      onEvent("done", { stop_reason: "error" });
+    });
+
+    render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} />,
+    );
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByPlaceholderText(/Message Agent Chat/i);
+    fireEvent.change(textarea, { target: { value: "hi" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    // A refused request is not an outage, and the operator sees why it was refused.
+    const expected = "The provider refused this request. It will not be retried.\n"
+      + "Provider detail: input_schema does not support oneOf, allOf, or anyOf at the top level";
+    await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(expected));
+  });
+
   it("shows tool activity only when verbose output is enabled", async () => {
     agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
       onEvent("tool_call", { id: "tc1", name: "get_overview", arguments: {} });

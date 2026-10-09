@@ -44,7 +44,7 @@ type ChatEntry =
   | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; checking?: boolean }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
-      rateLimit?: ProviderRateLimit };
+      rateLimit?: ProviderRateLimit; providerDetail?: string };
 
 const COMPOSER_MAX_ROWS = 6;
 
@@ -1265,9 +1265,12 @@ export function AgentCliWindow({
                 const messageParams = p.message_params && typeof p.message_params === "object"
                   ? p.message_params as Record<string, string | number> : undefined;
                 const rateLimit = providerRateLimit(p.rate_limit);
-                push({ kind: "error", code, message, messageParams, rateLimit });
+                // The provider's own error sentence, clipped and scrubbed server-side.
+                const providerDetail = typeof p.provider_detail === "string" && p.provider_detail
+                  ? p.provider_detail : undefined;
+                push({ kind: "error", code, message, messageParams, rateLimit, providerDetail });
                 setAnnouncement(t("agentchat.announceError", {
-                  message: serverText(code, message, messageParams, rateLimit),
+                  message: serverText(code, message, messageParams, rateLimit, providerDetail),
                 }));
               }
               break;
@@ -2025,11 +2028,13 @@ function serverText(
   message: string,
   params?: Record<string, string | number>,
   rateLimit?: ProviderRateLimit,
+  providerDetail?: string,
 ): string {
   const key = code ? `agentchat.notice.${code}` : "";
   const base = key && hasMessage(key) ? t(key, params) : message;
-  const diagnostics = rateLimitDiagnostics(rateLimit);
-  return diagnostics ? `${base}\n${diagnostics}` : base;
+  const lines = [base, rateLimitDiagnostics(rateLimit)];
+  if (providerDetail) lines.push(t("agentchat.providerDetail", { detail: providerDetail }));
+  return lines.filter(Boolean).join("\n");
 }
 
 function rateLimitDiagnostics(info?: ProviderRateLimit): string {
@@ -2232,7 +2237,7 @@ function ChatItem({
       return <div className="agentcli-notice">{serverText(entry.code, entry.message, entry.messageParams)}</div>;
     case "error":
       return <div className="agentcli-error">{
-        serverText(entry.code, entry.message, entry.messageParams, entry.rateLimit)
+        serverText(entry.code, entry.message, entry.messageParams, entry.rateLimit, entry.providerDetail)
       }{(entry.code === "outcome_unknown" || entry.code === "provider_after_dispatch") && <p>
         <a href="/phoenix-mcp#attention" target="_blank" rel="noopener noreferrer">{t("attention.title")}</a>
       </p>}</div>;

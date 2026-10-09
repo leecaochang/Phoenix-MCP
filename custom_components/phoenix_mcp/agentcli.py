@@ -39,7 +39,7 @@ from urllib.parse import urlparse, urlunparse
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
-from .conversation_log import record_rejected_tool
+from .conversation_log import record_rejected_tool, sanitized
 
 from .view_base import PhoenixView
 from homeassistant.core import HomeAssistant, callback
@@ -115,7 +115,9 @@ from .const import (
     AGENTCLI_MAX_ITERATIONS,
     AGENTCLI_MAX_SSE_BUFFER_BYTES,
     AGENTCLI_MAX_STREAM_BYTES,
+    AGENTCLI_MAX_TOOL_CALL_CORRECTIONS,
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
+    AGENTCLI_PROVIDER_DETAIL_CHARS,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
     AGENTCLI_SECRETS_STORAGE_KEY,
     AGENTCLI_SECRETS_STORAGE_VERSION,
@@ -229,6 +231,12 @@ EV_THINKING = "thinking_delta"
 EV_TOOL = "tool_use_complete"
 EV_DONE = "message_done"
 EV_ERROR = "provider_error"
+# A complete response whose tool arguments did not parse as JSON. It replaces
+# EV_TOOL and EV_DONE, so nothing from the response can dispatch. It carries a
+# replayable assistant message (placeholder `{}` arguments that are never run)
+# and one tool error per call, so a loop can hand the error back to the model.
+# A loop that cannot correct treats it as a terminal bad_tool_call error.
+EV_INVALID_TOOLS = "invalid_tool_calls"
 # Provider-reported token usage for the CURRENT model call, cumulative-replace
 # semantics: each event carries the latest known totals for that one call, so a
 # consumer keeps the newest event's numbers rather than summing events. Counts
@@ -999,6 +1007,58 @@ def _parse_provider_error(text: str) -> tuple[str, str | None]:
     return raw, None
 
 
+def _provider_error_detail(text: str) -> str:
+    """The provider's own error sentence for an administrator, or "".
+
+    Only the message inside a JSON error envelope qualifies; a proxy's HTML page
+    or another unstructured body is not shown. The sentence is clipped and then
+    scrubbed like conversation-log text, so a key, bearer token or address a
+    provider echoes is redacted. It reaches the admin panel, the conversation
+    log and the Home Assistant log, never a model, Voice or AI Task.
+    """
+    try:
+        obj = json.loads((text or "").strip())
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    err = obj.get("error")
+    message = err.get("message") if isinstance(err, dict) else err if isinstance(err, str) else obj.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return ""
+    clipped = " ".join(message.split())[:AGENTCLI_PROVIDER_DETAIL_CHARS]
+    try:
+        return str(sanitized(clipped, max_bytes=8 * AGENTCLI_PROVIDER_DETAIL_CHARS, hide_ip=True))
+    except ValueError:
+        return ""
+
+
+def _http_failure_code(status: int, server_error: str = "upstream") -> str:
+    """Classify a non-200 provider status for the panel and retry policy."""
+    if status in (401, 403):
+        return "auth"
+    if status == 429:
+        return "rate_limit"
+    if status == 402:
+        return "quota"
+    if 400 <= status < 500:
+        # The provider refused this request as sent. Not an outage, and the
+        # same request will be refused again.
+        return "provider_rejected"
+    return server_error
+
+
+def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bool, **extra: Any) -> dict:
+    """One EV_ERROR for a non-200 provider answer, with the administrator-only detail."""
+    detail = _provider_error_detail(text)
+    _LOGGER.log(
+        logging.DEBUG if retryable else logging.WARNING,
+        "Agent provider %s answered HTTP %s: %s", kind, status, detail or "no error message",
+    )
+    return _norm(EV_ERROR, status=status, code=code, message=f"Provider request failed (HTTP {status}).",
+                 retryable=retryable, **({"provider_detail": detail} if detail else {}), **extra)
+
+
 # Mistral documents a remaining-quota response header and currently publishes
 # more granular numeric headers for token/request windows. Keep this an explicit
 # allowlist: response headers are provider-controlled input, and no unrelated
@@ -1196,6 +1256,101 @@ def _tool_call_problem(call_id: Any, name: Any, arguments: Any) -> str:
     return "Tool arguments must be a JSON object."
 
 
+def _json_error_hint(raw: str, error: json.JSONDecodeError) -> str:
+    """Tell the model where its tool arguments stopped parsing and what is likely missing.
+
+    The received text is scanned up to the error position, string-aware, so the
+    objects and arrays still open there are known: the innermost one names the
+    closer the parser was waiting for, and the key it is the value of. No string
+    VALUE is quoted: the text returns to the model and the browser transcript,
+    and a value can hold a secret the model wrote.
+    """
+    pos = max(0, min(error.pos, len(raw)))
+    # (opener, index, key it is the value of), outermost first.
+    stack: list[tuple[str, int, str | None]] = []
+    in_string = escaped = False
+    current: list[str] = []
+    last_string: str | None = None
+    key: str | None = None
+    for index, char in enumerate(raw[:pos]):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+                last_string = "".join(current)
+                continue
+            current.append(char)
+        elif char == '"':
+            in_string, current, key = True, [], None
+        elif char == ":":
+            key = last_string
+        elif char in "{[":
+            stack.append((char, index, key))
+            key = None
+        elif char in "}],":
+            if char != "," and stack:
+                stack.pop()
+            key = None
+    closers = "".join("}" if opener == "{" else "]" for opener, _, _ in reversed(stack))
+    if error.msg.startswith("Unterminated string") or in_string:
+        hint = "A string opened here is never closed, so a closing quote is probably missing."
+    elif stack and not raw[pos:].strip():
+        noun = "object or array" if len(stack) == 1 else "objects or arrays"
+        hint = f"The arguments end with {len(stack)} unclosed {noun}, so '{closers}' is probably missing at the end."
+    elif stack:
+        opener, start, owner = stack[-1]
+        kind = "object" if opener == "{" else "array"
+        named = f" (the value of {json.dumps(owner[:64], ensure_ascii=False)})" if owner else ""
+        hint = (f"At that point the innermost open {kind}{named} starts at character {start}, "
+                f"so '{closers[0]}' is probably missing before this position.")
+    else:
+        hint = "The JSON value is already complete before that point, so the text after it is extra."
+    return (
+        f"Not run: the arguments for this call are not valid JSON ({error.msg} at line {error.lineno}, "
+        f"column {error.colno}, character {pos} of {len(raw)}). {hint} The arguments are shown as {{}} "
+        "in this history only because they could not be parsed; nothing was run with them. Send the "
+        "call again with complete, valid JSON arguments."
+    )
+
+
+_INVALID_BATCH_SIBLING = (
+    "Not run: another tool call in the same response had arguments that are not valid JSON, so no "
+    "call from that response ran. Send this call again if it is still needed."
+)
+
+
+def _invalid_tool_calls(
+    calls: list[tuple[Any, Any, Any, str | None]], assistant_msg: dict,
+) -> dict | None:
+    """Build the EV_INVALID_TOOLS event for one response, or None when it cannot be paired.
+
+    `calls` holds (id, name, parsed arguments or None, model-facing error or
+    None) in response order. Every call gets a tool error, the valid ones
+    included, because no call from a response with a malformed sibling runs. A
+    call whose ID or name is unusable cannot carry a tool result, so the response
+    stays a terminal error rather than a correction.
+    """
+    ids = [call_id for call_id, _name, _args, _error in calls]
+    if not calls or len(set(ids)) != len(ids) or not all(
+            _valid_tool_call(call_id, name, {}) for call_id, name, _args, _error in calls):
+        return None
+    results = [
+        {"tool_use_id": call_id, "tool_name": name, "result_text": error or _INVALID_BATCH_SIBLING,
+         "is_error": True}
+        for call_id, name, _args, error in calls
+    ]
+    return _norm(EV_INVALID_TOOLS, code="bad_tool_call", assistant_msg=assistant_msg, results=results)
+
+
+def _invalid_tools_error(message: str = "The model produced an invalid tool call.") -> dict:
+    """The terminal form of EV_INVALID_TOOLS, for a loop that cannot hand it back."""
+    return _norm(EV_ERROR, status=0, code="bad_tool_call", message=message, retryable=True,
+                 diagnostic={"category": "bad_tool_call"})
+
+
 class _ThinkSplitter:
     """Split a streamed content string into ("text"|"think", segment) pieces.
 
@@ -1315,6 +1470,62 @@ def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[d
     return system, [*messages[:-1], marked]
 
 
+_SCHEMA_COMBINATORS = ("anyOf", "oneOf", "allOf")
+
+
+def _requirement_sentence(keyword: str, branches: list) -> str:
+    """State one top-level anyOf/oneOf of required-property branches as a sentence."""
+    groups = []
+    for branch in branches:
+        required = branch.get("required") if isinstance(branch, dict) else None
+        if not isinstance(required, list) or not required:
+            return ("The arguments must match exactly one of the documented alternatives."
+                    if keyword == "oneOf" else
+                    "The arguments must match at least one of the documented alternatives.")
+        names = " and ".join(str(name) for name in required)
+        groups.append(f"({names})" if len(required) > 1 else names)
+    listed = groups[0] if len(groups) == 1 else ", ".join(groups[:-1]) + f" or {groups[-1]}"
+    return f"Provide {'exactly one' if keyword == 'oneOf' else 'at least one'} of: {listed}."
+
+
+def _anthropic_input_schema(schema: Any) -> tuple[Any, list[str]]:
+    """Lower the top-level combinators Anthropic's tool API refuses.
+
+    Anthropic answers HTTP 400 to any request whose tool input_schema has anyOf,
+    oneOf or allOf at the top level, so one such tool fails every request.
+    allOf members merge into the object (properties and required lists); each
+    anyOf or oneOf becomes a sentence for the tool description. Nested
+    combinators are accepted and stay. Only the copy sent in the Anthropic
+    format changes: each tool's handler enforces these rules at dispatch, so no
+    check is relaxed.
+    """
+    if not isinstance(schema, dict) or not any(key in schema for key in _SCHEMA_COMBINATORS):
+        return schema, []
+    lowered = {key: value for key, value in schema.items() if key not in _SCHEMA_COMBINATORS}
+    properties = dict(lowered.get("properties") or {})
+    required = list(lowered.get("required") or [])
+    rules: list[str] = []
+    members = [schema, *(member for member in schema.get("allOf") or [] if isinstance(member, dict))]
+    for member in members:
+        if member is not schema:
+            for name, spec in (member.get("properties") or {}).items():
+                properties.setdefault(name, spec)
+            required += [name for name in member.get("required") or [] if name not in required]
+        for keyword in ("anyOf", "oneOf"):
+            branches = member.get(keyword)
+            if not isinstance(branches, list) or not branches:
+                continue
+            for branch in branches:
+                for name, spec in ((branch.get("properties") or {}) if isinstance(branch, dict) else {}).items():
+                    properties.setdefault(name, spec)
+            rules.append(_requirement_sentence(keyword, branches))
+    lowered["type"] = "object"
+    lowered["properties"] = properties
+    if required:
+        lowered["required"] = required
+    return lowered, rules
+
+
 class ClaudeProvider:
     """Anthropic Messages API, streaming, over raw HTTP.
 
@@ -1330,11 +1541,17 @@ class ClaudeProvider:
         self._model_rows: dict[str, dict] = {}
 
     def format_tools(self, mcp_tools: list[dict]) -> list[dict]:
-        return [
-            {"name": t["name"], "description": t.get("description", ""),
-             "input_schema": t.get("inputSchema", {"type": "object", "properties": {}})}
-            for t in mcp_tools
-        ]
+        out = []
+        for t in mcp_tools:
+            schema, rules = _anthropic_input_schema(t.get("inputSchema", {"type": "object", "properties": {}}))
+            description = t.get("description", "")
+            if rules:
+                description = str(description).rstrip()
+                if description and description[-1] not in ".!?":
+                    description += "."
+                description = " ".join([description, *rules]).strip()
+            out.append({"name": t["name"], "description": description, "input_schema": schema})
+        return out
 
     def append_assistant(self, messages: list[dict], assistant_msg: dict) -> None:
         messages.append(assistant_msg)
@@ -1506,7 +1723,8 @@ class ClaudeProvider:
                     json=body, timeout=_CHAT_TIMEOUT,
                 ) as resp:
                     if resp.status != 200:
-                        msg, err_code = _parse_provider_error((await resp.text())[:4000])
+                        text = (await resp.text())[:4000]
+                        msg, err_code = _parse_provider_error(text)
                         if (attempt == 0 and resp.status == 400
                                 and _thinking_type(body) == "adaptive"
                                 and "adaptive" in msg.lower()):
@@ -1518,10 +1736,8 @@ class ClaudeProvider:
                         retryable = resp.status in (429, 500, 502, 503, 504, 529)
                         if err_code in _NON_RETRYABLE_ERROR_CODES:
                             retryable = False
-                        yield _norm(EV_ERROR, status=resp.status,
-                                    code=_claude_err_code(resp.status),
-                                    message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
-                                    refused=_refused_option(resp.status, msg, body))
+                        yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
+                                            retryable=retryable, refused=_refused_option(resp.status, msg, body))
                         return
                     async for ev in self._parse(resp):
                         yield ev
@@ -1643,6 +1859,8 @@ class ClaudeProvider:
             raise _ProviderResponseError()
         if parsed_tools and stop_reason != "tool_use":
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
+        # Model-facing error per block index whose arguments did not parse.
+        invalid: dict[int, str] = {}
         for tool in parsed_tools:
             raw_arguments = tool["input"]
             try:
@@ -1650,20 +1868,22 @@ class ClaudeProvider:
             except json.JSONDecodeError as exc:
                 record_rejected_tool(tool["id"], tool["name"], raw_arguments,
                                      reason="Tool arguments are not valid JSON.", finish_reason=stop_reason, error=exc)
-                raise
+                invalid[tool["_block_index"]] = _json_error_hint(raw_arguments, exc)
+                # History placeholder only: EV_INVALID_TOOLS never dispatches.
+                tool["input"] = {}
+                continue
             if not _valid_tool_call(tool["id"], tool["name"], tool["input"]):
                 record_rejected_tool(tool["id"], tool["name"], raw_arguments,
                                      reason=_tool_call_problem(tool["id"], tool["name"], tool["input"]),
                                      finish_reason=stop_reason)
                 raise _ProviderResponseError()
-            blocks[tool.pop("_block_index")]["input"] = tool["input"]
         if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
             for tool in parsed_tools:
                 record_rejected_tool(tool["id"], tool["name"], tool["input"],
                                      reason="The response contains duplicate tool call IDs.", finish_reason=stop_reason)
             raise _ProviderResponseError()
         for tool in parsed_tools:
-            yield tool
+            blocks[tool["_block_index"]]["input"] = tool["input"]
         # Assemble the assistant message in block order; drop thinking blocks from
         # the persisted history (they are display-only and Anthropic re-derives).
         content = []
@@ -1676,17 +1896,21 @@ class ClaudeProvider:
             elif blk["type"] == "tool_use":
                 content.append({"type": "tool_use", "id": blk["id"], "name": blk["name"], "input": blk["input"]})
         assistant_msg = {"role": "assistant", "content": content}
+        if invalid:
+            # The response finished cleanly but a call's arguments do not parse:
+            # withhold every call and let the loop hand the error back.
+            event = _invalid_tool_calls(
+                [(tool["id"], tool["name"], tool["input"], invalid.get(tool["_block_index"])) for tool in parsed_tools],
+                assistant_msg,
+            )
+            if event is None:
+                raise _ProviderResponseError()
+            yield event
+            return
+        for tool in parsed_tools:
+            tool.pop("_block_index")
+            yield tool
         yield _norm(EV_DONE, stop_reason=_norm_stop(stop_reason), assistant_msg=assistant_msg)
-
-
-def _claude_err_code(status: int) -> str:
-    if status in (401, 403):
-        return "auth"
-    if status == 429:
-        return "rate_limit"
-    if status == 402:
-        return "quota"
-    return "upstream"
 
 
 # OpenAI's /models lists everything the key can access, which includes many
@@ -1879,10 +2103,10 @@ async def async_probe_capabilities(
     guessed when it could not be established, so a partial or failed probe
     narrows nothing.
 
-    `answered` is False when NO call came back with a usable status (200 or 400).
-    A key with no credit, a revoked key or an unreachable host answers every
-    question the same way, and reporting that as "this provider does not validate
-    its options" would blame the provider for an account problem.
+    `answered` is False when the control request below did not answer 200. A key
+    with no credit, a revoked key, a refused model or an unreachable host answers
+    every question the same way, and reporting that as "this provider does not
+    validate its options" would blame the provider for an account problem.
 
     TWO STAGES, and the order is the whole method. Stage one sends a
     deliberately INVALID effort: a 400 proves the server validates the field.
@@ -1890,17 +2114,23 @@ async def async_probe_capabilities(
     Without stage one, a server that ignores an unknown parameter answers 200 to
     every level, which reads as "supports all five". A 400 is informative; a 200
     on its own never is.
+
+    Both stages need a CONTROL first: the same minimal request with no option
+    must answer 200. Without it, a model the endpoint refuses outright (wrong
+    id, wrong plan, an unrelated request rule) answers 400 to everything, and
+    those 400s would be recorded as refused options. A refused control
+    establishes nothing and reports the provider as not answering.
     """
     provider = build_provider(cfg)
     caps: dict = {}
-    calls = 0
-    answered = False
+    calls = 1
+    if await provider.probe_option(session, {}) != 200:
+        return caps, calls, False
 
     fragment = _effort_probe_body(cfg.kind, AGENTCLI_PROBE_SENTINEL)
     if fragment is not None:
         status = await provider.probe_option(session, fragment)
         calls += 1
-        answered = answered or status in (200, 400)
         # Only a 400 is evidence. Unreachable (None) says nothing, and a 200
         # means the field is ignored or leniently defaulted, which are
         # indistinguishable and equally useless.
@@ -1913,7 +2143,6 @@ async def async_probe_capabilities(
                 if body is None:
                     continue
                 level_status = await provider.probe_option(session, body)
-                answered = answered or level_status in (200, 400)
                 if level_status == 200:
                     levels.append(level)
                 calls += 1
@@ -1930,11 +2159,10 @@ async def async_probe_capabilities(
         # accepted temperature may still be ignored.
         status = await provider.probe_option(session, {"temperature": 0.7})
         calls += 1
-        answered = answered or status in (200, 400)
         if status == 400:
             caps["temperature"] = False
 
-    return caps, calls, answered
+    return caps, calls, True
 
 
 def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
@@ -2475,18 +2703,15 @@ class OpenAICompatProvider:
                 async with session.post(self._chat_url(), headers=self._headers(), json=body,
                                         timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
                     if resp.status != 200:
-                        msg, err_code = _parse_provider_error((await resp.text())[:4000])
+                        text = (await resp.text())[:4000]
+                        msg, err_code = _parse_provider_error(text)
                         if (attempt == 0 and effort_forced and resp.status == 400
                                 and "reasoning_effort" in msg.lower()):
                             _OPENAI_NO_EFFORT_NONE.add(self.cfg.model)
                             body.pop("reasoning_effort", None)
                             continue
                         # Ollama commonly 500s on an unknown/hallucinated tool name.
-                        code = "ollama_backend" if self._is_ollama else "upstream"
-                        if resp.status in (401, 403):
-                            code = "auth"
-                        elif resp.status == 429:
-                            code = "rate_limit"
+                        code = _http_failure_code(resp.status, "ollama_backend" if self._is_ollama else "upstream")
                         retryable = resp.status in (429, 500, 502, 503)
                         if err_code in _NON_RETRYABLE_ERROR_CODES:
                             retryable = False
@@ -2496,10 +2721,9 @@ class OpenAICompatProvider:
                             _mistral_rate_limit_headers(resp.headers)
                             if self.definition.model_filter == "mistral" and resp.status == 429 else {}
                         )
-                        yield _norm(EV_ERROR, status=resp.status, code=code,
-                                    message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
-                                    refused=_refused_option(resp.status, msg, body),
-                                    **({"rate_limit": rate_limit} if rate_limit else {}))
+                        yield _http_failure(self.kind, resp.status, text, code=code, retryable=retryable,
+                                            refused=_refused_option(resp.status, msg, body),
+                                            **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
                     async for ev in self._parse(resp, show_thinking):
                         yield ev
@@ -2668,9 +2892,12 @@ class OpenAICompatProvider:
         assistant_tool_calls = []
         parsed_tools = []
         bad = False
+        # (id, name, parsed arguments or None, model-facing JSON error or None).
+        checked: list[tuple[Any, Any, Any, str | None]] = []
         for idx in sorted(calls):
             slot = calls[idx]
             args_str = slot["args"] or "{}"
+            hint = None
             try:
                 parsed = json.loads(args_str)
                 if not _valid_tool_call(slot["id"], slot["name"], parsed):
@@ -2681,11 +2908,13 @@ class OpenAICompatProvider:
             except json.JSONDecodeError as exc:
                 bad = True
                 parsed = None
+                hint = _json_error_hint(args_str, exc)
                 reason = ("The output length limit interrupted the tool arguments." if finish == "length"
                           else "The stream ended before the tool arguments were complete." if not saw_finish
                           else "Tool arguments are not valid JSON.")
                 record_rejected_tool(slot["id"], slot["name"], slot["args"], reason=reason,
                                      finish_reason=finish if saw_finish else None, error=exc)
+            checked.append((slot["id"], slot["name"], parsed, hint))
             assistant_tool_calls.append({
                 "id": slot["id"], "type": "function",
                 "function": {"name": slot["name"], "arguments": args_str},
@@ -2740,9 +2969,23 @@ class OpenAICompatProvider:
                     "request itself was not at fault; send it again."
                 )
             else:
-                code = "bad_tool_call"
-                retryable = True
-                message = "The model produced an invalid tool call."
+                # A finished tool-call response whose JSON is the model's own
+                # syntax error. Hand it back with the position and likely missing
+                # closer so the model can resend it. Replayed history carries `{}`
+                # for the unparseable arguments: several OpenAI-compatible servers
+                # parse historical arguments and would refuse every later request.
+                event = _invalid_tool_calls(checked, {
+                    **assistant_msg,
+                    "tool_calls": [
+                        call if hint is None else {**call, "function": {**call["function"], "arguments": "{}"}}
+                        for call, (_id, _name, _parsed, hint) in zip(assistant_tool_calls, checked)
+                    ],
+                }) if finish == "tool_calls" else None
+                if event is not None:
+                    yield event
+                    return
+                yield _invalid_tools_error()
+                return
             yield _norm(EV_ERROR, status=0, code=code,
                         message=message, retryable=retryable, diagnostic={'category': code})
             return
@@ -3481,6 +3724,20 @@ async def _cancelable_provider_events(events: Any, cancel: asyncio.Event) -> Asy
         await events.aclose()
 
 
+def _after_dispatch_failure(ev: dict, write_started: bool) -> dict:
+    """A provider failure after this turn dispatched a tool: never retried, uncertain after a write.
+
+    Reads still stop automatic retries but cannot create an uncertain device
+    action, so only a write is reported as outcome unknown. Classified from
+    server annotations, never from the model.
+    """
+    ev = {**ev, "retryable": False, "dispatch_started": True}
+    if write_started:
+        ev = {**ev, "code": "provider_after_dispatch", "outcome": "outcome_unknown",
+              "message": "The provider failed after tool dispatch. Earlier actions may have run. Reconcile Home Assistant and approval results before retrying."}
+    return ev
+
+
 async def _stream_turn_resilient(
     provider: ClaudeProvider | OpenAICompatProvider, session: ClientSession, *,
     system_prompt: str, messages: list[dict], tools: list[dict], options: dict,
@@ -3517,12 +3774,7 @@ async def _stream_turn_resilient(
                     retry = True
                     break
                 if etype == EV_ERROR and dispatch_started:
-                    # Reads still stop automatic retries, but cannot create an
-                    # uncertain device action. Classify from server annotations.
-                    ev = {**ev, "retryable": False, "dispatch_started": True}
-                    if write_started:
-                        ev = {**ev, "code": "provider_after_dispatch", "outcome": "outcome_unknown",
-                              "message": "The provider failed after tool dispatch. Earlier actions may have run. Reconcile Home Assistant and approval results before retrying."}
+                    ev = _after_dispatch_failure(ev, write_started)
                 if etype == EV_ERROR and attempt > 1:
                     detail = str(ev.get("message") or "").strip()
                     seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
@@ -3547,7 +3799,7 @@ async def _stream_turn_resilient(
                         "message": message.strip(),
                         "message_params": {"seconds": seconds, "detail": detail},
                     }
-                if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE):
+                if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
                     produced = True
                 yield ev
         if not retry or cancel.is_set():
@@ -3571,6 +3823,8 @@ class _ModelCallResult:
     usage_output: int
     context_tokens: int
     focus_declined: bool
+    # The EV_INVALID_TOOLS event when the response's tool arguments did not parse.
+    invalid_tools: dict | None = None
 
 
 def _strip_focus_marker_text(text: str) -> tuple[str, bool]:
@@ -3676,6 +3930,7 @@ async def _consume_model_stream(
     """
     tool_calls: list[dict] = []
     assistant_msg: dict | None = None
+    invalid_tools: dict | None = None
     stop_reason = "end_turn"
     errored = False
     saw_text = False
@@ -3701,6 +3956,8 @@ async def _consume_model_stream(
             await emit("thinking_delta", {"text": ev["text"]})
         elif etype == EV_TOOL:
             tool_calls.append(ev)
+        elif etype == EV_INVALID_TOOLS:
+            invalid_tools = ev
         elif etype == EV_USAGE:
             usage_cur_input = _usage_int(ev.get("input_tokens"))
             usage_cur_output = _usage_int(ev.get("output_tokens"))
@@ -3730,6 +3987,11 @@ async def _consume_model_stream(
                                  **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
                                  **({"message_params": ev["message_params"]}
                                     if ev.get("message_params") else {}),
+                                 # The provider's own error sentence, already
+                                 # clipped and scrubbed by the adapter. The
+                                 # admin panel and conversation log show it.
+                                 **({"provider_detail": ev["provider_detail"]}
+                                    if ev.get("provider_detail") else {}),
                                  # Mistral's adapter has already reduced response
                                  # headers to a strict allowlist of safe numeric
                                  # quota fields. Preserve that structured snapshot
@@ -3756,6 +4018,7 @@ async def _consume_model_stream(
         usage_input=usage_cur_input, usage_output=usage_cur_output,
         context_tokens=context_tokens,
         focus_declined=focus.declined,
+        invalid_tools=invalid_tools,
     )
 
 
@@ -4067,6 +4330,8 @@ async def async_run_agent_turn(
     usage_done_input = usage_done_output = 0
     usage_cur_input = usage_cur_output = 0
     context_tokens = 0
+    # Rounds spent handing malformed tool-call JSON back to the model.
+    corrections = 0
     while True:
         if iterations >= max_iterations:
             # Pause at the checkpoint rather than stopping dead: the loop has
@@ -4108,6 +4373,25 @@ async def async_run_agent_turn(
             turn_errored = True
             stop_reason = "error"
             break
+        invalid = call.invalid_tools
+        if invalid is not None:
+            # Nothing from this response ran. Hand the JSON error back as tool
+            # results so the model can resend the call, within a small budget.
+            if corrections >= AGENTCLI_MAX_TOOL_CALL_CORRECTIONS:
+                failure = _invalid_tools_error()
+                if dispatch_started:
+                    failure = _after_dispatch_failure(failure, write_started)
+                await emit("error", {
+                    "code": failure["code"], "message": failure["message"], "retryable": failure["retryable"],
+                    "diagnostic": failure["diagnostic"],
+                    **({"outcome": "outcome_unknown"} if failure.get("outcome") == "outcome_unknown" else {}),
+                })
+                turn_errored = True
+                stop_reason = "error"
+                break
+            corrections += 1
+            assistant_msg = invalid["assistant_msg"]
+            stop_reason = "tool_use"
         if assistant_msg is not None:
             # Check the prospective total BEFORE appending, and reject the message
             # if it would blow the turn budget, so the offending message is never
@@ -4121,6 +4405,12 @@ async def async_run_agent_turn(
                 break
             provider.append_assistant(messages, assistant_msg)
             turn_output_bytes = prospective
+        if invalid is not None:
+            provider.append_tool_results(messages, invalid["results"])
+            await emit("notice", {"code": "bad_tool_call_retry", "message": (
+                "The model sent a tool call whose arguments were not valid JSON. Nothing from that "
+                "response ran; the error was returned so the model can send the call again.")})
+            continue
         if stop_reason != "tool_use":
             break
 
@@ -4336,6 +4626,7 @@ async def _run_headless_turn(
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
+        invalid: dict | None = None
         stop_reason = "end_turn"
         call_text = ""
         correct_format = False
@@ -4345,6 +4636,18 @@ async def _run_headless_turn(
             write_started=write_started,
         ):
             etype = ev["type"]
+            if etype == EV_INVALID_TOOLS:
+                # Hand malformed tool-call JSON back as tool errors while a round
+                # remains for the corrected call. Home Companion keeps its own
+                # stricter budget and never corrects after a write.
+                companion = internal_turn(access_key)
+                limit = HOME_COMPANION_MAX_FORMAT_CORRECTIONS if companion else AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
+                if (not final_round and format_corrections < limit and iteration < max_iterations - 1
+                        and not (companion and write_started)):
+                    invalid = ev
+                    continue
+                ev = _invalid_tools_error()
+                etype = EV_ERROR
             if etype == EV_TEXT:
                 call_text += ev["text"]
             elif etype == EV_TOOL:
@@ -4372,6 +4675,17 @@ async def _run_headless_turn(
                     focus_declined=focus_declined,
                 )
         if correct_format:
+            continue
+        if invalid is not None:
+            format_corrections += 1
+            prospective = turn_output_bytes + len(json.dumps(invalid["assistant_msg"], default=str))
+            if prospective > AGENTCLI_MAX_TURN_OUTPUT_BYTES:
+                return _HeadlessTurnResult(
+                    final_text, review_urls, outcome=TURN_OUTPUT_LIMIT, focus_declined=focus_declined,
+                )
+            provider.append_assistant(messages, invalid["assistant_msg"])
+            turn_output_bytes = prospective
+            provider.append_tool_results(messages, invalid["results"])
             continue
         if detect_focus_refusal:
             call_text, text_declined = _strip_focus_marker_text(call_text)

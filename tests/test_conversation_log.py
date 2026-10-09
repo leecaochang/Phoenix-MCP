@@ -401,6 +401,26 @@ async def test_changed_configuration_remains_visible_after_response_failure(conv
 
 
 @pytest.mark.asyncio
+async def test_a_malformed_call_handed_back_is_not_an_uncertain_execution(conversation_data):
+    """The call never ran, so its notice must not make the turn's execution read unknown."""
+    data, access_key = conversation_data
+
+    @history.recorded_chat
+    async def chat(**kwargs):
+        handle = history._current.get()
+        await kwargs["emit"]("notice", {"code": "bad_tool_call_retry", "message": "Handed back."})
+        data.conversations.event(handle, "tool_call", {"name": "get_state"})
+        data.conversations.event(handle, "tool_result", {"success": True}, outcome="allowed")
+
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Read it"}], emit=AsyncMock())
+    entry = only(data.conversations)
+    assert entry["status"] == "completed" and entry["execution_status"] == "allowed"
+    assert entry["uncertain_tools"] == []
+    notice = next(e for e in entry["events"] if e["kind"] == "notice")
+    assert notice["outcome"] == "invalid_request"
+
+
+@pytest.mark.asyncio
 async def test_uncertain_write_failure_preserves_transport_outcome(hass, conversation_data, monkeypatch):
     from custom_components.phoenix_mcp import mcp_view
     data, access_key = conversation_data
@@ -789,9 +809,18 @@ async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conv
             usage_done_input=0, usage_done_output=0, context_tokens=0)
 
     result = await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Graph the battery"}], emit=emit)
-    assert result.errored and not result.tool_calls
+    assert not result.tool_calls
     entry = only(data.conversations)
-    assert entry["status"] == "failed" and entry["tool_count"] == 0 and entry["execution_status"] == "no_tools"
+    if reason == "not valid JSON":
+        # Handed to the loop to return to the model. What it carries reaches the
+        # model and the browser transcript, so none of the rejected text does.
+        assert not result.errored and result.invalid_tools is not None
+        assert "canary" not in json.dumps(result.invalid_tools["results"])
+        replay = result.invalid_tools["assistant_msg"]
+        assert "canary" not in json.dumps(replay.get("tool_calls") or replay["content"])
+    else:
+        assert result.errored and entry["status"] == "failed"
+    assert entry["tool_count"] == 0 and entry["execution_status"] == "no_tools"
     rejection = next(e["payload"] for e in entry["events"] if isinstance(e["payload"], dict) and e["payload"].get("code") == "tool_call_rejected")
     assert reason in rejection["message"]
     assert rejection["name"] == "get_state" and rejection["call_id"] == "call-one"
@@ -957,6 +986,40 @@ async def test_provider_receipts_explain_each_round_without_copying_envelopes(co
         async for _ in provider_events(broken()):
             pass
         assert log.detail(handle[1])['events'][-1]['payload']['result'] == 'interrupted'
+    finally:
+        history._current.reset(ctx)
+
+
+@pytest.mark.asyncio
+async def test_failed_provider_receipts_name_the_failure_and_the_provider_detail(conversation_data):
+    """A provider failure is recorded as failed, not left reading "interrupted".
+
+    The receipt is the only conversation-log evidence Voice and AI Task turns get,
+    so it carries the adapter's already scrubbed provider sentence. A malformed
+    tool-call round is a failed request too, without copying its envelopes.
+    """
+    from custom_components.phoenix_mcp.agentcli import EV_ERROR, EV_INVALID_TOOLS
+    from custom_components.phoenix_mcp.routing_statistics import provider_events
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin('agentcli', prompt='read it')
+    ctx = history._current.set(handle)
+    async def refused():
+        yield {'type': EV_ERROR, 'status': 400, 'code': 'provider_rejected', 'retryable': False,
+               'message': 'Provider request failed (HTTP 400).', 'provider_detail': 'input_schema does not support oneOf'}
+    async def malformed():
+        yield {'type': EV_INVALID_TOOLS, 'code': 'bad_tool_call', 'assistant_msg': {'private': 'envelope-canary'},
+               'results': [{'result_text': 'argument-canary'}]}
+    try:
+        for stream in (refused, malformed):
+            async for _ in provider_events(stream(), messages=[], config=SimpleNamespace(kind='claude', model='m')):
+                pass
+        first, second = (event['payload'] for event in log.detail(handle[1])['events'])
+        assert first['result'] == 'failed' and first['reason'] == 'provider_rejected'
+        assert first['http_status'] == 400
+        assert first['provider_detail'] == 'input_schema does not support oneOf'
+        assert second['result'] == 'failed' and second['reason'] == 'bad_tool_call'
+        assert 'canary' not in json.dumps(second)
     finally:
         history._current.reset(ctx)
 

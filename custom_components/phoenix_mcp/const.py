@@ -390,8 +390,9 @@ AGENTCLI_EFFORT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
 AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
 
 # Hard cap on completion requests one probe run may make. The matrix is bounded by
-# construction (one validation check plus five levels plus temperature), so this
-# is a backstop that keeps a new knob from turning a button into unbounded spend.
+# construction (one control request, one validation check, five levels and
+# temperature), so this is a backstop that keeps a new knob from turning a button
+# into unbounded spend.
 AGENTCLI_PROBE_MAX_CALLS = 10
 
 # How long a refusal LEARNED from a real turn is honoured before Phoenix tries
@@ -420,6 +421,12 @@ AGENTCLI_LEARNABLE_OPTIONS = {
 AGENTCLI_MAX_ITERATIONS = 20
 AGENTCLI_MAX_ITERATIONS_MIN = 3
 AGENTCLI_MAX_ITERATIONS_MAX = 100
+# Per-turn cap on rounds that hand a malformed tool call back to the model as a
+# tool error so it can resend the call. Each correction also spends one round of
+# the iteration cap above; past this cap the turn ends with bad_tool_call.
+AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
+# Longest provider error-envelope message shown to an administrator.
+AGENTCLI_PROVIDER_DETAIL_CHARS = 300
 # Cap on the between-newline SSE buffer from a provider stream. A real frame is a
 # few KB; this bounds a faulty/hostile provider that never sends a newline.
 AGENTCLI_MAX_SSE_BUFFER_BYTES = 8 * 1024 * 1024
