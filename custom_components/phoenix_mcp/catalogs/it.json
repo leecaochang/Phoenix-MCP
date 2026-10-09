@@ -141,7 +141,8 @@
       "attentionNotReviewable": "Questo elemento non può essere confermato.",
       "attentionSaveFailed": "Impossibile salvare la verifica. L’azione richiede ancora una verifica.",
       "attentionReviewConflict": "Questa azione è in corso o è già stata verificata. Aggiorna l’elenco.",
-      "providerModelOrAuto": "Invia un modello oppure auto, non entrambi."
+      "providerModelOrAuto": "Invia un modello oppure auto, non entrambi.",
+      "restoreUnverified": "Il ripristino è stato inviato, ma la configurazione riletta in seguito non corrisponde alla versione scelta, quindi potrebbe essere stata applicata solo in parte. Phoenix la ricontrolla e chiede una revisione in Approvazioni se è ancora diversa. Controlla la configurazione corrente prima di ripristinare di nuovo."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",

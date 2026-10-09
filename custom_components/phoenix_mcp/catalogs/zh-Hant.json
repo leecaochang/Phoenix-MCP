@@ -146,7 +146,8 @@
       "attentionNotReviewable": "此事項無法確認。",
       "attentionSaveFailed": "無法儲存核對結果。此操作仍需核對。",
       "attentionReviewConflict": "此操作正在執行或已核對。請重新整理列表。",
-      "providerModelOrAuto": "請只傳送 model 或 auto 其中之一。"
+      "providerModelOrAuto": "請只傳送 model 或 auto 其中之一。",
+      "restoreUnverified": "還原已送出，但之後讀回的設定與所選版本不一致，因此可能只套用了一部分。Phoenix 會重新檢查，若仍不一致，會在核准中要求複核。再次還原前，請檢查目前設定。"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的核准。",

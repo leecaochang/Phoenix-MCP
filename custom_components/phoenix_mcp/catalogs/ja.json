@@ -1043,7 +1043,8 @@
       "attentionNotReviewable": "この項目は確認済みにできません。",
       "attentionSaveFailed": "確認結果を保存できませんでした。操作の確認が引き続き必要です。",
       "attentionReviewConflict": "この操作は実行中か、すでに確認済みです。一覧を更新してください。",
-      "providerModelOrAuto": "モデルまたは auto のどちらか一方を送信してください。"
+      "providerModelOrAuto": "モデルまたは auto のどちらか一方を送信してください。",
+      "restoreUnverified": "復元は送信されましたが、その後に読み戻した設定が選択したバージョンと一致しないため、一部しか適用されていない可能性があります。Phoenix が再確認し、まだ異なる場合は承認でレビューを求めます。もう一度復元する前に、現在の設定を確認してください。"
     },
     "agentchat": {
       "announceApproval": "アクション {name} には承認が必要です。",

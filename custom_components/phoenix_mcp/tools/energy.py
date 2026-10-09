@@ -1053,9 +1053,15 @@ async def async_restore_energy_prefs(
                 observed = await _read_prefs_raw(hass)
                 if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
-                else:
-                    await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
-                    await recovery.set_source(rid, _energy_recovery_snapshot(observed))
+                    # Not a restore, so no version: report it as the edit path does.
+                    return _tool_success(json.dumps({
+                        "status": "partial", "saved": False, "recovery_id": rid,
+                        "message": "Energy preferences were submitted, but the readback differs from the chosen "
+                                   "version; inspect configuration recovery before retrying.",
+                        **_scoped_body(observed, True, access_key, hass),
+                    }, default=str)), "allowed", "energy:preferences"
+                await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                await recovery.set_source(rid, _energy_recovery_snapshot(observed))
             except WsDispatchError:
                 await recovery.mark(rid, "unknown", error="save_or_readback_failed")
                 raise
@@ -1068,15 +1074,15 @@ async def async_restore_energy_prefs(
         return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
     await _record_version(
         data, access_key, resource_type="energy", resource_id="preferences",
-        action="edit", before=before, after=snapshot, alias="Energy dashboard",
+        action="edit", before=before, after=observed, alias="Energy dashboard",
         summary=_version_summary(
             "energy.sources",
-            count=len(snapshot.get("energy_sources") or []),
-            devices=sum(len(snapshot.get(key) or []) for key in _DEVICE_KEYS),
+            count=len(observed.get("energy_sources") or []),
+            devices=sum(len(observed.get(key) or []) for key in _DEVICE_KEYS),
         ),
     )
     return (
-        _tool_success(json.dumps({"saved": True, **_scoped_body(snapshot, True, access_key, hass)}, default=str)),
+        _tool_success(json.dumps({"saved": True, **_scoped_body(observed, True, access_key, hass)}, default=str)),
         "allowed",
         "energy:preferences",
     )

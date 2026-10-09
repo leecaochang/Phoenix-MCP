@@ -1053,7 +1053,8 @@
       "attentionNotReviewable": "Dit item kan niet worden bevestigd.",
       "attentionSaveFailed": "De controle kon niet worden opgeslagen. De actie moet nog worden gecontroleerd.",
       "attentionReviewConflict": "Deze actie loopt of is al gecontroleerd. Vernieuw de lijst.",
-      "providerModelOrAuto": "Stuur een model of auto, niet beide."
+      "providerModelOrAuto": "Stuur een model of auto, niet beide.",
+      "restoreUnverified": "Het herstellen is verzonden, maar de daarna teruggelezen configuratie komt niet overeen met de gekozen versie, dus die is mogelijk maar gedeeltelijk toegepast. Phoenix controleert het opnieuw en vraagt om een beoordeling bij Goedkeuringen als het nog steeds afwijkt. Controleer de huidige configuratie voordat je opnieuw herstelt."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",

@@ -303,3 +303,27 @@ async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
     assert entry["access_key_id"] == "admin"
     assert entry["ha_user_id"] == "admin-user"
     assert entry["originating_access_key_id"] == "source-identity"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "expected"), [("partial", 409), ("unknown", 409), ("verified", 200)])
+async def test_a_restore_whose_readback_is_unverified_is_not_reported_as_restored(status, expected):
+    """Executors report a dispatched restore with a mismatched readback as a successful tool result."""
+    data = _data()
+    rec = await _seed(data)
+    view = PhoenixAdminVersionRestoreView()
+    view.hass = _hass(data)
+    req = _request()
+    req.content_length = 0
+    req.content = MagicMock()
+    req.content.read = AsyncMock(side_effect=[b"", b""])
+    body = {"status": status, "recovery_id": "r1", "message": "readback differs; do not retry automatically."}
+    result = ({"content": [{"type": "text", "text": json.dumps(body)}]}, "allowed", "energy:preferences")
+    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+        resp = await view.post(req, version_id=rec.id)
+    assert resp.status == expected
+    if expected == 409:
+        assert _body(resp)["message_key"] == "adminError.restoreUnverified"
+        assert "restored" not in _body(resp)
+    else:
+        assert _body(resp)["restored"] is True

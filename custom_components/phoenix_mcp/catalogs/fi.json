@@ -335,7 +335,8 @@
       "valueAllowed": "{field} on oltava yksi seuraavista: {values}.",
       "versionNotFound": "Versiota ei löytynyt.",
       "versionResourcePairRequired": "Anna sekä resource_type että resource_id tai jätä molemmat pois, jos haluat viimeisimmät.",
-      "wipeConfirmationRequired": "confirm on oltava WIPE."
+      "wipeConfirmationRequired": "confirm on oltava WIPE.",
+      "restoreUnverified": "Palautus lähetettiin, mutta jälkikäteen luettu kokoonpano ei vastaa valittua versiota, joten se on ehkä otettu käyttöön vain osittain. Phoenix tarkistaa sen uudelleen ja pyytää tarkistusta Hyväksynnät-kohdassa, jos se poikkeaa yhä. Tarkista nykyinen kokoonpano ennen kuin palautat uudelleen."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",

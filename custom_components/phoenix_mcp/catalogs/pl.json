@@ -1063,7 +1063,8 @@
       "attentionNotReviewable": "Nie można potwierdzić tego elementu.",
       "attentionSaveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia.",
       "attentionReviewConflict": "To działanie trwa lub zostało już sprawdzone. Odśwież listę.",
-      "providerModelOrAuto": "Wyślij model albo auto, nie oba naraz."
+      "providerModelOrAuto": "Wyślij model albo auto, nie oba naraz.",
+      "restoreUnverified": "Przywracanie zostało wysłane, ale odczytana potem konfiguracja nie zgadza się z wybraną wersją, więc mogła zostać zastosowana tylko częściowo. Phoenix sprawdzi ją ponownie i poprosi o przegląd w Zatwierdzeniach, jeśli nadal się różni. Sprawdź bieżącą konfigurację przed ponownym przywróceniem."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",

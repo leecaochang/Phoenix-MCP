@@ -662,7 +662,8 @@
       "attentionNotReviewable": "此事项无法确认。",
       "attentionSaveFailed": "无法保存核对结果。此操作仍需核对。",
       "attentionReviewConflict": "此操作正在执行或已核对。请刷新列表。",
-      "providerModelOrAuto": "请只发送 model 或 auto 其中之一。"
+      "providerModelOrAuto": "请只发送 model 或 auto 其中之一。",
+      "restoreUnverified": "还原已提交，但随后读回的配置与所选版本不一致，因此可能只应用了一部分。Phoenix 会重新检查，如果仍不一致，会在审批中请求复核。再次还原前，请检查当前配置。"
     },
     "audit": {
       "allOutcomes": "所有结果",

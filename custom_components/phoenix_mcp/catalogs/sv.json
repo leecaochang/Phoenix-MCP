@@ -335,7 +335,8 @@
       "valueAllowed": "{field} måste vara ett av: {values}.",
       "versionNotFound": "Versionen hittades inte.",
       "versionResourcePairRequired": "Ange både resource_type och resource_id, eller inget av dem för det senaste flödet.",
-      "wipeConfirmationRequired": "confirm måste vara WIPE."
+      "wipeConfirmationRequired": "confirm måste vara WIPE.",
+      "restoreUnverified": "Återställningen skickades, men konfigurationen som lästes tillbaka efteråt matchar inte den valda versionen, så den kan vara bara delvis tillämpad. Phoenix kontrollerar den igen och ber om granskning under Godkännanden om den fortfarande avviker. Kontrollera den aktuella konfigurationen innan du återställer igen."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",

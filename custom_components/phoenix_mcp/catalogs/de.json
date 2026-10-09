@@ -1475,7 +1475,8 @@
       "attentionNotReviewable": "Dieser Eintrag kann nicht bestätigt werden.",
       "attentionSaveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden.",
       "attentionReviewConflict": "Diese Aktion läuft oder wurde bereits geprüft. Aktualisiere die Liste.",
-      "providerModelOrAuto": "Senden Sie entweder ein Modell oder auto, nicht beides."
+      "providerModelOrAuto": "Senden Sie entweder ein Modell oder auto, nicht beides.",
+      "restoreUnverified": "Die Wiederherstellung wurde gesendet, aber die danach zurückgelesene Konfiguration stimmt nicht mit der gewählten Version überein, sie ist also möglicherweise nur teilweise angewendet. Phoenix prüft sie erneut und bittet unter Genehmigungen um eine Überprüfung, falls sie weiterhin abweicht. Prüfe die aktuelle Konfiguration, bevor du erneut wiederherstellst."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",

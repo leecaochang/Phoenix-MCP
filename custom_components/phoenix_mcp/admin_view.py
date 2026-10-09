@@ -79,6 +79,20 @@ from .access_key_store import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _unverified_restore(tool_result: dict) -> bool:
+    """Whether a restore ran but its result reports a partial or unknown readback."""
+    for item in tool_result.get("content", []):
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        try:
+            body = json.loads(item.get("text", ""))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(body, dict) and body.get("status") in ("partial", "unknown"):
+            return True
+    return False
+
+
 def _err(
     code: str,
     message: str,
@@ -4786,6 +4800,19 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
                 "invalid_request",
                 "Restore could not be applied to the current configuration.",
                 400, rid, key="restoreNotApplicable",
+            )
+        # A dispatched restore whose readback did not confirm the chosen version
+        # comes back as a successful tool result carrying status partial or
+        # unknown. It is not a restore, and the change may still have landed;
+        # the recovery sweep raises an Approvals request if it still differs.
+        # The executors' messages are agent text, so the panel gets its own.
+        if _unverified_restore(tool_result):
+            return _err(
+                "restore_unverified",
+                "The restore was submitted, but the configuration read back afterwards does not match the "
+                "chosen version, so it may be only partly applied. Phoenix rechecks it and asks for review "
+                "in Approvals if it still differs. Check the current configuration before restoring again.",
+                409, rid, key="restoreUnverified",
             )
         return _ok({
             "restored": True,

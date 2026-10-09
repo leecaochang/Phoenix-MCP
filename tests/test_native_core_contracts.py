@@ -272,3 +272,34 @@ def test_the_advertised_statistic_types_are_cores() -> None:
     definition = next(tool for tool in _ENTITY_TOOL_DEFS if tool["name"] == "get_statistics")
     advertised = set(definition["inputSchema"]["properties"]["statistic_types"]["items"]["enum"])
     assert core and advertised == core
+
+
+async def test_an_unverified_energy_version_restore_is_reported_as_unverified(hass: HomeAssistant, energy) -> None:
+    """Through the admin endpoint: a differing readback answers 409, records no version, leaves recovery partial."""
+    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+    from custom_components.phoenix_mcp.const import DOMAIN
+
+    data = _data()
+    hass.data[DOMAIN] = data
+    await async_ws_command(hass, "energy/save_prefs", {"energy_sources": [{"type": "solar", "stat_energy_from": "sensor.solar"}]})
+    current = await async_ws_command(hass, "energy/get_prefs", {})
+    record = await data.versions.record(
+        resource_type="energy", resource_id="preferences", action="edit",
+        before={"energy_sources": [], "device_consumption": [], "device_consumption_water": []},
+        after=current, alias="Energy dashboard", access_key_name="agent")
+    user = MagicMock(is_admin=True, id="admin-user")
+    state = {KEY_HASS_USER: user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "rid"}
+    request = MagicMock(content_length=0)
+    request.__getitem__.side_effect = state.__getitem__
+    request.get.side_effect = lambda key, default=None: state.get(key, default)
+    request.content.read = AsyncMock(side_effect=[b"", b""])
+    view = PhoenixAdminVersionRestoreView()
+    view.hass = hass
+    drifted = {**current, "energy_sources": [{"type": "solar", "stat_energy_from": "sensor.grid_a"}]}
+    with patch("custom_components.phoenix_mcp.tools.energy._read_prefs_raw", AsyncMock(side_effect=[current, drifted])):
+        response = await view.post(request, version_id=record.id)
+    assert response.status == 409
+    assert json.loads(response.text)["message_key"] == "adminError.restoreUnverified"
+    assert [r.id for r in data.versions.list_recent()] == [record.id]
+    assert data.config_recovery.records()[0]["phase"] == "partial"

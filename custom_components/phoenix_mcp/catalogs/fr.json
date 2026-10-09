@@ -1772,7 +1772,8 @@
       "attentionNotReviewable": "Cet élément ne peut pas être confirmé.",
       "attentionSaveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier.",
       "attentionReviewConflict": "Cette action est en cours ou a déjà été vérifiée. Actualisez la liste.",
-      "providerModelOrAuto": "Envoyez soit un modèle, soit auto, pas les deux."
+      "providerModelOrAuto": "Envoyez soit un modèle, soit auto, pas les deux.",
+      "restoreUnverified": "La restauration a été envoyée, mais la configuration relue ensuite ne correspond pas à la version choisie, elle n'a donc peut-être été appliquée qu'en partie. Phoenix la vérifie de nouveau et demande un examen dans Approbations si elle diffère toujours. Vérifiez la configuration actuelle avant de restaurer à nouveau."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",

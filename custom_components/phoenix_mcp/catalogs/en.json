@@ -1742,6 +1742,7 @@
       "restoreFailed": "Restore failed.",
       "restoreNotApplicable": "Restore could not be applied to the current configuration.",
       "restoreSideInvalid": "side must be before or after.",
+      "restoreUnverified": "The restore was submitted, but the configuration read back afterwards does not match the chosen version, so it may be only partly applied. Phoenix rechecks it and asks for review in Approvals if it still differs. Check the current configuration before restoring again.",
       "selectorIdRequired": "selector_id is required.",
       "selectorTypeInvalid": "selector_type must be area, label, or integration.",
       "serviceDisabled": "Phoenix MCP is disabled by the kill switch.",
