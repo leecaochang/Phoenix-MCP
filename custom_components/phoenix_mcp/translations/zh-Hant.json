@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "核實 {tool} 的結果",
-      "description": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

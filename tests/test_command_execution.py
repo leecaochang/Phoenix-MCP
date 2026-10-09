@@ -29,7 +29,8 @@ async def local_home(hass, access_key_store, immediate_command_observation):
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
     await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
-        voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local", mesa_mode="off")
+        voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local", mesa_mode="off",
+        command_routing_timeout_ms=5000)
     registry = er.async_get(hass)
     entry = registry.async_get_or_create("light", "test", "desk", original_name="Desk lamp")
     registry.async_update_entity(entry.entity_id, aliases={"Desk lamp"})

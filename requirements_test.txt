@@ -27,7 +27,7 @@ pytest-homeassistant-custom-component==0.13.371
 # tests (voice_agent.py imports homeassistant.components.conversation). PHACC does
 # not pull component-level requirements, so pin them here to match the conversation
 # manifest for the pinned HA version. Re-verify on HA bumps.
-gazetteer-matcher==1.1.0
+gazetteer-matcher==1.2.0
 hassil==3.12.1
 home-assistant-intents==2026.10.6
 

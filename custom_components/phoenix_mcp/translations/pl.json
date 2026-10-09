@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "Sprawdź wynik {tool}",
-      "description": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

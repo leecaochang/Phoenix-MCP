@@ -25,7 +25,6 @@
   },
   "issues": {
     "agent_recovery": {
-      "description": "Åtgärder kan ha körts. Kontrollera Home Assistant och godkännanderesultat innan du försöker igen. Lös osäkra åtgärder i Inställningar > System > Reparationer.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "abort": {
           "not_ready": "Phoenix MCP är inte redo."

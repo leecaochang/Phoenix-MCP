@@ -25,7 +25,6 @@
   },
   "issues": {
     "agent_recovery": {
-      "description": "Handlinger kan være blevet udført. Kontrollér Home Assistant og godkendelsesresultater, før du prøver igen. Afklar usikre handlinger under Indstillinger > System > Reparationer.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "abort": {
           "not_ready": "Phoenix MCP er ikke klar."

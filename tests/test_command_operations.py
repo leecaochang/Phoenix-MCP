@@ -41,7 +41,8 @@ async def numeric_home(hass, access_key_store, request, immediate_command_observ
     hass.data[DOMAIN] = data
     await access_key_store.async_patch_settings(
         voice_agent_enabled=True, voice_agent_access_key_id=access_key.id, voice_agent_provider_id="p",
-        voice_agent_model="model", voice_agent_routing_mode="auto", agentcli_routing_mode="auto", mesa_mode="off")
+        voice_agent_model="model", voice_agent_routing_mode="auto", agentcli_routing_mode="auto", mesa_mode="off",
+        command_routing_timeout_ms=5000)
     area = ar.async_get(hass).async_create("Office")
     registry = er.async_get(hass)
     entry = registry.async_get_or_create(domain, "test", "numeric", original_name=name)

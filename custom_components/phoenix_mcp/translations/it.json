@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "Verifica il risultato di {tool}",
-      "description": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

@@ -25,7 +25,6 @@
   },
   "issues": {
     "agent_recovery": {
-      "description": "Toimintoja on saatettu suorittaa. Tarkista Home Assistant -järjestelmän tila ja hyväksyntätulokset ennen uudelleenyritystä. Ratkaise epävarmat toiminnot kohdassa Asetukset > Järjestelmä > Korjaukset.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "abort": {
           "not_ready": "Phoenix MCP ei ole valmis."

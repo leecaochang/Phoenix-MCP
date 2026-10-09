@@ -20,7 +20,6 @@
     },
     "agent_recovery": {
       "title": "Check the outcome of {tool}",
-      "description": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

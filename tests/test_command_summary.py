@@ -23,7 +23,7 @@ async def summary_home(hass, access_key_store, immediate_command_observation):
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    await access_key_store.async_patch_settings(agentcli_routing_mode='local', mesa_mode='off')
+    await access_key_store.async_patch_settings(agentcli_routing_mode='local', mesa_mode='off', command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     area = ar.async_get(hass).async_create('Office')

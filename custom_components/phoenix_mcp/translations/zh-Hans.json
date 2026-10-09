@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "核实 {tool} 的结果",
-      "description": "操作可能已经执行。重试前请检查 Home Assistant 和审批结果。请在设置 > 系统 > 修复中核实结果未知的操作。\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

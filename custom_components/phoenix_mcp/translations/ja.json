@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "{tool} の結果を確認",
-      "description": "操作が実行された可能性があります。再試行前に Home Assistant と承認結果を確認してください。不明な操作は設定 > システム > 修復で確認してください。\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

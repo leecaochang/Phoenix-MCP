@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "Controleer het resultaat van {tool}",
-      "description": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {

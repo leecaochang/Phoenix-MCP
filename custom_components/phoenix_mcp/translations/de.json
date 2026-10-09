@@ -19,7 +19,6 @@
     },
     "agent_recovery": {
       "title": "Ergebnis von {tool} prüfen",
-      "description": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.\n\n{tool}\n{request_id}",
       "fix_flow": {
         "step": {
           "confirm": {
