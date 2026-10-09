@@ -1055,14 +1055,13 @@
       "hintCode": "Syntaksuthevet, med linjenumre. Endrede linjer merkes ikke i denne visningen.",
       "hintCurrent": "Dette er gjeldende konfigurasjon for <strong>{name}</strong>; det er ingenting å gjenopprette.",
       "hintDiff": "Fjernede linjer er tonet røde, tilføyde linjer grønne.",
-      "hintPreview": "Konfigurasjonsforhåndsvisning av <strong>{side}</strong>-oppsettet. Bytt til Diff for å gjenopprette en side.",
+      "hintPreview": "Direkte forhåndsvisning av <strong>{side}</strong>-oppsettet. Bytt til Diff for å gjenopprette en side.",
       "hintRestorable": "Bruk <strong>Gjenopprett</strong> på en rute for å bruke den konfigurasjonen på nytt på <strong>{name}</strong>.",
       "loadFailed": "Kunne ikke laste endringer.",
       "loadVersionFailed": "Kunne ikke laste versjonen.",
       "previewBadCard": "Denne oppføringen er ikke en gyldig kortkonfigurasjon; se diffen.",
       "previewBadView": "Denne visningsoppføringen er ikke en gyldig visningskonfigurasjon.",
       "previewCardFailed": "Dette kortet kunne ikke gjengis; se diffen for konfigurasjonen.",
-      "previewConfig": "Kortkonfigurasjon",
       "previewDisclaimer": "Visuell forhåndsvisning. Kontrollene er deaktivert.",
       "previewErrorNoDetail": "Konfigurasjonsfeil (ingen detaljer tilgjengelig)",
       "previewNoCards": "Denne visningen har ingen kort.",
@@ -1101,7 +1100,10 @@
       "typeHelper": "Hjelper",
       "typeScene": "Scene",
       "typeScript": "Skript",
-      "typeYamlConfig": "YAML-konfigurasjon"
+      "typeYamlConfig": "YAML-konfigurasjon",
+      "previewCardFallbackLabel": "kort",
+      "previewErrorHead": "Et kort i denne forhåndsvisningen rapporterte en konfigurasjonsfeil. Kopier meldingen og lim den inn hos agenten, slik at den kan rette kortet.",
+      "previewNotReady": "Forhåndsvisning av dashbord er utilgjengelig i denne økten. Åpne et hvilket som helst dashbord én gang, og kom deretter tilbake hit."
     },
     "common": {
       "after": "Etter",

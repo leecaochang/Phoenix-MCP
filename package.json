@@ -14,8 +14,7 @@
     "@mdi/js": "^7.4.47",
     "js-yaml": "^4.3.2",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "es-module-lexer": "2.1.0"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

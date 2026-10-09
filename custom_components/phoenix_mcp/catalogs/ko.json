@@ -348,7 +348,7 @@
       "hintCode": "구문이 강조 표시되며 줄 번호가 포함됩니다. 이 보기에서는 변경된 줄이 표시되지 않습니다.",
       "hintCurrent": "이것은 <strong>{name}</strong>의 현재 구성이며 복원할 내용이 없습니다.",
       "hintDiff": "제거된 줄은 빨간색, 추가된 줄은 초록색으로 표시됩니다.",
-      "hintPreview": "<strong>{side}</strong> 레이아웃의 구성 미리 보기입니다. 한쪽을 복원하려면 Diff로 전환하세요.",
+      "hintPreview": "<strong>{side}</strong> 레이아웃의 실시간 미리 보기입니다. 한쪽을 복원하려면 Diff로 전환하세요.",
       "hintRestorable": "패널에서 <strong>복원</strong>을 사용하면 해당 구성을 <strong>{name}</strong>에 다시 적용할 수 있습니다.",
       "loadFailed": "변경 내역을 불러오지 못했습니다.",
       "loadVersionFailed": "버전을 불러오지 못했습니다.",
@@ -356,7 +356,6 @@
       "previewBadView": "이 보기 항목은 유효한 보기 구성이 아닙니다.",
       "previewDisclaimer": "카드 미리보기. 조작 기능은 비활성화되어 있습니다.",
       "previewCardFailed": "이 카드를 렌더링할 수 없습니다. diff에서 구성을 확인하세요.",
-      "previewConfig": "카드 설정",
       "previewUnavailableLayout": "이 레이아웃은 미리 보기를 사용할 수 없습니다. 대신 Diff 보기를 사용하세요.",
       "previewErrorNoDetail": "구성 오류(사용 가능한 세부 정보 없음)",
       "previewNoCards": "이 보기에는 카드가 없습니다.",
@@ -396,7 +395,10 @@
       "search": "불러온 변경 사항 검색...",
       "allTypes": "모든 유형",
       "allActions": "모든 작업",
-      "emptySearch": "이 필터와 일치하는 불러온 변경 사항이 없습니다."
+      "emptySearch": "이 필터와 일치하는 불러온 변경 사항이 없습니다.",
+      "previewCardFallbackLabel": "카드",
+      "previewErrorHead": "이 미리 보기의 카드에서 구성 오류가 보고되었습니다. 메시지를 복사하여 에이전트에 붙여넣어 카드를 수정하도록 하세요.",
+      "previewNotReady": "이 세션에서는 대시보드 미리 보기를 사용할 수 없습니다. 대시보드를 한 번 연 다음 여기로 돌아오세요."
     },
     "perms": {
       "addHint": "힌트 추가",

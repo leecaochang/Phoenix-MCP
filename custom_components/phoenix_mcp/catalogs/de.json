@@ -1891,7 +1891,7 @@
       "hintCode": "Syntax hervorgehoben, mit Zeilennummern. Geänderte Zeilen werden in dieser Ansicht nicht markiert.",
       "hintCurrent": "Dies ist die aktuelle Konfiguration von <strong>{name}</strong>; es gibt nichts wiederherzustellen.",
       "hintDiff": "Entfernte Zeilen sind rot getönt, hinzugefügte Zeilen grün.",
-      "hintPreview": "Konfigurationsvorschau des <strong>{side}</strong>-Layouts. Wechseln Sie zu Diff, um eine Seite wiederherzustellen.",
+      "hintPreview": "Live-Vorschau des <strong>{side}</strong>-Layouts. Wechseln Sie zu Diff, um eine Seite wiederherzustellen.",
       "hintRestorable": "Verwenden Sie <strong>Wiederherstellen</strong> in einem Bereich, um diese Konfiguration erneut auf <strong>{name}</strong> anzuwenden.",
       "loadFailed": "Änderungen konnten nicht geladen werden.",
       "loadVersionFailed": "Version konnte nicht geladen werden.",
@@ -1899,7 +1899,6 @@
       "previewBadView": "Dieser Ansichtseintrag ist keine gültige Ansichtskonfiguration.",
       "previewDisclaimer": "Visuelle Vorschau. Bedienelemente sind deaktiviert.",
       "previewCardFailed": "Diese Karte konnte nicht gerendert werden; siehe Diff für ihre Konfiguration.",
-      "previewConfig": "Kartenkonfiguration",
       "previewUnavailableLayout": "Vorschau für dieses Layout nicht verfügbar. Verwenden Sie stattdessen die Diff-Ansicht.",
       "previewErrorNoDetail": "Konfigurationsfehler (keine Details verfügbar)",
       "previewNoCards": "Diese Ansicht enthält keine Karten.",
@@ -1939,7 +1938,10 @@
       "search": "Geladene Änderungen durchsuchen...",
       "allTypes": "Alle Typen",
       "allActions": "Alle Aktionen",
-      "emptySearch": "Keine geladenen Änderungen entsprechen diesen Filtern."
+      "emptySearch": "Keine geladenen Änderungen entsprechen diesen Filtern.",
+      "previewCardFallbackLabel": "Karte",
+      "previewErrorHead": "Eine Karte in dieser Vorschau hat einen Konfigurationsfehler gemeldet. Kopieren Sie die Meldung und fügen Sie sie wieder beim Agenten ein, damit dieser die Karte korrigieren kann.",
+      "previewNotReady": "Die Dashboard-Vorschau ist in dieser Sitzung nicht verfügbar. Öffnen Sie einmal ein beliebiges Dashboard und kehren Sie dann hierher zurück."
     },
     "audit": {
       "outcomeAllowed": "Erlaubt",

@@ -1579,7 +1579,7 @@
       "hintCode": "Sintassi evidenziata, con numeri di riga. In questa vista le righe modificate non sono contrassegnate.",
       "hintCurrent": "Questa è la configurazione attuale di <strong>{name}</strong>; non c'è nulla da ripristinare.",
       "hintDiff": "Le righe rimosse sono colorate di rosso, quelle aggiunte di verde.",
-      "hintPreview": "Anteprima della configurazione del layout <strong>{side}</strong>. Passa a Differenze per ripristinare un lato.",
+      "hintPreview": "Anteprima dal vivo del layout <strong>{side}</strong>. Passa a Differenze per ripristinare un lato.",
       "hintRestorable": "Usa <strong>Ripristina</strong> su un riquadro per riapplicare quella configurazione a <strong>{name}</strong>.",
       "loadFailed": "Impossibile caricare le modifiche.",
       "loadVersionFailed": "Impossibile caricare la versione.",
@@ -1587,7 +1587,6 @@
       "previewBadView": "Questa voce di vista non è una configurazione di vista valida.",
       "previewDisclaimer": "Anteprima visiva. I controlli sono disabilitati.",
       "previewCardFailed": "Impossibile visualizzare questa scheda; vedi le differenze per la sua configurazione.",
-      "previewConfig": "Configurazione della scheda",
       "previewUnavailableLayout": "Anteprima non disponibile per questo layout. Usa invece la vista Differenze.",
       "previewErrorNoDetail": "Errore di configurazione (nessun dettaglio disponibile)",
       "previewNoCards": "Questa vista non ha schede.",
@@ -1627,7 +1626,10 @@
       "search": "Cerca nelle modifiche caricate...",
       "allTypes": "Tutti i tipi",
       "allActions": "Tutte le azioni",
-      "emptySearch": "Nessuna modifica caricata corrisponde a questi filtri."
+      "emptySearch": "Nessuna modifica caricata corrisponde a questi filtri.",
+      "previewCardFallbackLabel": "scheda",
+      "previewErrorHead": "Una scheda in questa anteprima ha segnalato un errore di configurazione. Copia il messaggio e incollalo all'agente in modo che possa correggere la scheda.",
+      "previewNotReady": "L'anteprima della plancia non è disponibile in questa sessione. Apri una plancia qualsiasi almeno una volta, poi torna qui."
     },
     "shell": {
       "agentChat": "Agent Chat",

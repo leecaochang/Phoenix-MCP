@@ -1055,14 +1055,13 @@
       "hintCode": "Syntaksikorostus ja rivinumerot. Muuttuneita rivejä ei merkitä tässä näkymässä.",
       "hintCurrent": "Tämä on kohteen <strong>{name}</strong> nykyinen kokoonpano; palautettavaa ei ole.",
       "hintDiff": "Poistetut rivit on sävytetty punaisella, lisätyt vihreällä.",
-      "hintPreview": "Asettelun <strong>{side}</strong> kokoonpanon esikatselu. Vaihda vertailunäkymään palauttaaksesi puolen.",
+      "hintPreview": "Asettelun <strong>{side}</strong> reaaliaikainen esikatselu. Vaihda vertailunäkymään palauttaaksesi puolen.",
       "hintRestorable": "Käytä paneelin <strong>Palauta</strong>-toimintoa soveltaaksesi kyseisen kokoonpanon uudelleen kohteeseen <strong>{name}</strong>.",
       "loadFailed": "Muutosten lataus epäonnistui.",
       "loadVersionFailed": "Version lataus epäonnistui.",
       "previewBadCard": "Tämä merkintä ei ole kelvollinen kortin kokoonpano; katso vertailu.",
       "previewBadView": "Tämä näkymämerkintä ei ole kelvollinen näkymän kokoonpano.",
       "previewCardFailed": "Tätä korttia ei voitu näyttää; katso sen kokoonpano vertailusta.",
-      "previewConfig": "Kortin kokoonpano",
       "previewDisclaimer": "Visuaalinen esikatselu. Säätimet on poistettu käytöstä.",
       "previewErrorNoDetail": "Kokoonpanovirhe (ei lisätietoja saatavilla)",
       "previewNoCards": "Tässä näkymässä ei ole kortteja.",
@@ -1101,7 +1100,10 @@
       "typeHelper": "Apuri",
       "typeScene": "Tilanne",
       "typeScript": "Skripti",
-      "typeYamlConfig": "YAML-kokoonpano"
+      "typeYamlConfig": "YAML-kokoonpano",
+      "previewCardFallbackLabel": "kortti",
+      "previewErrorHead": "Tämän esikatselun kortti ilmoitti kokoonpanovirheestä. Kopioi viesti ja liitä se agentille, jotta se voi korjata kortin.",
+      "previewNotReady": "Kojelaudan esikatselu ei ole käytettävissä tässä istunnossa. Avaa mikä tahansa kojelauta kerran ja palaa sitten tänne."
     },
     "common": {
       "after": "Jälkeen",

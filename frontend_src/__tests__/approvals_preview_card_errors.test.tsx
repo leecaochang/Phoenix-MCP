@@ -4,7 +4,12 @@ import { ApprovalsView } from "../views/ApprovalsView";
 import { api } from "../api";
 import type { ApprovalRecord } from "../types";
 
-// Review must not instantiate custom cards or run their error hooks.
+// A card whose configuration fails becomes HA's hui-error-card inside the live
+// preview. Its message is surfaced outside the inert region as copyable text,
+// so the operator can hand it back to the agent and reject in the usual way.
+// This stub hui-card always spawns an error card; jsdom's custom element
+// registry is shared per test file, which is why it lives apart from the other
+// approval preview tests.
 
 vi.mock("../api", () => ({
   api: { listApprovals: vi.fn(), getApproval: vi.fn(), rejectApproval: vi.fn() },
@@ -43,7 +48,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   };
 }
 
-describe("Reject with error message", () => {
+describe("card configuration errors in the approval preview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -52,22 +57,24 @@ describe("Reject with error message", () => {
     localStorage.setItem("phx-dash-preview-mode", "preview");
   });
 
-  it("shows an inert proposal and allows ordinary rejection without running card code", async () => {
+  it("shows a failing card's error as copyable text and keeps ordinary rejection", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
     vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected" }));
     const { container, findByText, findByRole, queryByRole } = render(
       <ApprovalsView tab="pending" onTabChange={() => {}} />,
     );
     fireEvent.click(await findByText("Add 'custom:apexcharts-card' to dashboard"));
-    await waitFor(() => expect(container.querySelector(".dash-preview-config")).toBeTruthy());
-    expect(container.querySelector("hui-card, hui-error-card")).toBeNull();
+    await waitFor(() => expect(container.querySelector(".dash-preview-cards hui-card hui-error-card")).toBeTruthy());
+    const message = await findByText("value.series[0] is not a ChartCardSeriesExternalConfig", { selector: ".dash-preview-error-msg" });
+    expect(container.querySelector(".dash-preview-cards")).not.toContainElement(message);
+    expect(container.querySelector(".dash-preview-error-panel")?.querySelector("button")?.textContent).toBe("Copy");
     expect(queryByRole("button", { name: "Reject with error message" })).toBeNull();
     fireEvent.click(await findByRole("button", { name: /^Reject$/ }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledTimes(1));
   });
 
-  it("offers no such button when the preview reports no errors", async () => {
-    // A non-dashboard approval renders no preview at all: the button must not exist.
+  it("offers no extra rejection action for an approval without a preview", async () => {
+    // A non-dashboard approval renders no preview at all.
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record({
         tool_name: "create_automation",

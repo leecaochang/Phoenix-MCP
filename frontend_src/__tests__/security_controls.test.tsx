@@ -6,7 +6,8 @@ import { DashboardPreview } from "../components/DashboardPreview";
 import { Modal } from "../components/Modal";
 import type { AccessKeyRecord } from "../types";
 
-vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() } }));
+const LIVE_HASS = vi.hoisted(() => ({ user: { is_admin: true } }));
+vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() }, currentHass: () => LIVE_HASS }));
 import { api } from "../api";
 import { CapabilityMatrix } from "../components/CapabilityMatrix";
 
@@ -72,19 +73,24 @@ it.each([
   expect(second).not.toHaveBeenCalled();
 });
 
-it("does not execute proposed custom cards or embedded HTML", () => {
-  const configSetter = vi.fn();
-  if (!customElements.get("hui-card")) {
-    customElements.define("hui-card", class extends HTMLElement { set config(value: unknown) { configSetter(value); } });
-  }
-  const { container } = render(<DashboardPreview config={{ views: [{ cards: [{
-    type: "custom:button-card", name: "[[[ hass.callService('lock', 'unlock'); ]]]",
-    content: "<img src=x onerror=alert(1)>",
-  }] }] }} />);
-  expect(container.querySelector("hui-card")).toBeNull();
-  expect(container.querySelector("img")).toBeNull();
-  expect(configSetter).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("hass.callService");
+it("draws proposed cards through HA's renderer with the live session, inside an inert region", async () => {
+  // Deliberate: the preview runs the proposed card with the administrator's
+  // hass, an accepted risk documented on DashboardPreview. Only input is blocked.
+  const seen: { config?: unknown; hass?: unknown; preview?: unknown } = {};
+  customElements.define("hui-card", class extends HTMLElement {
+    set config(value: unknown) { seen.config = value; }
+    set hass(value: unknown) { seen.hass = value; }
+    set preview(value: unknown) { seen.preview = value; }
+  });
+  const card = { type: "custom:button-card", name: "[[[ return 'x'; ]]]" };
+  const { container } = render(<DashboardPreview config={{ views: [{ cards: [card] }] }} />);
+  await waitFor(() => expect(container.querySelector("hui-card")).toBeTruthy());
+  expect(seen.config).toBe(card);
+  expect(seen.hass).toBe(LIVE_HASS);
+  expect(seen.preview).toBe(true);
+  const region = container.querySelector(".dash-preview-cards") as HTMLElement & { inert?: boolean };
+  expect(region.inert).toBe(true);
+  expect(region).toContainElement(container.querySelector("hui-card") as HTMLElement);
 });
 
 it("keeps Tab inside a dialog whose last reachable control is a closed details summary", async () => {

@@ -295,7 +295,7 @@
       "hintCode": "Podświetlona składnia z numerami wierszy. Zmienione wiersze nie są oznaczane w tym widoku.",
       "hintCurrent": "To jest bieżąca konfiguracja <strong>{name}</strong>; nie ma nic do przywrócenia.",
       "hintDiff": "Usunięte wiersze są czerwone, dodane zielone.",
-      "hintPreview": "Podgląd konfiguracji układu <strong>{side}</strong>. Przełącz na Diff, aby przywrócić stronę.",
+      "hintPreview": "Podgląd na żywo układu <strong>{side}</strong>. Przełącz na Diff, aby przywrócić stronę.",
       "hintRestorable": "Użyj <strong>Przywróć</strong> na panelu, aby ponownie zastosować tę konfigurację do <strong>{name}</strong>.",
       "loadFailed": "Nie udało się wczytać zmian.",
       "loadVersionFailed": "Nie udało się wczytać wersji.",
@@ -303,7 +303,6 @@
       "previewBadView": "Ten wpis widoku nie jest prawidłową konfiguracją widoku.",
       "previewDisclaimer": "Podgląd wizualny. Sterowanie jest wyłączone.",
       "previewCardFailed": "Tej karty nie można wyrenderować; zobacz diff jej konfiguracji.",
-      "previewConfig": "Konfiguracja karty",
       "previewUnavailableLayout": "Podgląd niedostępny dla tego układu. Użyj zamiast tego widoku Diff.",
       "previewErrorNoDetail": "Błąd konfiguracji (brak szczegółów)",
       "previewNoCards": "Ten widok nie ma kart.",
@@ -343,7 +342,10 @@
       "search": "Szukaj we wczytanych zmianach...",
       "allTypes": "Wszystkie typy",
       "allActions": "Wszystkie działania",
-      "emptySearch": "Żadna wczytana zmiana nie pasuje do tych filtrów."
+      "emptySearch": "Żadna wczytana zmiana nie pasuje do tych filtrów.",
+      "previewCardFallbackLabel": "karta",
+      "previewErrorHead": "Karta w tym podglądzie zgłosiła błąd konfiguracji. Skopiuj komunikat i wklej go z powrotem do agenta, aby mógł naprawić kartę.",
+      "previewNotReady": "Podgląd panelu jest niedostępny w tej sesji. Otwórz raz dowolny panel, a następnie wróć tutaj."
     },
     "audit": {
       "allOutcomes": "Wszystkie wyniki",

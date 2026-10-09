@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { api, currentHass } from "../api";
-import { harvestCards, syncCardCatalog } from "../utils/card_harvest";
+import { harvestCards, loadLovelaceResources, syncCardCatalog } from "../utils/card_harvest";
 import { JS_BUILD } from "../version";
 
 // The harvester reads window.customCards, the registry HA's own card picker
@@ -350,4 +350,20 @@ it("does not post a harvest after the HA user changes", async () => {
   resources([]);
   await pending;
   expect(api.postCardCatalog).not.toHaveBeenCalled();
+});
+
+describe("loadLovelaceResources", () => {
+  it("reads the resource list once per page, retrying only after an empty read", async () => {
+    const sendMessagePromise = vi.fn().mockResolvedValue([]);
+    vi.mocked(currentHass).mockReturnValue(hass({ connection: { sendMessagePromise } }));
+    await loadLovelaceResources();
+    await loadLovelaceResources();
+    expect(sendMessagePromise).toHaveBeenCalledTimes(2);
+
+    sendMessagePromise.mockResolvedValue([{ type: "module", url: "/hacsfiles/gone/gone.js" }]);
+    await loadLovelaceResources();
+    await loadLovelaceResources();
+    expect(sendMessagePromise).toHaveBeenCalledTimes(3);
+    expect(sendMessagePromise).toHaveBeenLastCalledWith({ type: "lovelace/resources/list" });
+  });
 });

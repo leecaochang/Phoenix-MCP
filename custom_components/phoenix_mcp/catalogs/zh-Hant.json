@@ -846,7 +846,7 @@
       "hintCode": "帶語法高亮和行號。此檢視不會標記變更的行。",
       "hintCurrent": "這是 <strong>{name}</strong> 的目前設定，沒有可還原的內容。",
       "hintDiff": "刪除的行以紅色標記，新增的行以綠色標記。",
-      "hintPreview": "<strong>{side}</strong>佈局的設定預覽。切換到「差異」即可還原某一側。",
+      "hintPreview": "<strong>{side}</strong>佈局的即時預覽。切換到「差異」即可還原某一側。",
       "hintRestorable": "在某一側點選 <strong>還原</strong>，即可將該設定重新套用到 <strong>{name}</strong>。",
       "loadFailed": "載入變更記錄失敗。",
       "loadVersionFailed": "載入版本失敗。",
@@ -854,7 +854,6 @@
       "previewBadView": "此檢視條目不是有效的檢視設定。",
       "previewDisclaimer": "卡片預覽。互動操作已停用。",
       "previewCardFailed": "此卡片無法渲染，請檢視差異中的設定。",
-      "previewConfig": "卡片設定",
       "previewUnavailableLayout": "無法預覽此佈局，請改用差異檢視。",
       "previewErrorNoDetail": "設定錯誤（無詳細資訊）",
       "previewNoCards": "此檢視沒有卡片。",
@@ -894,7 +893,10 @@
       "search": "搜尋已載入的變更...",
       "allTypes": "所有類型",
       "allActions": "所有操作",
-      "emptySearch": "已載入的變更中沒有符合篩選條件的記錄。"
+      "emptySearch": "已載入的變更中沒有符合篩選條件的記錄。",
+      "previewCardFallbackLabel": "卡片",
+      "previewErrorHead": "預覽中有卡片報告了設定錯誤。請複製該錯誤訊息並發回給智慧體，讓它修復這張卡片。",
+      "previewNotReady": "本次會話中無法使用儀表板預覽。請先開啟任意一個儀表板，然後返回此處。"
     },
     "common": {
       "after": "更改後",

@@ -604,7 +604,7 @@
       "hintCode": "Coloration syntaxique, avec numéros de ligne. Les lignes modifiées ne sont pas marquées dans cette vue.",
       "hintCurrent": "Ceci est la configuration actuelle de <strong>{name}</strong> ; il n'y a rien à restaurer.",
       "hintDiff": "Les lignes supprimées sont teintées en rouge, les lignes ajoutées en vert.",
-      "hintPreview": "Aperçu de la configuration de la disposition <strong>{side}</strong>. Passez à Diff pour restaurer un côté.",
+      "hintPreview": "Aperçu en direct de la disposition <strong>{side}</strong>. Passez à Diff pour restaurer un côté.",
       "hintRestorable": "Utilisez <strong>Restaurer</strong> sur un volet pour réappliquer cette configuration à <strong>{name}</strong>.",
       "loadFailed": "Échec du chargement des modifications.",
       "loadVersionFailed": "Échec du chargement de la version.",
@@ -612,7 +612,6 @@
       "previewBadView": "Cette entrée de vue n'est pas une configuration de vue valide.",
       "previewDisclaimer": "Aperçu visuel. Les commandes sont désactivées.",
       "previewCardFailed": "Cette carte n'a pas pu être rendue ; consultez le diff pour sa configuration.",
-      "previewConfig": "Configuration de la carte",
       "previewUnavailableLayout": "Aperçu indisponible pour cette disposition. Utilisez plutôt la vue Diff.",
       "previewErrorNoDetail": "Erreur de configuration (aucun détail disponible)",
       "previewNoCards": "Cette vue ne comporte aucune carte.",
@@ -652,7 +651,10 @@
       "search": "Rechercher dans les modifications chargées...",
       "allTypes": "Tous les types",
       "allActions": "Toutes les actions",
-      "emptySearch": "Aucune modification chargée ne correspond à ces filtres."
+      "emptySearch": "Aucune modification chargée ne correspond à ces filtres.",
+      "previewCardFallbackLabel": "carte",
+      "previewErrorHead": "Une carte de cet aperçu a signalé une erreur de configuration. Copiez le message et collez-le à l'agent pour qu'il puisse corriger la carte.",
+      "previewNotReady": "L'aperçu du tableau de bord est indisponible dans cette session. Ouvrez un tableau de bord une fois, puis revenez ici."
     },
     "audit": {
       "outcomeAllowed": "Autorisé",

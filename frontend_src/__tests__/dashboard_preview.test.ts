@@ -1,7 +1,10 @@
 import React from "react";
-import { describe, it, expect } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { collectConfigErrors, collectPreviewViews, DashboardPreview, singleCardPreviewConfig } from "../components/DashboardPreview";
+import { loadLovelaceResources } from "../utils/card_harvest";
+
+vi.mock("../utils/card_harvest", () => ({ loadLovelaceResources: vi.fn().mockResolvedValue(undefined) }));
 
 describe("collectPreviewViews", () => {
   it("returns null for non-dict configs", () => {
@@ -195,5 +198,26 @@ describe("DashboardPreview view controls", () => {
     fireEvent.click(second);
     expect(first).toHaveAttribute("aria-pressed", "false");
     expect(second).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("DashboardPreview custom card resources", () => {
+  it("waits for dashboard resources before drawing a custom card, but not a built-in one", async () => {
+    if (!customElements.get("hui-card")) {
+      customElements.define("hui-card", class extends HTMLElement {});
+    }
+    let release!: () => void;
+    vi.mocked(loadLovelaceResources).mockClear().mockReturnValueOnce(new Promise<void>((resolve) => { release = resolve; }));
+    const custom = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [{ type: "custom:x-card" }] }] } }));
+    expect(custom.container.querySelector("hui-card")).toBeNull();
+    expect(custom.getByRole("status")).toBeTruthy();
+    release();
+    await waitFor(() => expect(custom.container.querySelector("hui-card")).toBeTruthy());
+    expect(loadLovelaceResources).toHaveBeenCalledTimes(1);
+    custom.unmount();
+
+    const builtIn = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [{ type: "tile", entity: "light.x" }] }] } }));
+    expect(builtIn.container.querySelector("hui-card")).toBeTruthy();
+    expect(loadLovelaceResources).toHaveBeenCalledTimes(1);
   });
 });

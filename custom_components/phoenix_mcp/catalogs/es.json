@@ -281,7 +281,7 @@
       "hintCode": "Sintaxis resaltada, con números de línea. Las líneas modificadas no se marcan en esta vista.",
       "hintCurrent": "Esta es la configuración actual de <strong>{name}</strong>; no hay nada que restaurar.",
       "hintDiff": "Las líneas eliminadas se tiñen de rojo y las añadidas de verde.",
-      "hintPreview": "Vista previa de la configuración del diseño <strong>{side}</strong>. Cambie a Diff para restaurar un lado.",
+      "hintPreview": "Vista previa en vivo del diseño <strong>{side}</strong>. Cambie a Diff para restaurar un lado.",
       "hintRestorable": "Use <strong>Restaurar</strong> en un panel para volver a aplicar esa configuración a <strong>{name}</strong>.",
       "loadFailed": "No se pudieron cargar los cambios.",
       "loadVersionFailed": "No se pudo cargar la versión.",
@@ -289,7 +289,6 @@
       "previewBadView": "Esta entrada de vista no es una configuración de vista válida.",
       "previewDisclaimer": "Vista previa visual. Los controles están desactivados.",
       "previewCardFailed": "Esta tarjeta no se pudo renderizar; consulte el diff para ver su configuración.",
-      "previewConfig": "Configuración de la tarjeta",
       "previewUnavailableLayout": "Vista previa no disponible para este diseño. Use la vista Diff en su lugar.",
       "previewErrorNoDetail": "Error de configuración (sin detalle disponible)",
       "previewNoCards": "Esta vista no tiene tarjetas.",
@@ -329,7 +328,10 @@
       "search": "Buscar en los cambios cargados...",
       "allTypes": "Todos los tipos",
       "allActions": "Todas las acciones",
-      "emptySearch": "Ningún cambio cargado coincide con estos filtros."
+      "emptySearch": "Ningún cambio cargado coincide con estos filtros.",
+      "previewCardFallbackLabel": "tarjeta",
+      "previewErrorHead": "Una tarjeta de esta vista previa ha notificado un error de configuración. Copie el mensaje y péguelo de vuelta al agente para que pueda corregir la tarjeta.",
+      "previewNotReady": "La vista previa del panel de control no está disponible en esta sesión. Abra cualquier panel de control una vez y vuelva aquí."
     },
     "selectBy": {
       "apply": "Aplicar",

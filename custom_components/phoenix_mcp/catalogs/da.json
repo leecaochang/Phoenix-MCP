@@ -1055,14 +1055,13 @@
       "hintCode": "Syntaksfremhævet med linjenumre. Ændrede linjer er ikke markeret i denne visning.",
       "hintCurrent": "Dette er den aktuelle konfiguration af <strong>{name}</strong>; der er intet at gendanne.",
       "hintDiff": "Fjernede linjer er tonet røde, tilføjede linjer grønne.",
-      "hintPreview": "Forhåndsvisning af konfigurationen for <strong>{side}</strong>-layoutet. Skift til Diff for at gendanne en side.",
+      "hintPreview": "Live-forhåndsvisning af <strong>{side}</strong>-layoutet. Skift til Diff for at gendanne en side.",
       "hintRestorable": "Brug <strong>Gendan</strong> på et panel til at anvende denne konfiguration på <strong>{name}</strong> igen.",
       "loadFailed": "Kunne ikke indlæse ændringer.",
       "loadVersionFailed": "Kunne ikke indlæse versionen.",
       "previewBadCard": "Denne post er ikke en gyldig kortkonfiguration; se diffen.",
       "previewBadView": "Denne visningspost er ikke en gyldig visningskonfiguration.",
       "previewCardFailed": "Dette kort kunne ikke gengives; se diffen for dets konfiguration.",
-      "previewConfig": "Kortkonfiguration",
       "previewDisclaimer": "Visuel forhåndsvisning. Betjeningselementer er deaktiveret.",
       "previewErrorNoDetail": "Konfigurationsfejl (ingen detaljer tilgængelige)",
       "previewNoCards": "Denne visning har ingen kort.",
@@ -1101,7 +1100,10 @@
       "typeHelper": "Hjælper",
       "typeScene": "Scene",
       "typeScript": "Script",
-      "typeYamlConfig": "YAML-konfiguration"
+      "typeYamlConfig": "YAML-konfiguration",
+      "previewCardFallbackLabel": "kort",
+      "previewErrorHead": "Et kort i denne forhåndsvisning rapporterede en konfigurationsfejl. Kopiér meddelelsen, og indsæt den hos agenten, så den kan rette kortet.",
+      "previewNotReady": "Forhåndsvisning af betjeningspaneler er ikke tilgængelig i denne session. Åbn et vilkårligt betjeningspanel én gang, og vend derefter tilbage hertil."
     },
     "common": {
       "after": "Efter",

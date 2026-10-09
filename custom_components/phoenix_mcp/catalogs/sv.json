@@ -1055,14 +1055,13 @@
       "hintCode": "Syntaxmarkerad, med radnummer. Ändrade rader markeras inte i den här vyn.",
       "hintCurrent": "Det här är den aktuella konfigurationen för <strong>{name}</strong>; det finns inget att återställa.",
       "hintDiff": "Borttagna rader tonas röda, tillagda rader gröna.",
-      "hintPreview": "Konfigurationsförhandsgranskning av layouten <strong>{side}</strong>. Växla till Diff för att återställa en sida.",
+      "hintPreview": "Liveförhandsgranskning av layouten <strong>{side}</strong>. Växla till Diff för att återställa en sida.",
       "hintRestorable": "Använd <strong>Återställ</strong> i en ruta för att tillämpa den konfigurationen igen på <strong>{name}</strong>.",
       "loadFailed": "Det gick inte att läsa in ändringarna.",
       "loadVersionFailed": "Det gick inte att läsa in versionen.",
       "previewBadCard": "Den här posten är inte en giltig kortkonfiguration; se diffen.",
       "previewBadView": "Den här posten i vyn är inte en giltig vykonfiguration.",
       "previewCardFailed": "Det gick inte att rendera det här kortet; se diffen för dess konfiguration.",
-      "previewConfig": "Konfigurering av kort",
       "previewDisclaimer": "Visuell förhandsgranskning. Kontroller är inaktiverade.",
       "previewErrorNoDetail": "Konfigurationsfel (ingen information tillgänglig)",
       "previewNoCards": "Den här vyn har inga kort.",
@@ -1101,7 +1100,10 @@
       "typeHelper": "Hjälpare",
       "typeScene": "Scen",
       "typeScript": "Skript",
-      "typeYamlConfig": "YAML-konfiguration"
+      "typeYamlConfig": "YAML-konfiguration",
+      "previewCardFallbackLabel": "kort",
+      "previewErrorHead": "Ett kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera meddelandet och klistra in det till agenten så att den kan rätta kortet.",
+      "previewNotReady": "Förhandsgranskning av kontrollpaneler är inte tillgänglig i den här sessionen. Öppna valfri kontrollpanel en gång och återvänd sedan hit."
     },
     "common": {
       "after": "Efter",

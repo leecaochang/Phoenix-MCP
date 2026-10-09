@@ -606,7 +606,7 @@
       "hintCode": "Syntax highlighted, with line numbers. Changed lines are not marked in this view.",
       "hintCurrent": "This is the current configuration of <strong>{name}</strong>; there is nothing to restore.",
       "hintDiff": "Removed lines are tinted red, added lines green.",
-      "hintPreview": "Configuration preview of the <strong>{side}</strong> layout. Switch to Diff to restore a side.",
+      "hintPreview": "Live preview of the <strong>{side}</strong> layout. Switch to Diff to restore a side.",
       "hintRestorable": "Use <strong>Restore</strong> on a pane to re-apply that configuration to <strong>{name}</strong>.",
       "loadFailed": "Failed to load changes.",
       "loadVersionFailed": "Failed to load version.",
@@ -614,7 +614,6 @@
       "previewBadView": "This view entry is not a valid view configuration.",
       "previewDisclaimer": "Visual preview. Controls are disabled.",
       "previewCardFailed": "This card could not be rendered; see the diff for its config.",
-      "previewConfig": "Card configuration",
       "previewUnavailableLayout": "Preview unavailable for this layout. Use the Diff view instead.",
       "previewErrorNoDetail": "Configuration error (no detail available)",
       "previewNoCards": "This view has no cards.",
@@ -654,7 +653,10 @@
       "search": "Search loaded changes...",
       "allTypes": "All types",
       "allActions": "All actions",
-      "emptySearch": "No loaded changes match these filters."
+      "emptySearch": "No loaded changes match these filters.",
+      "previewCardFallbackLabel": "card",
+      "previewErrorHead": "A card in this preview reported a configuration error. Copy the message and paste it back to the agent so it can fix the card.",
+      "previewNotReady": "Dashboard preview is unavailable in this session. Open any dashboard once, then return here."
     },
     "audit": {
       "outcomeAllowed": "Allowed",

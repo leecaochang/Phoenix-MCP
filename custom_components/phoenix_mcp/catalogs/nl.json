@@ -287,7 +287,7 @@
       "hintCode": "Syntaxismarkering met regelnummers. Gewijzigde regels worden in deze weergave niet gemarkeerd.",
       "hintCurrent": "Dit is de huidige configuratie van <strong>{name}</strong>; er is niets te herstellen.",
       "hintDiff": "Verwijderde regels zijn rood getint, toegevoegde regels groen.",
-      "hintPreview": "Configuratievoorbeeld van de <strong>{side}</strong>-indeling. Schakel over naar Diff om een zijde te herstellen.",
+      "hintPreview": "Livevoorbeeld van de <strong>{side}</strong>-indeling. Schakel over naar Diff om een zijde te herstellen.",
       "hintRestorable": "Gebruik <strong>Herstellen</strong> op een paneel om die configuratie opnieuw toe te passen op <strong>{name}</strong>.",
       "loadFailed": "Wijzigingen laden is mislukt.",
       "loadVersionFailed": "Versie laden is mislukt.",
@@ -295,7 +295,6 @@
       "previewBadView": "Dit weergave-item is geen geldige weergaveconfiguratie.",
       "previewDisclaimer": "Visueel voorbeeld. Bediening is uitgeschakeld.",
       "previewCardFailed": "Deze kaart kon niet worden weergegeven; zie de diff voor de configuratie.",
-      "previewConfig": "Kaartconfiguratie",
       "previewUnavailableLayout": "Voorbeeld niet beschikbaar voor deze indeling. Gebruik in plaats daarvan de Diff-weergave.",
       "previewErrorNoDetail": "Configuratiefout (geen details beschikbaar)",
       "previewNoCards": "Deze weergave heeft geen kaarten.",
@@ -335,7 +334,10 @@
       "search": "Geladen wijzigingen doorzoeken...",
       "allTypes": "Alle typen",
       "allActions": "Alle acties",
-      "emptySearch": "Geen geladen wijzigingen komen overeen met deze filters."
+      "emptySearch": "Geen geladen wijzigingen komen overeen met deze filters.",
+      "previewCardFallbackLabel": "kaart",
+      "previewErrorHead": "Een kaart in dit voorbeeld meldde een configuratiefout. Kopieer het bericht en plak het terug naar de agent zodat die de kaart kan herstellen.",
+      "previewNotReady": "Dashboardvoorbeeld is niet beschikbaar in deze sessie. Open een willekeurig dashboard één keer en kom dan terug."
     },
     "audit": {
       "allOutcomes": "Alle uitkomsten",

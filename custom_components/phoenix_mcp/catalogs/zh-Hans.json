@@ -721,7 +721,7 @@
       "hintCode": "带语法高亮和行号。此视图不会标记变更的行。",
       "hintCurrent": "这是 <strong>{name}</strong> 的当前配置，没有可还原的内容。",
       "hintDiff": "删除的行以红色标记，新增的行以绿色标记。",
-      "hintPreview": "<strong>{side}</strong>布局的配置预览。切换到“差异”即可还原某一侧。",
+      "hintPreview": "<strong>{side}</strong>布局的实时预览。切换到“差异”即可还原某一侧。",
       "hintRestorable": "在某一侧点击 <strong>还原</strong>，即可将该配置重新应用到 <strong>{name}</strong>。",
       "loadFailed": "加载变更记录失败。",
       "loadVersionFailed": "加载版本失败。",
@@ -746,7 +746,6 @@
       "previewStrategyView": "此视图由运行时策略生成，没有可预览的静态卡片。",
       "previewDisclaimer": "卡片预览。交互操作已禁用。",
       "previewCardFailed": "此卡片无法渲染，请查看差异中的配置。",
-      "previewConfig": "卡片配置",
       "previewUnavailableLayout": "无法预览此布局，请改用差异视图。",
       "previewBadCard": "此条目不是有效的卡片配置，请查看差异。",
       "actionCreate": "创建",
@@ -773,7 +772,10 @@
       "search": "搜索已加载的更改...",
       "allTypes": "所有类型",
       "allActions": "所有操作",
-      "emptySearch": "已加载的更改中没有符合筛选条件的记录。"
+      "emptySearch": "已加载的更改中没有符合筛选条件的记录。",
+      "previewCardFallbackLabel": "卡片",
+      "previewErrorHead": "预览中有卡片报告了配置错误。请复制该错误信息并发回给智能体，让它修复这张卡片。",
+      "previewNotReady": "本次会话中无法使用仪表盘预览。请先打开任意一个仪表盘，然后返回此处。"
     },
     "perms": {
       "addHint": "添加提示",

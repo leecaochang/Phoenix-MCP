@@ -1986,8 +1986,6 @@ select.input {
 .dash-preview-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--phx-border); }
 .dash-preview-note { font-size: 12px; color: var(--phx-text-2); font-style: italic; padding: 12px; margin: 0; }
 .dash-preview-disclaimer { font-size: 11px; color: var(--phx-text-2); }
-.dash-preview-frame { border: 0; width: 100%; min-width: 0; }
-.dash-preview-source > summary { cursor: pointer; color: var(--phx-text-2); margin-bottom: 8px; }
 .dash-preview-scroll {
   overflow: auto; max-height: 45vh; padding: 10px;
   border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); background: var(--phx-surface-2);
@@ -2029,6 +2027,7 @@ select.input {
 /* Safe: the panel renders in its own shadow root, so this cannot leak into HA.
    Cards pick up HA's active theme (HA's CSS custom properties inherit into the
    shadow root from the page), which may differ from a forced Phoenix MCP panel theme. */
+hui-card { display: block; min-width: 0; }
 @media (max-width: 800px) { .dash-preview-grid { grid-template-columns: 1fr; } }
 
 .approval-summary-line { margin: 4px 0 8px 0; font-size: 13px; }
@@ -2926,18 +2925,6 @@ select.input {
 .routing-statistics-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
 .routing-statistics-values dd small { display: block; max-width: 22ch; color: var(--phx-text-2); font-size: 12px; }
 .routing-statistics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.dash-preview-config {
-  margin: 0;
-  padding: 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--phx-bg);
-  color: var(--phx-text);
-  border: 1px solid var(--phx-border);
-  border-radius: 8px;
-  font-size: 12px;
-}
 
 .diff-line-marker { display: inline-block; width: 1.25em; user-select: none; }
 

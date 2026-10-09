@@ -415,7 +415,7 @@
       "hintCode": "行番号付きのシンタックスハイライト表示です。このビューでは変更行は示されません。",
       "hintCurrent": "これは <strong>{name}</strong> の現在の設定です。復元できる内容はありません。",
       "hintDiff": "削除された行は赤、追加された行は緑で表示されます。",
-      "hintPreview": "<strong>{side}</strong> レイアウトの設定プレビューです。片側を復元するには差分表示に切り替えてください。",
+      "hintPreview": "<strong>{side}</strong> レイアウトのライブプレビューです。片側を復元するには差分表示に切り替えてください。",
       "hintRestorable": "ペインの <strong>復元</strong> を使うと、その設定を <strong>{name}</strong> に再適用できます。",
       "loadFailed": "変更履歴を読み込めませんでした。",
       "loadVersionFailed": "バージョンを読み込めませんでした。",
@@ -423,7 +423,6 @@
       "previewBadView": "このビューエントリは有効なビュー設定ではありません。",
       "previewDisclaimer": "カードのプレビュー。操作は無効です。",
       "previewCardFailed": "このカードをレンダリングできませんでした。設定の差分を確認してください。",
-      "previewConfig": "カードの設定",
       "previewUnavailableLayout": "このレイアウトではプレビューを利用できません。代わりに差分ビューを使用してください。",
       "previewErrorNoDetail": "設定エラー（詳細情報なし）",
       "previewNoCards": "このビューにはカードがありません。",
@@ -463,7 +462,10 @@
       "search": "読み込み済みの変更を検索...",
       "allTypes": "すべての種類",
       "allActions": "すべての操作",
-      "emptySearch": "読み込み済みの変更に、このフィルターに一致するものはありません。"
+      "emptySearch": "読み込み済みの変更に、このフィルターに一致するものはありません。",
+      "previewCardFallbackLabel": "カード",
+      "previewErrorHead": "このプレビュー内のカードから設定エラーが報告されました。メッセージをコピーしてエージェントに返し、カードを修正させてください。",
+      "previewNotReady": "このセッションではダッシュボードのプレビューを利用できません。いずれかのダッシュボードを一度開いてから、ここに戻ってください。"
     },
     "audit": {
       "outcomeAllowed": "許可",

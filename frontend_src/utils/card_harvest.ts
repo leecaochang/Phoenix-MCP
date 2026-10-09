@@ -93,6 +93,23 @@ async function loadModules(hass: any, resources: any[]): Promise<{ url: string; 
   return failed;
 }
 
+let resourceLoad: Promise<void> | null = null;
+
+/**
+ * Import the dashboard module resources into this page once, as HA does when a
+ * dashboard opens, so custom cards can render in a preview outside a dashboard.
+ * An empty read is not remembered, so a later preview retries the list.
+ */
+export function loadLovelaceResources(): Promise<void> {
+  const hass = currentHass() as any;
+  if (!hass) return Promise.resolve();
+  resourceLoad ??= readResources(hass).then(async (resources) => {
+    if (resources.length === 0) resourceLoad = null;
+    await loadModules(hass, resources);
+  });
+  return resourceLoad;
+}
+
 function cleanText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
