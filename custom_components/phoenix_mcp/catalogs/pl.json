@@ -861,9 +861,10 @@
         "rate_limit": "Dostawca jest tymczasowo niedostępny.",
         "ollama_backend": "Dostawca jest tymczasowo niedostępny.",
         "auth": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
-        "quota": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
+        "quota": "Konto dostawcy wyczerpało środki lub osiągnęło limit wydatków. Próba nie zostanie ponowiona.",
         "provider_rejected": "Dostawca odrzucił to żądanie. Próba nie zostanie ponowiona.",
-        "bad_tool_call_retry": "Model wysłał wywołanie narzędzia, którego argumenty nie były prawidłowym JSON-em. Nic z tej odpowiedzi nie zostało wykonane; błąd został zwrócony, aby model mógł ponownie wysłać wywołanie."
+        "bad_tool_call_retry": "Model wysłał wywołanie narzędzia, którego argumenty nie były prawidłowym JSON-em. Nic z tej odpowiedzi nie zostało wykonane; błąd został zwrócony, aby model mógł ponownie wysłać wywołanie.",
+        "too_many_tools": "Ten klucz dostępu udostępnia {count} narzędzi, ale {provider} przyjmuje najwyżej {limit} w jednym żądaniu. Ogranicz możliwości klucza dostępu lub wybierz innego dostawcę."
       },
       "options": "Opcje",
       "pausedAfter": "Wstrzymano po {count} krokach. Kontynuować badanie?",

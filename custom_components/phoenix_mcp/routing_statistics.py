@@ -208,6 +208,8 @@ async def provider_events(events, *, config=None, messages=None):
                     if event.get("provider_detail"):
                         # Already clipped and scrubbed by the provider adapter.
                         receipt["provider_detail"] = event["provider_detail"]
+                    if event.get("provider_code"):
+                        receipt["provider_code"] = event["provider_code"]
                 yield event
         finally:
             if receipt["result"] == "running":

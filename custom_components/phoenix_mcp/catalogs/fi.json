@@ -393,14 +393,15 @@
         "provider_rate_limit_exhausted": "Palveluntarjoajan pyyntöraja ylittyi edelleen, kun uudelleenyrityksiä oli tehty noin {seconds}s ajan. Palveluntarjoajan lisätiedot: {detail}",
         "provider_retry_exhausted": "Palveluntarjoajaan ei saatu yhteyttä, vaikka uudelleenyrityksiä tehtiin noin {seconds}s ajan. {detail}",
         "provider_transient": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
-        "quota": "Palveluntarjoaja esti tämän vastauksen. Sitä ei yritetä uudelleen.",
+        "quota": "Palveluntarjoajan tililtä on loppunut saldo tai sen kulutusraja on täynnä. Sitä ei yritetä uudelleen.",
         "rate_limit": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "tool_call_cut": "Yhteys malliin katkesi kesken työkalukutsun, joten toimintoa ei suoritettu. Mitään ei muutettu, eikä vika ollut pyynnössä itsessään; lähetä se uudelleen.",
         "tool_call_truncated": "Malli saavutti tulosteen pituusrajan kesken työkalukutsun, joten toimintoa ei suoritettu. Pyydetty muutos oli liian suuri tuotettavaksi yhdellä kutsulla; pyydä pienempää muutosta.",
         "unauthorized": "Tämä käyttöavain ei ole enää valtuutettu.",
         "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "provider_rejected": "Palveluntarjoaja torjui tämän pyynnön. Sitä ei yritetä uudelleen.",
-        "bad_tool_call_retry": "Malli lähetti työkalukutsun, jonka argumentit eivät olleet kelvollista JSONia. Mitään siitä vastauksesta ei suoritettu; virhe palautettiin, jotta malli voi lähettää kutsun uudelleen."
+        "bad_tool_call_retry": "Malli lähetti työkalukutsun, jonka argumentit eivät olleet kelvollista JSONia. Mitään siitä vastauksesta ei suoritettu; virhe palautettiin, jotta malli voi lähettää kutsun uudelleen.",
+        "too_many_tools": "Tämä käyttöavain tarjoaa {count} työkalua, mutta {provider} hyväksyy enintään {limit} yhdessä pyynnössä. Rajaa käyttöavaimen ominaisuuksia tai valitse toinen palveluntarjoaja."
       },
       "options": "Asetukset",
       "pausedAfter": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?",

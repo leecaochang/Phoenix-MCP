@@ -1006,7 +1006,8 @@ async def test_failed_provider_receipts_name_the_failure_and_the_provider_detail
     ctx = history._current.set(handle)
     async def refused():
         yield {'type': EV_ERROR, 'status': 400, 'code': 'provider_rejected', 'retryable': False,
-               'message': 'Provider request failed (HTTP 400).', 'provider_detail': 'input_schema does not support oneOf'}
+               'message': 'Provider request failed (HTTP 400).', 'provider_detail': 'input_schema does not support oneOf',
+               'provider_code': 'invalid_request_error'}
     async def malformed():
         yield {'type': EV_INVALID_TOOLS, 'code': 'bad_tool_call', 'assistant_msg': {'private': 'envelope-canary'},
                'results': [{'result_text': 'argument-canary'}]}
@@ -1018,6 +1019,7 @@ async def test_failed_provider_receipts_name_the_failure_and_the_provider_detail
         assert first['result'] == 'failed' and first['reason'] == 'provider_rejected'
         assert first['http_status'] == 400
         assert first['provider_detail'] == 'input_schema does not support oneOf'
+        assert first['provider_code'] == 'invalid_request_error'
         assert second['result'] == 'failed' and second['reason'] == 'bad_tool_call'
         assert 'canary' not in json.dumps(second)
     finally:

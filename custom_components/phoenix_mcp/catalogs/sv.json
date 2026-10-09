@@ -393,14 +393,15 @@
         "provider_rate_limit_exhausted": "Leverantörens hastighetsgräns var fortfarande överskriden efter omförsök i ungefär {seconds}s. Leverantörens detalj: {detail}",
         "provider_retry_exhausted": "Det gick inte att nå leverantören efter omförsök i ungefär {seconds}s. {detail}",
         "provider_transient": "Leverantören är tillfälligt otillgänglig.",
-        "quota": "Leverantören blockerade det här svaret. Det kommer inte att göras om.",
+        "quota": "Leverantörskontot saknar kredit eller har nått sin utgiftsgräns. Den kommer inte att göras om.",
         "rate_limit": "Leverantören är tillfälligt otillgänglig.",
         "tool_call_cut": "Anslutningen till modellen avbröts mitt i ett verktygsanrop, så åtgärden kördes inte. Inget tillämpades och begäran i sig var inte orsaken; skicka den igen.",
         "tool_call_truncated": "Modellen nådde sin gräns för utdatalängd mitt i ett verktygsanrop, så åtgärden kördes inte. Den begärda ändringen var för stor för att skickas i ett anrop; försök be om en mindre ändring.",
         "unauthorized": "Den här åtkomstnyckeln är inte längre auktoriserad.",
         "upstream": "Leverantören är tillfälligt otillgänglig.",
         "provider_rejected": "Leverantören avvisade den här begäran. Den kommer inte att göras om.",
-        "bad_tool_call_retry": "Modellen skickade ett verktygsanrop vars argument inte var giltig JSON. Inget från det svaret kördes; felet skickades tillbaka så att modellen kan skicka anropet igen."
+        "bad_tool_call_retry": "Modellen skickade ett verktygsanrop vars argument inte var giltig JSON. Inget från det svaret kördes; felet skickades tillbaka så att modellen kan skicka anropet igen.",
+        "too_many_tools": "Den här åtkomstnyckeln erbjuder {count} verktyg, men {provider} tar emot högst {limit} per begäran. Begränsa åtkomstnyckelns funktioner eller välj en annan leverantör."
       },
       "options": "Alternativ",
       "pausedAfter": "Pausad efter {count} steg. Fortsätta undersöka?",

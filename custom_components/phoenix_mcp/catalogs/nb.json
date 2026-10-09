@@ -393,14 +393,15 @@
         "provider_rate_limit_exhausted": "Leverandørens hastighetsgrense var fortsatt overskredet etter å ha prøvd på nytt i omtrent {seconds}s. Leverandørdetalj: {detail}",
         "provider_retry_exhausted": "Kunne ikke nå leverandøren etter å ha prøvd på nytt i omtrent {seconds}s. {detail}",
         "provider_transient": "Leverandøren er midlertidig utilgjengelig.",
-        "quota": "Leverandøren blokkerte dette svaret. Det vil ikke bli forsøkt på nytt.",
+        "quota": "Leverandørkontoen er tom for kreditt eller har nådd forbruksgrensen. Den vil ikke bli forsøkt på nytt.",
         "rate_limit": "Leverandøren er midlertidig utilgjengelig.",
         "tool_call_cut": "Tilkoblingen til modellen ble avsluttet midt i et verktøykall, så handlingen ble ikke utført. Ingenting ble anvendt, og det var ikke noe galt med selve forespørselen; send den på nytt.",
         "tool_call_truncated": "Modellen nådde grensen for utdatalengde midt i et verktøykall, så handlingen ble ikke utført. Den forespurte endringen var for stor til å sendes ut i ett kall; prøv å be om en mindre endring.",
         "unauthorized": "Denne tilgangsnøkkelen er ikke lenger autorisert.",
         "upstream": "Leverandøren er midlertidig utilgjengelig.",
         "provider_rejected": "Leverandøren avslo denne forespørselen. Den vil ikke bli forsøkt på nytt.",
-        "bad_tool_call_retry": "Modellen sendte et verktøykall der argumentene ikke var gyldig JSON. Ingenting fra det svaret ble utført; feilen ble sendt tilbake slik at modellen kan sende kallet på nytt."
+        "bad_tool_call_retry": "Modellen sendte et verktøykall der argumentene ikke var gyldig JSON. Ingenting fra det svaret ble utført; feilen ble sendt tilbake slik at modellen kan sende kallet på nytt.",
+        "too_many_tools": "Denne tilgangsnøkkelen tilbyr {count} verktøy, men {provider} godtar høyst {limit} per forespørsel. Begrens tilgangsnøkkelens kapabiliteter eller velg en annen leverandør."
       },
       "options": "Alternativer",
       "pausedAfter": "Satt på pause etter {count} trinn. Fortsette å undersøke?",

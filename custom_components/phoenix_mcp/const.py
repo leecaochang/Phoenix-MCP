@@ -425,6 +425,9 @@ AGENTCLI_MAX_ITERATIONS_MAX = 100
 # tool error so it can resend the call. Each correction also spends one round of
 # the iteration cap above; past this cap the turn ends with bad_tool_call.
 AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
+# The tools-array cap OpenAI, Groq, Mistral and Z.ai document or enforce. A
+# provider definition opts in through max_tools; past it the turn is refused.
+AGENTCLI_MAX_TOOLS_PER_REQUEST = 128
 # Longest provider error-envelope message shown to an administrator.
 AGENTCLI_PROVIDER_DETAIL_CHARS = 300
 # Cap on the between-newline SSE buffer from a provider stream. A real frame is a

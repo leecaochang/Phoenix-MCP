@@ -1492,9 +1492,10 @@
         "rate_limit": "Le fournisseur est temporairement indisponible.",
         "ollama_backend": "Le fournisseur est temporairement indisponible.",
         "auth": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
-        "quota": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
+        "quota": "Le compte de fournisseur n’a plus de crédit ou a atteint sa limite de dépenses. Aucun nouvel essai ne sera effectué.",
         "provider_rejected": "Le fournisseur a refusé cette requête. Aucun nouvel essai ne sera effectué.",
-        "bad_tool_call_retry": "Le modèle a envoyé un appel d'outil dont les arguments n'étaient pas du JSON valide. Rien de cette réponse n'a été exécuté ; l'erreur a été renvoyée pour que le modèle puisse renvoyer l'appel."
+        "bad_tool_call_retry": "Le modèle a envoyé un appel d'outil dont les arguments n'étaient pas du JSON valide. Rien de cette réponse n'a été exécuté ; l'erreur a été renvoyée pour que le modèle puisse renvoyer l'appel.",
+        "too_many_tools": "Cette clé d’accès annonce {count} outils, mais {provider} en accepte au maximum {limit} par requête. Réduisez les capacités de la clé d’accès ou choisissez un autre fournisseur."
       },
       "chatEnded": "Discussion terminée.",
       "providerDetail": "Détail du fournisseur : {detail}"

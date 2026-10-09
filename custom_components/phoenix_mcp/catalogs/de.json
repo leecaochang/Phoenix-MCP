@@ -218,9 +218,10 @@
         "rate_limit": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "auth": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
-        "quota": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
+        "quota": "Das Anbieterkonto hat kein Guthaben mehr oder sein Ausgabenlimit erreicht. Sie wird nicht erneut angefordert.",
         "provider_rejected": "Der Anbieter hat diese Anfrage abgelehnt. Sie wird nicht erneut angefordert.",
-        "bad_tool_call_retry": "Das Modell hat einen Tool-Aufruf gesendet, dessen Argumente kein gültiges JSON waren. Aus dieser Antwort wurde nichts ausgeführt; der Fehler wurde zurückgegeben, damit das Modell den Aufruf erneut senden kann."
+        "bad_tool_call_retry": "Das Modell hat einen Tool-Aufruf gesendet, dessen Argumente kein gültiges JSON waren. Aus dieser Antwort wurde nichts ausgeführt; der Fehler wurde zurückgegeben, damit das Modell den Aufruf erneut senden kann.",
+        "too_many_tools": "Dieser Zugriffsschlüssel stellt {count} Tools bereit, aber {provider} akzeptiert höchstens {limit} pro Anfrage. Schränken Sie die Fähigkeiten des Zugriffsschlüssels ein oder wählen Sie einen anderen Anbieter."
       },
       "chatEnded": "Chat beendet.",
       "providerDetail": "Anbieterdetails: {detail}"

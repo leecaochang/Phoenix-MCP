@@ -465,10 +465,11 @@ def _tools_with_top_level_combinators() -> list[str]:
 
 @pytest.mark.parametrize("tool_name", _tools_with_top_level_combinators())
 async def test_a_selector_rule_lowered_to_prose_is_still_refused_at_dispatch(tool_name):
-    """Anthropic refuses top-level combinators, so those providers receive these
-    rules as description text instead (agentcli._anthropic_input_schema). That
-    is only safe while the handler itself refuses what the combinator forbade.
-    A new tool with a top-level combinator must keep this true."""
+    """Several providers refuse top-level combinators, so every provider adapter
+    receives these rules as description text instead
+    (agentcli._lowered_input_schema). That is only safe while the handler itself
+    refuses what the combinator forbade. A new tool with a top-level combinator
+    must keep this true."""
     from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
     schema = next(tool["inputSchema"] for tool in _NATIVE_TOOL_DEFS if tool["name"] == tool_name)
     operation = {name: _SAMPLE_OPERATION[name] for name in schema.get("required", [])}

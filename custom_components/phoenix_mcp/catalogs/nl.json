@@ -851,9 +851,10 @@
         "rate_limit": "De provider is tijdelijk niet beschikbaar.",
         "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
         "auth": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
-        "quota": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
+        "quota": "Het provideraccount heeft geen tegoed meer of heeft de bestedingslimiet bereikt. Er volgt geen nieuwe poging.",
         "provider_rejected": "De provider heeft dit verzoek geweigerd. Er volgt geen nieuwe poging.",
-        "bad_tool_call_retry": "Het model stuurde een toolaanroep waarvan de argumenten geen geldige JSON waren. Niets uit die reactie is uitgevoerd; de fout is teruggestuurd zodat het model de aanroep opnieuw kan sturen."
+        "bad_tool_call_retry": "Het model stuurde een toolaanroep waarvan de argumenten geen geldige JSON waren. Niets uit die reactie is uitgevoerd; de fout is teruggestuurd zodat het model de aanroep opnieuw kan sturen.",
+        "too_many_tools": "Deze toegangssleutel biedt {count} tools aan, maar {provider} accepteert er maximaal {limit} per verzoek. Beperk de mogelijkheden van de toegangssleutel of kies een andere provider."
       },
       "options": "Opties",
       "pausedAfter": "Gepauzeerd na {count} stappen. Verder onderzoeken?",

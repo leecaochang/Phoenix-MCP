@@ -116,6 +116,7 @@ from .const import (
     AGENTCLI_MAX_SSE_BUFFER_BYTES,
     AGENTCLI_MAX_STREAM_BYTES,
     AGENTCLI_MAX_TOOL_CALL_CORRECTIONS,
+    AGENTCLI_MAX_TOOLS_PER_REQUEST,
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
     AGENTCLI_PROVIDER_DETAIL_CHARS,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
@@ -341,6 +342,12 @@ class ProviderDefinition:
     validation_error: str | None = None
     ollama: str | None = None
     purpose: str = "conversation"
+    # Most tools one request may carry; a larger catalog is refused before the
+    # call rather than answered by the provider's HTTP 400. None: no known cap.
+    max_tools: int | None = None
+    # How tool calls arrive in a stream. "openai" concatenates argument deltas
+    # by index; "gemini" is Gemini's compatibility layer (see _merged_whole_arguments).
+    tool_stream: str = "openai"
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -451,13 +458,13 @@ def _definition(
     endpoints: tuple[ProviderChoice, ...] = (), include_usage: bool = False,
     reasoning: str = "effort", model_filter: str = "chat",
     models_shape: str = "data", validation_error: str | None = None,
-    ollama: str | None = None,
+    ollama: str | None = None, max_tools: int | None = None, tool_stream: str = "openai",
 ) -> ProviderDefinition:
     return ProviderDefinition(
         kind, label, adapter, base_url, model,
         label_key or _PROVIDER_LABEL_KEYS[kind], fields, endpoints,
         include_usage, reasoning, model_filter, models_shape, validation_error,
-        ollama,
+        ollama, max_tools=max_tools, tool_stream=tool_stream,
     )
 
 
@@ -468,13 +475,16 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, include_usage=True, model_filter="openai",
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
+            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
-        _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini"),
+        _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
+                    tool_stream="gemini"),
         _definition(
             "grok", "Grok", AGENTCLI_GROK_BASE_URL,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
         ),
-        _definition("groq", "Groq", AGENTCLI_GROQ_BASE_URL, include_usage=True),
+        _definition("groq", "Groq", AGENTCLI_GROQ_BASE_URL, include_usage=True,
+                    max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
         _definition(
             "kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
             fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
@@ -484,6 +494,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
             fields=(_region_field(_MISTRAL_ENDPOINTS), _API_KEY_FIELD), endpoints=_MISTRAL_ENDPOINTS,
+            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("nvidia", "NVIDIA NIM", AGENTCLI_NVIDIA_BASE_URL, reasoning="probed_effort", model_filter="nvidia"),
         _definition(
@@ -513,7 +524,8 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             fields=(_API_KEY_FIELD, _QWEN_URL_FIELD), include_usage=True,
             reasoning="qwen", validation_error="qwen_openai",
         ),
-        _definition("zai", "Z.ai", AGENTCLI_ZAI_BASE_URL, fields=(_ZAI_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_ZAI_ENDPOINTS, reasoning="zai"),
+        _definition("zai", "Z.ai", AGENTCLI_ZAI_BASE_URL, fields=(_ZAI_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_ZAI_ENDPOINTS, reasoning="zai",
+                    max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
     )
 }
 
@@ -984,27 +996,60 @@ def _usage_int(value: Any) -> int:
 
 
 # Provider error bodies are JSON {"error": {"message", "type", "code"}} on both
-# the Anthropic and OpenAI-compatible surfaces. Some backends put a bare string
-# under "error" or a "message" at the top level. Pull out the human sentence and
-# the machine code so the panel shows a clean line, never a raw JSON blob.
-def _parse_provider_error(text: str) -> tuple[str, str | None]:
-    raw = (text or "").strip()
+# the Anthropic and OpenAI-compatible surfaces. Variants: Gemini wraps the
+# envelope in a one-item list; some backends put a bare string under "error", or
+# their code, type and message at the top level (xAI, Cerebras, Mistral); NVIDIA
+# has used an RFC 7807 problem body with "detail".
+def _error_envelope(text: str) -> dict | None:
+    """The error body as a dict, unwrapping Gemini's one-item list; None if not JSON."""
     try:
-        obj = json.loads(raw)
+        obj = json.loads((text or "").strip())
     except (ValueError, TypeError):
-        return raw, None
-    if not isinstance(obj, dict):
-        return raw, None
+        return None
+    if isinstance(obj, list) and len(obj) == 1:
+        obj = obj[0]
+    return obj if isinstance(obj, dict) else None
+
+
+def _envelope_message(obj: dict | None) -> str:
+    """The provider's human sentence from an error envelope, unclipped, or ""."""
+    if obj is None:
+        return ""
     err = obj.get("error")
-    if isinstance(err, str):
-        return err.strip() or raw, None
-    if isinstance(err, dict):
-        msg = err.get("message") or ""
-        code = err.get("code") or err.get("type")
-        return (str(msg).strip() or raw), (str(code).lower() if code else None)
-    if isinstance(obj.get("message"), str):
-        return obj["message"].strip() or raw, None
-    return raw, None
+    for message in ((err.get("message") if isinstance(err, dict) else err), obj.get("message"), obj.get("detail")):
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return ""
+
+
+def _provider_error_codes(obj: dict | None) -> list[str]:
+    """Every machine code an error envelope carries, lowercased, primary first.
+
+    The primary is error.code, else error.type, as before. The rest are where
+    some providers put the deciding code: Anthropic's details.error_code,
+    OpenRouter's metadata.limit_source and error_type, and top-level fields.
+    """
+    if obj is None:
+        return []
+    err: dict = obj["error"] if isinstance(obj.get("error"), dict) else {}
+    details: dict = err["details"] if isinstance(err.get("details"), dict) else {}
+    metadata: dict = err["metadata"] if isinstance(err.get("metadata"), dict) else {}
+    out: list[str] = []
+    for value in (err.get("code"), err.get("type"), details.get("error_code"), metadata.get("limit_source"),
+                  metadata.get("error_type"), err.get("status"), obj.get("code"), obj.get("type")):
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            continue
+        code = str(value).strip().lower()
+        if code and code not in out:
+            out.append(code)
+    return out
+
+
+def _parse_provider_error(text: str) -> tuple[str, str | None]:
+    """The human sentence (or the raw text) and the primary machine code."""
+    obj = _error_envelope(text)
+    codes = _provider_error_codes(obj)
+    return _envelope_message(obj) or (text or "").strip(), (codes[0] if codes else None)
 
 
 def _provider_error_detail(text: str) -> str:
@@ -1016,21 +1061,67 @@ def _provider_error_detail(text: str) -> str:
     provider echoes is redacted. It reaches the admin panel, the conversation
     log and the Home Assistant log, never a model, Voice or AI Task.
     """
-    try:
-        obj = json.loads((text or "").strip())
-    except (ValueError, TypeError):
-        return ""
-    if not isinstance(obj, dict):
-        return ""
-    err = obj.get("error")
-    message = err.get("message") if isinstance(err, dict) else err if isinstance(err, str) else obj.get("message")
-    if not isinstance(message, str) or not message.strip():
+    message = _envelope_message(_error_envelope(text))
+    if not message:
         return ""
     clipped = " ".join(message.split())[:AGENTCLI_PROVIDER_DETAIL_CHARS]
     try:
         return str(sanitized(clipped, max_bytes=8 * AGENTCLI_PROVIDER_DETAIL_CHARS, hide_ip=True))
     except ValueError:
         return ""
+
+
+# An ACCOUNT billing refusal: no credit, no balance, a spending limit reached or
+# billing not set up. Providers often send it as HTTP 429, but no wait clears it,
+# so it is never retried and is shown as a credit problem. Codes mean different
+# things at different providers (DashScope uses insufficient_quota for a
+# token-rate limit, numeric codes collide), so membership is per provider kind.
+# Phrases are a last resort for providers whose code is generic, matched on the
+# provider's own sentence; never the bare word "billing", which Gemini's
+# ordinary free-tier rate limit also says.
+_DEFAULT_BILLING_CODES = frozenset({
+    # OpenAI
+    "insufficient_quota", "billing_hard_limit_reached", "billing_not_active", "credit_balance_exhausted",
+    "organization_spend_limit_exceeded", "project_spend_limit_exceeded", "organization_usage_limit_exceeded",
+    # Anthropic, Meta, Cerebras, MiniMax, Together, Moonshot
+    "billing_error", "billing_not_configured", "payment_required", "insufficient_balance_error",
+    "credit_limit", "exceeded_current_quota_error",
+})
+_PROVIDER_BILLING: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
+    "claude": (frozenset({"enforced_spend_limit_reached"}),
+               ("credit balance is too low", "reached your specified api usage limits")),
+    "minimax": (frozenset(), ("(1008)",)),
+    "gemini": (frozenset(), ("prepayment credits are depleted", "exceeded its monthly spending cap")),
+    "grok": (frozenset({"personal-team-blocked:spending-limit"}),
+             ("used all available credits", "monthly spending limit", "doesn't have any credits")),
+    "groq": (frozenset({"blocked_api_access"}), ()),
+    "fireworks": (frozenset(), ("is suspended",)),
+    "opencode": (frozenset({"creditserror", "monthlylimiterror", "userlimiterror"}), ()),
+    "openrouter": (frozenset({"openrouter_credits", "openrouter_key_limit"}), ("key limit exceeded",)),
+    "ollama_cloud": (frozenset(), ("requires a subscription",)),
+    "zai": (frozenset({"1113", "1309"}), ()),
+    "tencent": (frozenset({"403004", "401007", "401008", "failedoperation.servicestoparrears",
+                           "failedoperation.resourcepackexhausted", "failedoperation.freeresourcepackexhausted"}), ()),
+}
+# DashScope replaces the default list: its insufficient_quota is a rate limit.
+_QWEN_BILLING = (frozenset({"arrearage", "allocationquota.freetieronly", "prepaidbilloverdue",
+                            "postpaidbilloverdue", "budgetlimitexceeded"}), ("free allocated quota exceeded",))
+# OpenRouter's one temporary 402: requests already in flight hold the budget.
+_OPENROUTER_IN_FLIGHT = "openrouter_in_flight_budget"
+
+
+def _billing_refusal(kind: str, status: int, codes: list[str], message: str) -> bool:
+    """Whether this provider answer is an account billing refusal (see _DEFAULT_BILLING_CODES)."""
+    if kind == "openrouter" and _OPENROUTER_IN_FLIGHT in codes:
+        return False
+    if status == 402:
+        return True
+    default = frozenset() if kind == "qwen" else _DEFAULT_BILLING_CODES
+    extra, phrases = _QWEN_BILLING if kind == "qwen" else _PROVIDER_BILLING.get(kind, (frozenset(), ()))
+    if any(code in default or code in extra for code in codes):
+        return True
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in phrases)
 
 
 def _http_failure_code(status: int, server_error: str = "upstream") -> str:
@@ -1049,14 +1140,29 @@ def _http_failure_code(status: int, server_error: str = "upstream") -> str:
 
 
 def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bool, **extra: Any) -> dict:
-    """One EV_ERROR for a non-200 provider answer, with the administrator-only detail."""
+    """One EV_ERROR for a non-200 provider answer, with the administrator-only detail.
+
+    Billing refusals override the status classification (_billing_refusal). The
+    primary machine code is kept as provider_code when identifier-shaped, so the
+    log shows how a refusal was classified without carrying provider prose.
+    """
+    envelope = _error_envelope(text)
+    codes = _provider_error_codes(envelope)
+    if _billing_refusal(kind, status, codes, _envelope_message(envelope)):
+        code, retryable = "quota", False
+    elif kind == "openrouter" and _OPENROUTER_IN_FLIGHT in codes:
+        code, retryable = "rate_limit", True
+    elif codes and codes[0] in _NON_RETRYABLE_ERROR_CODES:
+        retryable = False
     detail = _provider_error_detail(text)
+    machine = next((c for c in codes if re.fullmatch(r"[a-z0-9_.:-]{1,64}", c)), None)
     _LOGGER.log(
         logging.DEBUG if retryable else logging.WARNING,
-        "Agent provider %s answered HTTP %s: %s", kind, status, detail or "no error message",
+        "Agent provider %s answered HTTP %s (%s): %s", kind, status, machine or "no code", detail or "no error message",
     )
     return _norm(EV_ERROR, status=status, code=code, message=f"Provider request failed (HTTP {status}).",
-                 retryable=retryable, **({"provider_detail": detail} if detail else {}), **extra)
+                 retryable=retryable, **({"provider_detail": detail} if detail else {}),
+                 **({"provider_code": machine} if machine else {}), **extra)
 
 
 # Mistral documents a remaining-quota response header and currently publishes
@@ -1104,14 +1210,13 @@ def _mistral_rate_limit_headers(headers: Any) -> dict[str, int]:
     return out
 
 
-# Codes returned as HTTP 429/4xx that are NOT transient: a billing/quota/account
-# problem will not clear by retrying, so surface it immediately instead of
-# spending the connect-retry window (see _stream_turn_resilient) hammering it.
+# Account and request problems retrying cannot change, besides billing (see
+# _billing_refusal), so surface them immediately instead of spending the
+# connect-retry window (see _stream_turn_resilient) hammering them.
 _NON_RETRYABLE_ERROR_CODES = frozenset({
-    "insufficient_quota", "billing_hard_limit_reached", "billing_not_active",
     "account_deactivated", "access_terminated", "invalid_api_key",
     # Anthropic error types that retrying cannot change.
-    "billing_error", "request_too_large", "permission_error", "not_found_error",
+    "request_too_large", "permission_error", "not_found_error",
 })
 # Anthropic error types that name a transient condition, whether they arrive as an
 # HTTP status or as an `error` event after a 200 stream has already started.
@@ -1222,7 +1327,7 @@ def _provider_object(payload: str) -> dict:
     error = obj.get("error")
     if (isinstance(feedback, dict) and feedback.get("blockReason")) or (
         isinstance(error, dict) and str(error.get("code") or error.get("type")) in
-        {*_NON_RETRYABLE_ERROR_CODES, "content_filter", "content_policy_violation"}
+        {*_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation"}
     ):
         raise _ProviderResponseError("provider_blocked", retryable=False)
     if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
@@ -1343,6 +1448,66 @@ def _invalid_tool_calls(
         for call_id, name, _args, error in calls
     ]
     return _norm(EV_INVALID_TOOLS, code="bad_tool_call", assistant_msg=assistant_msg, results=results)
+
+
+def _merged_whole_arguments(current: str, fragment: str) -> str:
+    """Merge one Gemini tool-call arguments fragment into what the call has so far.
+
+    Gemini's OpenAI-compatible stream sends a call's arguments as COMPLETE JSON,
+    more than once: `{}` first, then the full object, for the same call. The
+    OpenAI rule of concatenating fragments turns that into `{}{...}`. A fragment
+    that is a complete object replaces a complete object, except that `{}` never
+    replaces real arguments; anything else is appended, so genuine deltas still
+    concatenate.
+    """
+    if not current:
+        return fragment
+    try:
+        old, new = json.loads(current), json.loads(fragment)
+    except ValueError:
+        return current + fragment
+    if isinstance(old, dict) and isinstance(new, dict):
+        return current if old and not new else fragment
+    return current + fragment
+
+
+def _gemini_tool_slot(calls: dict[int, dict], fragment: dict) -> int:
+    """Pick the call a Gemini fragment belongs to: by call ID first, then its index.
+
+    Gemini can omit `index` or repeat it across parallel calls, so the ID is the
+    reliable key; an ID-less fragment continues the latest call.
+    """
+    call_id = fragment.get("id")
+    if call_id:
+        for idx, slot in calls.items():
+            if slot["id"] == call_id:
+                return idx
+    given = fragment.get("index")
+    if type(given) is int and given >= 0 and (given not in calls or not call_id or not calls[given]["id"]):
+        return given
+    if call_id or not calls:
+        return max(calls, default=-1) + 1
+    return max(calls)
+
+
+def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
+    """The refusal for a catalog larger than this provider accepts, or None.
+
+    Checked before the first model call: past a documented tools-array cap the
+    provider answers HTTP 400 to every request, and trimming the catalog would
+    hide capabilities without saying so.
+    """
+    definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
+    limit = definition.max_tools if definition is not None else None
+    if definition is None or limit is None or len(tools) <= limit:
+        return None
+    params = {"count": len(tools), "limit": limit, "provider": definition.label}
+    return {
+        "code": "too_many_tools", "retryable": False, "message_params": params,
+        "message": (f"This access key announces {params['count']} tools, but {params['provider']} accepts "
+                    f"at most {limit} in one request. Narrow the access key's capabilities or choose "
+                    "another provider."),
+    }
 
 
 def _invalid_tools_error(message: str = "The model produced an invalid tool call.") -> dict:
@@ -1488,16 +1653,16 @@ def _requirement_sentence(keyword: str, branches: list) -> str:
     return f"Provide {'exactly one' if keyword == 'oneOf' else 'at least one'} of: {listed}."
 
 
-def _anthropic_input_schema(schema: Any) -> tuple[Any, list[str]]:
-    """Lower the top-level combinators Anthropic's tool API refuses.
+def _lowered_input_schema(schema: Any) -> tuple[Any, list[str]]:
+    """Lower the top-level combinators that several provider APIs refuse.
 
-    Anthropic answers HTTP 400 to any request whose tool input_schema has anyOf,
-    oneOf or allOf at the top level, so one such tool fails every request.
+    Anthropic, and OpenAI even without strict mode, answer HTTP 400 to any
+    request whose tool schema has anyOf, oneOf or allOf at the top level, so
+    one such tool fails every request; gateways forward the schema unchanged.
     allOf members merge into the object (properties and required lists); each
     anyOf or oneOf becomes a sentence for the tool description. Nested
-    combinators are accepted and stay. Only the copy sent in the Anthropic
-    format changes: each tool's handler enforces these rules at dispatch, so no
-    check is relaxed.
+    combinators stay. Each tool's handler enforces these rules at dispatch, so
+    no check is relaxed.
     """
     if not isinstance(schema, dict) or not any(key in schema for key in _SCHEMA_COMBINATORS):
         return schema, []
@@ -1526,6 +1691,58 @@ def _anthropic_input_schema(schema: Any) -> tuple[Any, list[str]]:
     return lowered, rules
 
 
+def _explicitly_open(schema: Any, *, nested: bool = False) -> Any:
+    """Copy a schema with every nested object that leaves extra keys open marked so.
+
+    JSON Schema leaves an object without additionalProperties open, but xAI
+    applies strict rules that close it, and Kimi's default strict dialect may,
+    which would leave a model able to send only `{}` for service data or an
+    automation config. The explicit `true` keeps the meaning everywhere. Type
+    lists are left alone: Kimi refuses any keyword beside one. The root is
+    never touched (every tool root is closed). Unchanged schemas are returned
+    as the same object.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    changed = False
+    out = dict(schema)
+    for key in ("properties", "patternProperties"):
+        if isinstance(schema.get(key), dict):
+            mapped = {name: _explicitly_open(sub, nested=True) for name, sub in schema[key].items()}
+            if any(mapped[name] is not schema[key][name] for name in mapped):
+                out[key], changed = mapped, True
+    for key in ("items", "additionalProperties", "not"):
+        if isinstance(schema.get(key), dict):
+            sub = _explicitly_open(schema[key], nested=True)
+            if sub is not schema[key]:
+                out[key], changed = sub, True
+    for key in _SCHEMA_COMBINATORS:
+        if isinstance(schema.get(key), list):
+            mapped_list = [_explicitly_open(sub, nested=nested) for sub in schema[key]]
+            if any(new is not old for new, old in zip(mapped_list, schema[key])):
+                out[key], changed = mapped_list, True
+    if nested and schema.get("type") == "object" and "additionalProperties" not in schema:
+        out["additionalProperties"], changed = True, True
+    return out if changed else schema
+
+
+def _provider_tool(tool: dict) -> tuple[str, str, Any]:
+    """Name, description and input schema as every provider adapter sends them.
+
+    The published MCP schema is unchanged; only this copy is adapted to what
+    provider APIs accept (see _lowered_input_schema and _explicitly_open).
+    """
+    schema, rules = _lowered_input_schema(tool.get("inputSchema", {"type": "object", "properties": {}}))
+    schema = _explicitly_open(schema)
+    description = tool.get("description", "")
+    if rules:
+        description = str(description).rstrip()
+        if description and description[-1] not in ".!?":
+            description += "."
+        description = " ".join([description, *rules]).strip()
+    return tool["name"], description, schema
+
+
 class ClaudeProvider:
     """Anthropic Messages API, streaming, over raw HTTP.
 
@@ -1543,14 +1760,8 @@ class ClaudeProvider:
     def format_tools(self, mcp_tools: list[dict]) -> list[dict]:
         out = []
         for t in mcp_tools:
-            schema, rules = _anthropic_input_schema(t.get("inputSchema", {"type": "object", "properties": {}}))
-            description = t.get("description", "")
-            if rules:
-                description = str(description).rstrip()
-                if description and description[-1] not in ".!?":
-                    description += "."
-                description = " ".join([description, *rules]).strip()
-            out.append({"name": t["name"], "description": description, "input_schema": schema})
+            name, description, schema = _provider_tool(t)
+            out.append({"name": name, "description": description, "input_schema": schema})
         return out
 
     def append_assistant(self, messages: list[dict], assistant_msg: dict) -> None:
@@ -1724,7 +1935,7 @@ class ClaudeProvider:
                 ) as resp:
                     if resp.status != 200:
                         text = (await resp.text())[:4000]
-                        msg, err_code = _parse_provider_error(text)
+                        msg = _parse_provider_error(text)[0]
                         if (attempt == 0 and resp.status == 400
                                 and _thinking_type(body) == "adaptive"
                                 and "adaptive" in msg.lower()):
@@ -1733,11 +1944,9 @@ class ClaudeProvider:
                             _CLAUDE_NO_ADAPTIVE.add(self.cfg.model)
                             _use_enabled_thinking(body)
                             continue
-                        retryable = resp.status in (429, 500, 502, 503, 504, 529)
-                        if err_code in _NON_RETRYABLE_ERROR_CODES:
-                            retryable = False
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
-                                            retryable=retryable, refused=_refused_option(resp.status, msg, body))
+                                            retryable=resp.status in (429, 500, 502, 503, 504, 529),
+                                            refused=_refused_option(resp.status, msg, body))
                         return
                     async for ev in self._parse(resp):
                         yield ev
@@ -2341,13 +2550,13 @@ class OpenAICompatProvider:
         return h
 
     def format_tools(self, mcp_tools: list[dict]) -> list[dict]:
-        return [
-            {"type": "function", "function": {
-                "name": t["name"], "description": t.get("description", ""),
-                "parameters": t.get("inputSchema", {"type": "object", "properties": {}}),
-            }}
-            for t in mcp_tools
-        ]
+        out = []
+        for t in mcp_tools:
+            name, description, schema = _provider_tool(t)
+            out.append({"type": "function", "function": {
+                "name": name, "description": description, "parameters": schema,
+            }})
+        return out
 
     def append_assistant(self, messages: list[dict], assistant_msg: dict) -> None:
         messages.append(assistant_msg)
@@ -2704,7 +2913,7 @@ class OpenAICompatProvider:
                                         timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
                     if resp.status != 200:
                         text = (await resp.text())[:4000]
-                        msg, err_code = _parse_provider_error(text)
+                        msg = _parse_provider_error(text)[0]
                         if (attempt == 0 and effort_forced and resp.status == 400
                                 and "reasoning_effort" in msg.lower()):
                             _OPENAI_NO_EFFORT_NONE.add(self.cfg.model)
@@ -2713,10 +2922,6 @@ class OpenAICompatProvider:
                         # Ollama commonly 500s on an unknown/hallucinated tool name.
                         code = _http_failure_code(resp.status, "ollama_backend" if self._is_ollama else "upstream")
                         retryable = resp.status in (429, 500, 502, 503)
-                        if err_code in _NON_RETRYABLE_ERROR_CODES:
-                            retryable = False
-                            if err_code == "insufficient_quota":
-                                code = "quota"
                         rate_limit = (
                             _mistral_rate_limit_headers(resp.headers)
                             if self.definition.model_filter == "mistral" and resp.status == 429 else {}
@@ -2750,6 +2955,10 @@ class OpenAICompatProvider:
         mistral_content_parts: list[dict] = []
         # tool calls accumulated by index: {index: {"id","name","args"}}
         calls: dict[int, dict] = {}
+        # Gemini's compatibility layer deviates from OpenAI streaming for tool
+        # calls (see _merged_whole_arguments and _gemini_tool_slot).
+        gemini = self.definition.tool_stream == "gemini"
+        pending_extra: dict | None = None
         finish = "stop"
         # Whether the stream ever reported WHY it ended. Every provider sends a
         # finish_reason on its final chunk, so the default above standing
@@ -2860,13 +3069,25 @@ class OpenAICompatProvider:
             fragments = delta.get("tool_calls", [])
             if not isinstance(fragments, list):
                 raise _ProviderResponseError()
+            if gemini and isinstance(delta.get("extra_content"), dict):
+                # A thought signature can arrive on the delta rather than the call.
+                pending_extra = delta["extra_content"]
             for tc in fragments:
-                idx = tc.get("index", 0)
+                if not isinstance(tc, dict):
+                    raise _ProviderResponseError()
+                idx = _gemini_tool_slot(calls, tc) if gemini else tc.get("index", 0)
                 if type(idx) is not int or idx < 0:
                     raise _ProviderResponseError()
                 slot = calls.setdefault(idx, {"id": None, "name": None, "args": ""})
                 if tc.get("id"):
                     slot["id"] = tc["id"]
+                if gemini:
+                    extra = tc.get("extra_content")
+                    if isinstance(extra, dict):
+                        slot["extra_content"] = extra
+                    elif pending_extra is not None and "extra_content" not in slot:
+                        slot["extra_content"] = pending_extra
+                    pending_extra = None
                 fn = tc.get("function", {})
                 if not isinstance(fn, dict):
                     raise _ProviderResponseError()
@@ -2877,10 +3098,14 @@ class OpenAICompatProvider:
                         record_rejected_tool(slot["id"], slot["name"], fn["arguments"],
                                              reason="The provider must send tool arguments as JSON text.")
                         raise _ProviderResponseError()
-                    slot["args"] += fn["arguments"]
+                    slot["args"] = (_merged_whole_arguments(slot["args"], fn["arguments"]) if gemini
+                                    else slot["args"] + fn["arguments"])
             if choice.get("finish_reason"):
                 finish = choice["finish_reason"]
                 saw_finish = True
+        if gemini and finish == "stop" and calls:
+            # Gemini ends a tool-call response with "stop" rather than "tool_calls".
+            finish = "tool_calls"
         # Flush any held-back tail from the think splitter.
         for kind, seg in think.flush():
             if kind == "text":
@@ -2918,6 +3143,9 @@ class OpenAICompatProvider:
             assistant_tool_calls.append({
                 "id": slot["id"], "type": "function",
                 "function": {"name": slot["name"], "arguments": args_str},
+                # Gemini's thought signature must return with its call, unchanged,
+                # or the next request is refused.
+                **({"extra_content": slot["extra_content"]} if slot.get("extra_content") else {}),
             })
             if parsed is not None:
                 parsed_tools.append({"id": slot["id"], "name": slot["name"], "input": parsed})
@@ -3992,6 +4220,8 @@ async def _consume_model_stream(
                                  # admin panel and conversation log show it.
                                  **({"provider_detail": ev["provider_detail"]}
                                     if ev.get("provider_detail") else {}),
+                                 **({"provider_code": ev["provider_code"]}
+                                    if ev.get("provider_code") else {}),
                                  # Mistral's adapter has already reduced response
                                  # headers to a strict allowlist of safe numeric
                                  # quota fields. Preserve that structured snapshot
@@ -4293,6 +4523,11 @@ async def async_run_agent_turn(
     )
     agent_tools = build_agent_tool_list(access_key, data, "chat")
     tools = provider.format_tools(agent_tools)
+    if (too_many := _tool_limit_problem(provider, tools)) is not None:
+        await emit("error", too_many)
+        await emit("messages", {"messages": messages})
+        await emit("done", {"stop_reason": "error"})
+        return messages
     # The access key is re-resolved per dispatch (see _current_dispatch_access_key), so a
     # mid-turn revoke/expire/cap-change/kill-switch is honored before any side
     # effect. Each dispatch gets the inline-confirm wait zeroed so a confirm gate
@@ -4583,6 +4818,8 @@ async def _run_headless_turn(
     review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
     tools = provider.format_tools(agent_tools)
+    if (too_many := _tool_limit_problem(provider, tools)) is not None:
+        return _HeadlessTurnResult("", [], outcome=TURN_PROVIDER_ERROR, detail=too_many["message"])
     messages: list[dict] = [{"role": "user", "content": seed}]
     access_key_id = access_key.id
     cancel = asyncio.Event()  # never fired; the stream primitive expects one

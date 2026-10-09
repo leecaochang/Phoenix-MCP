@@ -4534,7 +4534,7 @@ async def test_scheduled_catalog_refresh_honours_the_operator_settings(hass, acc
 
 
 # --------------------------------------------------------------------------- #
-# Anthropic top-level schema rule
+# Tool schemas as providers receive them
 # --------------------------------------------------------------------------- #
 
 def _full_catalog() -> list[dict]:
@@ -4543,23 +4543,61 @@ def _full_catalog() -> list[dict]:
     return [*_ENTITY_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *mesa_tool_defs()]
 
 
-@pytest.mark.parametrize("kind", ["claude", "minimax"])
-def test_anthropic_format_tools_satisfy_the_top_level_schema_rule(kind):
-    """Anthropic answers HTTP 400 to the WHOLE request when any one tool's
-    input_schema has anyOf, oneOf or allOf at the top level. The schemas are
-    valid JSON Schema, so a metaschema check cannot catch it."""
+def _sent_schemas(kind: str, catalog: list[dict]) -> list[tuple[str, dict]]:
+    provider = agentcli.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
+    return [(tool.get("name") or tool["function"]["name"], tool.get("input_schema") or tool["function"]["parameters"])
+            for tool in provider.format_tools(catalog)]
+
+
+def _nested(schema: dict):
+    """Yield every nested subschema with its path, the root excluded."""
+    def walk(node, path):
+        if not isinstance(node, dict):
+            return
+        if path:
+            yield path, node
+        for name, sub in (node.get("properties") or {}).items():
+            yield from walk(sub, f"{path}.{name}")
+        for key in ("items", "additionalProperties"):
+            if isinstance(node.get(key), dict):
+                yield from walk(node[key], f"{path}.{key}")
+        for key in ("anyOf", "oneOf", "allOf"):
+            for index, sub in enumerate(node.get(key) or []):
+                yield from walk(sub, f"{path}.{key}[{index}]")
+    yield from walk(schema, "")
+
+
+@pytest.mark.parametrize("kind", sorted(k for k, d in agentcli.PROVIDER_DEFINITIONS.items() if d.purpose == "conversation"))
+def test_every_provider_receives_schemas_strict_validators_accept(kind):
+    """Several providers refuse the WHOLE request over one tool.
+
+    Anthropic, and OpenAI even without strict mode, refuse a top-level anyOf,
+    oneOf or allOf; gateways forward it unchanged. xAI's strict rules close an
+    object that does not say it is open, and Kimi refuses any keyword beside a
+    type list. The schemas are valid JSON Schema, so a metaschema check cannot
+    catch any of it.
+    """
     catalog = _full_catalog()
+    before = json.dumps(catalog, sort_keys=True)
     assert any(key in tool["inputSchema"] for tool in catalog for key in ("anyOf", "oneOf", "allOf"))
-    for tool in ClaudeProvider(ProviderConfig(kind, "m", "https://x", "k")).format_tools(catalog):
-        schema = tool["input_schema"]
-        assert schema.get("type") == "object", tool["name"]
-        assert not {"anyOf", "oneOf", "allOf"} & set(schema), tool["name"]
+    for name, schema in _sent_schemas(kind, catalog):
+        assert schema.get("type") == "object" and schema.get("additionalProperties") is False, name
+        assert not {"anyOf", "oneOf", "allOf"} & set(schema), name
+        for path, sub in _nested(schema):
+            if sub.get("type") == "object":
+                assert "additionalProperties" in sub, f"{name}{path}"
+            if isinstance(sub.get("type"), list):
+                assert "additionalProperties" not in sub, f"{name}{path}"
+    # The published catalog is never mutated by adapting it.
+    assert json.dumps(catalog, sort_keys=True) == before
 
 
 def test_lowered_combinators_keep_every_property_and_state_each_rule():
     schema = {
         "type": "object", "additionalProperties": False, "required": ["level"],
-        "properties": {"name": {"type": "string"}, "level": {"type": "integer"}},
+        "properties": {"name": {"type": "string"}, "level": {"type": "integer"},
+                       "data": {"type": "object", "description": "Free-form."},
+                       "any": {"type": ["object", "null"]}},
         "allOf": [
             {"anyOf": [{"required": ["name"]}, {"required": ["area"]}]},
             {"properties": {"area": {"type": "string"}}, "required": ["mode"]},
@@ -4567,24 +4605,23 @@ def test_lowered_combinators_keep_every_property_and_state_each_rule():
         "oneOf": [{"required": ["a"]}, {"required": ["b", "c"]}],
     }
     original = json.loads(json.dumps(schema))
-    tool = ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k")).format_tools(
-        [{"name": "t", "description": "Sets a thing", "inputSchema": schema}])[0]
-    assert tool["input_schema"] == {
+    tool = {"name": "t", "description": "Sets a thing", "inputSchema": schema}
+    expected = {
         "type": "object", "additionalProperties": False, "required": ["level", "mode"],
-        "properties": {"name": {"type": "string"}, "level": {"type": "integer"}, "area": {"type": "string"}},
+        "properties": {"name": {"type": "string"}, "level": {"type": "integer"},
+                       "data": {"type": "object", "description": "Free-form.", "additionalProperties": True},
+                       "any": {"type": ["object", "null"]}, "area": {"type": "string"}},
     }
-    assert tool["description"] == (
-        "Sets a thing. Provide exactly one of: a or (b and c). Provide at least one of: name or area.")
-    # The shared catalog definition is never mutated, and providers that accept
-    # the combinators still receive the original schema.
+    rules = "Sets a thing. Provide exactly one of: a or (b and c). Provide at least one of: name or area."
+    claude = ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k")).format_tools([tool])[0]
+    openai = OpenAICompatProvider(ProviderConfig("deepseek", "m", "https://d", "k")).format_tools([tool])[0]
+    assert claude == {"name": "t", "description": rules, "input_schema": expected}
+    assert openai == {"type": "function", "function": {"name": "t", "description": rules, "parameters": expected}}
     assert schema == original
-    openai = OpenAICompatProvider(ProviderConfig("deepseek", "m", "https://d", "k")).format_tools(
-        [{"name": "t", "description": "Sets a thing", "inputSchema": schema}])[0]
-    assert openai["function"]["parameters"] is schema
-    plain = {"type": "object", "properties": {}}
+    # A schema that needs nothing is sent as the same object, description untouched.
+    plain = {"type": "object", "properties": {"x": {"type": "string"}}, "additionalProperties": False}
     assert ClaudeProvider(ProviderConfig("claude", "m", "https://x", "k")).format_tools(
-        [{"name": "p", "description": "Plain", "inputSchema": plain}])[0] == {
-            "name": "p", "description": "Plain", "input_schema": plain}
+        [{"name": "p", "description": "Plain", "inputSchema": plain}])[0]["input_schema"] is plain
 
 
 # --------------------------------------------------------------------------- #
@@ -4609,6 +4646,9 @@ async def test_a_refused_request_carries_the_provider_sentence_for_the_administr
 @pytest.mark.parametrize(("body", "expected"), [
     ('{"error": "model not found"}', "model not found"),
     ('{"message": "Insufficient Balance"}', "Insufficient Balance"),
+    # Gemini's OpenAI-compatible endpoint wraps its envelope in a one-item list.
+    ('[{"error": {"code": 404, "message": "model not found", "status": "NOT_FOUND"}}]', "model not found"),
+    ('[{"error": {"message": "a"}}, {"error": {"message": "b"}}]', ""),
     ("<html><body>502 Bad Gateway</body></html>", ""),
     ("not json at all", ""),
     ('{"error": {"message": "   "}}', ""),
@@ -4766,3 +4806,207 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
         result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
             system="s", seed="is it on", client_ip="voice", max_iterations=1)
     assert result.outcome == agentcli.TURN_PROVIDER_ERROR
+
+
+# --------------------------------------------------------------------------- #
+# Tools-array cap
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(("kind", "capped"), [("chatgpt", True), ("groq", True), ("mistral", True), ("zai", True),
+                                              ("deepseek", False), ("gemini", False), ("claude", False)])
+def test_documented_tools_array_caps(kind, capped):
+    from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOLS_PER_REQUEST
+    assert agentcli.PROVIDER_DEFINITIONS[kind].max_tools == (AGENTCLI_MAX_TOOLS_PER_REQUEST if capped else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [128, 129])
+async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(hass, count):
+    """Past the cap the provider answers HTTP 400 to every request; trimming would
+    hide capabilities silently. So the turn is refused up front, saying why."""
+    catalog = [{"name": f"tool_{i}", "description": "d", "inputSchema": {"type": "object", "properties": {}}}
+               for i in range(count)]
+    provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+    provider.kind = "chatgpt"
+    data = _loop_data()
+    access_key = data.store.get_access_key_by_id.return_value
+    events = []
+    async def emit(name, payload):
+        events.append((name, payload))
+    with patch.object(agentcli, "build_mcp_tool_list", return_value=catalog), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+        await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
+            session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
+            emit=emit, cancel=asyncio.Event())
+        headless_provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+        headless_provider.kind = "chatgpt"
+        result = await agentcli._run_headless_turn(hass, data, access_key, headless_provider, None, "http://h",
+            system="s", seed="hi", client_ip="voice", max_iterations=2)
+    errors = [body for name, body in events if name == "error"]
+    if count == 128:
+        assert provider.i == 1 and not errors and result.outcome == agentcli.TURN_OK
+        return
+    assert provider.i == 0 and headless_provider.i == 0
+    assert errors == [{
+        "code": "too_many_tools", "retryable": False,
+        "message_params": {"count": 129, "limit": 128, "provider": "OpenAI"},
+        "message": "This access key announces 129 tools, but OpenAI accepts at most 128 in one request. "
+                   "Narrow the access key's capabilities or choose another provider.",
+    }]
+    assert result.outcome == agentcli.TURN_PROVIDER_ERROR and "129 tools" in result.detail
+
+
+# --------------------------------------------------------------------------- #
+# Gemini's OpenAI-compatible tool-call stream
+# --------------------------------------------------------------------------- #
+
+def _gemini_stream(*chunks: dict, finish: str = "stop") -> bytes:
+    frames = ["data: " + json.dumps({"choices": [{"index": 0, "delta": delta, "finish_reason": None}]})
+              for delta in chunks]
+    frames.append("data: " + json.dumps({"choices": [{"index": 0, "delta": {}, "finish_reason": finish}]}))
+    frames.append("data: [DONE]")
+    return _sse(*frames)
+
+
+async def _parse_stream(kind: str, body: bytes) -> list[dict]:
+    provider = OpenAICompatProvider(ProviderConfig(kind, "m", "https://g", "k"))
+    return await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)),
+        system_prompt="s", messages=[], tools=[], options={}))
+
+
+def _call(arguments: str, call_id: str = "call_1", name: str = "search_entities", **extra) -> dict:
+    return {"tool_calls": [{"id": call_id, "type": "function", **extra,
+                            "function": {"name": name, "arguments": arguments}}]}
+
+
+@pytest.mark.asyncio
+async def test_gemini_whole_arguments_sent_twice_make_one_call():
+    """Observed live: `{}` first, then the full arguments, ending with "stop".
+
+    The OpenAI rule of concatenating fragments produced `{}{...}`, so no
+    Gemini tool call could ever run.
+    """
+    signature = {"google": {"thought_signature": "c2lnbmF0dXJl"}}
+    events = await _parse_stream("gemini", _gemini_stream(
+        _call("{}"), _call('{"query":"Bed Light","domain":"light"}', extra_content=signature)))
+    tools = [e for e in events if e["type"] == agentcli.EV_TOOL]
+    assert [(t["id"], t["input"]) for t in tools] == [("call_1", {"query": "Bed Light", "domain": "light"})]
+    done = events[-1]
+    assert done["type"] == agentcli.EV_DONE and done["stop_reason"] == "tool_use"
+    # The thought signature returns with its call, unchanged.
+    assert done["assistant_msg"]["tool_calls"][0]["extra_content"] == signature
+    # The same stream from an OpenAI-convention provider is still malformed.
+    other = await _parse_stream("deepseek", _gemini_stream(
+        _call("{}"), _call('{"query":"Bed Light"}'), finish="tool_calls"))
+    assert other[-1]["type"] == agentcli.EV_INVALID_TOOLS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("fragments", "expected"), [
+    (['{"query":"a"}', "{}"], {"query": "a"}),                 # {} never replaces real arguments
+    (['{"query":', '"a"}'], {"query": "a"}),                    # genuine deltas still concatenate
+    (['{"a": ', '{"b": 1}', "}"], {"a": {"b": 1}}),             # a nested object is not a replacement
+    (["{}"], {}),                                               # a call that takes no arguments
+])
+async def test_gemini_argument_fragments_merge_safely(fragments, expected):
+    events = await _parse_stream("gemini", _gemini_stream(*(_call(fragment) for fragment in fragments)))
+    tools = [e for e in events if e["type"] == agentcli.EV_TOOL]
+    assert [t["input"] for t in tools] == [expected]
+
+
+@pytest.mark.asyncio
+async def test_gemini_parallel_calls_are_kept_apart_by_id():
+    # Gemini can omit or repeat `index`; the call ID keeps parallel calls apart,
+    # and a signature on the delta attaches to the call it arrived with.
+    signature = {"google": {"thought_signature": "c2ln"}}
+    events = await _parse_stream("gemini", _gemini_stream(
+        {**_call('{"query":"a"}', "c1"), "extra_content": signature},
+        {"tool_calls": [{"index": 0, "id": "c2", "function": {"name": "get_state", "arguments": '{"entity_id":"x"}'}}]},
+    ))
+    tools = [(e["id"], e["name"], e["input"]) for e in events if e["type"] == agentcli.EV_TOOL]
+    assert tools == [("c1", "search_entities", {"query": "a"}), ("c2", "get_state", {"entity_id": "x"})]
+    calls = events[-1]["assistant_msg"]["tool_calls"]
+    assert calls[0]["extra_content"] == signature and "extra_content" not in calls[1]
+
+
+# --------------------------------------------------------------------------- #
+# Billing refusals
+# --------------------------------------------------------------------------- #
+
+# (kind, HTTP status, body, is a billing refusal). Signatures captured live
+# (OpenAI, Moonshot) or taken from each provider's documentation and community
+# reports; each billing case sits beside that provider's ordinary rate limit,
+# which must stay retryable.
+_PROVIDER_REFUSALS = [
+    ("chatgpt", 429, {"error": {"code": "credit_balance_exhausted", "message": "You have no credits remaining."}}, True),
+    ("chatgpt", 429, {"error": {"code": "project_spend_limit_exceeded", "message": "Spend limit."}}, True),
+    ("chatgpt", 429, {"error": {"code": None, "type": "billing_not_active", "message": "Not active."}}, True),
+    ("chatgpt", 429, {"error": {"code": "rate_limit_exceeded", "message": "Check your plan and billing details."}}, False),
+    ("kimi", 429, {"error": {"type": "exceeded_current_quota_error", "message": "Insufficient balance."}}, True),
+    ("kimi", 429, {"error": {"type": "rate_limit_reached_error", "message": "Max RPM."}}, False),
+    ("claude", 400, {"type": "error", "error": {"type": "invalid_request_error",
+                     "message": "Your credit balance is too low to access the Anthropic API."}}, True),
+    ("claude", 429, {"type": "error", "error": {"type": "rate_limit_error", "message": "Spend cap.",
+                     "details": {"error_code": "enforced_spend_limit_reached"}}}, True),
+    ("claude", 429, {"type": "error", "error": {"type": "rate_limit_error", "message": "Too many requests."}}, False),
+    ("gemini", 402, [{"error": {"code": 402, "message": "Your prepayment credits are depleted.",
+                                "status": "RESOURCE_EXHAUSTED"}}], True),
+    ("gemini", 429, [{"error": {"code": 429, "message": "Your project has exceeded its monthly spending cap.",
+                                "status": "RESOURCE_EXHAUSTED"}}], True),
+    ("gemini", 429, [{"error": {"code": 429, "message": "Quota exceeded; check your plan and billing details.",
+                                "status": "RESOURCE_EXHAUSTED"}}], False),
+    ("grok", 403, {"code": "permission-denied", "error": "Your team has used all available credits."}, True),
+    ("groq", 400, {"error": {"code": "blocked_api_access", "message": "Spend limit reached."}}, True),
+    ("groq", 429, {"error": {"code": "rate_limit_exceeded", "type": "tokens", "message": "Slow down."}}, False),
+    ("cerebras", 402, {"message": "Payment required.", "type": "payment_required_error", "code": "payment_required"}, True),
+    ("cerebras", 429, {"message": "Too many.", "code": "request_quota_exceeded"}, False),
+    ("fireworks", 412, {"error": {"code": "PRECONDITION_FAILED", "message": "Account x is suspended."}}, True),
+    ("together", 400, {"error": {"type": "credit_limit", "code": None, "message": "Credit limit exceeded."}}, True),
+    ("meta", 402, {"error": {"type": "billing_error", "code": "billing_not_configured", "message": "Billing."}}, True),
+    ("nvidia", 402, {"status": 402, "title": "Payment Required", "detail": "Cloud credits expired."}, True),
+    ("openrouter", 402, {"error": {"code": 402, "message": "Insufficient credits.",
+                                   "metadata": {"limit_source": "openrouter_credits"}}}, True),
+    ("openrouter", 402, {"error": {"code": 402, "message": "Busy.",
+                                   "metadata": {"limit_source": "openrouter_in_flight_budget"}}}, False),
+    ("opencode", 401, {"error": {"type": "CreditsError", "message": "Insufficient balance."}}, True),
+    ("opencode", 429, {"error": {"type": "RateLimitError", "message": "Slow down."}}, False),
+    ("ollama_cloud", 403, {"error": "this model requires a subscription"}, True),
+    ("deepseek", 402, {"error": {"message": "Insufficient Balance", "type": "unknown_error",
+                                 "code": "invalid_request_error"}}, True),
+    ("mimo", 402, {"error": {"message": "Insufficient account balance."}}, True),
+    ("mistral", 402, {"message": "No payment method on account."}, True),
+    ("mistral", 429, {"object": "error", "type": "rate_limited", "code": "1300", "message": "Slow."}, False),
+    ("zai", 429, {"error": {"code": "1113", "message": "Insufficient balance."}}, True),
+    ("zai", 429, {"error": {"code": "1302", "message": "Rate limit."}}, False),
+    ("tencent", 402, {"error": {"code": "403004", "message": "Overdue payment."}}, True),
+    ("tencent", 429, {"error": {"code": 429001, "message": "Rate."}}, False),
+    ("minimax", 500, {"type": "error", "error": {"type": "api_error", "message": "insufficient balance (1008)"}}, True),
+    ("qwen", 400, {"error": {"code": "Arrearage", "type": "Arrearage", "message": "Account not in good standing."}}, True),
+    # DashScope's insufficient_quota is a token-rate limit, unlike OpenAI's.
+    ("qwen", 429, {"error": {"code": "insufficient_quota", "message": "You exceeded your current quota."}}, False),
+    # Another provider's numeric code means nothing elsewhere.
+    ("deepseek", 429, {"error": {"code": "1113", "message": "Rate limit."}}, False),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "status", "body", "billing"), _PROVIDER_REFUSALS)
+async def test_billing_refusals_are_not_retried_as_rate_limits(kind, status, body, billing):
+    provider = agentcli.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, b"", text_data=json.dumps(body))),
+        system_prompt="s", messages=[], tools=[], options={}))
+    err = events[-1]
+    if billing:
+        assert (err["code"], err["retryable"]) == ("quota", False)
+    else:
+        assert err["code"] != "quota"
+        assert err["retryable"] is True
+    assert err.get("provider_detail")
+
+
+def test_only_identifier_shaped_provider_codes_are_kept():
+    shaped = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "rate_limit_exceeded"}}),
+                                    code="rate_limit", retryable=True)
+    prose = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "see https://x.invalid/ now"}}),
+                                   code="rate_limit", retryable=True)
+    assert shaped["provider_code"] == "rate_limit_exceeded" and "provider_code" not in prose

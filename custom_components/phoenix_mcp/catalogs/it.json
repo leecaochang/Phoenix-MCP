@@ -201,9 +201,10 @@
         "rate_limit": "Il fornitore è temporaneamente non disponibile.",
         "ollama_backend": "Il fornitore è temporaneamente non disponibile.",
         "auth": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
-        "quota": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
+        "quota": "L'account del provider ha esaurito il credito o ha raggiunto il limite di spesa. Non verrà ritentata.",
         "provider_rejected": "Il provider ha rifiutato questa richiesta. Non verrà ritentata.",
-        "bad_tool_call_retry": "Il modello ha inviato una chiamata a uno strumento i cui argomenti non erano JSON valido. Nulla di quella risposta è stato eseguito; l'errore è stato restituito perché il modello possa inviare di nuovo la chiamata."
+        "bad_tool_call_retry": "Il modello ha inviato una chiamata a uno strumento i cui argomenti non erano JSON valido. Nulla di quella risposta è stato eseguito; l'errore è stato restituito perché il modello possa inviare di nuovo la chiamata.",
+        "too_many_tools": "Questa chiave di accesso annuncia {count} strumenti, ma {provider} ne accetta al massimo {limit} per richiesta. Riduci le capacità della chiave di accesso o scegli un altro provider."
       },
       "options": "Opzioni",
       "pausedAfter": "In pausa dopo {count} passaggi. Continuare l'analisi?",
