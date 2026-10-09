@@ -30,7 +30,22 @@
 
         <h2 id="access-keys-tab">Access keys</h2>
         <p>The Access keys tab lists every active access key with its status and last use. From here you create access keys, open one to edit it, or launch the guided setup that walks a first-timer all the way to a tested connection (see <a href="quickstart.html">Quick start</a>).</p>
+
+        <figure class="screenshot">
+          <img src="assets/access-keys-list.png" alt="The Access keys tab listing each access key with its mode, status, creation date and last use" loading="lazy" />
+          <figcaption>The Access keys tab: one row per access key, with the setup wizard and create actions above.</figcaption>
+        </figure>
+
+        <figure class="screenshot">
+          <img src="assets/create-access-key.png" style="width: 70%; margin: 0 auto;" alt="The Create access key dialog with a name, expiry, pass-through toggle and rate limits" loading="lazy" />
+          <figcaption>Create access key: a name, an optional expiry, pass-through mode (off by default), and rate limits.</figcaption>
+        </figure>
         <p>Opening an access key shows its detail page: the capability matrix, the permission tree, and lifecycle actions (rotate the raw value, revoke the access key). The capability matrix is where you pick a <a href="capabilities.html#personas">persona</a> or set individual capabilities to deny, allow, or confirm.</p>
+
+        <figure class="screenshot">
+          <img src="assets/access-key-persona.png" style="width: 60%; margin: 0 auto;" alt="The persona picker on an access key's detail page with Automation builder selected" loading="lazy" />
+          <figcaption>Choosing a persona seeds the capability matrix; any later change to a single capability switches the persona to Custom.</figcaption>
+        </figure>
 
         <details class="advanced">
           <summary>Switch complete access key settings with presets</summary>
@@ -39,7 +54,7 @@
         <p>With the <strong>Enable presets</strong> toggle on in Settings, each access key gains a Presets card: named snapshots of its complete configuration (capabilities, permissions, rate limits, pass-through) you can switch between, for example a locked-down daily preset and a broader maintenance one on the same access key. Enabling the toggle saves every access key's current settings as its first preset ("Default preset", renameable inline).</p>
         <p>The access key is always "in" one preset, and edits you make are that preset's unsaved changes: switching to another preset first saves them into the outgoing preset (the dialog lists exactly what), then applies the target, so nothing is lost and there are no save prompts. Applying the preset you are already in does the opposite: it reverts the access key to the preset's saved state, discarding the listed unsaved changes. The active preset cannot be deleted, and applying a preset that would enable pass-through asks for the same confirmation as enabling it by hand. Switching is admin-only; a connected agent cannot change its own preset, and after a switch the agent is nudged in-band to refresh its tool list (see the audit log's preset column for per-request attribution).</p>
         <figure class="screenshot">
-          <img src="assets/access-key-panel.png" alt="an access key detail page showing the capability matrix and persona" loading="lazy" />
+          <img src="assets/access-key-detail.png" alt="an access key detail page showing the capability matrix and persona" loading="lazy" />
           <figcaption>An access key's detail page: capabilities and persona.</figcaption>
         </figure>
 
@@ -57,19 +72,24 @@
           <div class="callout-body"><p class="callout-title">It is a snapshot, not a new permission level</p><p>Area, label, and integration selection all resolve current registry membership and save the affected nodes in one atomic update. Future members are <strong>not</strong> picked up automatically. Registry-only deviceless entities still need a domain grant, and the dialog reports those domains. A shared-device warning means its device grant also affects entities owned by other config entries.</p></div>
         </div>
         <figure class="screenshot">
-          <img src="assets/access-key-area.png" alt="The bulk permission dialog grouping entities by area" loading="lazy" />
+          <img src="assets/bulk-select-area.png" alt="The bulk permission dialog grouping entities by area" loading="lazy" />
           <figcaption>The same bulk-apply dialog also supports labels and exact config entries.</figcaption>
         </figure>
 
         <h3 id="emulator">The effective-permission emulator</h3>
         <p>The emulator shows what Phoenix MCP will actually decide for any entity. Type an entity ID, or click one in the tree or summary, and Phoenix MCP runs the full two-pass resolver, then shows the result, which ancestor decided it, and the hint text if one is set. If a result surprises you, the path output names the ancestor that is overriding it.</p>
         <figure class="screenshot">
-          <img src="assets/access-key-epe.png" alt="The effective-permission emulator showing a result and the deciding ancestor" loading="lazy" />
+          <img src="assets/emulator-result.png" alt="The effective-permission emulator showing a result and the deciding ancestor" loading="lazy" />
           <figcaption>The emulator, showing the deciding ancestor.</figcaption>
         </figure>
 
         <h3 id="summary">The permission summary</h3>
         <p>A compact, sortable table of every node set to something other than GREY. It lists the node type, friendly name, ID, and current state. Clicking a row loads that entity into the emulator. An empty summary means no grants exist and the access key has no access to anything.</p>
+
+        <figure class="screenshot">
+          <img src="assets/access-key-permission-summary.png" style="width: 80%; margin: 0 auto;" alt="The permission summary table listing each node with its type, name, ID and state" loading="lazy" />
+          <figcaption>The permission summary: every node that is not GREY, with its resolved state.</figcaption>
+        </figure>
 
         <h3 id="entity-hints">Entity hints</h3>
         <p>After granting access to an entity, you can attach an optional hint that is surfaced to the connected AI, to clarify what an entity represents, for example <em>"This lamp is on Rachel's desk, not the ceiling light."</em> Hints are capped at 200 characters and come in two scopes:</p>
@@ -78,13 +98,23 @@
           <div class="kv-row"><dt>All access keys</dt><dd>A global hint for the entity, applied to every access key that can see it. Useful when the clarification is about the entity itself, not one agent's view of it.</dd></div>
         </dl>
         <figure class="screenshot">
-          <img src="assets/access-key-entity-hint.png" alt="The entity hint editor with the access-key-only and all-access-keys scope toggle" loading="lazy" />
+          <img src="assets/entity-hint.png" alt="The entity hint editor with the access-key-only and all-access-keys scope toggle" loading="lazy" />
           <figcaption>The hint editor, with the access-key-only / all-access-keys toggle.</figcaption>
         </figure>
 
         <h2 id="approvals-tab">Approvals</h2>
         <p>Resolved approval history retains at most 500 records for seven days. Raw arguments, diffs and results are cleared after one hour; older Details therefore cannot reproduce the original full payload.</p>
         <p>When a capability or a MESA entity is set to confirm, the held action lands in the Approvals queue. The tab badge shows the pending count, and a notification can deep-link straight to a specific approval. Opening one starts in <strong>Summary</strong>, a plain-language view of what is proposed and what it will do. Its connected command box offers <strong>Details</strong>, <strong>Reject</strong>, and <strong>Approve and execute</strong>. Reject first opens an optional reason field, removes the approval action, and leaves <strong>Cancel</strong> and <strong>Reject</strong>, so an accidental click does not resolve the request or leave two competing decisions on screen.</p>
+
+        <figure class="screenshot">
+          <img src="assets/approvals-pending.png" alt="The Approvals tab showing two pending approvals with a Select all control" loading="lazy" />
+          <figcaption>The Approvals tab, Pending queue (Details view).</figcaption>
+        </figure>
+
+        <figure class="screenshot">
+          <img src="assets/approvals-history.png" alt="The Approvals History tab filtered to one access key, showing approved and rejected requests" loading="lazy" />
+          <figcaption>The History tab, filtered by access key. Rejected and approved requests stay listed until retention removes them.</figcaption>
+        </figure>
         <p><strong>Details</strong> contains the existing technical title, access key, tool, capability, timestamps, redacted Diff or Preview, raw arguments, and result. The <strong>Summary | Details</strong> control in the Approvals toolbar changes the titles in both Pending and History and chooses the next modal's default for this browser. Switching inside an open approval is temporary and does not change that preference. Summary is the safe fallback when browser storage is unavailable or contains an old value.</p>
         <p>Immediate control approvals explain their exact target contract in <strong>Summary</strong> and show the resolved entity list in <strong>Details</strong>. If selected membership, registry identity or permission changes before execution, Phoenix refuses the action and the agent must submit a new request. Older pending control requests without that binding also need a new request. A later failure in an action using several Home Assistant services can leave earlier effects applied; inspect the result before retrying.</p>
         <p>Automation and script approvals review the configuration being saved. Their summaries explain that Home Assistant resolves future targets when they run, including changing groups, areas, devices, floors, labels and domains. Later native execution runs outside Phoenix permission and MESA checks. Active radio topology scans similarly declare that accessible-device membership may change before the scan runs.</p>
@@ -98,6 +128,11 @@
         <p>The pending queue and History both use the same plain-language title as Summary, so YAML paths and dashboard coordinates stay in Details. Automations, scripts, scenes, and helpers use their saved names rather than showing only storage IDs. Older deletion records that did not save a friendly name say only <strong>the selected script</strong>, helper, scene, or automation instead of presenting an internal storage slug as a name. Device removal likewise uses the saved device and integration names; opaque registry and config-entry IDs remain in Details. History follows that proposal with the decision and its time, then the outcome. It distinguishes a completed action from one that was rejected, expired, cancelled, failed during execution, or was interrupted and may already have applied. Known executor errors have specific localized wording. An unknown diagnostic uses a localized Summary fallback instead of leaking technical English; its complete original result remains unchanged in Details.</p>
         <p>The same approval appears here, in Agent Chat, and as a Home Assistant notification. Acting on it in one takes the buttons away in the other two immediately. While it runs it reads <strong>Being processed</strong> and offers nothing, and becomes actionable again if the action fails.</p>
         <p>A dashboard layout change also offers a <strong>Diff | Preview</strong> switch in the diff's toolbar. Preview draws the proposed cards with Home Assistant's own card renderer and live entity states, in your active theme, so they look as they would on the dashboard. A card change previews only that card; a whole-layout change previews every view. The cards are display-only, so nothing you click in a preview can actuate a device. The switch appears once Home Assistant has loaded its card renderer in this browser session; if it is missing, open any dashboard once and return.</p>
+
+        <figure class="screenshot">
+          <img src="assets/approval-dashboard-card-preview.png" alt="An approval to add a tile card to a dashboard, switched to Preview to show the card as it would appear" loading="lazy" />
+          <figcaption>Preview draws the proposed card with Home Assistant's own renderer and the live state of the entity.</figcaption>
+        </figure>
         <p>Drawing a card runs its code in your browser with your Home Assistant session, including any JavaScript templates a custom card evaluates from its configuration. The Diff | Preview choice is remembered, so switch to Diff before opening a proposal you do not trust.</p>
         <p>An Energy dashboard change offers the same <strong>Diff | Preview</strong> switch, but it renders the Energy configuration itself: your sources and individual devices as a list, with added rows marked, removed rows marked, and a change shown as the old value directly above the new one. Energy has no card layout to draw, and Home Assistant's own energy cards read the saved preferences rather than the pending ones, so a card here would show your current dashboard instead of the change you are approving. Rows pair by statistic, so renaming a device reads as one substitution rather than an unrelated removal and addition.</p>
         <p>Every before/after diff, on this tab and on Changes, also has a <strong>code editor</strong> button in the same toolbar. It hands both panes to Home Assistant's own editor, the one you already see in the ESPHome add-on, with syntax colours and line numbers, which makes a long device YAML far easier to read than a plain monospace block. The trade is stated in the toolbar when you switch: the code view cannot tint changed lines, so use the line diff when the question is what changed and the code view when the question is what the file says. The choice is remembered separately from the side-by-side and stacked setting.</p>
@@ -138,7 +173,7 @@ mode: queued</code></pre>
         </details>
 
         <figure class="screenshot">
-          <img src="assets/access-key-mesa-confirm.png" alt="A pending MESA confirmation approval with its diff and approve or reject actions" loading="lazy" />
+          <img src="assets/approval-mesa-confirm.png" alt="A pending MESA confirmation approval with its diff and approve or reject actions" loading="lazy" />
           <figcaption>A pending approval awaiting review.</figcaption>
         </figure>
 
@@ -148,10 +183,25 @@ mode: queued</code></pre>
         <h2 id="audit-tab">Audit Log</h2>
         <p>The Audit Log tab is a filterable view of the request log: request ID, time, access key, method, resource, outcome, and source. Source shows an IP address for network requests and a friendly surface name for requests made inside Phoenix MCP: <strong>Agent Chat</strong>, <strong>Assist Tool Provider</strong>, <strong>Voice Agent</strong>, or <strong>AI Task</strong>. Audited administrator mutations appear under the acting HA administrator; restores may also retain the original access key as provenance. Filter by access key, outcome, or source to trace recorded actions. With an entry open, use <strong>Up Arrow</strong> and <strong>Down Arrow</strong> to scan the previous and next items in the current sorted list. The log's retention and storage are described in <a href="operations.html#audit-log">Operations</a>.</p>
 
+        <figure class="screenshot">
+          <img src="assets/audit-log.png" alt="The Audit Log tab filtered to one access key, listing outcome, time, method, resource and source" loading="lazy" />
+          <figcaption>The Audit Log, filtered to one access key. The MESA badge marks requests that MESA evaluated.</figcaption>
+        </figure>
+
         <h2 id="changes-tab">Changes</h2>
         <p>The Changes tab is the configuration history for everything an agent builds. It opens on a feed of recent create, edit, and delete actions across automations, scripts, scenes, helpers, blueprints, dashboards, entity-registry edits, ESPHome device YAML, the raw <code>configuration.yaml</code>, and scoped file writes, and refreshes live as new changes land. Rows carry a one-line description of what actually changed where the resource name alone would not say: a dashboard card operation shows the card and its position ("added custom:apexcharts-card (view 0, section 6)"), a whole-layout or raw file write shows the card-count or size movement, a one-key <code>configuration.yaml</code> edit names the key, and an entity edit lists the changed fields.</p>
 
+        <figure class="screenshot">
+          <img src="assets/changes-list.png" alt="The Changes tab listing a scene and a helper created by an access key" loading="lazy" />
+          <figcaption>The Changes feed, filtered to one access key.</figcaption>
+        </figure>
+
         <p>Selecting a row opens that version's before/after diff directly, rendered as YAML for structured resources or as a line-highlighted text diff for raw <code>configuration.yaml</code> and file writes, with the resource's other versions in a timeline beside it so you can step through its history.</p>
+
+        <figure class="screenshot">
+          <img src="assets/change-detail.png" alt="A change opened to show Before and After YAML with the Restore this configuration button" loading="lazy" />
+          <figcaption>A change opened to its before/after diff, with the resource's other versions on the left and a restore button.</figcaption>
+        </figure>
 
         <p>Each pane has its own <strong>Restore this configuration</strong> button, so you re-apply the Before (to undo a bad edit) or the After (to re-apply the change) explicitly. A button is hidden when restoring it would do nothing: an empty pane, like the Before of a freshly created resource, or the After of the resource's latest version, which is already its current config. A raw snapshot too large to have been stored shows a notice and cannot be restored.</p>
 

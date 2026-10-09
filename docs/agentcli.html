@@ -47,6 +47,11 @@
         <h2>Before you start: add a provider account</h2>
         <p>Agent Chat needs an AI provider account. Add one hosted provider or a local Ollama server; you can add more accounts later.</p>
         <p><strong>Models update themselves.</strong> By default an account is set to <em>Automatic</em>: Phoenix reads the provider's own model list periodically (by default every 24 hours; you can change the period or turn the check off in the <strong>LLM providers</strong> card, and Refresh always works) and uses its newest suitable model, so a provider releasing or retiring models needs no Phoenix update. You can still pick a specific model. If a model you picked later disappears from the provider's list, Phoenix switches that account to the newest model of the same family, or the provider's best model when that family has none left, and says so on the account card; a model you typed in yourself, or one the provider never listed, is never replaced. Voice, AI Task and Agent Chat all follow the account's current model. Decision providers always use an exact model and never switch.</p>
+
+        <figure class="screenshot">
+          <img src="assets/settings-llm-providers.png" style="width: 60%; margin: 0 auto;" alt="The LLM providers card in Settings with three provider accounts and their default models" loading="lazy" />
+          <figcaption>The LLM providers card in Settings: add, edit, refresh, check or remove each account.</figcaption>
+        </figure>
         <div class="tool-toolbar provider-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -398,7 +403,7 @@
         </ol>
         <p>With <strong>Show throughout Home Assistant</strong> enabled, press <strong>Shift+A</strong> from any Home Assistant page to show or hide the window. Enable keyboard shortcuts in your Home Assistant profile first.</p>
             <figure class="screenshot">
-              <img src="assets/agent-chat.png" style="width: 50%; margin: 0 auto;" alt="Agent Chat lets you ask your provider to do anything you need" loading="lazy" />
+              <img src="assets/agent-chat-answer.png" style="width: 50%; margin: 0 auto;" alt="Agent Chat lets you ask your provider to do anything you need" loading="lazy" />
               <figcaption>Ask your provider to do anything you need, inside this panel.</figcaption>
             </figure>
 
@@ -447,6 +452,11 @@
         <p>If an action needs reconciliation, further writes using that access key are blocked, including through other MCP clients. Scoped MCP reads remain available, but new Agent Chat, Voice Agent, and AI Task turns wait for reconciliation. Open <strong>Needs attention</strong> at the top of the Phoenix panel, check the action and its approval result in Home Assistant, then select <strong>I checked the action outcome</strong> and <strong>Mark reviewed</strong>. Ordinary failures appear in the current interaction. Uncertain actions stay in Phoenix until reviewed, without creating Home Assistant Repairs notifications. Review permits new requests without repeating or undoing the action. Recovery records survive restarts; <code>get_approval_status</code> without an ID lists your access key's records. Check pending approvals before submitting an action again.</p>
 
         <p>The <strong>Agent Chat</strong> card in Settings has three server-side conversation preferences. <strong>Conversation style</strong> chooses Direct, Warm, Calm guide, Lively, or Technical. <strong>Detail</strong> chooses Concise, Balanced, or Detailed. These choices shape only how the answer is written. They do not change the tools the agent can use, its arguments, verification, permissions, approvals, MESA checks, safety decisions, or what counts as completed work. A tone or detail request in your message takes priority for that reply.</p>
+
+        <figure class="screenshot">
+          <img src="assets/settings-agent-chat.png" style="width: 60%; margin: 0 auto;" alt="The Agent Chat card in Settings with command handling, history limit, steps before check-in, style and detail" loading="lazy" />
+          <figcaption>The Agent Chat card in Settings.</figcaption>
+        </figure>
         <p><strong>Home-focused</strong> limits the assistant to requests directly about your own Home Assistant installation: its devices, entities, areas, automations, dashboards, integrations, configuration, and state. Any other request receives a brief refusal, and there is no way to override it from the chat. If a request might be about your installation but is unclear, the assistant asks a short clarifying question instead of answering a general one. Turn the setting off to allow other topics. The restriction is enforced by instructing the model, so it is a focus preference rather than a security control; it does not change permissions. Phoenix does not call Home Assistant tools merely to decide whether a request is relevant.</p>
         <p>Changing any of these settings affects the next model turn, including a conversation that already has history. A turn already running finishes with the settings it started with. You do not need to clear the conversation, and the chat window deliberately shows no persistent mode badge.</p>
 
@@ -456,7 +466,7 @@
         <h2 id="approvals">Approvals in the chat</h2>
         <p>When the agent tries to do something that a capability has set to <code>confirm</code>, the action does not just run. A card appears in the chat with <strong>Review&hellip;</strong>, <strong>Approve</strong>, and <strong>Reject</strong> buttons. Because you are the administrator viewing the panel, you can decide right there:</p>
             <figure class="screenshot">
-              <img src="assets/agent-chat-review.png" style="width: 50%; margin: 0 auto;" alt="Agent Chat lets you approve actions inside the chat window" loading="lazy" />
+              <img src="assets/agent-chat-approval.png" style="width: 50%; margin: 0 auto;" alt="Agent Chat lets you approve actions inside the chat window" loading="lazy" />
               <figcaption>You can approve actions directly in the panel, or review the details first.</figcaption>
             </figure>
         <ul>
@@ -479,6 +489,11 @@
           <li><strong>Temperature</strong>: shown only where it applies, DeepSeek (when thinking is off), standard GPT models, Grok (when thinking is off), Kimi's legacy <code>moonshot-v1</code> models, Mistral AI, OpenRouter, NVIDIA NIM, OpenCode Zen, Tencent Cloud TokenHub, Groq, Together, Cerebras, Fireworks, Z.ai, Qwen, and Xiaomi MiMo (when thinking is off), and Ollama (local and cloud). It is not shown for Claude, Gemini, Meta, MiniMax, or the Kimi K2/K3 models, whose providers either reject it outright or recommend leaving it at the default for their reasoning models.</li>
         </ul>
         <p>The same menu has a <strong>Clear chat history</strong> action, which empties the conversation and starts fresh without closing the window or changing your access key, provider, or model, and a <strong>Close</strong> button to close the popover.</p>
+
+        <figure class="screenshot">
+          <img src="assets/agent-chat-options.png" style="width: 50%; margin: 0 auto;" alt="The Agent Chat options popover with Thinking, verbose output, timestamps, footer and Clear chat history" loading="lazy" />
+          <figcaption>The options popover. Which controls appear depends on the selected provider and model.</figcaption>
+        </figure>
         <p>You can do the same thing from the message box: type <strong><code>/clear</code></strong> and press Enter to start a new conversation. The command is handled locally, it is never sent to the model and does not appear in the transcript, and it does exactly what <strong>Clear chat history</strong> does.</p>
 
         <h2 id="scrollback">Chat history limit</h2>

@@ -106,12 +106,12 @@
         <p>The archive carries a <code>format_version</code>, and an export always writes the current one. Import accepts the current format and the one before it, so moving a profile set forward is always safe. Moving one <em>backward</em> is not: an older MESA-aware server refuses a newer archive outright rather than quietly dropping the parts it does not understand, which is the intended behaviour but means an export taken here cannot be read by a server running an older MESA. Upgrade the receiving side first.</p>
 
         <figure class="screenshot">
-          <img src="assets/mesa-panel.png" alt="The MESA tab listing entity profiles grouped by control mode" loading="lazy" />
+          <img src="assets/mesa-profiles.png" alt="The MESA tab listing entity profiles grouped by control mode" loading="lazy" />
           <figcaption>The MESA tab, listing profiles by control mode.</figcaption>
         </figure>
 
         <figure class="screenshot">
-          <img src="assets/mesa-edit.png" alt="The MESA profile editor with control mode and canonical tags" loading="lazy" />
+          <img src="assets/mesa-profile-editor.png" alt="The MESA profile editor with control mode and canonical tags" loading="lazy" />
           <figcaption>The profile editor, with control mode and canonical tags.</figcaption>
         </figure>
 
@@ -122,6 +122,11 @@
           <div class="kv-row"><dt>Unprotected risky device</dt><dd>A lock, alarm panel, garage-class cover, valve, siren, water heater, or firmware-update entity with no MESA coverage at any level. When five or more in one domain are uncovered, Phoenix MCP suggests a single domain-level profile instead of a wall of rows.</dd></div>
         </dl>
         <p>Each row offers <strong>Apply</strong> (create the profile with the suggested mode in one click; the reason is preserved on the profile as its <code>control_reason</code>), <strong>Review</strong> (open the editor pre-set to the suggested mode, to adjust before saving), and <strong>Dismiss</strong> (persisted, restorable). Locks and alarm panels suggest <code>prohibited</code>, matching the built-in baseline, so applying is never a loosening under enforced mode; everything else suggests <code>confirm</code>. Nothing is ever applied automatically, and domains your deployment defaults already restrict are not suggested.</p>
+
+        <figure class="screenshot">
+          <img src="assets/mesa-suggested-profiles.png" alt="The Suggested profiles section listing automations with their blast radius and the Apply, Review and Dismiss actions" loading="lazy" />
+          <figcaption>Suggested profiles: each row shows why it was flagged and offers Apply, Review or Dismiss.</figcaption>
+        </figure>
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.4" fill="currentColor"/></svg>
           <div class="callout-body"><p class="callout-title">The scan is a floor, not a guarantee</p><p>Blast radii come from the automation's declared targets. An automation that computes its targets from a template is invisible to this analysis, so an empty suggestion list does not mean nothing is risky. Suggestions catch the common cases; they do not replace reviewing what your automations can reach.</p></div>
@@ -132,7 +137,7 @@
         <p>The setting lives under <strong>Settings &middot; Experimental</strong>, is admin-only, and is off by default. It is a convenience for the admin's own browser and is independent of the <a href="security.html">kill switch</a>; it never opens any agent-facing surface. It is available at the supported Home Assistant minimum, and toggling it may need a full Home Assistant page reload to take effect.</p>
 
         <figure class="screenshot">
-          <img src="assets/mesa-inject.png" alt="Home Assistant's native entity list with a Phoenix MCP (+) / MESA control added to each row" loading="lazy" />
+          <img src="assets/mesa-native-list.png" alt="Home Assistant's native entity list with a Phoenix MCP (+) / MESA control added to each row" loading="lazy" />
           <figcaption>The injected (+) / MESA control on Home Assistant's native config rows.</figcaption>
         </figure>
 
