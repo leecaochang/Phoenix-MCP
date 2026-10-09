@@ -36,6 +36,7 @@ from ..helpers import (
     content_hash,
     diff_summary_fields as _summary,
     effective_cap,
+    redact_inaccessible_entity_ids_in_text,
     str_arg,
     version_summary_fields as _version_summary,
 )
@@ -52,7 +53,7 @@ from ..tool_common import (
 )
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
-from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
+from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, validate_ws_payload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -290,10 +291,9 @@ _SOURCE_TYPES = ("grid", "solar", "battery", "gas", "water")
 # The price fields come in two shapes and both are offered, because a tariff is
 # either fixed or it is not: number_* is a constant, entity_energy_price* names a
 # sensor publishing the current rate (time-of-use), and stat_cost / stat_compensation
-# name an already-existing cost statistic instead of letting HA derive one. HA
-# refuses a price on a source whose meter is an EXTERNAL statistic
-# (_reject_price_for_external_stat), so that combination fails at save with its own
-# message rather than being second-guessed here.
+# name an already-existing cost statistic instead of letting HA derive one. Which
+# combinations are valid (one price shape, no price on an external statistic, a
+# grid keeping a meter) is Core's save schema's call, checked by _plan_save.
 _SOURCE_FIELDS: dict[str, tuple[str, ...]] = {
     "grid": (
         "stat_energy_from", "stat_energy_to",
@@ -309,16 +309,6 @@ _SOURCE_FIELDS: dict[str, tuple[str, ...]] = {
 # Every writable field across all types, so an unknown-field refusal can name what
 # the caller sent instead of only what the type accepts. Derived, never a copy.
 _ALL_SOURCE_FIELDS = frozenset(f for fields in _SOURCE_FIELDS.values() for f in fields)
-
-# What HA's schema marks vol.Required, so a CREATE that omits one would be
-# refused by the dispatch schema with a message about a key the caller never saw.
-_SOURCE_REQUIRED: dict[str, tuple[str, ...]] = {
-    "grid": (),  # only cost_adjustment_day, which _new_source supplies
-    "solar": ("stat_energy_from",),
-    "battery": ("stat_energy_from", "stat_energy_to"),
-    "gas": ("stat_energy_from",),
-    "water": ("stat_energy_from",),
-}
 
 # Fields naming a statistic or an entity rather than holding a number. Only these
 # are checked against the access key's scope, and only when being WRITTEN.
@@ -401,64 +391,6 @@ def _replace_everywhere(prefs: dict, old: str, new: str) -> int:
                         entry[field] = new
                         changed += 1
     return changed
-
-
-# HA's per-source CROSS-FIELD rules, mirrored from the validators wired onto
-# *_SOURCE_SCHEMA in components/energy/data.py. Each is (import-side, export-side)
-# key groups: the meter, its price-entity, its price-number, and its cost stat.
-# Only grid has an export side; gas and water carry the import group alone, and
-# solar/battery have no cost fields at all.
-#
-# WHY THESE ARE MIRRORED rather than left to HA: per-field validation cannot see
-# them, so a call that sets both a price entity AND a price number would pass every
-# other check, become a pending approval, and only fail at save after an admin
-# approved it. Validating before the approval is created avoids that.
-# HA-VERSION-SENSITIVE: re-verify the validators on upgrades.
-_PRICE_GROUPS: dict[str, tuple[tuple[str, str, str, str], ...]] = {
-    "grid": (
-        ("stat_energy_from", "entity_energy_price", "number_energy_price", "stat_cost"),
-        ("stat_energy_to", "entity_energy_price_export", "number_energy_price_export", "stat_compensation"),
-    ),
-    "gas": (("stat_energy_from", "entity_energy_price", "number_energy_price", "stat_cost"),),
-    "water": (("stat_energy_from", "entity_energy_price", "number_energy_price", "stat_cost"),),
-}
-
-
-def _check_source_cross_fields(source: dict, source_type: str) -> None:
-    """Refuse a source HA's own schema would reject for a cross-field reason.
-
-    Called on the MERGED source (existing values plus the caller's), because every
-    rule here reads more than one field and an update supplies only some of them.
-    Raises _OpError with HA's own wording, so the message a caller sees pre-gate is
-    the message they would have seen at save.
-    """
-    for meter, entity_price, number_price, cost_stat in _PRICE_GROUPS.get(source_type, ()):
-        side = "export" if meter == "stat_energy_to" else "import"
-        if source.get(entity_price) is not None and source.get(number_price) is not None:
-            raise _OpError(
-                f"Define either an entity or a fixed number for {side} price, not both "
-                f"({entity_price} and {number_price}). Set the one you do not want to null."
-            )
-        stat_id = source.get(meter)
-        # A price cannot be derived for an EXTERNAL statistic; HA wants a ready-made
-        # cost statistic instead, and skips this rule when one is already set.
-        if (
-            stat_id is not None
-            and not valid_entity_id(stat_id)
-            and source.get(cost_stat) is None
-            and (source.get(entity_price) is not None or source.get(number_price) is not None)
-        ):
-            raise _OpError(
-                f"{meter} is an external statistic, so a price cannot be applied to it. "
-                f"Set {cost_stat} to an existing cost statistic instead."
-            )
-    if source_type == "grid" and not any(
-        source.get(k) is not None for k in ("stat_energy_from", "stat_energy_to", "stat_rate", "power_config")
-    ):
-        raise _OpError(
-            "A grid source must keep at least one of an import meter, an export meter, "
-            "or a power sensor."
-        )
 
 
 def _new_source(source_type: str) -> dict:
@@ -639,22 +571,13 @@ def _apply_op(prefs: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAs
         (s for s in sources if isinstance(s, dict) and s.get("type") == source_type), None
     )
     if existing is None:
-        missing = [f for f in _SOURCE_REQUIRED[source_type] if f not in fields]
-        if missing:
-            raise _OpError(
-                f"There is no {source_type} source yet, and creating one requires "
-                f"{', '.join(missing)}."
-            )
         source = _new_source(source_type)
         source.update(fields)
-        _check_source_cross_fields(source, source_type)
         sources.append(source)
         action = "create"
     else:
-        # Checked on the MERGED result, not the caller's fields alone: an update
-        # supplying only a price has to be judged against the meter already there.
-        merged = {**existing, **fields}
-        _check_source_cross_fields(merged, source_type)
+        # The merged source, not the caller's fields alone, is what Core's schema
+        # judges: an update supplying only a price meets the meter already there.
         existing.update(fields)
         action = "update"
     return new, {
@@ -699,6 +622,36 @@ def _verify_structure(before: dict, after: dict, op: str) -> None:
             f"({sources_before} sources / {devices_before} devices before, "
             f"{sources_after} / {devices_after} after)."
         )
+
+
+def _core_refusal(err: Exception, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """Core's reason for refusing an Energy save, without entity ids the key cannot read."""
+    return redact_inaccessible_entity_ids_in_text(
+        f"Home Assistant refuses this Energy configuration: {err}", access_key, hass)
+
+
+def _plan_save(
+    before: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> tuple[dict, dict, dict]:
+    """Apply one operation and check it against Core's own save schema.
+
+    Returns (summary, payload, expected): the changed top-level keys to send, and
+    the preferences Core will hold after the save, as its registered
+    energy/save_prefs schema normalizes them (grid defaults filled, numbers
+    coerced). Core's schema is the only validator of field combinations, so an
+    approval is never created for a save Core would refuse. Raises _OpError.
+    """
+    after, summary = _apply_op(before, args, access_key, hass)
+    _verify_structure(before, after, summary["op"])
+    payload = {key: after[key] for key in _PREFS_KEYS if key in after and after.get(key) != before.get(key)}
+    if not payload:
+        raise _OpError("That change would leave the Energy configuration unchanged.")
+    try:
+        normalized = validate_ws_payload(hass, "energy/save_prefs", payload)
+    except WsCommandNotDispatchedError as err:
+        raise _OpError(_core_refusal(err, access_key, hass)) from None
+    # EnergyManager.async_update replaces exactly the keys it receives.
+    return summary, payload, {**before, **normalized}
 
 
 async def _read_prefs_raw(hass: HomeAssistant) -> dict:
@@ -787,7 +740,7 @@ async def _build_diff_edit_energy_config(args: dict, access_key: AccessKeyRecord
     }
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, access_key, hass)
+        summary, _payload, after = _plan_save(before, args, access_key, hass)
         diff.update(_summary(f"edit_energy_config.{summary['op']}", **{
             k: v for k, v in summary.items() if k != "op"
         }))
@@ -825,8 +778,7 @@ async def _tool_edit_energy_config(
         return _tool_error(refusal), "invalid_request", tool
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, access_key, hass)
-        _verify_structure(before, after, summary["op"])
+        _plan_save(before, args, access_key, hass)
     except _OpError as err:
         return _tool_error(str(err)), "invalid_request", tool
     except WsDispatchError:
@@ -852,8 +804,7 @@ async def _execute_edit_energy_config(
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, access_key, hass)
-        _verify_structure(before, after, summary["op"])
+        summary, payload, after = _plan_save(before, args, access_key, hass)
     except _OpError as err:
         return _tool_error(str(err)), "invalid_request", tool
     except WsDispatchError:
@@ -876,17 +827,19 @@ async def _execute_edit_energy_config(
                 if current != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("Energy preferences changed while preparing the safety copy; nothing was dispatched."), "invalid_request", tool
-                # Send ONLY top-level keys changed by the addressed operation.
-                payload = {key: after[key] for key in _PREFS_KEYS if key in after and after.get(key) != before.get(key)}
-                if not payload:
-                    await recovery.mark(rid, "not_applied")
-                    return _tool_error("That change would leave the Energy configuration unchanged."), "invalid_request", tool
+                # Send ONLY top-level keys changed by the addressed operation;
+                # `after` is what Core's schema makes of them.
                 try:
                     await async_ws_command(hass, "energy/save_prefs", payload)
                 except WsDispatchError as err:
                     _LOGGER.exception("edit_energy_config: energy/save_prefs failed")
-                    await recovery.mark(rid, "not_applied" if isinstance(err, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
-                    return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
+                    refused = isinstance(err, WsCommandNotDispatchedError)
+                    await recovery.mark(rid, "not_applied" if refused else "unknown", error="save_rejected")
+                    if refused:
+                        return _tool_error(_core_refusal(err, access_key, hass)), "invalid_request", tool
+                    return _tool_error(redact_inaccessible_entity_ids_in_text(
+                        f"The Energy save outcome is unknown: {err} Inspect configuration recovery before retrying.",
+                        access_key, hass)), "invalid_request", tool
                 try:
                     observed = await _read_prefs_raw(hass)
                     if observed == after:
@@ -1015,7 +968,12 @@ async def restore_energy_configuration(snapshot: dict[str, Any], access_key: Acc
         async with recovery.resource(resource):
             before = await _read_prefs_raw(hass)
             before_snapshot = _energy_recovery_snapshot(before)
-            rid = await recovery.begin(resource, tool, access_key.id, before_snapshot, source=snapshot, expected=snapshot)
+            try:
+                expected = {**before, **validate_ws_payload(hass, "energy/save_prefs", wanted)}
+            except WsCommandNotDispatchedError as err:
+                return _tool_error(_core_refusal(err, access_key, hass)), "invalid_request", tool
+            rid = await recovery.begin(resource, tool, access_key.id, before_snapshot, source=snapshot,
+                                       expected=_energy_recovery_snapshot(expected))
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()
@@ -1024,7 +982,7 @@ async def restore_energy_configuration(snapshot: dict[str, Any], access_key: Acc
                     return _tool_error("Energy preferences changed before restore dispatch; nothing was applied."), "invalid_request", tool
                 await async_ws_command(hass, "energy/save_prefs", wanted)
                 observed = await _read_prefs_raw(hass)
-                if observed != wanted:
+                if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
                     return _tool_success(json.dumps({
                         "status": "partial", "recovery_id": rid,
@@ -1081,16 +1039,19 @@ async def async_restore_energy_prefs(
     try:
         async with recovery.resource(resource):
             before = await _read_prefs_raw(hass)
+            # The stored form Core's schema makes of the snapshot (an older version
+            # may predate its defaults), checked before anything is recorded.
+            expected = {**before, **validate_ws_payload(hass, "energy/save_prefs", payload)}
             # A durable pre-image is taken before the wholesale save, so even an
             # administrator's rollback can itself be rolled back.
             rid = await recovery.begin(resource, "energy_version_restore", access_key.id,
                                        _energy_recovery_snapshot(before),
-                                       expected=_energy_recovery_snapshot({**before, **payload}))
+                                       expected=_energy_recovery_snapshot(expected))
             try:
                 await recovery.mark(rid, "dispatching")
                 await async_ws_command(hass, "energy/save_prefs", payload)
                 observed = await _read_prefs_raw(hass)
-                if observed != {**before, **payload}:
+                if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
                 else:
                     await recovery.mark(rid, "verified", observed_hash=content_hash(observed))

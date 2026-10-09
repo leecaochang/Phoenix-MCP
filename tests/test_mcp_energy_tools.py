@@ -43,6 +43,18 @@ from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS, WsDis
 _WS = "custom_components.phoenix_mcp.tools.energy.async_ws_command"
 
 
+@pytest.fixture(autouse=True)
+def core_energy_commands(hass: HomeAssistant) -> None:
+    """Register Core's own Energy commands, whose save schema checks every planned write.
+
+    The patched dispatcher still fakes storage; the schema each plan is judged by
+    is the installed Core's, never a copy.
+    """
+    from homeassistant.components.energy import websocket_api as energy_ws
+
+    energy_ws.async_setup(hass)
+
+
 def _data() -> PhoenixData:
     return PhoenixData(
         store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore(),
@@ -67,12 +79,16 @@ def _text(content: dict) -> str:
     return content["content"][0]["text"]
 
 
+# The stored form Core returns: supported HA migrates the legacy flow_from/flow_to
+# grid on load and its save schema refuses that shape.
 PREFS = {
     "energy_sources": [
         {
             "type": "grid",
-            "flow_from": [{"stat_energy_from": "sensor.grid_import", "stat_cost": None}],
-            "flow_to": [{"stat_energy_to": "sensor.grid_export"}],
+            "stat_energy_from": "sensor.grid_import", "stat_energy_to": "sensor.grid_export",
+            "stat_cost": None, "entity_energy_price": None, "number_energy_price": None,
+            "stat_compensation": None, "entity_energy_price_export": None,
+            "number_energy_price_export": None, "cost_adjustment_day": 0.0,
         },
         {"type": "solar", "stat_energy_from": "sensor.solar_production"},
     ],

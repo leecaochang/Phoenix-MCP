@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from calendar import monthrange
 from dataclasses import dataclass
+import logging
 from datetime import datetime, timedelta
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from homeassistant.util import dt as dt_util
 
 from .helpers import parse_time_param
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -268,3 +271,66 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
     requested_end = ceil_statistic_period(window.end, period)
     page_end = min(add_statistic_periods(page_start, period, effective_limit), requested_end)
     return page_start, page_end, effective_limit, page_end < requested_end
+
+
+def read_statistics_page(
+    hass: Any, start: datetime, end: datetime, statistic_id: str,
+    period: Literal["5minute", "day", "hour", "week", "month", "year"], types: set[Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[str]]:
+    """Read one statistics page with Core's unit label. Recorder executor only.
+
+    Returns (rows, units, warnings). Core converts values to the unit its own
+    get_display_unit reports, so that is the label; it comes from Recorder
+    metadata rather than the rows, so an empty page is labelled too, and None
+    means no metadata exists. Core 2026.7 to 2026.10 also passes last_reset
+    timestamps through that value converter. When a conversion happened, resets
+    are re-read with every unit class pinned to the stored unit, where Core
+    converts nothing; a reset that cannot be re-read is omitted, never returned
+    converted.
+    """
+    from homeassistant.components.recorder import statistics as recorder_stats
+
+    result = recorder_stats.statistics_during_period(hass, start, end, {statistic_id}, period, None, types)
+    rows = [dict(row) for row in result.get(statistic_id, [])]
+    try:
+        metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
+    except Exception:  # noqa: BLE001 - the values stay usable without their label
+        _LOGGER.warning("Recorder metadata for %s could not be read", statistic_id, exc_info=True)
+        dropped = [row.pop("last_reset", None) for row in rows]
+        dropped_any = any(value is not None for value in dropped)
+        return rows, None, [
+            "The unit could not be read from Recorder metadata, so these values are unlabelled."
+            + (" last_reset was omitted because it may carry a unit conversion." if dropped_any else "")
+        ]
+    if metadata is None:
+        return rows, None, []
+    stored = metadata[1].get("unit_of_measurement")
+    unit_class = metadata[1].get("unit_class")
+    display = recorder_stats.get_display_unit(hass, statistic_id, unit_class, stored)
+    units = {
+        "display_unit_of_measurement": display,
+        "statistics_unit_of_measurement": stored,
+        "unit_class": unit_class,
+    }
+    if display == stored or not any(row.get("last_reset") is not None for row in rows):
+        return rows, units, []
+    # A unitless stored unit is None, which Core's converters accept as a unit.
+    same_unit = cast(dict[str, str], {
+        converter.UNIT_CLASS: stored for converter in recorder_stats.UNIT_CLASS_TO_UNIT_CONVERTER.values()})
+    try:
+        reset_rows = recorder_stats.statistics_during_period(
+            hass, start, end, {statistic_id}, period, same_unit, {"last_reset"}).get(statistic_id, [])
+        resets: dict[Any, Any] = {row["start"]: row.get("last_reset") for row in reset_rows}
+    except Exception:  # noqa: BLE001 - omit rather than return converted timestamps
+        _LOGGER.warning("Unconverted last_reset values for %s could not be read", statistic_id, exc_info=True)
+        resets = {}
+    omitted = False
+    for row in rows:
+        if "last_reset" not in row:
+            continue
+        if row.get("start") in resets:
+            row["last_reset"] = resets[row["start"]]
+        else:
+            omitted |= row.pop("last_reset") is not None
+    warnings = ["last_reset was omitted from some rows because its unconverted value could not be read."] if omitted else []
+    return rows, units, warnings

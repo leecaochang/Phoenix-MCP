@@ -266,7 +266,14 @@ async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
         await d.config_recovery.begin("dashboard_layout:lovelace", "retry", t.id, {})
 
 
+def _core_energy_commands(hass) -> None:
+    """Register Core's own Energy commands; their save schema checks each Energy plan."""
+    from homeassistant.components.energy import websocket_api as energy_ws
+    energy_ws.async_setup(hass)
+
+
 async def test_energy_partial_readback_returns_observed_state(hass):
+    _core_energy_commands(hass)
     d, t = runtime(), access_key(cap_energy_write="allow")
     before = {"energy_sources": [], "device_consumption": [{"stat_consumption": "sensor.old", "name": "Old"}], "device_consumption_water": []}
     with patch("custom_components.phoenix_mcp.tools.energy._read_prefs_raw", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", AsyncMock(return_value=None)):
@@ -401,6 +408,7 @@ async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, fa
         path.write_text("blueprint:\n  name: Current\n  domain: automation\ntriggers: []\nactions: []\n")
         snapshot = _blueprint_recovery_snapshot("automation", "test/admin.yaml", "blueprint:\n  name: Restored\n  domain: automation\ntriggers: []\nactions: []\n")
     elif family == "energy_preferences":
+        _core_energy_commands(hass)
         snapshot = _energy_recovery_snapshot(current_prefs)
         current_prefs["device_consumption"] = [{"stat_consumption": "external:meter"}]
     else:
@@ -451,6 +459,7 @@ async def test_ambiguous_ws_failure_preserves_family_barrier(hass, family):
         raise WsDispatchError("Command timed out after dispatch")
 
     if family == "energy":
+        _core_energy_commands(hass)
         t = access_key(cap_energy_write="allow")
         prefs = {"energy_sources": [], "device_consumption": [{"name": "Old", "stat_consumption": "external:old"}], "device_consumption_water": []}
         resource = "energy:preferences"
@@ -610,6 +619,7 @@ async def test_admin_energy_version_restore_keeps_a_durable_pre_image(hass):
     from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
     from custom_components.phoenix_mcp.tools.energy import async_restore_energy_prefs
     t, d = access_key(cap_energy_write="allow"), runtime()
+    _core_energy_commands(hass)
     original = {"energy_sources": [], "device_consumption": [{"stat_consumption": "sensor.kettle_energy"}]}
     prefs = json.loads(json.dumps(original))
 

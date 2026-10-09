@@ -86,6 +86,7 @@ from .recorder_queries import (
     statistic_page,
     statistic_timestamp,
     parse_recorder_window,
+    read_statistics_page,
 )
 # Shared tool primitives live in tool_common so per-domain tool modules do not
 # import this transport module. Per-domain tools live under tools/; this module
@@ -1073,7 +1074,6 @@ async def _tool_get_statistics(
 
     try:
         from homeassistant.components.recorder import get_instance
-        from homeassistant.components.recorder import statistics as recorder_stats
 
         instance = get_instance(hass)
         keep_days = instance.keep_days
@@ -1081,37 +1081,34 @@ async def _tool_get_statistics(
         if period in ("day", "week", "month", "year"):
             query_end -= timedelta.resolution
         fn = functools.partial(
-            recorder_stats.statistics_during_period,
-            hass,
-            page_start,
-            query_end,
-            {entity_id},
-            period,
-            None,
-            type_set,
+            read_statistics_page, hass, page_start, query_end, entity_id, period, type_set,
         )
-        result = await instance.async_add_executor_job(fn)
+        raw_rows, units, unit_warnings = await instance.async_add_executor_job(fn)
     except Exception:
         _LOGGER.warning("MCP statistics call failed for entity %s", entity_id, exc_info=True)
-        return _tool_error("Statistics call failed."), "denied", entity_id
+        return _tool_error("Statistics call failed."), "invalid_request", entity_id
 
     statistics: list[dict[str, Any]] = []
-    for raw_row in result.get(entity_id, []):
+    for raw_row in raw_rows:
         stamp = statistic_timestamp(raw_row)
         if stamp is None or not page_start <= stamp < page_end:
             continue
         row = dict(raw_row)
         row["start"] = iso_utc(stamp)
-        last_reset = row.get("last_reset")
-        if isinstance(last_reset, datetime):
-            row["last_reset"] = iso_utc(last_reset)
+        # Core returns bucket ends and resets as epoch seconds; render them like start.
+        for key in ("end", "last_reset"):
+            value = row.get(key)
+            if isinstance(value, datetime):
+                row[key] = iso_utc(value)
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                row[key] = iso_utc(datetime.fromtimestamp(value, tz=dt_util.UTC))
         statistics.append(row)
         if len(statistics) == effective_limit:
             break
     retention_kind: Literal["short_term", "long_term"] = (
         "short_term" if period == "5minute" else "long_term"
     )
-    warnings = retention_warnings(retention_kind, window.start, keep_days, utcnow())
+    warnings = retention_warnings(retention_kind, window.start, keep_days, utcnow()) + unit_warnings
     if not statistics:
         warnings.append(
             "No statistics were returned. The entity may not expose a state_class, may not produce Recorder statistics, or may have no data in this period."
@@ -1131,6 +1128,9 @@ async def _tool_get_statistics(
         result_key="statistics",
     )
     body["period"] = period
+    # Every value field is in units.display_unit_of_measurement; null means Recorder
+    # holds no metadata for this entity, not that the values are unitless.
+    body["units"] = units
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 

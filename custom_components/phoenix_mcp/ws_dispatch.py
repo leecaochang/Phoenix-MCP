@@ -20,6 +20,7 @@ cap_helper_write + Confirm + audit) decides whether a call runs at all.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from typing import Any
@@ -125,7 +126,8 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # (HA's EnergyManager.async_update copies through any key the update omits).
         # The one exception is an admin version restore, which reproduces a snapshot.
         # energy/validate is a READ despite the name: it validates what is already
-        # persisted, not a submitted payload, so it cannot pre-flight a write. It
+        # persisted, not a submitted payload, so it cannot pre-flight a write
+        # (validate_ws_payload runs save_prefs's own schema for that). It
         # answers "is the Energy dashboard actually working", naming entries whose
         # entity no longer exists or that record no statistics.
         # energy/solar_forecast returns production forecasts for the config entries
@@ -233,19 +235,8 @@ async def _resolve_admin_user(hass: HomeAssistant) -> Any:
     return next((u for u in active_admins if u.is_owner), active_admins[0])
 
 
-async def async_ws_command(
-    hass: HomeAssistant,
-    command: str,
-    payload: dict[str, Any],
-    *,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> Any:
-    """Invoke a registered HA WebSocket command in-process and return its result.
-
-    Raises WsDispatchError if the command is not on the ALLOWED_WS_COMMANDS
-    allowlist, is not registered, the payload fails the command's schema, no
-    admin user is available, or the handler reports an error / times out.
-    """
+def _validated_message(hass: HomeAssistant, command: str, payload: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+    """Return an allowlisted command's handler and its schema-validated message."""
     if command not in ALLOWED_WS_COMMANDS:
         raise WsCommandNotDispatchedError(f"WebSocket command not allowed: {command}")
     if set(payload) & WS_REQUEST_CONTROL_FIELDS:
@@ -262,7 +253,35 @@ async def async_ws_command(
             msg = schema(msg)
         except vol.Invalid as err:
             raise WsCommandNotDispatchedError(f"Invalid arguments for {command}: {err}") from err
+    return handler, msg
 
+
+def validate_ws_payload(hass: HomeAssistant, command: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate a payload with the command's registered schema without running its handler.
+
+    Returns the payload as the schema normalizes it (defaults filled, values
+    coerced), which is what the handler would receive. Raises
+    WsCommandNotDispatchedError wherever async_ws_command would refuse before
+    dispatch. Nothing runs, so no admin identity is resolved. Event loop only.
+    """
+    _, msg = _validated_message(hass, command, copy.deepcopy(payload))
+    return {key: value for key, value in msg.items() if key not in ("id", "type")}
+
+
+async def async_ws_command(
+    hass: HomeAssistant,
+    command: str,
+    payload: dict[str, Any],
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Any:
+    """Invoke a registered HA WebSocket command in-process and return its result.
+
+    Raises WsDispatchError if the command is not on the ALLOWED_WS_COMMANDS
+    allowlist, is not registered, the payload fails the command's schema, no
+    admin user is available, or the handler reports an error / times out.
+    """
+    handler, msg = _validated_message(hass, command, payload)
     user = await _resolve_admin_user(hass)
     check_request_authority()
 

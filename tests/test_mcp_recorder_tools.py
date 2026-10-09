@@ -33,10 +33,11 @@ async def _call(args: dict, hass):
     return await _call_tool("get_statistics", args, _access_key(), hass, MagicMock())
 
 
-def _recorder(result: dict) -> tuple[MagicMock, AsyncMock]:
+def _recorder(rows: list[dict]) -> tuple[MagicMock, AsyncMock]:
+    """A recorder whose executor returns read_statistics_page's (rows, units, warnings)."""
     instance = MagicMock()
     instance.keep_days = 10
-    executor = AsyncMock(return_value=result)
+    executor = AsyncMock(return_value=(rows, None, []))
     instance.async_add_executor_job = executor
     return instance, executor
 
@@ -48,7 +49,7 @@ async def test_statistics_common_envelope_and_safe_day_cap(hass) -> None:
         {"start": now - timedelta(days=2), "mean": 10.0},
         {"start": now - timedelta(days=1), "mean": 12.0},
     ]
-    instance, executor = _recorder({"sensor.power": rows})
+    instance, executor = _recorder(rows)
     with patch("homeassistant.components.recorder.get_instance", return_value=instance):
         content, outcome, _ = await _call(
             {
@@ -79,7 +80,7 @@ async def test_statistics_common_envelope_and_safe_day_cap(hass) -> None:
 
 async def test_empty_five_minute_page_can_have_more_and_warn_about_retention(hass) -> None:
     hass.states.async_set("sensor.power", "12", {"state_class": "measurement"})
-    instance, _ = _recorder({})
+    instance, _ = _recorder([])
     with patch("homeassistant.components.recorder.get_instance", return_value=instance):
         content, outcome, _ = await _call(
             {"entity_id": "sensor.power", "start_time": "30d", "period": "5minute", "limit": 10},
@@ -102,7 +103,7 @@ async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
         {"start": start, "mean": 10.0},
         {"start": start + timedelta(hours=1), "mean": 12.0},
     ]
-    instance, _ = _recorder({"sensor.power": rows})
+    instance, _ = _recorder(rows)
     with patch("homeassistant.components.recorder.get_instance", return_value=instance):
         content, outcome, _ = await _call(
             {
