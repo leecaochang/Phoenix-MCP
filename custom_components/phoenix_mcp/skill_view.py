@@ -445,12 +445,18 @@ mode: single
 
 ### Dashboards and cards
 
-- To add, change, or remove ONE card: read the layout with `get_dashboard_config`
-  to find the `view_index` (and `section_index` if the view uses sections), then
-  use `add_dashboard_card`, `edit_dashboard_card`, or `delete_dashboard_card`.
-  These send only the one card, never the whole layout. Pass the read's
-  `content_hash` as `expected_hash`; each result returns the new `content_hash`
-  so you can chain several card changes without re-reading.
+- To add, change, or remove ONE card, find it with a `get_dashboard_config` search,
+  not a full read: give a `query`, `entity_id`, `card_type` or `heading` (add
+  `all_dashboards: true` to search every dashboard). Each match has its view, a
+  `path` and the card's config, including cards nested inside other cards, and the
+  result carries the `content_hash`. That is everything the write tools need, so do
+  not also read the whole layout. A top-level match's path gives the
+  `view_index`, `section_index` and `card_index` for `add_dashboard_card`,
+  `edit_dashboard_card` or `delete_dashboard_card`; change a nested card or a
+  single field with `patch_dashboard` and the match's path. Pass the
+  `content_hash` as `expected_hash`. A successful write returns the new
+  `content_hash` and confirms the change, so do not read or search again to check
+  it.
 - Only rewrite a whole layout (`set_dashboard_config`) when you are genuinely
   restructuring it (new views, reordering, many cards at once). Storage-mode
   dashboards only; YAML-mode is rejected. Omit `url_path` for the default

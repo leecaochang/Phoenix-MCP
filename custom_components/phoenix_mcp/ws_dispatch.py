@@ -23,6 +23,7 @@ import asyncio
 import copy
 import json
 import logging
+import os
 from typing import Any
 
 from .request_authority import check_request_authority
@@ -153,6 +154,18 @@ class WsDashboardNotFoundError(WsCommandNotDispatchedError):
     "lovelace could not be read" (a failure that must surface, not be mistaken for
     absence and silently overwritten).
     """
+
+
+class WsYamlDashboardError(WsCommandNotDispatchedError):
+    """A YAML-mode dashboard, whose loaded layout carries resolved !secret values.
+
+    `filename` is its YAML file relative to the configuration directory, or None
+    when that cannot be established.
+    """
+
+    def __init__(self, message: str, filename: str | None) -> None:
+        super().__init__(message)
+        self.filename = filename
 
 
 class _CapturingConnection(ActiveConnection):
@@ -485,16 +498,28 @@ async def async_lovelace_resource_urls(hass: HomeAssistant) -> list[str] | None:
     return [item["url"] for item in items if isinstance(item, dict) and isinstance(item.get("url"), str)]
 
 
-async def async_get_lovelace_config(hass: HomeAssistant, url_path: str | None) -> dict[str, Any] | None:
+async def async_get_lovelace_config(
+    hass: HomeAssistant, url_path: str | None, *, storage_only: bool = False,
+) -> dict[str, Any] | None:
     """Return a dashboard's stored view/card config, or None if it has none.
 
     None means the dashboard exists but is auto-generated (no stored config).
     Raises WsDashboardNotFoundError for an unknown dashboard, WsDispatchError when
-    lovelace itself is unavailable or the read fails.
+    lovelace itself is unavailable or the read fails. With storage_only, a
+    YAML-mode dashboard raises WsYamlDashboardError before it is loaded: HA's
+    YAML loader resolves !secret, so its layout must not reach a caller that
+    discloses it.
     """
     config = _lovelace_dashboard(hass, url_path)
     if config is None:
         raise WsDashboardNotFoundError(f"config_not_found: unknown dashboard {url_path!r}")
+    if storage_only and getattr(config, "mode", None) != "storage":
+        path = getattr(config, "path", None)
+        filename = None
+        if isinstance(path, str):
+            relative = os.path.relpath(path, hass.config.config_dir)
+            filename = None if relative.startswith("..") or os.path.isabs(relative) else relative
+        raise WsYamlDashboardError(f"dashboard {url_path!r} is YAML-mode", filename)
     try:
         from homeassistant.components.lovelace.const import ConfigNotFound  # noqa: PLC0415
     except Exception as exc:  # noqa: BLE001

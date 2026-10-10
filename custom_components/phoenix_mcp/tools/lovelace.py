@@ -28,7 +28,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from ..card_catalog import CardEntry, CatalogFreshness, assess_freshness
-from ..const import BUILTIN_CARD_TYPES, CAP_DENY, LAYOUT_SHAPE_MAX_DEPTH, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
+from ..const import (
+    BUILTIN_CARD_TYPES,
+    CAP_DENY,
+    DASHBOARD_SCRUB_MAX_DEPTH,
+    DASHBOARD_SEARCH_MAX_MATCHES,
+    DASHBOARD_SEARCH_MAX_WARNINGS,
+    LAYOUT_SHAPE_MAX_DEPTH,
+    MAX_DIFF_INLINE_BYTES,
+    REDACTION_SENTINEL,
+)
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..tool_input import nested_argument_error
@@ -37,9 +46,12 @@ from ..helpers import (
     dict_arg,
     diff_summary_fields as _summary,
     effective_cap,
+    instance_entity_domains,
+    redact_inaccessible_entity_ids_in_text,
     str_arg,
     version_summary_fields as _version_summary,
 )
+from .dashboard_search import Criteria, parse_criteria, search_layout
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
@@ -59,6 +71,7 @@ from ..ws_dispatch import (
     WsCommandNotDispatchedError,
     WsDashboardNotFoundError,
     WsDispatchError,
+    WsYamlDashboardError,
     async_get_lovelace_config,
     async_lovelace_resource_urls,
     async_save_lovelace_config,
@@ -686,31 +699,168 @@ def _no_stored_config_message(url_path: str | None) -> str:
     )
 
 
+def _scrub_layout(
+    config: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *,
+    entity_domains: frozenset[str] | None = None,
+) -> tuple[Any, list[dict]]:
+    """A layout scrubbed to this key's scope, plus a warning per truncated subtree.
+
+    Layouts nest far deeper than service responses, so the bound is the
+    dashboard one and a deeper subtree becomes the placeholder every write path
+    refuses, never a silently empty container. With entity_domains, hidden
+    entity IDs embedded in strings are redacted too, which search needs so they
+    cannot match; tokens outside those domains, such as a button-card
+    template's entity.state, are not IDs and stay.
+    """
+    truncated: list[list] = []
+    scrubbed = filter_service_response(
+        config, access_key, hass, max_depth=DASHBOARD_SCRUB_MAX_DEPTH, truncated=truncated,
+    )
+
+    def text(node: Any) -> Any:
+        if isinstance(node, str):
+            return redact_inaccessible_entity_ids_in_text(
+                node, access_key, hass, sentinel=REDACTION_SENTINEL, domains=entity_domains)
+        if isinstance(node, list):
+            return [text(item) for item in node]
+        if isinstance(node, dict):
+            return {key: text(item) for key, item in node.items()}
+        return node
+
+    problem = f"is nested more than {DASHBOARD_SCRUB_MAX_DEPTH} levels deep, so it was replaced with {REDACTION_SENTINEL!r}"
+    return (scrubbed if entity_domains is None else text(scrubbed)), [{"path": path, "problem": problem} for path in truncated]
+
+
+def _yaml_dashboard_message(url_path: str | None, filename: str | None) -> str:
+    """Why a YAML-mode layout is withheld, and where its unresolved source is."""
+    name = "The default dashboard" if url_path is None else f"Dashboard {url_path!r}"
+    source = f"its file {filename!r}" if filename else "its YAML file"
+    return (
+        f"{name} is YAML-mode. Home Assistant resolves !secret values when it loads one, so Phoenix "
+        f"does not return its layout. Read {source} with get_yaml_config instead, which keeps !secret "
+        "references unresolved; YAML-mode dashboards cannot be written through the dashboard tools."
+    )
+
+
+def _bounded_warnings(warnings: list[dict]) -> dict:
+    """The first warnings and a count of the rest, or nothing when there are none."""
+    if not warnings:
+        return {}
+    body: dict[str, Any] = {"warnings": warnings[:DASHBOARD_SEARCH_MAX_WARNINGS]}
+    if len(warnings) > DASHBOARD_SEARCH_MAX_WARNINGS:
+        body["more_warnings"] = len(warnings) - DASHBOARD_SEARCH_MAX_WARNINGS
+    return body
+
+
 async def _tool_get_dashboard_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: read a dashboard's view/card layout, entity ids redacted to scope."""
+    """MCP tool: read a dashboard's view/card layout, or search its cards, scrubbed to scope."""
+    tool = "get_dashboard_config"
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
-        return _tool_error("Forbidden."), "denied", "get_dashboard_config"
-    error = unknown_argument_error("get_dashboard_config", args)
+        return _tool_error("Forbidden."), "denied", tool
+    error = unknown_argument_error(tool, args)
     if error:
-        return _tool_error(error), "invalid_request", "get_dashboard_config"
-    refusal = _url_path_refusal(args, "get_dashboard_config")
+        return _tool_error(error), "invalid_request", tool
+    refusal = _url_path_refusal(args, tool)
     if refusal is not None:
         return refusal
     url_path = str(args.get("url_path") or "").strip() or None
+    criteria, error = parse_criteria(args)
+    if error:
+        return _tool_error(error), "invalid_request", tool
+    all_dashboards = args.get("all_dashboards")
+    if all_dashboards is not None and not isinstance(all_dashboards, bool):
+        return _tool_error("all_dashboards must be a boolean."), "invalid_request", tool
+    if all_dashboards and url_path is not None:
+        return _tool_error("Pass url_path to search one dashboard or all_dashboards to search every one, not both."), "invalid_request", tool
+    if all_dashboards and criteria is None:
+        return _tool_error(
+            "all_dashboards searches every dashboard, so give at least one of query, entity_id, card_type or heading."
+        ), "invalid_request", tool
+    if criteria is not None:
+        return await _search_dashboards(criteria, url_path, bool(all_dashboards), access_key, hass)
     try:
-        config = await async_get_lovelace_config(hass, url_path)
+        config = await async_get_lovelace_config(hass, url_path, storage_only=True)
+    except WsYamlDashboardError as exc:
+        return _tool_error(_yaml_dashboard_message(url_path, exc.filename)), "invalid_request", tool
     except WsDispatchError as exc:
-        return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", "get_dashboard_config"
+        return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", tool
     if config is None:
         return _tool_error(_no_stored_config_message(url_path)), "not_found", f"dashboard:{url_path or 'lovelace'}"
-    redacted = filter_service_response(config, access_key, hass)
+    redacted, warnings = _scrub_layout(config, access_key, hass)
     # content_hash is over the RAW (unredacted) config the executor re-reads, so
     # redaction of the returned config does not affect the optimistic-lock guard.
     return _tool_success(json.dumps({
         "url_path": url_path, "config": redacted, "content_hash": content_hash(config),
+        **_bounded_warnings(warnings),
     }, default=str)), "allowed", f"dashboard:{url_path or 'lovelace'}"
+
+
+async def _search_dashboards(
+    criteria: Criteria, url_path: str | None, all_dashboards: bool,
+    access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> tuple[dict, str, str]:
+    """Search one dashboard, or every stored one, without claiming coverage it lacks.
+
+    One dashboard keeps the ordinary read's refusals. Across dashboards, each
+    one that could not be searched is named in not_searched instead.
+    """
+    tool = "get_dashboard_config"
+    targets: list[tuple[str | None, Any]] = [(url_path, None)]
+    not_searched: list[dict] = []
+    if all_dashboards:
+        try:
+            listed = await async_ws_command(hass, "lovelace/dashboards/list", {})
+        except WsDispatchError as exc:
+            listed = []
+            not_searched.append({"reason": f"the dashboard list could not be read, so only the default dashboard was searched: {exc}"})
+        targets += [(row["url_path"], row.get("title")) for row in listed if isinstance(listed, list)
+                    and isinstance(row, dict) and isinstance(row.get("url_path"), str) and row["url_path"]]
+    dashboards: list[dict] = []
+    warnings: list[dict] = []
+    total = returned = 0
+    domains = instance_entity_domains(hass)
+    for target, title in targets:
+        try:
+            config = await async_get_lovelace_config(hass, target, storage_only=True)
+        except WsYamlDashboardError as exc:
+            if not all_dashboards:
+                return _tool_error(_yaml_dashboard_message(target, exc.filename)), "invalid_request", tool
+            not_searched.append({"url_path": target, "reason": _yaml_dashboard_message(target, exc.filename)})
+            continue
+        except WsDispatchError as exc:
+            if not all_dashboards:
+                return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", tool
+            not_searched.append({"url_path": target, "reason": f"could not be read: {exc}"})
+            continue
+        if config is None:
+            if not all_dashboards:
+                return _tool_error(_no_stored_config_message(target)), "not_found", f"dashboard:{target or 'lovelace'}"
+            not_searched.append({"url_path": target, "reason": "auto-generated, so it stores no cards"})
+            continue
+        scrubbed, problems = _scrub_layout(config, access_key, hass, entity_domains=domains)
+        matches, shape_problems = search_layout(scrubbed, criteria, domains)
+        kept = matches[:max(DASHBOARD_SEARCH_MAX_MATCHES - returned, 0)]
+        total += len(matches)
+        returned += len(kept)
+        entry: dict[str, Any] = {"url_path": target}
+        if isinstance(title, str) and title:
+            entry["title"] = title
+        entry.update(content_hash=content_hash(config), match_count=len(matches), matches=kept)
+        dashboards.append(entry)
+        warnings += [{"url_path": target, **problem} if all_dashboards else problem
+                     for problem in problems + shape_problems]
+    body: dict[str, Any] = {}
+    if not all_dashboards:
+        body.update(url_path=url_path, content_hash=dashboards[0]["content_hash"])
+    body.update(match_count=total, truncated=returned < total, dashboards=dashboards)
+    if not_searched:
+        body["not_searched"] = not_searched
+    body.update(_bounded_warnings(warnings))
+    return _tool_success(json.dumps(body, default=str)), "allowed", (
+        "dashboards" if all_dashboards else f"dashboard:{url_path or 'lovelace'}"
+    )
 
 
 async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
@@ -910,10 +1060,29 @@ def _layout_shape_reason(config: Any) -> str | None:
 
 
 def _card_shape_reason(card: Any) -> str | None:
-    """Cheap structural check on an agent-supplied card config."""
+    """Cheap structural check on an agent-supplied card config.
+
+    A card copied from a scrubbed read can carry the redaction placeholder;
+    writing it would replace real configuration, so it is refused like a
+    patched value.
+    """
     if not isinstance(card, dict) or not isinstance(card.get("type"), str) or not card["type"]:
         return "card must be an object with a non-empty type."
-    return None
+    return _placeholder_reason("card", redaction_sentinel_path(card))
+
+
+def _placeholder_reason(name: str, offender: list | None) -> str | None:
+    """Refuse a value carrying the placeholder a scrubbed dashboard read substitutes."""
+    if offender is None:
+        return None
+    where = _patch_path_label(offender) if offender else name
+    return (
+        f"{name} contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
+        "That placeholder is what a read substitutes for an entity this access key cannot "
+        "resolve (out of scope, or one that no longer exists) or for content nested too deep "
+        "to return, so writing it back would replace real configuration with the placeholder. "
+        f"Send the intended {name} instead."
+    )
 
 
 def _resolve_dashboard_cards(
@@ -1227,13 +1396,17 @@ def _apply_one_patch(config: dict, change: dict) -> tuple[Any, str | None]:
     """Apply one path-addressed change in place; returns (prior_value, reason).
 
     prior_value is what the path held before (None for an append, which keeps
-    its list identity). Never called on the live lovelace object.
+    its list identity, and for a set that adds a mapping key). Only set may name
+    a key its mapping lacks; remove and append need something there. Never
+    called on the live lovelace object.
     """
     op = _patch_op_arg(change)
     path = change.get("path")
     container, key, reason = resolve_json_path(config, path)
     if reason is not None:
         return None, reason
+    if op != "set" and isinstance(container, dict) and key not in container:
+        return None, f"{_patch_path_label(path)} does not exist."
     if op == "remove":
         prior = container[key]
         if isinstance(container, list):
@@ -1247,22 +1420,15 @@ def _apply_one_patch(config: dict, change: dict) -> tuple[Any, str | None]:
     # The caller's own value is the ONLY thing that can introduce a sentinel here:
     # every other byte of the layout is untouched because it was never resent,
     # which is the entire reason this tool exists.
-    offender = redaction_sentinel_path(value)
-    if offender is not None:
-        where = _patch_path_label(offender) if offender else "value"
-        return None, (
-            f"value contains the redaction placeholder {REDACTION_SENTINEL!r} at {where}. "
-            "That placeholder is what a read substitutes for an entity this access key cannot "
-            "resolve (out of scope, or one that no longer exists), so writing it back would "
-            "replace real configuration with the placeholder. Send the intended value instead."
-        )
+    if (reason := _placeholder_reason("value", redaction_sentinel_path(value))) is not None:
+        return None, reason
     if op == "append":
         target = container[key]
         if not isinstance(target, list):
             return None, f"op 'append' requires the path to address a list; {_patch_path_label(path)} is not one."
         target.append(value)
         return None, None
-    prior = container[key] if not isinstance(container, list) or 0 <= key < len(container) else None
+    prior = container.get(key) if isinstance(container, dict) else container[key]
     container[key] = value
     return prior, None
 

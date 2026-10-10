@@ -170,7 +170,7 @@ async def test_intentional_default_reaches_read_and_unrelated_extra_is_refused(h
         read.assert_not_awaited()
         _, outcome, _ = await _call_tool('get_dashboard_config', {}, access_key(cap_lovelace_write='allow'), hass, MagicMock())
     assert outcome == 'allowed'
-    read.assert_awaited_once_with(hass, None)
+    read.assert_awaited_once_with(hass, None, storage_only=True)
 
 
 @pytest.mark.parametrize('extra', [{}, {'unrelated': True}])

@@ -869,6 +869,10 @@ def filter_service_response(
     access_key: AccessKeyRecord,
     hass: HomeAssistant,
     _depth: int = 0,
+    *,
+    max_depth: int = 10,
+    truncated: list[list] | None = None,
+    _path: tuple = (),
 ) -> Any:
     """Recursively redact secrets and inaccessible entity IDs from service response data.
 
@@ -884,24 +888,31 @@ def filter_service_response(
     (get_logbook drops out-of-scope entries rather than marking them). Services
     that key their response by entity_id (weather.get_forecasts, calendar
     .get_events) depend on this.
+
+    A container below max_depth is never returned raw. Passing `truncated` makes
+    it "<redacted>", which every write path refuses, and records its path there;
+    otherwise it is emptied, the long-standing service-response behavior.
     """
-    if _depth > 10:
-        # Depth limit reached. Still redact entity ID strings, but truncate
-        # containers to empty rather than returning their raw contents - a dict
-        # or list at this depth could contain entity IDs at deeper levels that
-        # would bypass redaction if returned as-is.
+    if _depth > max_depth:
+        # Depth limit reached. Still redact entity ID strings, but never return
+        # a container's raw contents: it could hold entity IDs at deeper levels
+        # that would bypass redaction.
         if isinstance(response_data, str) and _ENTITY_ID_RE.match(response_data):
             perm = resolve(response_data, access_key, hass)
             if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
                 return "<redacted>"
             return response_data
         if isinstance(response_data, (dict, list)):
+            if truncated is not None:
+                truncated.append(list(_path))
+                return "<redacted>"
             _LOGGER.warning(
                 "filter_service_response: depth limit reached, truncating %s to empty",
                 type(response_data).__name__,
             )
             return {} if isinstance(response_data, dict) else []
         return response_data
+    nested: dict[str, Any] = {"max_depth": max_depth, "truncated": truncated}
     if isinstance(response_data, str):
         if _ENTITY_ID_RE.match(response_data):
             perm = resolve(response_data, access_key, hass)
@@ -917,11 +928,20 @@ def filter_service_response(
                     continue
             out[k] = (
                 "<redacted>" if is_sensitive_key(k)
-                else filter_service_response(v, access_key, hass, _depth + 1)
+                else filter_service_response(
+                    v, access_key, hass, _depth + 1, **nested,
+                    _path=(*_path, k) if truncated is not None else (),
+                )
             )
         return out
     if isinstance(response_data, list):
-        return [filter_service_response(item, access_key, hass, _depth + 1) for item in response_data]
+        return [
+            filter_service_response(
+                item, access_key, hass, _depth + 1, **nested,
+                _path=(*_path, index) if truncated is not None else (),
+            )
+            for index, item in enumerate(response_data)
+        ]
     return response_data
 
 

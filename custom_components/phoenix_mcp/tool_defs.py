@@ -67,6 +67,18 @@ _NATIVE_TOOL_PUBLIC_TO_INTERNAL: dict[str, str] = {
     public: internal for internal, public in _NATIVE_TOOL_NAMES.items()
 }
 
+# One wording on every dashboard tool that needs a card's location or confirms a
+# write, so a model is steered the same way wherever it starts. Live runs showed
+# models reading the whole layout because these tools said to, firing a full
+# read alongside a search, and re-reading to confirm a write that had succeeded.
+_DASHBOARD_SEARCH_FIRST = (
+    "Find cards with a get_dashboard_config search, not a full read that resends every card: "
+    "its matches carry the paths and content_hash this tool needs. "
+)
+_DASHBOARD_SAVED = (
+    "A successful result confirms the change and returns the new content_hash; do not re-read to check it."
+)
+
 
 _ENTITY_TOOL_DEFS: list[dict] = [
     {
@@ -3317,21 +3329,30 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "get_dashboard_config",
         "description": (
-            "Read a Lovelace dashboard's view and card layout. Omit url_path for the "
-            "default dashboard, or pass a url_path from list_dashboards. Entity IDs "
-            "outside this access key's read scope come back as \"<redacted>\"; do not write a "
-            "redacted read back with set_dashboard_config. The response includes a "
-            "content_hash; pass it as expected_hash to the dashboard write tools to make "
-            "the write conditional on the layout not having changed since this read. To "
-            "change a single card after this read, use add_dashboard_card / "
-            "edit_dashboard_card / delete_dashboard_card rather than rewriting the "
-            "whole layout with set_dashboard_config."
+            "Find cards on a Lovelace dashboard, or read its whole view and card layout. To find a card to "
+            "change, search: give any of query, entity_id, card_type and heading, and a card must match "
+            "all given. Each match carries its view, its path and its config, and the result carries the "
+            "dashboard's content_hash, which is everything patch_dashboard and the card tools need, so do "
+            "not also read the whole layout, in the same turn or after. Search reaches cards nested "
+            "inside other cards, view badges and header cards. Without criteria the call returns the "
+            "whole layout, which only restructuring a dashboard needs. Omit url_path for the default "
+            "dashboard, or pass a url_path from list_dashboards. Entity IDs outside this access key's "
+            "read scope, and content nested too deep to return, come back as \"<redacted>\"; do not "
+            "write a redacted read back with set_dashboard_config. Pass content_hash as expected_hash "
+            "to a dashboard write tool to refuse the write if the layout changed since. YAML-mode "
+            "dashboards are withheld because Home Assistant resolves their !secret values; read their "
+            "file with get_yaml_config."
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "url_path": {"type": "string", "description": "Dashboard url_path (from list_dashboards). Omit for the default dashboard."},
+                "query": {"type": "string", "description": "Search: text in a card's values, case-insensitive; an underscore matches a space."},
+                "entity_id": {"type": "string", "description": "Search: an entity ID a card references; * matches any characters, as in light.*."},
+                "card_type": {"type": "string", "description": "Search: a card type such as tile or custom:button-card; badge lists view badges."},
+                "heading": {"type": "string", "description": "Search: cards under a heading card whose text contains this; not a view title (matches name their view)."},
+                "all_dashboards": {"type": "boolean", "description": "Search every stored dashboard; any not searched are listed in not_searched."},
             },
         },
     },
@@ -3368,12 +3389,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Add ONE card to a Lovelace dashboard view without resending the whole "
             "layout (prefer this over set_dashboard_config for a single-card change). "
-            "Call get_dashboard_config first to find view_index (and section_index if "
-            "the view uses sections) and its content_hash. Omit url_path for the "
-            "default dashboard. Storage-mode dashboards with a stored config only. "
-            "May require admin approval. Pass expected_hash to refuse the write if the "
-            "layout changed since your read; the result returns the new content_hash "
-            "so you can chain further card changes without re-reading."
+            + _DASHBOARD_SEARCH_FIRST +
+            "A match's path [\"views\", V, \"sections\", S, \"cards\", C] gives view_index V and "
+            "section_index S for a card beside it; read the layout only when the target view has no "
+            "card to search for. Omit url_path for the default dashboard. Storage-mode dashboards "
+            "with a stored config only. May require admin approval. Pass expected_hash to refuse "
+            "the write if the layout changed since your read. " + _DASHBOARD_SAVED
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {
@@ -3393,13 +3414,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "edit_dashboard_card",
         "description": (
             "Replace ONE card's config on a Lovelace dashboard without resending the "
-            "whole layout. Call get_dashboard_config first to find view_index, "
-            "card_index (and section_index if the view uses sections) and its "
-            "content_hash. Omit url_path for the default dashboard. Storage-mode "
-            "dashboards only. May require admin approval. Pass expected_hash to refuse "
-            "the write if the layout changed since your read (card indexes shift when "
-            "the layout changes, so this is strongly recommended); the result returns "
-            "the new content_hash for chaining further card changes."
+            "whole layout. " + _DASHBOARD_SEARCH_FIRST +
+            "A top-level match's path [\"views\", V, \"sections\", S, \"cards\", C] gives "
+            "view_index V, section_index S and card_index C; change a card nested inside another "
+            "card with patch_dashboard and its path. Omit url_path for the default dashboard. "
+            "Storage-mode dashboards only. May require admin approval. Pass expected_hash to refuse "
+            "the write if the layout changed since your read (card indexes shift when the layout "
+            "changes, so this is strongly recommended). " + _DASHBOARD_SAVED
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {
@@ -3419,13 +3440,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "delete_dashboard_card",
         "description": (
             "Delete ONE card from a Lovelace dashboard without resending the whole "
-            "layout. Call get_dashboard_config first to find view_index, card_index "
-            "(and section_index if the view uses sections) and its content_hash. Omit "
-            "url_path for the default dashboard. Storage-mode dashboards only. May "
-            "require admin approval. Pass expected_hash to refuse the delete if the "
-            "layout changed since your read (card indexes shift when the layout "
-            "changes, so this is strongly recommended); the result returns the new "
-            "content_hash for chaining further card changes."
+            "layout. " + _DASHBOARD_SEARCH_FIRST +
+            "A top-level match's path [\"views\", V, \"sections\", S, \"cards\", C] gives "
+            "view_index V, section_index S and card_index C; remove a card nested inside another "
+            "card with patch_dashboard and its path. Omit url_path for the default dashboard. "
+            "Storage-mode dashboards only. May require admin approval. Pass expected_hash to refuse "
+            "the delete if the layout changed since your read (card indexes shift when the layout "
+            "changes, so this is strongly recommended). " + _DASHBOARD_SAVED
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {
@@ -3446,15 +3467,15 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Change path-addressed values anywhere in a Lovelace dashboard without resending the layout. Use "
             "this for what the card tools cannot reach (a view-level badge, a view option, a single field inside "
             "a card) and for several related edits at once, such as repointing every card get_relationships "
-            "listed for a replaced entity. Call get_dashboard_config first to find the paths and its "
-            "content_hash. Each change's path is an array of keys and 0-based indexes, e.g. [\"views\", 0, "
-            "\"badges\", 4, \"entity\"]; kind set replaces the value there, append adds to a list it "
+            "listed for a replaced entity. " + _DASHBOARD_SEARCH_FIRST + "Read the whole layout only "
+            "for something search cannot find, such as a view option. Each change's path is an array of keys and 0-based indexes, e.g. [\"views\", 0, "
+            "\"badges\", 4, \"entity\"]; kind set replaces or adds the value there, append adds to a list it "
             "addresses, remove deletes it. Changes apply in order, each to the layout the previous one left, "
             "and all of them or none are written, under one approval. Nothing is created along the way, so a "
             "path whose parent does not exist is refused rather than built. Omit target.url_path for the "
             "default dashboard. Storage-mode dashboards only. Pass expected_hash to refuse the write if the "
-            "layout changed since your read; the result returns the new content_hash for chaining. Values a "
-            "read redacted are refused: writing the placeholder back would overwrite real configuration."
+            "layout changed since your read. " + _DASHBOARD_SAVED + " Values a read redacted are "
+            "refused: writing the placeholder back would overwrite real configuration."
         ),
         "cap": "cap_lovelace_write",
         "inputSchema": {

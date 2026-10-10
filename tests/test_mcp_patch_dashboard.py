@@ -237,6 +237,29 @@ class TestPatchDashboard:
         assert outcome == "allowed"
         assert "title" not in (await async_get_lovelace_config(h, None))["views"][0]
 
+    async def test_set_adds_a_key_the_card_lacks(self, hass, lovelace_env):
+        """Giving a found card an option it does not have yet is the common case."""
+        h, _l = lovelace_env
+        await _seed(h)
+        data, versions = _data()
+        content, outcome, _ = await _call(
+            {"path": ["views", 0, "cards", 0, "tap_action"], "value": {"action": "more-info"}}, _access_key(), h, data)
+        assert outcome == "allowed", content
+        assert (await async_get_lovelace_config(h, None))["views"][0]["cards"][0]["tap_action"] == {"action": "more-info"}
+        assert len(versions.list_for("dashboard", "lovelace")) == 1
+
+    @pytest.mark.parametrize("op,value", [("remove", None), ("append", "x")])
+    async def test_remove_or_append_at_a_missing_key_is_refused(self, hass, lovelace_env, op, value):
+        h, _l = lovelace_env
+        await _seed(h)
+        before = await async_get_lovelace_config(h, None)
+        args = {"path": ["views", 0, "cards", 0, "tap_action"], "op": op}
+        if value is not None:
+            args["value"] = value
+        content, outcome, _ = await _call(args, _access_key(), h, _data()[0])
+        assert outcome == "invalid_request" and "does not exist" in _text(content)
+        assert await async_get_lovelace_config(h, None) == before
+
     async def test_set_requires_a_value(self, hass, lovelace_env):
         h, _l = lovelace_env
         await _seed(h)

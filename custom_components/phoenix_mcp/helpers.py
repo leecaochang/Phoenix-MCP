@@ -10,7 +10,7 @@ import logging
 import math
 import re
 import string
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Collection, Iterator
 from functools import lru_cache
 import time
 from dataclasses import dataclass
@@ -1056,10 +1056,29 @@ def redact_inaccessible_entity_ids_in_text(
     hass: HomeAssistant,
     *,
     sentinel: str = "<redacted-entity>",
+    domains: Collection[str] | None = None,
 ) -> str:
-    """Redact inaccessible entity IDs embedded in otherwise free-form text. Event loop only."""
+    """Redact inaccessible entity IDs embedded in otherwise free-form text. Event loop only.
+
+    With `domains`, a token outside them is not an entity ID and stays, so
+    template property access such as entity.state survives.
+    """
     return _redact_entity_ids(
-        text, hass, lambda eid: resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE), sentinel)
+        text, hass,
+        lambda eid: (domains is not None and eid.split(".", 1)[0] not in domains)
+        or resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE),
+        sentinel)
+
+
+def instance_entity_domains(hass: HomeAssistant) -> frozenset[str]:
+    """Every domain with a state, a registry entry or a service. Event loop only.
+
+    The domains a dotted token must name to be read as an entity ID. Hidden
+    entities' domains are included, so their IDs are still treated as IDs.
+    """
+    domains = {state.entity_id.split(".", 1)[0] for state in hass.states.async_all()}
+    domains |= {entry.entity_id.split(".", 1)[0] for entry in er.async_get(hass).entities.values()}
+    return frozenset(domains | set(hass.services.async_services()))
 
 
 def redact_entity_ids_outside(

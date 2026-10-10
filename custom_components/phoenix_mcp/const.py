@@ -82,6 +82,16 @@ REFERENCE_WARNING_MAX = 20
 LAYOUT_SHAPE_MAX_DEPTH = 10
 # One patch_dashboard call applies at most this many changes under one approval.
 PATCH_DASHBOARD_MAX_CHANGES = 20
+# A dashboard layout read is scrubbed this many levels deep; anything deeper is
+# returned as the redaction placeholder and reported, never silently emptied.
+DASHBOARD_SCRUB_MAX_DEPTH = 100
+# Typed objects under these keys are nested cards for get_dashboard_config search.
+DASHBOARD_CARD_CONTAINER_KEYS = frozenset({"card", "cards", "custom_fields", "states"})
+DASHBOARD_SEARCH_CRITERION_MAX = 200
+DASHBOARD_SEARCH_MAX_MATCHES = 50
+DASHBOARD_SEARCH_MATCHED_VALUES = 5
+DASHBOARD_SEARCH_VALUE_CHARS = 200
+DASHBOARD_SEARCH_MAX_WARNINGS = 20
 TEMPLATE_WORKER_TIMEOUT_SECONDS = 5
 TEMPLATE_WORKER_CPU_SECONDS = 2
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
@@ -2519,7 +2529,7 @@ ROUTING_STATISTICS_FLUSH_INTERVAL = datetime.timedelta(seconds=30)
 
 # Targeted public-input diagnostics; unrelated extra arguments stay tolerated.
 UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
-    "get_dashboard_config": ("url_path",),
+    "get_dashboard_config": ("url_path", "query", "entity_id", "card_type", "heading", "all_dashboards"),
     "set_dashboard_config": ("url_path", "expected_hash"),
     "add_dashboard_card": ("url_path", "view_index", "section_index", "position", "expected_hash"),
     "edit_dashboard_card": ("url_path", "view_index", "section_index", "card_index", "expected_hash"),

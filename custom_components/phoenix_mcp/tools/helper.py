@@ -45,6 +45,7 @@ from ..const import (
     STORAGE_HELPER_TYPES as HELPER_TYPES,
     TEMPLATE_RECOVERY_TYPES,
 )
+from ..config_recovery import ConfigurationRecoveryError
 from ..data import PhoenixData
 from ..mesa import (
     RegistryMesaDecision,
@@ -52,8 +53,12 @@ from ..mesa import (
     evaluate_registry_action,
     fire_mesa_blocked_event,
 )
-from ..ws_dispatch import WsDispatchError, async_ws_command
-from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, version_summary_fields as _version_summary
+from ..request_authority import AuthorityChangedError
+from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, ws_commands_unsettled
+from ..helpers import (
+    content_hash, dict_arg, diff_summary_fields as _summary, effective_cap,
+    redact_inaccessible_entity_ids_in_text, version_summary_fields as _version_summary,
+)
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _approved_exec_ctx,
@@ -100,6 +105,8 @@ _SCOPED_STORAGE_HELPER_TYPES = frozenset({"person", "tag", "zone"})
 _HELPER_CONTEXT_FINGERPRINT = "_phoenix_helper_context_fingerprint"
 _HELPER_MESA_FINGERPRINT = "_phoenix_helper_mesa_fingerprint"
 _HELPER_RESTORE_ID = "_phoenix_helper_restore_id"
+# Readback that could not run, so it never equals a safety copy.
+_UNREAD = object()
 
 # A generated OTP cannot be created noninteractively: HA shows the secret and
 # requires a current TOTP code in a later confirmation step. Keeping it out is a
@@ -774,17 +781,35 @@ async def _prepare_config_flow_helper(
         await _abort_create_flow(hass, flow_id)
 
 
-def _resolve_helper_entity_id(hass: HomeAssistant, helper_type: str, helper_id: str) -> str | None:
-    """Map a storage-helper id back to its entity_id via the registry, or None.
+def _resolve_helper_entity_id(
+    hass: HomeAssistant, helper_type: str, helper_id: str, *, platform: str | None = None,
+) -> str | None:
+    """Map a helper id back to its entity_id via the registry, or None.
 
-    list_helpers exposes entry.unique_id as the editable helper_id, so the reverse
-    lookup matches on (domain == helper_type, unique_id == helper_id). Edit and
-    delete use it as the existence check: the helper must resolve to a real entity.
+    list_helpers exposes entry.unique_id as the editable helper_id. A unique_id
+    is unique only per (domain, platform), so the lookup names the owner: the
+    helper type itself for storage helpers, whose collections register under
+    their own domain, or "template" for Template helpers. Another integration's
+    entity with the same unique_id never resolves. Edit and delete use this as
+    the existence check: the helper must resolve to a real entity.
     """
-    registry = er.async_get(hass)
-    for entry in registry.entities.values():
-        if entry.domain == helper_type and entry.unique_id == helper_id:
-            return entry.entity_id
+    return er.async_get(hass).async_get_entity_id(helper_type, platform or helper_type, helper_id)
+
+
+def _template_helper_entry(hass: HomeAssistant, helper_type: str, helper_id: str) -> Any | None:
+    """The Template config entry behind a Template helper id, or None.
+
+    Edit and delete route to config-entry settings and removal only when both
+    the entity's platform and its owning config entry are Template, so another
+    integration's entity can never select that integration's entry.
+    """
+    entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id, platform="template")
+    registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
+    config_entry_id = registry_entry.config_entry_id if registry_entry else None
+    entry = hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
+    if (registry_entry is not None and registry_entry.platform == "template"
+            and entry is not None and entry.domain == "template"):
+        return entry
     return None
 
 
@@ -1094,15 +1119,52 @@ def _scoped_helper_approval_context(
     return {"entity_id": entity_id, "config": item}
 
 
+async def _storage_helper_rows(hass: HomeAssistant, helper_type: str) -> list[dict[str, Any]] | None:
+    """One helper type's stored items, or None when storage cannot be read."""
+    try:
+        return _storage_items(helper_type, await async_ws_command(hass, f"{helper_type}/list", {}))
+    except WsDispatchError:
+        return None
+
+
+async def _stored_helper_item(
+    hass: HomeAssistant, access_key: AccessKeyRecord, helper_type: str, helper_id: str,
+    entity_id: str, tool_name: str,
+) -> tuple[dict[str, Any] | None, tuple[dict, str, str] | None]:
+    """Return a registered helper's stored item, or the refusal that explains its absence.
+
+    The storage list proves the item belongs to the editable collection rather
+    than merely sharing its entity domain. A list failure is unavailable, never
+    an authoritative absence. YAML and storage items share one id space, so a
+    registered entity missing from storage that HA marks not editable is a YAML
+    helper; only a key that can read the entity is told so.
+    """
+    rows = await _storage_helper_rows(hass, helper_type)
+    if rows is None:
+        return None, (
+            _tool_error(f"The {helper_type} helper storage is unavailable; nothing changed."),
+            "invalid_request", tool_name,
+        )
+    item = next((row for row in rows if row.get("id") == helper_id), None)
+    if item is not None:
+        return item, None
+    state = hass.states.get(entity_id)
+    if (state is not None and state.attributes.get("editable") is False
+            and resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)):
+        return None, (
+            _tool_error(
+                "This helper is defined in YAML, which helper storage cannot change. "
+                "Edit or remove it in the YAML configuration instead; nothing changed."
+            ),
+            "invalid_request", tool_name,
+        )
+    return None, (_tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}")
+
+
 async def _scoped_helper_context(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, tool_name: str,
 ) -> tuple[dict[str, Any] | None, tuple[dict, str, str] | None]:
-    """Resolve one writable scoped storage helper and its stored config.
-
-    The storage list proves the item belongs to the editable collection rather
-    than merely sharing its entity domain. A list failure is reported as
-    unavailable, never collapsed into an authoritative not-found result.
-    """
+    """Resolve one writable scoped storage helper and its stored config."""
     helper_type = str(args.get("helper_type") or "")
     helper_id = str(args.get("helper_id") or "").strip()
     entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
@@ -1111,36 +1173,10 @@ async def _scoped_helper_context(
             _tool_error("Helper not found."), "not_found",
             f"helper:{helper_type}:{helper_id}",
         )
-    try:
-        items = await async_ws_command(hass, f"{helper_type}/list", {})
-    except WsDispatchError:
-        return None, (
-            _tool_error(
-                f"{helper_type.capitalize()} helper storage is unavailable; "
-                "nothing changed."
-            ),
-            "invalid_request",
-            tool_name,
-        )
-    storage_items = _storage_items(helper_type, items)
-    if storage_items is None:
-        return None, (
-            _tool_error(
-                f"{helper_type.capitalize()} helper storage is unavailable; "
-                "nothing changed."
-            ),
-            "invalid_request",
-            tool_name,
-        )
-    item = next(
-        (row for row in storage_items if row.get("id") == helper_id),
-        None,
-    )
-    if item is None:
-        return None, (
-            _tool_error("Helper not found."), "not_found",
-            f"helper:{helper_type}:{helper_id}",
-        )
+    item, missing = await _stored_helper_item(hass, access_key, helper_type, helper_id, entity_id, tool_name)
+    if missing is not None:
+        return None, missing
+    assert item is not None
     if helper_type == "person" and not _person_relationships_accessible(
         item, access_key, hass, write=True
     ):
@@ -1356,21 +1392,13 @@ def _edit_helper_update(helper_type: str, before: Any, config: dict) -> dict:
 
 
 async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: str) -> dict | None:
-    """Return a helper's current stored config (for version-history `before`), or None.
+    """Return a helper's current stored config, or None when absent or unreadable.
 
-    Best-effort: a failure to read the prior config must not block the edit/delete,
-    so any dispatch error degrades to no `before` rather than raising.
+    Only restore's readback uses this, where either None leaves the result
+    unverified. Edit and delete need the distinction and use _stored_helper_item.
     """
-    try:
-        result = await async_ws_command(hass, f"{helper_type}/list", {})
-    except WsDispatchError:
-        return None
-    items = _storage_items(helper_type, result)
-    if items is None:
-        return None
-    return next(
-        (it for it in items if isinstance(it, dict) and it.get("id") == helper_id), None
-    )
+    rows = await _storage_helper_rows(hass, helper_type)
+    return next((row for row in rows or [] if row.get("id") == helper_id), None)
 
 
 async def _execute_create_helper(
@@ -1856,19 +1884,16 @@ async def _tool_edit_helper(
     if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
         helper_id = str(args.get("helper_id") or "").strip()
         helper_type = str(args.get("helper_type"))
-        entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
-        registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
-        config_entry_id = registry_entry.config_entry_id if registry_entry else None
-        entry = hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
-        if (registry_entry is not None and registry_entry.platform == "template"
-                and entry is not None and entry.domain == "template"):
-            settings = args.get("config")
-            if not isinstance(settings, dict) or not settings:
-                return _tool_error("config must be a non-empty object of Template settings."), "invalid_request", "edit_helper"
-            return await _tool_set_config_entry_options(
-                {"entry_id": entry.entry_id, "settings": settings},
-                access_key, hass, data, request_id=request_id, client_ip=client_ip,
-            )
+        entry = _template_helper_entry(hass, helper_type, helper_id)
+        if entry is None:
+            return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
+        settings = args.get("config")
+        if not isinstance(settings, dict) or not settings:
+            return _tool_error("config must be a non-empty object of Template settings."), "invalid_request", "edit_helper"
+        return await _tool_set_config_entry_options(
+            {"entry_id": entry.entry_id, "settings": settings},
+            access_key, hass, data, request_id=request_id, client_ip=client_ip,
+        )
     pre = _helper_write_precheck(args, "edit_helper", require_id=True)
     if pre is not None:
         return pre
@@ -1900,7 +1925,11 @@ async def _tool_edit_helper(
     )
     if isinstance(mesa_context, tuple):
         return mesa_context
-    current = await _read_helper_config(hass, helper_type, helper_id)
+    # The executor needs this item as its safety copy, so refuse now rather
+    # than after an approval that could only fail.
+    current, missing = await _stored_helper_item(hass, access_key, helper_type, helper_id, entity_id, "edit_helper")
+    if missing is not None:
+        return missing
     approval_args, blocked = await _helper_mesa_approval_gate(
         approval_args,
         access_key,
@@ -1917,9 +1946,32 @@ async def _tool_edit_helper(
     return await _execute_edit_helper(approval_args, access_key, hass, data)
 
 
+class _UncertainHelperWrite(Exception):
+    """A storage helper write reached Home Assistant without a verified result."""
+
+    def __init__(self, recovery_id: str, status: str) -> None:
+        super().__init__(status)
+        self.recovery_id = recovery_id
+        self.status = status
+
+
+def _uncertain_helper_result(exc: _UncertainHelperWrite, tool_name: str) -> tuple[dict, str, str]:
+    """Report a dispatched but unverified helper write without inviting a retry."""
+    return _tool_error(json.dumps({
+        "status": exc.status, "recovery_id": exc.recovery_id, "retry_safe": False,
+        "error": "Home Assistant received the helper change, but its result was not verified. "
+                 "Inspect configuration recovery and the helper's current state; do not retry automatically.",
+    })), "invalid_request", tool_name
+
+
 async def _protected_storage_helper_write(args, access_key, hass, data, before, payload, *, deleting=False):
-    """Retain a durable safety copy and verify storage readback after one dispatch."""
-    from ..config_recovery import ConfigurationRecoveryError
+    """Retain a durable safety copy and verify storage readback after one dispatch.
+
+    Raises ConfigurationRecoveryError when nothing changed: a refusal before
+    dispatch, or a Home Assistant refusal whose settled readback still equals
+    the safety copy. Raises _UncertainHelperWrite once a dispatch may have taken
+    effect. An authority change propagates after its recovery phase is saved.
+    """
     from ..request_authority import check_request_authority
 
     helper_type = args["helper_type"]
@@ -1935,9 +1987,9 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
     recovery = data.config_recovery
 
     async def read():
-        rows = _storage_items(helper_type, await async_ws_command(hass, f"{helper_type}/list", {}))
+        rows = await _storage_helper_rows(hass, helper_type)
         if rows is None:
-            raise ConfigurationRecoveryError("Helper storage could not be verified.")
+            raise ConfigurationRecoveryError("Helper storage could not be read")
         return next((row for row in rows if row.get("id") == helper_id), None)
 
     if not isinstance(before, dict) or before.get("id") != helper_id:
@@ -1959,33 +2011,67 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
         })
         try:
             await recovery.mark(rid, "dispatching")
-            current = await read()
-            if current != before:
+            refusal = None
+            try:
+                if await read() != before:
+                    refusal = "Helper configuration changed while saving its safety copy"
+                elif (await _revalidate_scoped_helper_context(args, access_key, hass, operation))[1] is not None:
+                    refusal = "Helper authority changed before dispatch"
+                else:
+                    check_request_authority()
+                    entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
+                    if entity_id is None:
+                        refusal = "Helper identity changed before dispatch"
+                    elif isinstance(_enforce_helper_mesa_context(args, access_key, hass, data, [entity_id],
+                            action="delete" if deleting else "edit",
+                            service_data={"helper_type": helper_type} if deleting else {"helper_type": helper_type, "config": args["config"]},
+                            session_id=operation), tuple):
+                        refusal = "Helper safety policy changed before dispatch"
+            except ConfigurationRecoveryError as exc:
+                refusal = str(exc)
+            except AuthorityChangedError:
                 await recovery.mark(rid, "not_applied")
-                raise ConfigurationRecoveryError("Helper configuration changed while saving its safety copy.")
-            _, error = await _revalidate_scoped_helper_context(args, access_key, hass, operation)
-            if error is not None:
+                raise
+            if refusal is not None:
                 await recovery.mark(rid, "not_applied")
-                raise ConfigurationRecoveryError("Helper authority changed before dispatch.")
-            check_request_authority()
-            entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
-            if entity_id is None:
-                raise ConfigurationRecoveryError("Helper identity changed before dispatch.")
-            context = _enforce_helper_mesa_context(args, access_key, hass, data, [entity_id],
-                action="delete" if deleting else "edit",
-                service_data={"helper_type": helper_type} if deleting else {"helper_type": helper_type, "config": args["config"]},
-                session_id=operation)
-            if isinstance(context, tuple):
+                raise ConfigurationRecoveryError(f"{refusal}; nothing was dispatched.")
+            try:
+                result = await async_ws_command(hass, f"{helper_type}/{'delete' if deleting else 'update'}", payload)
+            except WsCommandNotDispatchedError:
                 await recovery.mark(rid, "not_applied")
-                raise ConfigurationRecoveryError("Helper safety policy changed before dispatch.")
-            result = await async_ws_command(hass, f"{helper_type}/{'delete' if deleting else 'update'}", payload)
-            observed = await read()
+                raise ConfigurationRecoveryError("Home Assistant refused the helper request before running it; nothing was dispatched.") from None
+            except WsDispatchError as exc:
+                # A settled refusal whose readback is still the safety copy
+                # changed nothing; anything else may have landed.
+                observed: Any = _UNREAD
+                if not ws_commands_unsettled():
+                    try:
+                        observed = await read()
+                    except ConfigurationRecoveryError:
+                        pass
+                    except AuthorityChangedError:
+                        await recovery.mark(rid, "unknown")
+                        raise
+                if observed != before:
+                    await recovery.mark(rid, "unknown")
+                    raise _UncertainHelperWrite(rid, "unknown") from exc
+                await recovery.mark(rid, "not_applied")
+                detail = redact_inaccessible_entity_ids_in_text(str(exc), access_key, hass)[:500]
+                raise ConfigurationRecoveryError(f"Home Assistant refused the helper change ({detail}); nothing changed.") from None
+            try:
+                observed = await read()
+            except ConfigurationRecoveryError:
+                await recovery.mark(rid, "unknown")
+                raise _UncertainHelperWrite(rid, "unknown") from None
+            except AuthorityChangedError:
+                await recovery.mark(rid, "unknown")
+                raise
             verified = observed is None if deleting else isinstance(observed, dict) and all(
                 observed.get(k) == v for k, v in payload.items() if k != f"{helper_type}_id"
             )
             await recovery.mark(rid, "verified" if verified else "partial")
             if not verified:
-                raise ConfigurationRecoveryError("Helper write was dispatched but readback is incomplete; inspect recovery before retrying.")
+                raise _UncertainHelperWrite(rid, "partial")
             return result
         finally:
             recovery.leave(rid)
@@ -2030,11 +2116,14 @@ async def _execute_edit_helper(
     )
     if isinstance(mesa_context, tuple):
         return mesa_context
-    before_cfg = (
-        scoped_context["config"]
-        if scoped_context is not None
-        else await _read_helper_config(hass, str(helper_type), str(helper_id))
-    )
+    if scoped_context is not None:
+        before_cfg = scoped_context["config"]
+    else:
+        before_cfg, missing = await _stored_helper_item(
+            hass, access_key, str(helper_type), helper_id, entity_id, "edit_helper",
+        )
+        if missing is not None:
+            return missing
     if helper_type == "person":
         if "device_trackers" in config and (
             relationship_error := _person_relationship_scope_error(
@@ -2056,6 +2145,12 @@ async def _execute_edit_helper(
     payload = {**config, f"{helper_type}_id": helper_id}
     try:
         item = await _protected_storage_helper_write(args, access_key, hass, data, before_cfg, payload)
+    except AuthorityChangedError:
+        raise
+    except _UncertainHelperWrite as exc:
+        return _uncertain_helper_result(exc, "edit_helper")
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", "edit_helper"
     except Exception:
         return _tool_error("Helper edit was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "edit_helper"
     public_before = (
@@ -2083,20 +2178,17 @@ async def _tool_delete_helper(
     """MCP tool: delete a helper (Confirm-gated)."""
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_helper"
-    from ..const import TEMPLATE_RECOVERY_TYPES
     if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
         helper_id = str(args.get("helper_id") or "").strip()
         helper_type = str(args.get("helper_type"))
-        entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
-        registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
-        config_entry_id = registry_entry.config_entry_id if registry_entry else None
-        entry = hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
-        if registry_entry is not None and registry_entry.platform == "template" and entry is not None and entry.domain == "template":
-            from ..mcp_view import _tool_remove_integration
-            return await _tool_remove_integration(
-                {"entry_id": entry.entry_id}, access_key, hass, data,
-                request_id=request_id, client_ip=client_ip,
-            )
+        entry = _template_helper_entry(hass, helper_type, helper_id)
+        if entry is None:
+            return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
+        from ..mcp_view import _tool_remove_integration
+        return await _tool_remove_integration(
+            {"entry_id": entry.entry_id}, access_key, hass, data,
+            request_id=request_id, client_ip=client_ip,
+        )
     pre = _helper_write_precheck(
         {**args, "config": {}}, "delete_helper", require_id=True
     )
@@ -2122,6 +2214,12 @@ async def _tool_delete_helper(
     )
     if isinstance(mesa_context, tuple):
         return mesa_context
+    # The executor needs this item as its safety copy, so refuse now rather
+    # than after an approval that could only fail. Scoped types read it above.
+    if helper_type not in _SCOPED_STORAGE_HELPER_TYPES:
+        _, missing = await _stored_helper_item(hass, access_key, helper_type, helper_id, entity_id, "delete_helper")
+        if missing is not None:
+            return missing
     approval_args, blocked = await _helper_mesa_approval_gate(
         approval_args,
         access_key,
@@ -2169,14 +2267,23 @@ async def _execute_delete_helper(
     )
     if isinstance(mesa_context, tuple):
         return mesa_context
-    before_cfg = (
-        scoped_context["config"]
-        if scoped_context is not None
-        else await _read_helper_config(hass, str(helper_type), str(helper_id))
-    )
+    if scoped_context is not None:
+        before_cfg = scoped_context["config"]
+    else:
+        before_cfg, missing = await _stored_helper_item(
+            hass, access_key, str(helper_type), helper_id, entity_id, "delete_helper",
+        )
+        if missing is not None:
+            return missing
     try:
         await _protected_storage_helper_write(args, access_key, hass, data, before_cfg,
             {f"{helper_type}_id": helper_id}, deleting=True)
+    except AuthorityChangedError:
+        raise
+    except _UncertainHelperWrite as exc:
+        return _uncertain_helper_result(exc, "delete_helper")
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", "delete_helper"
     except Exception:
         return _tool_error("Helper deletion was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "delete_helper"
     public_before = (
