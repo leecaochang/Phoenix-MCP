@@ -708,9 +708,9 @@ def _scrub_layout(
     Layouts nest far deeper than service responses, so the bound is the
     dashboard one and a deeper subtree becomes the placeholder every write path
     refuses, never a silently empty container. With entity_domains, hidden
-    entity IDs embedded in strings are redacted too, which search needs so they
-    cannot match; tokens outside those domains, such as a button-card
-    template's entity.state, are not IDs and stay.
+    entity IDs embedded in strings (Markdown, templates) are redacted too, so
+    they can neither be read nor matched; tokens outside those domains, such as
+    a button-card template's entity.state, are not IDs and stay.
     """
     truncated: list[list] = []
     scrubbed = filter_service_response(
@@ -788,7 +788,7 @@ async def _tool_get_dashboard_config(
         return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", tool
     if config is None:
         return _tool_error(_no_stored_config_message(url_path)), "not_found", f"dashboard:{url_path or 'lovelace'}"
-    redacted, warnings = _scrub_layout(config, access_key, hass)
+    redacted, warnings = _scrub_layout(config, access_key, hass, entity_domains=instance_entity_domains(hass))
     # content_hash is over the RAW (unredacted) config the executor re-reads, so
     # redaction of the returned config does not affect the optimistic-lock guard.
     return _tool_success(json.dumps({

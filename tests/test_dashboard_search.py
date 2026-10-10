@@ -324,6 +324,23 @@ class TestYamlMode:
         assert "YAML-mode" in text and "yaml_board.yaml" in text and "get_yaml_config" in text
 
 
+class TestFullRead:
+    async def test_hidden_ids_inside_text_are_redacted_and_cannot_be_written_back(self, boards):
+        await async_save_lovelace_config(boards, None, {"views": [{"cards": [
+            {"type": "markdown", "content": "Door {{ states('sensor.secret') }} and light.kitchen"},
+            {"type": "custom:button-card", "entity": "light.kitchen", "custom_fields": {
+                "status": "[[[ return entity.state ]]]"}}]}]})
+        stored = await async_get_lovelace_config(boards, None)
+        body = _body((await _call(boards, "get_dashboard_config", {}))[0])
+        markdown, button = body["config"]["views"][0]["cards"]
+        assert "sensor.secret" not in markdown["content"] and "<redacted>" in markdown["content"]
+        assert "light.kitchen" in markdown["content"]
+        assert button["custom_fields"]["status"] == "[[[ return entity.state ]]]"
+        content, outcome, _ = await _call(boards, "set_dashboard_config", {"config": body["config"]})
+        assert outcome == "invalid_request" and "placeholder" in content["content"][0]["text"]
+        assert await async_get_lovelace_config(boards, None) == stored
+
+
 class TestDepth:
     async def test_common_nesting_is_no_longer_emptied(self, boards):
         body = _body((await _call(boards, "get_dashboard_config", {"url_path": "board-a"}))[0])
