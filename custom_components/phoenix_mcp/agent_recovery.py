@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
 
-from .const import DOMAIN
+from .const import DOMAIN, TURN_DELIVERED_EVENT
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -229,7 +229,14 @@ class AgentRecovery:
 
 
 def recovery_turn(run: Callable) -> Callable:
-    """Retain dispatch receipts until the entire provider turn succeeds."""
+    """Retain dispatch receipts until the entire provider turn succeeds.
+
+    A streamed turn has succeeded once its closing event (TURN_DELIVERED_EVENT)
+    was written while the turn was live. A client leaving after that, which Home
+    Assistant's server delivers as task cancellation, cannot make its effects
+    uncertain, so the receipts still complete, shielded from the cancellation
+    that is then re-raised. An interrupted delivery keeps them.
+    """
     @functools.wraps(run)
     async def guarded(*args: Any, **kwargs: Any) -> Any:
         data = kwargs["data"] if "data" in kwargs else args[1]
@@ -237,22 +244,29 @@ def recovery_turn(run: Callable) -> Callable:
         ctx = _turn_id.set(turn)
         data.agent_recovery._live_turns.add(turn)
         failed = False
+        delivered = False
+        cancel = kwargs.get("cancel")
         emit = kwargs.get("emit")
         if emit is not None:
             async def observe(name: str, payload: dict) -> None:
-                nonlocal failed
+                nonlocal failed, delivered
                 if name == "error" or (name == "notice" and payload.get("code") == "max_tokens_stop"):
                     failed = True
                 await emit(name, payload)
+                delivered = delivered or (name == TURN_DELIVERED_EVENT and not (cancel is not None and cancel.is_set()))
             kwargs["emit"] = observe
         try:
             result = await run(*args, **kwargs)
             if hasattr(result, "recovery_turn_id"):
                 result.recovery_turn_id = turn
-            cancel = kwargs.get("cancel")
-            if not failed and not (cancel is not None and cancel.is_set()) and getattr(result, "outcome", "ok") == "ok":
+            if (not failed and (delivered or not (cancel is not None and cancel.is_set()))
+                    and getattr(result, "outcome", "ok") == "ok"):
                 await data.agent_recovery.complete_turn(turn)
             return result
+        except asyncio.CancelledError:
+            if delivered and not failed:
+                await asyncio.shield(data.agent_recovery.complete_turn(turn))
+            raise
         finally:
             data.agent_recovery._live_turns.discard(turn)
             _turn_id.reset(ctx)

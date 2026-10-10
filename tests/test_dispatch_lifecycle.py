@@ -93,6 +93,122 @@ async def test_real_chat_disconnect_cancels_approval(hass, hass_access_token, so
             await client.close()
 
 
+@pytest.mark.parametrize("failing_frame", [b"event: tool_result", b"event: messages", b"event: done"])
+async def test_interrupted_delivery_through_the_view_keeps_the_barrier(
+    hass, hass_access_token, socket_enabled, failing_frame,
+):
+    """Until `done` is written the user may not have the result, so the write stays uncertain."""
+    from aiohttp import web
+
+    assert await async_setup_component(hass, "http", {})
+    data, access_key, _ = await _environment(hass)
+    view = agentcli.PhoenixAgentCliChatView()
+    view.hass = hass
+    hass.http.register_view(view)
+    cfg = agentcli.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
+    store = MagicMock()
+    store.resolve.return_value = cfg
+    provider = agentcli.ClaudeProvider(cfg)
+    rounds = iter([
+        [{"type": agentcli.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
+         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+             "role": "assistant", "content": [{"type": "tool_use", "id": "call", "name": "call_service", "input": {}}]}}],
+        [{"type": agentcli.EV_TEXT, "text": "Done."},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
+    ])
+
+    async def stream(*args, **kwargs):
+        for event in next(rounds):
+            yield event
+    provider.stream_turn = stream
+    dispatch = AsyncMock(return_value=({"result": {"content": []}}, "call_service", "call_service", "allowed"))
+    write = web.StreamResponse.write
+
+    async def leaving_client(self, chunk):
+        if chunk.startswith(failing_frame):
+            raise ConnectionResetError
+        return await write(self, chunk)
+    server = TestServer(hass.http.app)
+    client = TestClient(server, headers={"Authorization": f"Bearer {hass_access_token}"})
+    await client.start_server()
+    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli, "build_provider", return_value=provider), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch), \
+         patch.object(web.StreamResponse, "write", leaving_client):
+        try:
+            response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "go"})
+            assert response.status == 200
+            async with asyncio.timeout(5):
+                await response.read()
+        finally:
+            await client.close()
+    dispatch.assert_awaited_once()
+    assert data.agent_recovery.blocks(access_key.id)
+
+
+@pytest.mark.parametrize("handler_cancellation", [True, False])
+async def test_client_leaving_right_after_done_keeps_the_turn_finished(
+    hass, hass_access_token, socket_enabled, handler_cancellation,
+):
+    """Home Assistant cancels the handler on disconnect; work after `done` must still settle."""
+    assert await async_setup_component(hass, "http", {})
+    data, access_key, _ = await _environment(hass)
+    data.store.get_settings().conversation_log_enabled = True
+    data.conversations.configure(data.store.get_settings())
+    view = agentcli.PhoenixAgentCliChatView()
+    view.hass = hass
+    hass.http.register_view(view)
+    cfg = agentcli.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
+    store = MagicMock()
+    store.resolve.return_value = cfg
+    provider = agentcli.ClaudeProvider(cfg)
+    rounds = iter([
+        [{"type": agentcli.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
+         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+             "role": "assistant", "content": [{"type": "tool_use", "id": "call", "name": "call_service", "input": {}}]}}],
+        [{"type": agentcli.EV_TEXT, "text": "Done."},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
+    ])
+
+    async def stream(*args, **kwargs):
+        for event in next(rounds):
+            yield event
+    provider.stream_turn = stream
+    dispatch = AsyncMock(return_value=({"result": {"content": []}}, "call_service", "call_service", "allowed"))
+    release = data.agent_recovery.complete_turn
+
+    async def slow_release(turn):
+        # Holds the post-turn work open so the client's hang-up lands inside it.
+        await asyncio.sleep(0.3)
+        await release(turn)
+    server = TestServer(hass.http.app, handler_cancellation=handler_cancellation)
+    client = TestClient(server, headers={"Authorization": f"Bearer {hass_access_token}"})
+    await client.start_server()
+    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli, "build_provider", return_value=provider), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch), \
+         patch.object(data.agent_recovery, "complete_turn", slow_release):
+        try:
+            response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "go"})
+            assert response.status == 200
+            buffer = ""
+            async with asyncio.timeout(3):
+                async for chunk in response.content.iter_any():
+                    buffer += chunk.decode()
+                    if "event: done\ndata:" in buffer and buffer.endswith("\n\n"):
+                        break
+            response.close()
+            await asyncio.sleep(0.6)
+        finally:
+            await client.close()
+    dispatch.assert_awaited_once()
+    assert not data.agent_recovery.blocks(access_key.id)
+    assert data.conversations.query()["entries"][0]["status"] == "completed"
+    assert data.routing_statistics.surfaces["chat"]["outcomes"]["cancelled"] == 0
+
+
 @pytest.fixture
 async def lifecycle_http(hass, hass_client_no_auth):
     assert await async_setup_component(hass, "http", {})

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from homeassistant.util.dt import utcnow, parse_datetime
 
-from .const import ROUTING_STATISTICS_OUTCOMES, ROUTING_STATISTICS_SURFACES
+from .const import ROUTING_STATISTICS_OUTCOMES, ROUTING_STATISTICS_SURFACES, TURN_DELIVERED_EVENT
 
 
 def _empty() -> dict:
@@ -230,9 +230,12 @@ def tracked_turn(surface: str):
                 return await function(*args, **kwargs)
             turn = TurnStatistics(surface, stats.surfaces[surface]["generation"])
             context = _current.set(turn)
+            delivered = False
             if surface == "chat":
                 emit = kwargs["emit"]
+                cancel = kwargs.get("cancel")
                 async def observed(event, payload):
+                    nonlocal delivered
                     if event == "error":
                         turn.cancelled = payload.get("code") == "cancelled"
                         turn.failed = not turn.cancelled
@@ -245,11 +248,13 @@ def tracked_turn(surface: str):
                     elif event == "continue_required" or (event == "notice" and payload.get("code") == "empty_turn"):
                         turn.failed = True
                     await emit(event, payload)
+                    delivered = delivered or (event == TURN_DELIVERED_EVENT and not (cancel is not None and cancel.is_set()))
                 kwargs["emit"] = observed
             try:
                 return await function(*args, **kwargs)
             except asyncio.CancelledError:
-                turn.cancelled = True
+                # A client leaving after a delivered turn does not cancel it.
+                turn.cancelled = turn.cancelled or not delivered
                 raise
             except BaseException:
                 turn.failed = True

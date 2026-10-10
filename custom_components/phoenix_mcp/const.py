@@ -2733,6 +2733,11 @@ APPROVAL_PAYLOAD_RETENTION_SECONDS = 3600
 
 # Optional administrator conversation history, independent of safety journals.
 CONVERSATION_LOG_STORAGE_KEY = "phoenix_mcp_conversations"
+# A streamed Agent Chat turn whose closing event was written while the turn was
+# live has delivered its result; a client leaving afterwards (Home Assistant
+# cancels the handler) does not make its effects uncertain. A failed or
+# cancelled delivery of this event still does.
+TURN_DELIVERED_EVENT = "done"
 CONVERSATION_LOG_DEFAULTS = {
     "conversation_log_max_entries": 100,
     "conversation_log_max_days": 7,

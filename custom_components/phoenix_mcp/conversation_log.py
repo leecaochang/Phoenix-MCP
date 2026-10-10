@@ -27,6 +27,7 @@ from .const import (
     CONVERSATION_LOG_ENTRY_BYTES, CONVERSATION_LOG_PAYLOAD_BYTES, CONVERSATION_LOG_SCAN_BYTES,
     CONVERSATION_LOG_MAX_EVENTS, CONVERSATION_LOG_MAX_OPERATIONS, CONVERSATION_LOG_MAX_APPROVALS,
     CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS, CONVERSATION_LOG_STATUS_PRIORITY,
+    TURN_DELIVERED_EVENT,
 )
 from .helpers import is_sensitive_key, redact_secrets_in_text
 
@@ -891,8 +892,11 @@ def recorded_chat(run: Callable) -> Callable:
 
         flush_context = _assistant_flush.set(flush)
 
+        delivered = False
+        cancel = kwargs.get("cancel")
+
         async def observe(name: str, payload: dict) -> None:
-            nonlocal size, status, response_status, overflow
+            nonlocal size, status, response_status, overflow, delivered
             if log.entry(handle) is None:
                 chunks.clear()
             if log.entry(handle) is not None and name == "assistant_delta" and isinstance(payload.get("text"), str):
@@ -915,18 +919,21 @@ def recorded_chat(run: Callable) -> Callable:
                 elif name == "continue_required":
                     status = "paused"
             await emit(name, payload)
+            delivered = delivered or (name == TURN_DELIVERED_EVENT and not (cancel is not None and cancel.is_set()))
 
         kwargs["emit"] = observe
         try:
             return await run(*args, **kwargs)
         except asyncio.CancelledError:
-            status = response_status = "cancelled"
+            # A client leaving after a delivered turn does not cancel it.
+            if not delivered:
+                status = response_status = "cancelled"
             raise
         except Exception:
             status = response_status = "failed"
             raise
         finally:
-            if kwargs.get("cancel") is not None and kwargs["cancel"].is_set():
+            if not delivered and cancel is not None and cancel.is_set():
                 status = response_status = "cancelled"
             flush_assistant()
             log.finish(handle, response=last_text, status=status, response_status=response_status)
