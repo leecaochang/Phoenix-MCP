@@ -227,6 +227,10 @@
         "label": "Filesystem access",
         "description": "Read and write files under www/, themes/, and custom_templates/."
       },
+      "cap_dashboard_resources": {
+        "label": "Dashboard resources",
+        "description": "List, add, change and remove the JavaScript and CSS files every dashboard loads, which is how custom cards are installed. A registered JavaScript file runs in every browser that opens a dashboard, with that person's Home Assistant access, so Confirm is strongly recommended."
+      },
       "cap_esphome_yaml": {
         "label": "ESPHome device YAML",
         "description": "Read and edit ESPHome device YAML in its own jail under esphome/, validate it, and compile it. Credentials are masked on read and cannot be changed. Compiling only builds a binary; flashing a device needs the separate ESPHome firmware flashing capability."
@@ -1530,6 +1534,9 @@
       "dashboard_card.delete.section": "Delete card {card_index} from dashboard '{label}' (view {view_index}, section {section_index})",
       "dashboard_card.edit": "Replace card {card_index} on dashboard '{label}' (view {view_index})",
       "dashboard_card.edit.section": "Replace card {card_index} on dashboard '{label}' (view {view_index}, section {section_index})",
+      "dashboard_resource.create": "Add dashboard resource {url}",
+      "dashboard_resource.delete": "Remove dashboard resource {url}",
+      "dashboard_resource.update": "Change dashboard resource {url}",
       "delete_automation": "Delete automation '{automation_id}'",
       "delete_calendar_event": "Delete calendar event",
       "delete_entity": "Delete the registry entry for {entity_id}",
@@ -1864,6 +1871,12 @@
       "dashboard_card.edit.section.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
       "dashboard_card.edit.section.title": "Update a card on dashboard '{label}'",
       "dashboard_card.edit.title": "Update a card on dashboard '{label}'",
+      "dashboard_resource.create.body": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
+      "dashboard_resource.create.title": "Add dashboard resource {url}",
+      "dashboard_resource.delete.body": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
+      "dashboard_resource.delete.title": "Remove dashboard resource {url}",
+      "dashboard_resource.update.body": "This changes a file every browser loads when it opens a dashboard. Open Details to compare the current and proposed file.",
+      "dashboard_resource.update.title": "Change dashboard resource {url}",
       "delete_automation.body": "This will permanently delete automation {automation_id}.",
       "delete_automation.title": "Delete automation '{automation_id}'",
       "delete_calendar_event.body": "This will remove the selected item. The change may not be reversible.",

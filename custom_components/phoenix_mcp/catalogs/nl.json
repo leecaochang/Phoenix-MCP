@@ -517,6 +517,10 @@
       "cap_calendar_write": {
         "label": "Kalender schrijven",
         "description": "Afspraken maken, bijwerken en verwijderen in kalenders met schrijftoegang."
+      },
+      "cap_dashboard_resources": {
+        "label": "Dashboardbronnen",
+        "description": "De JavaScript- en CSS-bestanden weergeven, toevoegen, wijzigen en verwijderen die elk dashboard laadt, waarmee aangepaste kaarten worden geïnstalleerd. Een geregistreerd JavaScript-bestand wordt uitgevoerd in elke browser die een dashboard opent, met de Home Assistant-toegang van die persoon, dus Bevestigen wordt sterk aanbevolen."
       }
     },
     "perms": {
@@ -696,7 +700,10 @@
       "location.create": "Locatie {name} maken",
       "location.delete": "Locatie {name} verwijderen",
       "location.update": "Locatie {name} bijwerken",
-      "patch_dashboard.multi": "{count} wijzigingen toepassen op dashboard '{label}'"
+      "patch_dashboard.multi": "{count} wijzigingen toepassen op dashboard '{label}'",
+      "dashboard_resource.create": "Dashboardbron {url} toevoegen",
+      "dashboard_resource.update": "Dashboardbron {url} wijzigen",
+      "dashboard_resource.delete": "Dashboardbron {url} verwijderen"
     },
     "approvals": {
       "approve": "Goedkeuren en uitvoeren",
@@ -2157,7 +2164,13 @@
       "location.update.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
       "location.update.title": "Locatie {name} bijwerken",
       "patch_dashboard.multi.title": "Dashboard '{label}' bijwerken",
-      "patch_dashboard.multi.body": "Hiermee wordt de Home Assistant-dashboardconfiguratie bijgewerkt. Open Details om de exacte voorgestelde wijziging te bekijken."
+      "patch_dashboard.multi.body": "Hiermee wordt de Home Assistant-dashboardconfiguratie bijgewerkt. Open Details om de exacte voorgestelde wijziging te bekijken.",
+      "dashboard_resource.create.title": "Dashboardbron {url} toevoegen",
+      "dashboard_resource.update.title": "Dashboardbron {url} wijzigen",
+      "dashboard_resource.delete.title": "Dashboardbron {url} verwijderen",
+      "dashboard_resource.create.body": "Elke browser die een dashboard opent, laadt {url}. Een JavaScript-bestand wordt uitgevoerd met de Home Assistant-toegang van die persoon, dus keur alleen een bestand goed dat je vertrouwt.",
+      "dashboard_resource.update.body": "Hiermee wordt een bestand gewijzigd dat elke browser laadt bij het openen van een dashboard. Open Details om het huidige en het voorgestelde bestand te vergelijken.",
+      "dashboard_resource.delete.body": "Dashboards laden {url} niet meer. Kaarten die uit dit bestand komen, tonen een fout totdat het weer wordt toegevoegd."
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",

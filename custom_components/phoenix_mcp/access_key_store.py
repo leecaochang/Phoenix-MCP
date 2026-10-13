@@ -344,6 +344,7 @@ class AccessKeyRecord:
     cap_registry_write: str = CAP_DENY
     cap_radio_write: str = CAP_DENY
     cap_energy_write: str = CAP_DENY
+    cap_dashboard_resources: str = CAP_DENY
     cap_backup: str = CAP_DENY
     cap_filesystem: str = CAP_DENY
     cap_yaml_edit: str = CAP_DENY

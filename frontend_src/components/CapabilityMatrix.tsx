@@ -224,6 +224,13 @@ const CAPS: CapDef[] = [
     confirmAvailable: true,
   },
   {
+    key: "cap_dashboard_resources",
+    labelKey: "caps.cap_dashboard_resources.label",
+    descriptionKey: "caps.cap_dashboard_resources.description",
+    tier: "irreversible",
+    confirmAvailable: true,
+  },
+  {
     key: "cap_esphome_yaml",
     labelKey: "caps.cap_esphome_yaml.label",
     descriptionKey: "caps.cap_esphome_yaml.description",

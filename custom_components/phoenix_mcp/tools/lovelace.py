@@ -73,7 +73,7 @@ from ..ws_dispatch import (
     WsDispatchError,
     WsYamlDashboardError,
     async_get_lovelace_config,
-    async_lovelace_resource_urls,
+    async_lovelace_resources,
     async_save_lovelace_config,
     async_ws_command,
 )
@@ -319,7 +319,8 @@ _FRESHNESS_TEXT = {
 
 async def _catalog_freshness(hass: HomeAssistant, data: PhoenixData) -> CatalogFreshness:
     """Judge the harvested catalog against the dashboard resources registered now."""
-    return assess_freshness(data.card_catalog.catalog, await async_lovelace_resource_urls(hass))
+    resources = await async_lovelace_resources(hass)
+    return assess_freshness(data.card_catalog.catalog, resources.items if resources is not None else None)
 
 
 def _freshness_clause(freshness: CatalogFreshness) -> str:

@@ -742,7 +742,13 @@
       "zigbee_topology.backend.body": "Dette forespørger aktivt Zigbee-routere på {backend}. Mesh-netværket kan være mindre lydhørt, mens scanningen kører.",
       "zigbee_topology.backend.title": "Scan {backend}-nabotabeller for det afgrænsede Zigbee-kort",
       "zigbee_topology.body": "Dette forespørger aktivt Zigbee-routere. Mesh-netværket kan være mindre lydhørt, mens scanningen kører.",
-      "zigbee_topology.title": "Scan Zigbee-topologi"
+      "zigbee_topology.title": "Scan Zigbee-topologi",
+      "dashboard_resource.create.title": "Tilføj betjeningspanelressource {url}",
+      "dashboard_resource.update.title": "Ændr betjeningspanelressource {url}",
+      "dashboard_resource.delete.title": "Fjern betjeningspanelressource {url}",
+      "dashboard_resource.create.body": "Alle browsere, der åbner et betjeningspanel, vil indlæse {url}. En JavaScript-fil kører med den pågældende persons adgang til Home Assistant, så godkend kun en fil, du har tillid til.",
+      "dashboard_resource.update.body": "Dette ændrer en fil, som alle browsere indlæser, når de åbner et betjeningspanel. Åbn Detaljer for at sammenligne den nuværende og den foreslåede fil.",
+      "dashboard_resource.delete.body": "Betjeningspaneler holder op med at indlæse {url}. Kort, der kommer fra den, viser en fejl, indtil den tilføjes igen."
     },
     "approvals": {
       "approve": "Godkend og udfør",
@@ -1036,7 +1042,11 @@
       "tierIrreversible": "Høj risiko",
       "tierRead": "Læsninger",
       "tierSystem": "Systemhandlinger",
-      "updateFailed": "Kunne ikke opdatere funktionen."
+      "updateFailed": "Kunne ikke opdatere funktionen.",
+      "cap_dashboard_resources": {
+        "label": "Betjeningspanelressourcer",
+        "description": "Vis, tilføj, ændr og fjern de JavaScript- og CSS-filer, som alle betjeningspaneler indlæser, og som er den måde, brugerdefinerede kort installeres på. En registreret JavaScript-fil kører i alle browsere, der åbner et betjeningspanel, med den pågældende persons adgang til Home Assistant, så det anbefales kraftigt at bruge Bekræft."
+      }
     },
     "changes": {
       "actionCreate": "Opret",
@@ -1418,7 +1428,10 @@
       "zigbee_reporting": "Konfigurér Zigbee-attributrapportering",
       "zigbee_reporting.device": "Konfigurér rapportering af {cluster}.{attribute} for {label}",
       "zigbee_topology": "Scan Zigbee-topologi",
-      "zigbee_topology.backend": "Scan {backend}-nabotabeller for det afgrænsede Zigbee-kort"
+      "zigbee_topology.backend": "Scan {backend}-nabotabeller for det afgrænsede Zigbee-kort",
+      "dashboard_resource.create": "Tilføj betjeningspanelressource {url}",
+      "dashboard_resource.update": "Ændr betjeningspanelressource {url}",
+      "dashboard_resource.delete": "Fjern betjeningspanelressource {url}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",

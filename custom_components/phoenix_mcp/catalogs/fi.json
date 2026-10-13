@@ -742,7 +742,13 @@
       "zigbee_topology.backend.body": "Tämä tekee aktiivisia kyselyitä Zigbee-reitittimille taustajärjestelmässä {backend}. Verkko voi reagoida hitaammin skannauksen aikana.",
       "zigbee_topology.backend.title": "Skannaa {backend}-naapuritaulukot rajattua Zigbee-karttaa varten",
       "zigbee_topology.body": "Tämä tekee aktiivisia kyselyitä Zigbee-reitittimille. Verkko voi reagoida hitaammin skannauksen aikana.",
-      "zigbee_topology.title": "Skannaa Zigbee-topologia"
+      "zigbee_topology.title": "Skannaa Zigbee-topologia",
+      "dashboard_resource.create.title": "Lisää kojelaudan resurssi {url}",
+      "dashboard_resource.update.title": "Muuta kojelaudan resurssia {url}",
+      "dashboard_resource.delete.title": "Poista kojelaudan resurssi {url}",
+      "dashboard_resource.create.body": "Jokainen selain, joka avaa kojelaudan, lataa tiedoston {url}. JavaScript-tiedosto suoritetaan kyseisen henkilön Home Assistant -käyttöoikeuksilla, joten hyväksy vain tiedosto, johon luotat.",
+      "dashboard_resource.update.body": "Tämä muuttaa tiedostoa, jonka jokainen selain lataa avatessaan kojelaudan. Avaa Yksityiskohdat ja vertaa nykyistä ja ehdotettua tiedostoa.",
+      "dashboard_resource.delete.body": "Kojelaudat lakkaavat lataamasta tiedostoa {url}. Siitä peräisin olevat kortit näyttävät virheen, kunnes se lisätään takaisin."
     },
     "approvals": {
       "approve": "Hyväksy ja suorita",
@@ -1036,7 +1042,11 @@
       "tierIrreversible": "Korkea riski",
       "tierRead": "Lukutoiminnot",
       "tierSystem": "Järjestelmätoiminnot",
-      "updateFailed": "Ominaisuuden päivitys epäonnistui."
+      "updateFailed": "Ominaisuuden päivitys epäonnistui.",
+      "cap_dashboard_resources": {
+        "label": "Kojelaudan resurssit",
+        "description": "Listaa, lisää, muuta ja poista JavaScript- ja CSS-tiedostot, jotka jokainen kojelauta lataa ja joiden avulla mukautetut kortit asennetaan. Rekisteröity JavaScript-tiedosto suoritetaan jokaisessa selaimessa, joka avaa kojelaudan, kyseisen henkilön Home Assistant -käyttöoikeuksilla, joten Vahvista-tila on erittäin suositeltava."
+      }
     },
     "changes": {
       "actionCreate": "Luo",
@@ -1418,7 +1428,10 @@
       "zigbee_reporting": "Määritä Zigbee-attribuutin raportointi",
       "zigbee_reporting.device": "Määritä kohteen {cluster}.{attribute} raportointi laitteelle {label}",
       "zigbee_topology": "Skannaa Zigbee-topologia",
-      "zigbee_topology.backend": "Skannaa {backend}-naapuritaulukot rajattua Zigbee-karttaa varten"
+      "zigbee_topology.backend": "Skannaa {backend}-naapuritaulukot rajattua Zigbee-karttaa varten",
+      "dashboard_resource.create": "Lisää kojelaudan resurssi {url}",
+      "dashboard_resource.update": "Muuta kojelaudan resurssia {url}",
+      "dashboard_resource.delete": "Poista kojelaudan resurssi {url}"
     },
     "inject": {
       "mesaProfile": "MESA-profiili",

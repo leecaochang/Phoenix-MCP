@@ -742,7 +742,13 @@
       "zigbee_topology.backend.body": "Detta söker aktivt av Zigbee-routrarna på {backend}. Nätet kan bli mindre responsivt medan skanningen körs.",
       "zigbee_topology.backend.title": "Skanna {backend}-grannstabeller för den avgränsade Zigbee-kartan",
       "zigbee_topology.body": "Detta söker aktivt av Zigbee-routrarna. Nätet kan bli mindre responsivt medan skanningen körs.",
-      "zigbee_topology.title": "Skanna Zigbee-topologin"
+      "zigbee_topology.title": "Skanna Zigbee-topologin",
+      "dashboard_resource.create.title": "Lägg till kontrollpanelsresurs {url}",
+      "dashboard_resource.update.title": "Ändra kontrollpanelsresurs {url}",
+      "dashboard_resource.delete.title": "Ta bort kontrollpanelsresurs {url}",
+      "dashboard_resource.create.body": "Varje webbläsare som öppnar en kontrollpanel läser in {url}. En JavaScript-fil körs med den personens åtkomst till Home Assistant, så godkänn bara en fil du litar på.",
+      "dashboard_resource.update.body": "Detta ändrar en fil som varje webbläsare läser in när den öppnar en kontrollpanel. Öppna Detaljer för att jämföra den nuvarande och den föreslagna filen.",
+      "dashboard_resource.delete.body": "Kontrollpaneler slutar läsa in {url}. Kort som kommer från den visar ett fel tills den läggs till igen."
     },
     "approvals": {
       "approve": "Godkänn och kör",
@@ -1036,7 +1042,11 @@
       "tierIrreversible": "Hög risk",
       "tierRead": "Läsningar",
       "tierSystem": "Systemåtgärder",
-      "updateFailed": "Det gick inte att uppdatera funktionen."
+      "updateFailed": "Det gick inte att uppdatera funktionen.",
+      "cap_dashboard_resources": {
+        "label": "Kontrollpanelsresurser",
+        "description": "Lista, lägg till, ändra och ta bort JavaScript- och CSS-filerna som varje kontrollpanel läser in, vilket är så anpassade kort installeras. En registrerad JavaScript-fil körs i varje webbläsare som öppnar en kontrollpanel, med den personens åtkomst till Home Assistant, så Bekräfta rekommenderas starkt."
+      }
     },
     "changes": {
       "actionCreate": "Skapa",
@@ -1418,7 +1428,10 @@
       "zigbee_reporting": "Konfigurera rapportering av Zigbee-attribut",
       "zigbee_reporting.device": "Konfigurera rapportering av {cluster}.{attribute} för {label}",
       "zigbee_topology": "Skanna Zigbee-topologin",
-      "zigbee_topology.backend": "Skanna {backend}-grannstabeller för den avgränsade Zigbee-kartan"
+      "zigbee_topology.backend": "Skanna {backend}-grannstabeller för den avgränsade Zigbee-kartan",
+      "dashboard_resource.create": "Lägg till kontrollpanelsresurs {url}",
+      "dashboard_resource.update": "Ändra kontrollpanelsresurs {url}",
+      "dashboard_resource.delete": "Ta bort kontrollpanelsresurs {url}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",

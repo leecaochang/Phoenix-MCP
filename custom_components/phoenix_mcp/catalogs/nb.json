@@ -742,7 +742,13 @@
       "zigbee_topology.backend.body": "Dette spør aktivt Zigbee-rutere på {backend}. Mesh-nettet kan være mindre responsivt mens skanningen kjører.",
       "zigbee_topology.backend.title": "Skann nabotabellene til {backend} for det avgrensede Zigbee-kartet",
       "zigbee_topology.body": "Dette spør aktivt Zigbee-rutere. Mesh-nettet kan være mindre responsivt mens skanningen kjører.",
-      "zigbee_topology.title": "Skann Zigbee-topologi"
+      "zigbee_topology.title": "Skann Zigbee-topologi",
+      "dashboard_resource.create.title": "Legg til dashbordressurs {url}",
+      "dashboard_resource.update.title": "Endre dashbordressurs {url}",
+      "dashboard_resource.delete.title": "Fjern dashbordressurs {url}",
+      "dashboard_resource.create.body": "Hver nettleser som åpner et dashbord, vil laste inn {url}. En JavaScript-fil kjører med den personens tilgang til Home Assistant, så godkjenn bare en fil du stoler på.",
+      "dashboard_resource.update.body": "Dette endrer en fil som hver nettleser laster inn når den åpner et dashbord. Åpne Detaljer for å sammenligne den nåværende og den foreslåtte filen.",
+      "dashboard_resource.delete.body": "Dashbord slutter å laste inn {url}. Kort som kommer fra den, viser en feil til den legges til igjen."
     },
     "approvals": {
       "approve": "Godkjenn og utfør",
@@ -1036,7 +1042,11 @@
       "tierIrreversible": "Høy risiko",
       "tierRead": "Lesing",
       "tierSystem": "Systemhandlinger",
-      "updateFailed": "Kunne ikke oppdatere kapabiliteten."
+      "updateFailed": "Kunne ikke oppdatere kapabiliteten.",
+      "cap_dashboard_resources": {
+        "label": "Dashbordressurser",
+        "description": "List opp, legg til, endre og fjern JavaScript- og CSS-filene som hvert dashbord laster inn, som er måten tilpassede kort installeres på. En registrert JavaScript-fil kjører i hver nettleser som åpner et dashbord, med den personens tilgang til Home Assistant, så Bekreft anbefales sterkt."
+      }
     },
     "changes": {
       "actionCreate": "Opprett",
@@ -1418,7 +1428,10 @@
       "zigbee_reporting": "Konfigurer Zigbee-attributtrapportering",
       "zigbee_reporting.device": "Konfigurer rapportering av {cluster}.{attribute} for {label}",
       "zigbee_topology": "Skann Zigbee-topologi",
-      "zigbee_topology.backend": "Skann nabotabellene til {backend} for det avgrensede Zigbee-kartet"
+      "zigbee_topology.backend": "Skann nabotabellene til {backend} for det avgrensede Zigbee-kartet",
+      "dashboard_resource.create": "Legg til dashbordressurs {url}",
+      "dashboard_resource.update": "Endre dashbordressurs {url}",
+      "dashboard_resource.delete": "Fjern dashbordressurs {url}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",

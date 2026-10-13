@@ -42,6 +42,7 @@ async def lovelace(hass: HomeAssistant):
 
 
 async def _catalog(resource_urls: list[str] | None = RESOURCES, failed: list | None = None) -> CardCatalogStore:
+    resources = None if resource_urls is None else [{"type": "module", "url": url} for url in resource_urls]
     store = CardCatalogStore()
     await store.async_replace(
         entries=[
@@ -50,7 +51,7 @@ async def _catalog(resource_urls: list[str] | None = RESOURCES, failed: list | N
         ],
         resource_count=31,
         failed_imports=failed or [],
-        resource_urls=resource_urls,
+        resources=resources,
     )
     return store
 

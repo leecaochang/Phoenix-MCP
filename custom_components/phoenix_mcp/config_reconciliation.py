@@ -94,6 +94,9 @@ async def observe_configuration(hass, record: dict) -> dict:
     if kind == "dashboard_registry":
         from .tools.lovelace import _dashboard_registry_snapshot
         return await _dashboard_registry_snapshot(hass, snapshot["resource_id"])
+    if kind == "dashboard_resource":
+        from .tools.dashboard_resources import read_resource_snapshot
+        return await read_resource_snapshot(hass, snapshot["lookup"], snapshot["resource_id"])
     raise ConfigurationRecoveryError("This configuration has no observation adapter.")
 
 
@@ -110,6 +113,12 @@ def _matches(record: dict, observed: dict) -> bool:
         row = observed.get("dashboard") or {}
         return observed.get("exists") == expected.get("exists") and all(
             row.get(key) == value for key, value in (expected.get("dashboard") or {}).items()
+        )
+    if expected.get("snapshot_type") == "dashboard_resource":
+        # HA assigns a created resource's ID, so only the expected fields compare.
+        resource = observed.get("resource") or {}
+        return observed.get("exists") == expected.get("exists") and all(
+            resource.get(key) == value for key, value in (expected.get("resource") or {}).items()
         )
     if expected.get("snapshot_type") == "template_helper" and record.get("observations", {}).get("replacement_entry_id"):
         # The config flow allocates a new entry and unique ID. Keep the remaining

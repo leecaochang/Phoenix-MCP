@@ -553,7 +553,13 @@
       "location.update.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
       "location.update.title": "更新位置 {name}",
       "patch_dashboard.multi.title": "更新儀表板「{label}」",
-      "patch_dashboard.multi.body": "這將更新 Home Assistant 儀表板設定。開啟詳細資訊可檢視具體更改內容。"
+      "patch_dashboard.multi.body": "這將更新 Home Assistant 儀表板設定。開啟詳細資訊可檢視具體更改內容。",
+      "dashboard_resource.create.title": "新增儀表板資源 {url}",
+      "dashboard_resource.update.title": "更改儀表板資源 {url}",
+      "dashboard_resource.delete.title": "移除儀表板資源 {url}",
+      "dashboard_resource.create.body": "每個開啟儀表板的瀏覽器都會載入 {url}。JavaScript 檔案會以該使用者的 Home Assistant 存取權限執行，因此請只核准您信任的檔案。",
+      "dashboard_resource.update.body": "這將更改每個瀏覽器開啟儀表板時載入的檔案。請在詳細資訊中比較目前檔案和擬議檔案。",
+      "dashboard_resource.delete.body": "儀表板將不再載入 {url}。來自該檔案的卡片在重新新增之前會顯示錯誤。"
     },
     "approvals": {
       "approve": "核准並執行",
@@ -829,6 +835,10 @@
       "cap_calendar_write": {
         "label": "行事曆寫入",
         "description": "在具有寫入權限的行事曆中建立、更新和刪除事件。"
+      },
+      "cap_dashboard_resources": {
+        "label": "儀表板資源",
+        "description": "列出、新增、更改和移除每個儀表板都會載入的 JavaScript 和 CSS 檔案，自定義卡片就是透過它們安裝的。已註冊的 JavaScript 檔案會在每個開啟儀表板的瀏覽器中執行，並擁有該使用者的 Home Assistant 存取權限，因此強烈建議設為「確認」。"
       }
     },
     "changes": {
@@ -1034,7 +1044,10 @@
       "location.create": "建立位置 {name}",
       "location.delete": "刪除位置 {name}",
       "location.update": "更新位置 {name}",
-      "patch_dashboard.multi": "對儀表板「{label}」套用 {count} 項變更"
+      "patch_dashboard.multi": "對儀表板「{label}」套用 {count} 項變更",
+      "dashboard_resource.create": "新增儀表板資源 {url}",
+      "dashboard_resource.update": "更改儀表板資源 {url}",
+      "dashboard_resource.delete": "移除儀表板資源 {url}"
     },
     "inject": {
       "mesaProfile": "MESA 策略",

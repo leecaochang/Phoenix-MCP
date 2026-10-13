@@ -4586,7 +4586,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                     resource_id = snapshot["entry_id"]
                 elif snapshot.get("snapshot_type") in (
                     "energy_preferences", "authored_file", "yaml_file", "blueprint_source",
-                    "dashboard_registry", "dashboard_layout",
+                    "dashboard_registry", "dashboard_layout", "dashboard_resource",
                 ):
                     from .mcp_view import async_restore_configuration
                     restored, outcome, _ = await async_restore_configuration(
@@ -5025,13 +5025,14 @@ class PhoenixAdminCardCatalogView(PhoenixView):
                 "invalid_request", "entries must be a list.", 400, rid,
                 key="entriesListRequired",
             )
-        from .ws_dispatch import async_lovelace_resource_urls  # noqa: PLC0415
+        from .ws_dispatch import async_lovelace_resources  # noqa: PLC0415
 
+        resources = await async_lovelace_resources(self.hass)
         catalog = await data.card_catalog.async_replace(
             entries=body.get("entries"),
             resource_count=body.get("resource_count"),
             failed_imports=body.get("failed_imports"),
-            resource_urls=await async_lovelace_resource_urls(self.hass),
+            resources=resources.items if resources is not None else None,
         )
         _audit_admin(self.hass, request, rid, request.path)
         return _ok({

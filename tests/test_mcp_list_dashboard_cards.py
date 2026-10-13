@@ -60,7 +60,7 @@ async def _harvested(**over) -> CardCatalogStore:
     await store.async_replace(
         entries=entries, resource_count=31,
         failed_imports=over.pop("failed_imports", []),
-        resource_urls=over.pop("resource_urls", RESOURCES),
+        resources=over.pop("resources", [{"type": "module", "url": url} for url in RESOURCES]),
     )
     return store
 
@@ -203,7 +203,7 @@ async def test_failed_imports_and_unknown_provenance_are_both_reported(hass: Hom
 
 
 async def test_listing_reports_an_incomplete_catalog(lovelace) -> None:
-    data = _data(await _harvested(resource_urls=None))
+    data = _data(await _harvested(resources=None))
 
     content, _, _ = await _call({}, _access_key(), lovelace, data)
     body = _json(content)

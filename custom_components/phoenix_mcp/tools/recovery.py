@@ -116,7 +116,7 @@ async def _tool_restore_configuration(
     tool = "restore_configuration"
     if all(effective_cap(access_key, cap) == "deny" for cap in (
         "cap_helper_write", "cap_energy_write", "cap_yaml_edit", "cap_filesystem",
-        "cap_blueprint_write", "cap_lovelace_write",
+        "cap_blueprint_write", "cap_lovelace_write", "cap_dashboard_resources",
     )):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     rid = args.get("recovery_id")
@@ -149,6 +149,10 @@ async def _tool_restore_configuration(
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_registry":
         return await _tool_restore_dashboard_registry(
+            args, record, side, access_key, hass, data, request_id, client_ip,
+        )
+    if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_resource":
+        return await _tool_restore_dashboard_resource(
             args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if effective_cap(access_key, "cap_helper_write") == "deny":
@@ -579,6 +583,46 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
         return _tool_error("Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
+async def _tool_restore_dashboard_resource(
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    request_id: str, client_ip: str | None,
+) -> tuple[dict, str, str]:
+    """Preflight a dashboard resource restore under cap_dashboard_resources."""
+    from .dashboard_resources import _valid_snapshot, restore_receipt_diff, restore_target
+
+    tool = "restore_configuration"
+    if effective_cap(access_key, "cap_dashboard_resources") == "deny":
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+    snapshot = record.get(side)
+    if not _valid_snapshot(snapshot):
+        return _tool_error("This dashboard resource snapshot is invalid."), "invalid_request", tool
+    assert isinstance(snapshot, dict)
+    try:
+        target = await restore_target(hass, record, side, snapshot)
+        digest, fingerprint = content_hash(snapshot), content_hash(target)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", tool
+    except Exception:  # noqa: BLE001 - an incomplete resource read is not absence
+        return _tool_error("Could not read the current dashboard resources."), "invalid_request", tool
+    if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
+        return _tool_success(json.dumps({
+            "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
+            "snapshot_digest": digest, "target_fingerprint": fingerprint,
+            "diff": restore_receipt_diff(target, snapshot),
+        }, default=str)), "allowed", tool
+    if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
+        return _tool_error("The selected dashboard resource snapshot or target changed; request a fresh restore receipt."), "invalid_request", tool
+    bound = {"recovery_id": record["id"], "side": side,
+             "snapshot_digest": digest, "target_fingerprint": fingerprint}
+    blocked = await _gate(
+        "cap_dashboard_resources", access_key, hass, data, tool_name=tool, args=bound,
+        request_id=request_id, client_ip=client_ip, diff=lambda: restore_receipt_diff(target, snapshot),
+    )
+    if blocked is not None:
+        return blocked
+    return await _execute_restore_configuration(bound, access_key, hass, data)
+
+
 async def _tool_restore_energy_configuration(
     args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
@@ -637,7 +681,7 @@ async def _execute_restore_configuration(
     """Revalidate owner, snapshot digest and target fingerprint after approval.
 
     Then run the adapter for the snapshot type (Energy, file, blueprint, dashboard
-    layout or registry, Template).
+    layout, registry or resource, Template).
     """
     tool = "restore_configuration"
     record = data.config_recovery.get(str(args.get("recovery_id") or ""))
@@ -679,6 +723,12 @@ async def _execute_restore_configuration(
         return await _execute_restore_dashboard_layout(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_registry":
         return await _execute_restore_dashboard_registry(args, record, side, selected, access_key, hass, data)
+    if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_resource":
+        from .dashboard_resources import execute_restore
+        return await execute_restore(
+            record, side, selected, snapshot_digest=args.get("snapshot_digest"),
+            target_fingerprint=args.get("target_fingerprint"), access_key=access_key, hass=hass, data=data,
+        )
     if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:

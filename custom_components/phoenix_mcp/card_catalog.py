@@ -30,8 +30,9 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
@@ -84,8 +85,9 @@ class CardCatalog:
     # as a cleanup hint: a registered resource whose file is gone is common,
     # typically a stale duplicate of a card served from a different path.
     failed_imports: list[dict] = field(default_factory=list)
-    # Fingerprint of the dashboard resource URLs registered when the harvest
-    # reported, or None when they could not be read (or the cache predates it).
+    # Fingerprint of the dashboard resources (type and URL) registered when the
+    # harvest reported, or None when they could not be read (or the cache
+    # predates it).
     resource_fingerprint: str | None = None
 
     @property
@@ -101,12 +103,23 @@ FRESHNESS_REASONS = ("provenance_unknown", "resources_changed", "failed_imports"
 _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 
 
-def resource_fingerprint(urls: Iterable[str] | None) -> str | None:
-    """Order-independent fingerprint of a resource URL list, or None if unknown."""
-    if urls is None:
+def resource_fingerprint(resources: Iterable[Mapping[str, Any]] | None) -> str | None:
+    """Order-independent fingerprint of the registered resources, or None if unknown.
+
+    Covers each resource's type as well as its URL: switching a file between
+    module and js changes how the browser loads it, so it can stop a card
+    registering without any URL changing.
+    """
+    if resources is None:
         return None
-    canonical = json.dumps(sorted({u for u in urls if isinstance(u, str)}))
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    pairs = {(str(r.get("type")), r["url"]) for r in resources if isinstance(r.get("url"), str)}
+    return hashlib.sha256(json.dumps(sorted(pairs)).encode()).hexdigest()
+
+
+def _url_fingerprint(resources: Iterable[Mapping[str, Any]]) -> str:
+    """The URL-only fingerprint catalogs stored before types were covered."""
+    urls = {r["url"] for r in resources if isinstance(r.get("url"), str)}
+    return hashlib.sha256(json.dumps(sorted(urls)).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -127,13 +140,19 @@ class CatalogFreshness:
         return not self.reasons
 
 
-def assess_freshness(catalog: CardCatalog, current_urls: list[str] | None) -> CatalogFreshness:
-    """Compare a harvested catalog with the dashboard resources registered now."""
+def assess_freshness(
+    catalog: CardCatalog, current: Sequence[Mapping[str, Any]] | None,
+) -> CatalogFreshness:
+    """Compare a harvested catalog with the dashboard resources registered now.
+
+    A catalog stored before fingerprints covered types still matches on its URLs
+    until the next harvest replaces it, so an upgrade does not report a change
+    that never happened.
+    """
     reasons: list[str] = []
-    current = resource_fingerprint(current_urls)
     if catalog.resource_fingerprint is None or current is None:
         reasons.append("provenance_unknown")
-    elif current != catalog.resource_fingerprint:
+    elif catalog.resource_fingerprint not in (resource_fingerprint(current), _url_fingerprint(current)):
         reasons.append("resources_changed")
     if catalog.failed_imports:
         reasons.append("failed_imports")
@@ -290,11 +309,11 @@ class CardCatalogStore:
 
     async def async_replace(
         self, *, entries: object, resource_count: object, failed_imports: object,
-        resource_urls: list[str] | None = None,
+        resources: Sequence[Mapping[str, Any]] | None = None,
     ) -> CardCatalog:
         """Replace the catalog from a harvest payload and persist it.
 
-        `resource_urls` is the server's own read of the registered dashboard
+        `resources` is the server's own read of the registered dashboard
         resources at report time, never the browser's claim, or None if unread.
         """
         self._catalog = CardCatalog(
@@ -302,7 +321,7 @@ class CardCatalogStore:
             harvested_at=utcnow().isoformat(),
             resource_count=_resource_count(resource_count),
             failed_imports=sanitize_failures(failed_imports),
-            resource_fingerprint=resource_fingerprint(resource_urls),
+            resource_fingerprint=resource_fingerprint(resources),
         )
         await self.async_save()
         return self._catalog

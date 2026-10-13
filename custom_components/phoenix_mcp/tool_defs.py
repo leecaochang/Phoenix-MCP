@@ -2839,11 +2839,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "restore_configuration",
         "description": (
-            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
+            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
         ),
         "caps_any": [
             "cap_helper_write", "cap_yaml_edit", "cap_filesystem",
-            "cap_blueprint_write", "cap_energy_write", "cap_lovelace_write",
+            "cap_blueprint_write", "cap_energy_write", "cap_lovelace_write", "cap_dashboard_resources",
         ],
         "inputSchema": {
             "type": "object",
@@ -3324,6 +3324,41 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "dashboard_id": {"type": "string", "description": "Dashboard ID to delete, as returned by list_dashboards."},
             },
             "required": ["dashboard_id"],
+        },
+    },
+    {
+        "name": "list_dashboard_resources",
+        "description": (
+            "List the dashboard resources: the JavaScript and CSS files every dashboard loads, which is how "
+            "custom cards are installed. Returns each resource's resource_id, type and url, plus load_failed "
+            "when the last check of installed cards saw that file fail to load. When resources are defined in "
+            "YAML they are counted but not listed; read them with get_yaml_config. An unreadable list is an "
+            "error, never an empty one."
+        ),
+        "cap": "cap_dashboard_resources",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "set_dashboard_resource",
+        "description": (
+            "Add, change or remove one dashboard resource. Every browser that opens a dashboard runs a "
+            "registered JavaScript file with that person's Home Assistant access, so register only a file the operator "
+            "asked for. HACS registers the cards it installs itself; do not add those again. create needs url "
+            "and type; update needs resource_id and url, type or both; delete needs resource_id. Take "
+            "resource_id from list_dashboard_resources. A URL that is already registered cannot be added "
+            "again, and resources defined in YAML cannot be changed. Open dashboards load a change on their "
+            "next page reload. Changes can be undone with restore_configuration. May require admin approval."
+        ),
+        "cap": "cap_dashboard_resources",
+        "inputSchema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "What to do with the resource."},
+                "resource_id": {"type": "string", "description": "For update and delete: the resource_id from list_dashboard_resources. Omit for create."},
+                "url": {"type": "string", "minLength": 1, "maxLength": 2048, "description": "The file's URL, such as /local/my-card.js for a file in the www folder."},
+                "type": {"type": "string", "enum": ["module", "css", "js"], "description": "module for JavaScript cards (current cards are modules), css for a stylesheet, js only for a legacy non-module script."},
+            },
+            "required": ["operation"],
         },
     },
     {
@@ -4011,6 +4046,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "create_dashboard": _annot(False, False, False),
     "edit_dashboard": _annot(False, True, True),
     "delete_dashboard": _annot(False, True, True),
+    "list_dashboard_resources": _annot(True, False, True),
+    "set_dashboard_resource": _annot(False, True, False),
     "set_dashboard_config": _annot(False, True, True),
     "add_dashboard_card": _annot(False, False, False),
     "edit_dashboard_card": _annot(False, True, True),

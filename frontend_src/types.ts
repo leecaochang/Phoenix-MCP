@@ -51,6 +51,7 @@ export interface CapabilityFlagsMap {
   cap_registry_write: CapMode;
   cap_radio_write: CapMode;
   cap_energy_write: CapMode;
+  cap_dashboard_resources: CapMode;
   cap_backup: CapMode;
   cap_filesystem: CapMode;
   cap_yaml_edit: CapMode;
@@ -576,6 +577,7 @@ export interface PatchAccessKeyBody {
   cap_registry_write?: CapMode;
   cap_radio_write?: CapMode;
   cap_energy_write?: CapMode;
+  cap_dashboard_resources?: CapMode;
   cap_backup?: CapMode;
   cap_filesystem?: CapMode;
   cap_yaml_edit?: CapMode;

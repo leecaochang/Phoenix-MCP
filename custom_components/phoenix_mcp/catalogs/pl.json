@@ -525,6 +525,10 @@
       "cap_calendar_write": {
         "label": "Zapis kalendarza",
         "description": "Tworzenie, aktualizowanie i usuwanie wydarzeń w kalendarzach z prawem zapisu."
+      },
+      "cap_dashboard_resources": {
+        "label": "Zasoby paneli",
+        "description": "Wyświetlaj, dodawaj, zmieniaj i usuwaj pliki JavaScript i CSS ładowane przez każdy panel; w ten sposób instaluje się niestandardowe karty. Zarejestrowany plik JavaScript działa w każdej przeglądarce, która otwiera panel, z dostępem do Home Assistant danej osoby, dlatego zdecydowanie zaleca się Potwierdź."
       }
     },
     "perms": {
@@ -704,7 +708,10 @@
       "location.create": "Utwórz lokalizację {name}",
       "location.delete": "Usuń lokalizację {name}",
       "location.update": "Zaktualizuj lokalizację {name}",
-      "patch_dashboard.multi": "Zastosuj zmiany ({count}) w panelu '{label}'"
+      "patch_dashboard.multi": "Zastosuj zmiany ({count}) w panelu '{label}'",
+      "dashboard_resource.create": "Dodaj zasób panelu {url}",
+      "dashboard_resource.update": "Zmień zasób panelu {url}",
+      "dashboard_resource.delete": "Usuń zasób panelu {url}"
     },
     "approvals": {
       "approve": "Zatwierdź i wykonaj",
@@ -2183,7 +2190,13 @@
       "location.update.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
       "location.update.title": "Zaktualizuj lokalizację {name}",
       "patch_dashboard.multi.title": "Zaktualizuj panel '{label}'",
-      "patch_dashboard.multi.body": "Spowoduje to zaktualizowanie konfiguracji panelu Home Assistant. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę."
+      "patch_dashboard.multi.body": "Spowoduje to zaktualizowanie konfiguracji panelu Home Assistant. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
+      "dashboard_resource.create.title": "Dodaj zasób panelu {url}",
+      "dashboard_resource.update.title": "Zmień zasób panelu {url}",
+      "dashboard_resource.delete.title": "Usuń zasób panelu {url}",
+      "dashboard_resource.create.body": "Każda przeglądarka, która otworzy panel, załaduje {url}. Plik JavaScript działa z dostępem do Home Assistant danej osoby, dlatego zatwierdzaj tylko pliki, którym ufasz.",
+      "dashboard_resource.update.body": "Spowoduje to zmianę pliku, który każda przeglądarka ładuje po otwarciu panelu. Otwórz Szczegóły, aby porównać obecny i proponowany plik.",
+      "dashboard_resource.delete.body": "Panele przestaną ładować {url}. Karty pochodzące z tego pliku będą wyświetlać błąd, dopóki nie zostanie on ponownie dodany."
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",

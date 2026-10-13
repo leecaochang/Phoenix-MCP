@@ -137,6 +137,10 @@
       "cap_calendar_write": {
         "label": "Escritura de calendario",
         "description": "Crear, actualizar y eliminar eventos en calendarios con permiso de escritura."
+      },
+      "cap_dashboard_resources": {
+        "label": "Recursos del panel de control",
+        "description": "Enumera, añade, cambia y elimina los archivos JavaScript y CSS que carga cada panel de control, que es como se instalan las tarjetas personalizadas. Un archivo JavaScript registrado se ejecuta en cada navegador que abre un panel de control, con el acceso a Home Assistant de esa persona, por lo que se recomienda encarecidamente usar Confirmar."
       }
     },
     "inject": {
@@ -855,7 +859,10 @@
       "location.create": "Crear ubicación {name}",
       "location.delete": "Eliminar ubicación {name}",
       "location.update": "Actualizar ubicación {name}",
-      "patch_dashboard.multi": "Aplicar {count} cambios en el panel de control '{label}'"
+      "patch_dashboard.multi": "Aplicar {count} cambios en el panel de control '{label}'",
+      "dashboard_resource.create": "Añadir el recurso del panel de control {url}",
+      "dashboard_resource.update": "Cambiar el recurso del panel de control {url}",
+      "dashboard_resource.delete": "Eliminar el recurso del panel de control {url}"
     },
     "adminError": {
       "authRequired": "Se requiere autenticación.",
@@ -1989,7 +1996,13 @@
       "location.update.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
       "location.update.title": "Actualizar ubicación {name}",
       "patch_dashboard.multi.title": "Actualizar panel de control «{label}»",
-      "patch_dashboard.multi.body": "Se actualizará la configuración del panel de control de Home Assistant. Abra Detalles para revisar el cambio exacto propuesto."
+      "patch_dashboard.multi.body": "Se actualizará la configuración del panel de control de Home Assistant. Abra Detalles para revisar el cambio exacto propuesto.",
+      "dashboard_resource.create.title": "Añadir el recurso del panel de control {url}",
+      "dashboard_resource.update.title": "Cambiar el recurso del panel de control {url}",
+      "dashboard_resource.delete.title": "Eliminar el recurso del panel de control {url}",
+      "dashboard_resource.create.body": "Cada navegador que abra un panel de control cargará {url}. Un archivo JavaScript se ejecuta con el acceso a Home Assistant de esa persona, así que apruebe solo un archivo de su confianza.",
+      "dashboard_resource.update.body": "Esto cambia un archivo que carga cada navegador al abrir un panel de control. Abra Detalles para comparar el archivo actual y el propuesto.",
+      "dashboard_resource.delete.body": "Los paneles de control dejarán de cargar {url}. Las tarjetas que provienen de él mostrarán un error hasta que se vuelva a añadir."
     },
     "common": {
       "after": "Después",

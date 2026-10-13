@@ -286,6 +286,10 @@
       "cap_calendar_write": {
         "label": "캘린더 쓰기",
         "description": "쓰기 권한이 있는 캘린더에서 일정을 생성, 수정 및 삭제합니다."
+      },
+      "cap_dashboard_resources": {
+        "label": "대시보드 리소스",
+        "description": "모든 대시보드가 불러오는 JavaScript 및 CSS 파일을 나열, 추가, 변경 및 제거합니다. 사용자 지정 카드는 이 방식으로 설치됩니다. 등록된 JavaScript 파일은 대시보드를 여는 모든 브라우저에서 해당 사용자의 Home Assistant 접근 권한으로 실행되므로 확인을 강력히 권장합니다."
       }
     },
     "audit": {
@@ -748,7 +752,10 @@
       "location.create": "위치 {name} 만들기",
       "location.delete": "위치 {name} 삭제",
       "location.update": "위치 {name} 업데이트",
-      "patch_dashboard.multi": "대시보드 '{label}'에 변경 사항 {count}개 적용"
+      "patch_dashboard.multi": "대시보드 '{label}'에 변경 사항 {count}개 적용",
+      "dashboard_resource.create": "대시보드 리소스 {url} 추가",
+      "dashboard_resource.update": "대시보드 리소스 {url} 변경",
+      "dashboard_resource.delete": "대시보드 리소스 {url} 제거"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field}은(는) 활성 액세스 키를 참조해야 합니다.",
@@ -1693,7 +1700,13 @@
       "location.update.body": "제안된 구성 변경 사항이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
       "location.update.title": "위치 {name} 업데이트",
       "patch_dashboard.multi.title": "대시보드 \"{label}\" 업데이트",
-      "patch_dashboard.multi.body": "Home Assistant 대시보드 구성이 업데이트됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오."
+      "patch_dashboard.multi.body": "Home Assistant 대시보드 구성이 업데이트됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
+      "dashboard_resource.create.title": "대시보드 리소스 {url} 추가",
+      "dashboard_resource.update.title": "대시보드 리소스 {url} 변경",
+      "dashboard_resource.delete.title": "대시보드 리소스 {url} 제거",
+      "dashboard_resource.create.body": "대시보드를 여는 모든 브라우저가 {url}을(를) 불러옵니다. JavaScript 파일은 해당 사용자의 Home Assistant 접근 권한으로 실행되므로 신뢰하는 파일만 승인하십시오.",
+      "dashboard_resource.update.body": "대시보드를 열 때 모든 브라우저가 불러오는 파일을 변경합니다. 현재 파일과 제안된 파일을 비교하려면 세부 정보를 열어 주십시오.",
+      "dashboard_resource.delete.body": "대시보드가 더 이상 {url}을(를) 불러오지 않습니다. 이 파일에서 제공하는 카드는 다시 추가될 때까지 오류를 표시합니다."
     },
     "approvals": {
       "approve": "승인 및 실행",

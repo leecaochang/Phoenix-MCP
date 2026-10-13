@@ -24,6 +24,7 @@ import copy
 import json
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from .request_authority import check_request_authority
@@ -84,6 +85,10 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         "backup/agents/info", "backup/info", "backup/generate",
         "lovelace/dashboards/list", "lovelace/dashboards/create",
         "lovelace/dashboards/update", "lovelace/dashboards/delete",
+        # Storage-mode dashboard resources. HA's collection handlers validate the
+        # type and URL; tools/dashboard_resources.py is the only caller and gates
+        # them on cap_dashboard_resources. They are not registered in YAML mode.
+        "lovelace/resources/create", "lovelace/resources/update", "lovelace/resources/delete",
         "logbook/get_events",
         # Loaded-config reverse references. This complements Phoenix's direct
         # YAML walk with packages, blueprint-expanded configs, people, and
@@ -474,14 +479,27 @@ def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
     return dashboards.get(url_path)
 
 
-async def async_lovelace_resource_urls(hass: HomeAssistant) -> list[str] | None:
-    """Return the URL of every registered dashboard resource, or None if unknown.
+@dataclass(frozen=True)
+class LovelaceResources:
+    """The registered dashboard resources and where Home Assistant keeps them.
+
+    `mode` is "storage" (managed through Settings and the resource commands) or
+    "yaml" (the lovelace: resources list, loaded with its !secret values
+    resolved). Each item is HA's own dictionary: url and type, plus id in storage
+    mode.
+    """
+
+    mode: str
+    items: list[dict[str, Any]]
+
+
+async def async_lovelace_resources(hass: HomeAssistant) -> LovelaceResources | None:
+    """Return the registered dashboard resources, or None if they cannot be read.
 
     Mirrors HA's lovelace/resources handler, including its empty answer in safe
-    mode, through the collection's own loading method. None covers both an
-    unavailable lovelace and a failed read: the card catalog uses this only to
-    judge whether a harvest is still current, and an unknown answer must make
-    that judgment unknown rather than look like an instance with no resources.
+    mode, through the collection's own loading method. None covers an unavailable
+    lovelace, safe mode and a failed read: an unknown answer must stay unknown
+    rather than look like an instance with no resources.
     """
     try:
         from homeassistant.components.lovelace.const import LOVELACE_DATA  # noqa: PLC0415
@@ -492,10 +510,15 @@ async def async_lovelace_resource_urls(hass: HomeAssistant) -> list[str] | None:
         resources = data.resources
         await resources.async_get_info()
         items = resources.async_items() or []
-    except Exception:  # noqa: BLE001 - an advisory read must never fail a tool call
+        mode = data.resource_mode
+    except Exception:  # noqa: BLE001 - callers report an unreadable list, never a failed tool
         _LOGGER.debug("Could not read the dashboard resource list", exc_info=True)
         return None
-    return [item["url"] for item in items if isinstance(item, dict) and isinstance(item.get("url"), str)]
+    if mode not in ("storage", "yaml"):
+        return None
+    return LovelaceResources(mode, [
+        dict(item) for item in items if isinstance(item, dict) and isinstance(item.get("url"), str)
+    ])
 
 
 async def async_get_lovelace_config(

@@ -259,7 +259,7 @@ config is good on the strength of validation alone if you can compile it.
 - Authoring tools, when granted: automations and scripts (`cap_automation_write`
   / `cap_script_write`), scenes (`cap_scene_write`), helpers such as
   `input_boolean`, `input_number`, `timer`, `counter` (`cap_helper_write`),
-  dashboards (`cap_lovelace_write`).
+  dashboards (`cap_lovelace_write`), dashboard resources (`cap_dashboard_resources`).
 - Radio management, when granted (`cap_radio_write`, often admin-confirmed):
   `permit_zigbee_join` opens the Zigbee network for pairing (duration 0 closes
   it), `reconfigure_zigbee_device` re-interviews a misbehaving device, and
@@ -492,6 +492,11 @@ mode: single
   example because dashboard resources changed after it ran. A card it did not
   see may still be installed: ask the user before relying on one, rather than
   telling them it is missing.
+- Custom cards load from dashboard resources, the JavaScript files every
+  dashboard runs. `list_dashboard_resources` shows each registered file, and
+  `load_failed` marks one that failed to load at the last check. Register a file
+  with `set_dashboard_resource` only when the user asks: a JavaScript file runs in
+  every browser that opens a dashboard. HACS registers the cards it installs itself.
 
 ### Voice names for an entity
 

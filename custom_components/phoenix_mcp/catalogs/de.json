@@ -363,6 +363,10 @@
       "cap_calendar_write": {
         "label": "Kalender schreiben",
         "description": "Termine in beschreibbaren Kalendern erstellen, aktualisieren und löschen."
+      },
+      "cap_dashboard_resources": {
+        "label": "Dashboard-Ressourcen",
+        "description": "Die JavaScript- und CSS-Dateien auflisten, hinzufügen, ändern und entfernen, die jedes Dashboard lädt und über die benutzerdefinierte Karten installiert werden. Eine registrierte JavaScript-Datei wird in jedem Browser ausgeführt, der ein Dashboard öffnet, und zwar mit dem Home Assistant-Zugriff der jeweiligen Person; daher wird Bestätigung dringend empfohlen."
       }
     },
     "personas": {
@@ -1336,7 +1340,10 @@
       "location.create": "Standort {name} erstellen",
       "location.delete": "Standort {name} löschen",
       "location.update": "Standort {name} aktualisieren",
-      "patch_dashboard.multi": "{count} Änderungen auf das Dashboard '{label}' anwenden"
+      "patch_dashboard.multi": "{count} Änderungen auf das Dashboard '{label}' anwenden",
+      "dashboard_resource.create": "Dashboard-Ressource {url} hinzufügen",
+      "dashboard_resource.update": "Dashboard-Ressource {url} ändern",
+      "dashboard_resource.delete": "Dashboard-Ressource {url} entfernen"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -1762,7 +1769,13 @@
       "location.update.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
       "location.update.title": "Standort {name} aktualisieren",
       "patch_dashboard.multi.title": "Dashboard '{label}' aktualisieren",
-      "patch_dashboard.multi.body": "Dadurch wird die Dashboard-Konfiguration von Home Assistant aktualisiert. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen."
+      "patch_dashboard.multi.body": "Dadurch wird die Dashboard-Konfiguration von Home Assistant aktualisiert. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
+      "dashboard_resource.create.title": "Dashboard-Ressource {url} hinzufügen",
+      "dashboard_resource.update.title": "Dashboard-Ressource {url} ändern",
+      "dashboard_resource.delete.title": "Dashboard-Ressource {url} entfernen",
+      "dashboard_resource.create.body": "Jeder Browser, der ein Dashboard öffnet, lädt {url}. Eine JavaScript-Datei wird mit dem Home Assistant-Zugriff der jeweiligen Person ausgeführt; genehmigen Sie daher nur eine Datei, der Sie vertrauen.",
+      "dashboard_resource.update.body": "Dadurch wird eine Datei geändert, die jeder Browser beim Öffnen eines Dashboards lädt. Öffnen Sie Details, um die aktuelle und die vorgeschlagene Datei zu vergleichen.",
+      "dashboard_resource.delete.body": "Dashboards laden {url} nicht mehr. Karten aus dieser Datei zeigen einen Fehler an, bis sie wieder hinzugefügt wird."
     },
     "common": {
       "after": "Nachher",

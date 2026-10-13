@@ -589,7 +589,13 @@
       "location.update.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
       "location.update.title": "Aggiorna posizione {name}",
       "patch_dashboard.multi.title": "Aggiorna la plancia '{label}'",
-      "patch_dashboard.multi.body": "Verrà aggiornata la configurazione della plancia di Home Assistant. Apri Dettagli per rivedere la modifica esatta proposta."
+      "patch_dashboard.multi.body": "Verrà aggiornata la configurazione della plancia di Home Assistant. Apri Dettagli per rivedere la modifica esatta proposta.",
+      "dashboard_resource.create.title": "Aggiungi la risorsa della plancia {url}",
+      "dashboard_resource.update.title": "Modifica la risorsa della plancia {url}",
+      "dashboard_resource.delete.title": "Rimuovi la risorsa della plancia {url}",
+      "dashboard_resource.create.body": "Ogni browser che apre una plancia caricherà {url}. Un file JavaScript viene eseguito con l'accesso a Home Assistant di quella persona, quindi approva solo un file di cui ti fidi.",
+      "dashboard_resource.update.body": "Questo modifica un file che ogni browser carica quando apre una plancia. Apri Dettagli per confrontare il file attuale e quello proposto.",
+      "dashboard_resource.delete.body": "Le plance smetteranno di caricare {url}. Le schede che ne derivano mostreranno un errore finché il file non verrà aggiunto di nuovo."
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",
@@ -843,6 +849,10 @@
       "cap_calendar_write": {
         "label": "Scrittura del calendario",
         "description": "Creare, aggiornare ed eliminare eventi nei calendari con accesso in scrittura."
+      },
+      "cap_dashboard_resources": {
+        "label": "Risorse della plancia",
+        "description": "Elenca, aggiunge, modifica e rimuove i file JavaScript e CSS caricati da ogni plancia, che è il modo in cui si installano le schede personalizzate. Un file JavaScript registrato viene eseguito in ogni browser che apre una plancia, con l'accesso a Home Assistant di quella persona, quindi la modalità Conferma è vivamente consigliata."
       }
     },
     "perms": {
@@ -1973,7 +1983,10 @@
       "location.create": "Crea posizione {name}",
       "location.delete": "Elimina posizione {name}",
       "location.update": "Aggiorna posizione {name}",
-      "patch_dashboard.multi": "Applica {count} modifiche alla plancia '{label}'"
+      "patch_dashboard.multi": "Applica {count} modifiche alla plancia '{label}'",
+      "dashboard_resource.create": "Aggiungi la risorsa della plancia {url}",
+      "dashboard_resource.update": "Modifica la risorsa della plancia {url}",
+      "dashboard_resource.delete": "Rimuovi la risorsa della plancia {url}"
     },
     "wizard": {
       "accessSub": "Espandi il gruppo <code>light</code> e scegli una luce che puoi verificare. Seleziona <strong>W</strong> per concedere l'accesso in lettura e scrittura. Concedi un intero dispositivo o espandilo per scegliere una sola entità. Puoi aggiungere altre autorizzazioni in seguito.",

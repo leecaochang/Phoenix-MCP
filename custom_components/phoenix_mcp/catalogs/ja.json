@@ -258,6 +258,10 @@
       "cap_calendar_write": {
         "label": "カレンダーの書き込み",
         "description": "書き込み権限のあるカレンダーで予定を作成、更新、削除します。"
+      },
+      "cap_dashboard_resources": {
+        "label": "ダッシュボードリソース",
+        "description": "すべてのダッシュボードが読み込む JavaScript と CSS のファイルを一覧表示、追加、変更、削除します。カスタムカードはこの仕組みでインストールされます。登録した JavaScript ファイルは、ダッシュボードを開くすべてのブラウザーで、その人の Home Assistant のアクセス権で実行されるため、確認を強く推奨します。"
       }
     },
     "personas": {
@@ -1279,7 +1283,10 @@
       "location.create": "場所 {name} を作成",
       "location.delete": "場所 {name} を削除",
       "location.update": "場所 {name} を更新",
-      "patch_dashboard.multi": "ダッシュボード「{label}」に {count} 件の変更を適用"
+      "patch_dashboard.multi": "ダッシュボード「{label}」に {count} 件の変更を適用",
+      "dashboard_resource.create": "ダッシュボードリソース {url} を追加",
+      "dashboard_resource.update": "ダッシュボードリソース {url} を変更",
+      "dashboard_resource.delete": "ダッシュボードリソース {url} を削除"
     },
     "settings": {
       "addProviderFirst": "先に Agent Chat でプロバイダーアカウントを追加してください。",
@@ -2080,7 +2087,13 @@
       "location.update.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
       "location.update.title": "場所 {name} を更新",
       "patch_dashboard.multi.title": "ダッシュボード「{label}」を更新",
-      "patch_dashboard.multi.body": "Home Assistantのダッシュボード設定を更新します。正確な変更内容を確認するには、詳細を開いてください。"
+      "patch_dashboard.multi.body": "Home Assistantのダッシュボード設定を更新します。正確な変更内容を確認するには、詳細を開いてください。",
+      "dashboard_resource.create.title": "ダッシュボードリソース {url} を追加",
+      "dashboard_resource.update.title": "ダッシュボードリソース {url} を変更",
+      "dashboard_resource.delete.title": "ダッシュボードリソース {url} を削除",
+      "dashboard_resource.create.body": "ダッシュボードを開くすべてのブラウザーが {url} を読み込みます。JavaScript ファイルはその人の Home Assistant のアクセス権で実行されるため、信頼できるファイルのみ承認してください。",
+      "dashboard_resource.update.body": "ダッシュボードを開くときにすべてのブラウザーが読み込むファイルを変更します。詳細で現在のファイルと提案されたファイルを比較してください。",
+      "dashboard_resource.delete.body": "ダッシュボードは {url} を読み込まなくなります。このファイルに由来するカードは、再度追加されるまでエラーを表示します。"
     },
     "routing": {
       "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",

@@ -226,6 +226,11 @@ from .tools.lovelace import (
     _tool_list_dashboards,
     _tool_set_dashboard_config,
 )
+from .tools.dashboard_resources import (
+    _execute_set_dashboard_resource,
+    _tool_list_dashboard_resources,
+    _tool_set_dashboard_resource,
+)
 from .tools.camera import _tool_get_camera_image
 from .tools.esphome import _ESPHOME_DOMAIN, _execute_delete_esphome_yaml, _execute_install_esphome_firmware, _execute_rename_esphome_device, _execute_set_esphome_yaml, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_delete_esphome_yaml, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_rename_esphome_device, _tool_set_esphome_yaml, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
@@ -10111,6 +10116,7 @@ _register_executor("create_backup", _execute_create_backup)
 _register_executor("create_dashboard", _execute_create_dashboard)
 _register_executor("edit_dashboard", _execute_edit_dashboard)
 _register_executor("delete_dashboard", _execute_delete_dashboard)
+_register_executor("set_dashboard_resource", _execute_set_dashboard_resource)
 _register_executor("set_dashboard_config", _execute_set_dashboard_config)
 _register_executor("add_dashboard_card", _execute_add_dashboard_card)
 _register_executor("edit_dashboard_card", _execute_edit_dashboard_card)
@@ -10317,6 +10323,8 @@ _register_tool("list_dashboard_cards", _tool_list_dashboard_cards)
 _register_tool("create_dashboard", _tool_create_dashboard)
 _register_tool("edit_dashboard", _tool_edit_dashboard)
 _register_tool("delete_dashboard", _tool_delete_dashboard)
+_register_tool("list_dashboard_resources", _tool_list_dashboard_resources)
+_register_tool("set_dashboard_resource", _tool_set_dashboard_resource)
 _register_tool("get_dashboard_config", _tool_get_dashboard_config)
 _register_tool("set_dashboard_config", _tool_set_dashboard_config)
 _register_tool("add_dashboard_card", _tool_dashboard_card, op="add", tool_name="add_dashboard_card")

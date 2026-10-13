@@ -258,6 +258,10 @@
       "cap_calendar_write": {
         "label": "Écriture du calendrier",
         "description": "Créer, modifier et supprimer des événements dans les calendriers accessibles en écriture."
+      },
+      "cap_dashboard_resources": {
+        "label": "Ressources du tableau de bord",
+        "description": "Lister, ajouter, modifier et supprimer les fichiers JavaScript et CSS que charge chaque tableau de bord, ce qui permet d'installer les cartes personnalisées. Un fichier JavaScript enregistré s'exécute dans chaque navigateur qui ouvre un tableau de bord, avec l'accès à Home Assistant de la personne concernée ; Confirmer est donc fortement recommandé."
       }
     },
     "personas": {
@@ -1607,7 +1611,10 @@
       "location.create": "Créer le lieu {name}",
       "location.delete": "Supprimer le lieu {name}",
       "location.update": "Mettre à jour le lieu {name}",
-      "patch_dashboard.multi": "Appliquer {count} modifications au tableau de bord « {label} »"
+      "patch_dashboard.multi": "Appliquer {count} modifications au tableau de bord « {label} »",
+      "dashboard_resource.create": "Ajouter la ressource du tableau de bord {url}",
+      "dashboard_resource.update": "Modifier la ressource du tableau de bord {url}",
+      "dashboard_resource.delete": "Supprimer la ressource du tableau de bord {url}"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -2080,7 +2087,13 @@
       "location.update.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
       "location.update.title": "Mettre à jour le lieu {name}",
       "patch_dashboard.multi.title": "Mettre à jour le tableau de bord « {label} »",
-      "patch_dashboard.multi.body": "Cela mettra à jour la configuration du tableau de bord Home Assistant. Ouvrez Détails pour réviser la modification proposée exacte."
+      "patch_dashboard.multi.body": "Cela mettra à jour la configuration du tableau de bord Home Assistant. Ouvrez Détails pour réviser la modification proposée exacte.",
+      "dashboard_resource.create.title": "Ajouter la ressource du tableau de bord {url}",
+      "dashboard_resource.update.title": "Modifier la ressource du tableau de bord {url}",
+      "dashboard_resource.delete.title": "Supprimer la ressource du tableau de bord {url}",
+      "dashboard_resource.create.body": "Chaque navigateur qui ouvre un tableau de bord chargera {url}. Un fichier JavaScript s'exécute avec l'accès à Home Assistant de la personne concernée ; n'approuvez donc qu'un fichier de confiance.",
+      "dashboard_resource.update.body": "Cela modifie un fichier que chaque navigateur charge à l'ouverture d'un tableau de bord. Ouvrez Détails pour comparer le fichier actuel et le fichier proposé.",
+      "dashboard_resource.delete.body": "Les tableaux de bord cesseront de charger {url}. Les cartes qui en proviennent afficheront une erreur jusqu'à ce que ce fichier soit rajouté."
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",

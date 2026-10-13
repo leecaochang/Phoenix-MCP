@@ -287,6 +287,7 @@ describe("PERSONA_CAP_DEFAULTS drift guard", () => {
     "cap_physical_control", "cap_restart",
     "cap_integration_write", "cap_integration_reconfigure", "cap_lovelace_write", "cap_registry_write", "cap_radio_write",
     "cap_energy_write",
+    "cap_dashboard_resources",
     "cap_backup", "cap_filesystem", "cap_yaml_edit", "cap_esphome_yaml",
     "cap_esphome_flash",
   ];

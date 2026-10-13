@@ -59,6 +59,7 @@ const ACCESS_KEY_RECORD_KEYS = {
   cap_registry_write: true,
   cap_radio_write: true,
   cap_energy_write: true,
+  cap_dashboard_resources: true,
   cap_backup: true,
   cap_filesystem: true,
   cap_yaml_edit: true,

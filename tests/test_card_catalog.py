@@ -203,11 +203,15 @@ async def test_round_trip_through_as_dict() -> None:
     assert data["harvested_at"] is not None
 
 
+def _res(*urls: str, type_: str = "module") -> list[dict]:
+    return [{"id": f"id{index}", "type": type_, "url": url} for index, url in enumerate(urls)]
+
+
 async def test_harvest_records_an_order_independent_resource_fingerprint() -> None:
     store = CardCatalogStore()
-    await store.async_replace(entries=[], resource_count=2, failed_imports=[], resource_urls=["/b.js", "/a.js"])
+    await store.async_replace(entries=[], resource_count=2, failed_imports=[], resources=_res("/b.js", "/a.js"))
 
-    assert store.catalog.resource_fingerprint == resource_fingerprint(["/a.js", "/b.js", "/a.js"])
+    assert store.catalog.resource_fingerprint == resource_fingerprint(_res("/a.js", "/b.js", "/a.js"))
     assert store.as_dict()["resource_fingerprint"] == store.catalog.resource_fingerprint
 
 
@@ -219,20 +223,39 @@ async def test_unread_resources_record_no_fingerprint() -> None:
 
 
 def test_freshness_is_complete_only_against_the_same_resources_without_failures() -> None:
-    harvested = CardCatalog(harvested_at="t", resource_fingerprint=resource_fingerprint(["/a.js"]))
+    harvested = CardCatalog(harvested_at="t", resource_fingerprint=resource_fingerprint(_res("/a.js")))
 
-    assert assess_freshness(harvested, ["/a.js"]).complete is True
-    assert assess_freshness(harvested, ["/a.js", "/b.js"]).reasons == ("resources_changed",)
+    assert assess_freshness(harvested, _res("/a.js")).complete is True
+    assert assess_freshness(harvested, _res("/a.js", "/b.js")).reasons == ("resources_changed",)
     assert assess_freshness(harvested, []).reasons == ("resources_changed",)
     # An unreadable current list is unknown, never "no resources".
     assert assess_freshness(harvested, None).reasons == ("provenance_unknown",)
 
     failed = CardCatalog(
-        harvested_at="t", resource_fingerprint=resource_fingerprint(["/a.js"]),
+        harvested_at="t", resource_fingerprint=resource_fingerprint(_res("/a.js")),
         failed_imports=[{"url": "/a.js", "error": "404"}],
     )
-    assert assess_freshness(failed, ["/a.js"]).reasons == ("failed_imports",)
-    assert assess_freshness(CardCatalog(harvested_at="t"), ["/a.js"]).reasons == ("provenance_unknown",)
+    assert assess_freshness(failed, _res("/a.js")).reasons == ("failed_imports",)
+    assert assess_freshness(CardCatalog(harvested_at="t"), _res("/a.js")).reasons == ("provenance_unknown",)
+
+
+def test_a_type_change_alone_makes_the_catalog_stale() -> None:
+    """Loading a file as js instead of module can stop its card registering."""
+    harvested = CardCatalog(harvested_at="t", resource_fingerprint=resource_fingerprint(_res("/a.js")))
+
+    assert assess_freshness(harvested, _res("/a.js", type_="js")).reasons == ("resources_changed",)
+
+
+def test_a_catalog_stored_with_the_url_only_fingerprint_still_matches() -> None:
+    """An upgrade must not report a resource change that never happened."""
+    import hashlib
+    import json
+
+    legacy = hashlib.sha256(json.dumps(["/a.js", "/b.js"]).encode()).hexdigest()
+    harvested = CardCatalog(harvested_at="t", resource_fingerprint=legacy)
+
+    assert assess_freshness(harvested, _res("/b.js", "/a.js")).complete is True
+    assert assess_freshness(harvested, _res("/a.js")).reasons == ("resources_changed",)
 
 
 @pytest.mark.parametrize("stored", ["", "abc", "Z" * 64, 7, None, ["x"], "A" * 64])
@@ -249,7 +272,7 @@ async def test_a_malformed_stored_fingerprint_loads_as_unknown(stored) -> None:
 
 
 async def test_a_stored_fingerprint_survives_a_reload() -> None:
-    fingerprint = resource_fingerprint(["/a.js"])
+    fingerprint = resource_fingerprint(_res("/a.js"))
 
     class _Store:
         async def async_load(self):

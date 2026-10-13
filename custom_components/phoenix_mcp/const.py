@@ -855,6 +855,7 @@ CAPABILITY_NAMES = (
     "cap_registry_write",
     "cap_radio_write",
     "cap_energy_write",
+    "cap_dashboard_resources",
     "cap_backup",
     "cap_filesystem",
     "cap_yaml_edit",
@@ -894,6 +895,12 @@ CAPABILITY_TIERS: dict[str, str] = {
     # things that define BEHAVIOUR (automations, scripts, scenes). Nothing here
     # actuates a device; a wrong write costs you the Energy setup, not the house.
     "cap_energy_write": "system",
+    # Dashboard resources are the JavaScript and CSS files every browser loads
+    # when it opens a dashboard, so registering a JavaScript file runs code
+    # with the viewing person's Home Assistant session. That is why it is separate from
+    # cap_lovelace_write (layouts are data) and grouped with file and YAML
+    # editing; YAML_PROTECTED_SUBTREES refuses the same list through YAML.
+    "cap_dashboard_resources": "irreversible",
     "cap_backup": "irreversible",
     "cap_filesystem": "irreversible",
     "cap_yaml_edit": "irreversible",
@@ -922,6 +929,7 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
     "cap_registry_write",
     "cap_radio_write",
     "cap_energy_write",
+    "cap_dashboard_resources",
     "cap_backup",
     "cap_filesystem",
     "cap_yaml_edit",
@@ -951,6 +959,7 @@ PASS_THROUGH_EXEMPT_CAPS = frozenset({
     "cap_registry_write",
     "cap_radio_write",
     "cap_energy_write",
+    "cap_dashboard_resources",
     "cap_backup",
     "cap_filesystem",
     "cap_yaml_edit",
@@ -1459,7 +1468,8 @@ YAML_MAX_EXPANDED_NODES = 100_000
 #     and login_attempts_threshold disarm the brute-force and origin defenses.
 #   frontend: extra_module_url and lovelace: resources load arbitrary JavaScript
 #     into the authenticated dashboard, which is a stored-XSS foothold with access
-#     to the instance and its access keys.
+#     to the instance and its access keys. Storage-mode dashboard resources have
+#     their own capability, cap_dashboard_resources, and never ride on this one.
 # An admin edits these by hand. Enforced by tools.config_files._yaml_protected_check
 # on both the pre-gate and the apply-time path; unchanged values always pass.
 YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
@@ -1582,6 +1592,9 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "dashboard.create": "Create dashboard '{label}'",
     "dashboard.edit": "Edit dashboard '{label}'",
     "dashboard.delete": "Delete dashboard '{label}'",
+    "dashboard_resource.create": "Add dashboard resource {url}",
+    "dashboard_resource.update": "Change dashboard resource {url}",
+    "dashboard_resource.delete": "Remove dashboard resource {url}",
     "dashboard_card.add": "Add '{card_type}' to dashboard '{label}' (view {view_index})",
     "dashboard_card.add.section": "Add '{card_type}' to dashboard '{label}' (view {view_index}, section {section_index})",
     "dashboard_card.edit": "Replace card {card_index} on dashboard '{label}' (view {view_index})",
@@ -1707,6 +1720,9 @@ _APPROVAL_SUMMARY_BODIES = {
     "blueprint.delete": "This will permanently delete the {domain} blueprint {rel}.",
     "blueprint.delete.consumers": "This will permanently delete {rel}, even though {count} automations or scripts still use it.",
     "dashboard.delete": "This will permanently delete the dashboard {label}.",
+    "dashboard_resource.create": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
+    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Open Details to compare the current and proposed file.",
+    "dashboard_resource.delete": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
     "dashboard_card.delete": "This will permanently delete the selected card from {label}.",
     "dashboard_card.delete.section": "This will permanently delete the selected card from {label}.",
     "delete_automation": "This will permanently delete automation {automation_id}.",
@@ -2719,6 +2735,14 @@ HOME_COMPANION_TIMEOUT_SECONDS = 120
 LOCATION_REGISTRY_COLLECTION_LIMIT = 100
 LOCATION_REGISTRY_TEXT_LIMIT = 255
 LOCATION_REGISTRY_BINDING = "_location_registry_binding"
+
+# Private approval binding for set_dashboard_resource: the hash of the resource
+# list as reviewed, so an approval cannot apply to a list that changed since.
+DASHBOARD_RESOURCE_BINDING = "_dashboard_resource_binding"
+# Resource types offered to agents. Home Assistant also accepts "html", whose
+# HTML imports no current browser loads.
+DASHBOARD_RESOURCE_TYPES = ("module", "css", "js")
+DASHBOARD_RESOURCE_URL_MAX_LENGTH = 2048
 LOCATION_REGISTRY_FIELDS = frozenset({
     "name", "icon", "aliases", "floor_id", "level", "labels", "add_labels", "remove_labels",
 })

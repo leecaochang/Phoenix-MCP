@@ -179,6 +179,10 @@
       "cap_calendar_write": {
         "label": "日历写入",
         "description": "在具有写入权限的日历中创建、更新和删除事件。"
+      },
+      "cap_dashboard_resources": {
+        "label": "仪表盘资源",
+        "description": "列出、添加、更改和移除每个仪表盘都会加载的 JavaScript 和 CSS 文件，自定义卡片就是通过它们安装的。已注册的 JavaScript 文件会在每个打开仪表盘的浏览器中运行，并拥有该用户的 Home Assistant 访问权限，因此强烈建议设为“确认”。"
       }
     },
     "personas": {
@@ -982,7 +986,10 @@
       "location.create": "创建位置 {name}",
       "location.delete": "删除位置 {name}",
       "location.update": "更新位置 {name}",
-      "patch_dashboard.multi": "对仪表盘“{label}”应用 {count} 项更改"
+      "patch_dashboard.multi": "对仪表盘“{label}”应用 {count} 项更改",
+      "dashboard_resource.create": "添加仪表盘资源 {url}",
+      "dashboard_resource.update": "更改仪表盘资源 {url}",
+      "dashboard_resource.delete": "移除仪表盘资源 {url}"
     },
     "approvals": {
       "approve": "批准并执行",
@@ -2080,7 +2087,13 @@
       "location.update.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
       "location.update.title": "更新位置 {name}",
       "patch_dashboard.multi.title": "更新仪表盘“{label}”",
-      "patch_dashboard.multi.body": "这将更新 Home Assistant 仪表盘配置。打开详细信息可查看具体更改内容。"
+      "patch_dashboard.multi.body": "这将更新 Home Assistant 仪表盘配置。打开详细信息可查看具体更改内容。",
+      "dashboard_resource.create.title": "添加仪表盘资源 {url}",
+      "dashboard_resource.update.title": "更改仪表盘资源 {url}",
+      "dashboard_resource.delete.title": "移除仪表盘资源 {url}",
+      "dashboard_resource.create.body": "每个打开仪表盘的浏览器都会加载 {url}。JavaScript 文件会以该用户的 Home Assistant 访问权限运行，因此请只批准您信任的文件。",
+      "dashboard_resource.update.body": "这将更改每个浏览器打开仪表盘时加载的文件。请在详细信息中比较当前文件和拟议文件。",
+      "dashboard_resource.delete.body": "仪表盘将不再加载 {url}。来自该文件的卡片在重新添加之前会显示错误。"
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",
