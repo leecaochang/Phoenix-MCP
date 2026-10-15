@@ -599,7 +599,8 @@
       "unmatchedDeviceName": "Urządzenie nie znajduje się w bieżącym drzewie",
       "unmatchedDevicesNote": "Te jawne uprawnienia odwołują się do ID urządzeń, których nie ma w bieżącym drzewie encji. Ustaw N, aby usunąć nieaktualne uprawnienie.",
       "unmatchedDevicesTitle": "Niedopasowane uprawnienia urządzeń",
-      "viewMesaProfile": "Wyświetl profil MESA"
+      "viewMesaProfile": "Wyświetl profil MESA",
+      "hintCaution": "Podpowiedź jest wysyłana do agentów i ich dostawców modeli. Nigdy nie wpisuj tu haseł ani kodów."
     },
     "diff": {
       "blueprint.create": "Utwórz schemat '{rel}' ({domain})",

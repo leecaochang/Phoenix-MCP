@@ -552,6 +552,7 @@
       "hintAllAria": "Apply hint to all access keys",
       "hintAllAccessKeys": "All access keys",
       "hintAria": "Hint for {id}",
+      "hintCaution": "Sent to agents and their model providers. Never include passwords or codes.",
       "hintModalTitle": "Entity hint",
       "hintNoteGlobal": "Saved globally: applies to every access key that can see this entity.",
       "hintNoteLocal": "Applies only to this access key and overrides any global hint.",

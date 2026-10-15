@@ -1780,7 +1780,8 @@
       "unmatchedDeviceName": "Laite ei ole nykyisessä puussa",
       "unmatchedDevicesNote": "Nämä erilliset käyttöoikeudet viittaavat laitetunnuksiin, joita ei ole nykyisessä entiteettipuussa. Poista vanhentunut käyttöoikeus valitsemalla N.",
       "unmatchedDevicesTitle": "Laitteiden käyttöoikeudet, joilla ei ole vastaavuutta",
-      "viewMesaProfile": "Näytä MESA-profiili"
+      "viewMesaProfile": "Näytä MESA-profiili",
+      "hintCaution": "Lähetetään agenteille ja niiden mallipalveluntarjoajille. Älä koskaan kirjoita salasanoja tai koodeja."
     },
     "personas": {
       "automation_builder": {

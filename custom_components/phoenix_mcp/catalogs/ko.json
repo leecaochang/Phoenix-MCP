@@ -472,7 +472,8 @@
       "unmatchedDeviceName": "현재 트리에 없는 기기",
       "unmatchedDevicesNote": "이 명시적 권한은 현재 엔티티 트리에 없는 기기 ID를 참조합니다. N으로 설정하면 오래된 권한을 제거할 수 있습니다.",
       "unmatchedDevicesTitle": "일치하지 않는 기기 권한",
-      "viewMesaProfile": "MESA 프로필 보기"
+      "viewMesaProfile": "MESA 프로필 보기",
+      "hintCaution": "힌트는 에이전트와 해당 모델 공급자에게 전송됩니다. 비밀번호는 절대 입력하지 마세요."
     },
     "selectBy": {
       "apply": "적용",

@@ -1780,7 +1780,8 @@
       "unmatchedDeviceName": "Enhet som inte finns i det aktuella trädet",
       "unmatchedDevicesNote": "De här uttryckliga beviljandena avser enhets-ID:n som inte finns i det aktuella entitetsträdet. Ange N för att ta bort ett inaktuellt beviljande.",
       "unmatchedDevicesTitle": "Omatchade enhetsbehörigheter",
-      "viewMesaProfile": "Visa MESA-profil"
+      "viewMesaProfile": "Visa MESA-profil",
+      "hintCaution": "Skickas till agenter och deras modellleverantörer. Skriv aldrig lösenord eller koder här."
     },
     "personas": {
       "automation_builder": {

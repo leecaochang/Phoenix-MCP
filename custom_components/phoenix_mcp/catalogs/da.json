@@ -1780,7 +1780,8 @@
       "unmatchedDeviceName": "Enhed findes ikke i det aktuelle træ",
       "unmatchedDevicesNote": "Disse eksplicitte tildelinger henviser til enheds-ID'er, der ikke findes i det aktuelle entitetstræ. Angiv N for at fjerne en forældet tildeling.",
       "unmatchedDevicesTitle": "Ikke matchede enhedstilladelser",
-      "viewMesaProfile": "Vis MESA-profil"
+      "viewMesaProfile": "Vis MESA-profil",
+      "hintCaution": "Sendes til agenter og deres modeludbydere. Medtag aldrig adgangskoder eller koder."
     },
     "personas": {
       "automation_builder": {

@@ -1072,6 +1072,7 @@ select.input {
 .tree-perm-error { font-size: 11px; font-weight: 700; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
 .hint-modal-entity { font-family: var(--phx-mono, monospace); font-size: 12px; color: var(--phx-text-2); margin: 0 0 12px; }
 .hint-modal-error { color: var(--phx-error); font-size: 12px; margin: 8px 0 0; text-align: center; }
+.hint-modal-caution { font-size: 12px; color: var(--phx-text-2); margin: 6px 0 0; line-height: 1.4; }
 .hint-scope { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 6px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
 .hint-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px; text-align: center; }

@@ -926,7 +926,8 @@
       "unmatchedDeviceName": "Dispositivo non presente nell'albero corrente",
       "unmatchedDevicesNote": "Queste autorizzazioni esplicite si riferiscono a ID dispositivo non presenti nell'albero delle entità corrente. Imposta N per rimuovere un'autorizzazione obsoleta.",
       "unmatchedDevicesTitle": "Autorizzazioni dei dispositivi non abbinati",
-      "viewMesaProfile": "Visualizza il profilo MESA"
+      "viewMesaProfile": "Visualizza il profilo MESA",
+      "hintCaution": "Questo suggerimento viene inviato agli agenti e ai loro provider di modelli. Non inserire mai password o codici."
     },
     "personas": {
       "automation_builder": {

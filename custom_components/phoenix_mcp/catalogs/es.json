@@ -264,7 +264,8 @@
       "unmatchedDeviceName": "Dispositivo no presente en el árbol actual",
       "unmatchedDevicesNote": "Estos permisos explícitos hacen referencia a IDs de dispositivo que no están en el árbol de entidades actual. Establezca N para eliminar un permiso obsoleto.",
       "unmatchedDevicesTitle": "Permisos de dispositivo sin coincidencia",
-      "viewMesaProfile": "Ver perfil MESA"
+      "viewMesaProfile": "Ver perfil MESA",
+      "hintCaution": "Se envía a los agentes y a sus proveedores de modelos. No incluya nunca contraseñas ni códigos."
     },
     "changes": {
       "added": "Añadido",

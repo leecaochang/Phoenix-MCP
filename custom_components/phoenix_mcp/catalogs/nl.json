@@ -542,7 +542,7 @@
       "hintAllAccessKeys": "Alle toegangssleutels",
       "hintAria": "Hint voor {id}",
       "hintModalTitle": "Entiteitshint",
-      "hintNoteGlobal": "Globaal opgeslagen: geldt voor elke toegangssleutel dat deze entiteit kan zien.",
+      "hintNoteGlobal": "Globaal opgeslagen: geldt voor elke toegangssleutel die deze entiteit kan zien.",
       "hintNoteLocal": "Geldt alleen voor deze toegangssleutel en overschrijft elke globale hint.",
       "hintPlaceholder": "Beschrijf hoe de agent deze entiteit moet gebruiken",
       "hintSaveFailed": "Hint opslaan is mislukt.",
@@ -591,7 +591,8 @@
       "unmatchedDeviceName": "Apparaat niet in huidige boom",
       "unmatchedDevicesNote": "Deze expliciete toekenningen verwijzen naar apparaat-ID's die niet in de huidige entiteitenboom staan. Zet N om een verouderde toekenning te verwijderen.",
       "unmatchedDevicesTitle": "Niet-gekoppelde apparaatmachtigingen",
-      "viewMesaProfile": "MESA-profiel bekijken"
+      "viewMesaProfile": "MESA-profiel bekijken",
+      "hintCaution": "Wordt verzonden naar agents en hun modelproviders. Zet hier nooit wachtwoorden of codes in."
     },
     "diff": {
       "blueprint.create": "Blueprint '{rel}' maken ({domain})",

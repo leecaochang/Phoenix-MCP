@@ -852,7 +852,8 @@
       "stateNotFound": "未找到",
       "effectiveTitle": "生效权限：{state}",
       "treeCollapse": "收起 {name}",
-      "treeExpand": "展开 {name}"
+      "treeExpand": "展开 {name}",
+      "hintCaution": "提示会发送给智能体及其模型提供商。切勿在此填写密码或代码。"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",

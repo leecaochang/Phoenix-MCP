@@ -1854,7 +1854,7 @@
       "hintAllAccessKeys": "Alle Zugriffsschlüssel",
       "hintAria": "Hinweis für {id}",
       "hintModalTitle": "Entitätshinweis",
-      "hintNoteGlobal": "Global gespeichert: gilt für jeden Zugriffsschlüssel, das diese Entität sehen kann.",
+      "hintNoteGlobal": "Global gespeichert: gilt für jeden Zugriffsschlüssel, der diese Entität sehen kann.",
       "hintNoteLocal": "Gilt nur für diesen Zugriffsschlüssel und überschreibt jeden globalen Hinweis.",
       "hintPlaceholder": "Beschreiben, wie der Agent diese Entität verwenden soll",
       "hintSaveFailed": "Hinweis konnte nicht gespeichert werden.",
@@ -1903,7 +1903,8 @@
       "unmatchedDeviceName": "Gerät nicht im aktuellen Baum",
       "unmatchedDevicesNote": "Diese expliziten Berechtigungen verweisen auf Geräte-IDs, die sich nicht im aktuellen Entitätsbaum befinden. Setzen Sie N, um eine veraltete Berechtigung zu entfernen.",
       "unmatchedDevicesTitle": "Nicht zugeordnete Geräteberechtigungen",
-      "viewMesaProfile": "MESA-Profil anzeigen"
+      "viewMesaProfile": "MESA-Profil anzeigen",
+      "hintCaution": "Wird an Agenten und deren Modellanbieter gesendet. Tragen Sie niemals Passwörter oder Codes ein."
     },
     "changes": {
       "added": "Hinzugefügt",

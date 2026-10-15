@@ -1,6 +1,6 @@
 import { BusyInput } from "./BusyButton";
 import { BusyButton } from "./BusyButton";
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useId } from "react";
 import type { EntityTree, DomainTree, PermissionTree, NodeState } from "../types";
 import { PermissionSelector } from "./PermissionSelector";
 import { MesaProfileLink, type LinkScope } from "./MesaProfileLink";
@@ -173,6 +173,7 @@ function HintInput({ accessKeyId, entityId, currentHint, globalHint, currentStat
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const cautionId = useId();
 
   function openModal() {
     setAllAccessKeys(true);
@@ -226,6 +227,7 @@ function HintInput({ accessKeyId, entityId, currentHint, globalHint, currentStat
         <input
           className="input"
           aria-label={t("perms.hintAria", { id: entityId })}
+          aria-describedby={cautionId}
           value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={t("perms.hintPlaceholder")}
@@ -233,6 +235,7 @@ function HintInput({ accessKeyId, entityId, currentHint, globalHint, currentStat
         onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setOpen(false); }}
         autoFocus
       />
+      <p className="hint-modal-caution" id={cautionId}>{t("perms.hintCaution")}</p>
       <div className="hint-scope">
         <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisAccessKey")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>

@@ -1383,7 +1383,8 @@
       "unmatchedDeviceName": "裝置不在目前實體樹中",
       "unmatchedDevicesNote": "這些顯式授權引用了目前實體樹中沒有的裝置 ID。選擇 N 可移除失效授權。",
       "unmatchedDevicesTitle": "未匹配的裝置權限",
-      "viewMesaProfile": "檢視 MESA 策略"
+      "viewMesaProfile": "檢視 MESA 策略",
+      "hintCaution": "提示會傳送給智慧體及其模型提供者。切勿在此填寫密碼。"
     },
     "personas": {
       "automation_builder": {

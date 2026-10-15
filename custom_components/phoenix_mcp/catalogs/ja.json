@@ -398,7 +398,8 @@
       "unmatchedDeviceName": "現在のツリーにないデバイス",
       "unmatchedDevicesNote": "これらの明示的な権限は、現在のエンティティツリーにないデバイス ID を参照しています。古い権限を削除するには N を設定してください。",
       "unmatchedDevicesTitle": "一致しないデバイス権限",
-      "viewMesaProfile": "MESA プロファイルを表示"
+      "viewMesaProfile": "MESA プロファイルを表示",
+      "hintCaution": "ヒントはエージェントとそのモデルプロバイダーに送信されます。パスワードやコードは絶対に入力しないでください。"
     },
     "changes": {
       "added": "追加",

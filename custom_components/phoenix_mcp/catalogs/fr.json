@@ -600,7 +600,8 @@
       "unmatchedDeviceName": "Appareil absent de l'arbre actuel",
       "unmatchedDevicesNote": "Ces autorisations explicites font référence à des ID d'appareil absents de l'arbre des entités actuel. Appuyez sur N pour supprimer une autorisation obsolète.",
       "unmatchedDevicesTitle": "Autorisations d'appareil non associées",
-      "viewMesaProfile": "Voir le profil MESA"
+      "viewMesaProfile": "Voir le profil MESA",
+      "hintCaution": "Cette indication est envoyée aux agents et à leurs fournisseurs de modèle. N’y mettez jamais de mots de passe ni de codes."
     },
     "changes": {
       "added": "Ajouté",

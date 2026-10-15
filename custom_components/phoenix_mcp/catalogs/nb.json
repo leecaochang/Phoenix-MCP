@@ -1780,7 +1780,8 @@
       "unmatchedDeviceName": "Enhet som ikke finnes i gjeldende tre",
       "unmatchedDevicesNote": "Disse eksplisitte tildelingene viser til enhets-ID-er som ikke finnes i det gjeldende entitetstreet. Sett N for å fjerne en utdatert tildeling.",
       "unmatchedDevicesTitle": "Tillatelser for enheter uten samsvar",
-      "viewMesaProfile": "Vis MESA-profil"
+      "viewMesaProfile": "Vis MESA-profil",
+      "hintCaution": "Sendes til agenter og modellleverandørene deres. Skriv aldri passord eller koder her."
     },
     "personas": {
       "automation_builder": {
