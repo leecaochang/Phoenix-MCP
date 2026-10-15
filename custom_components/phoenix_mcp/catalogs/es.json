@@ -1006,7 +1006,10 @@
       "attentionSaveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión.",
       "attentionReviewConflict": "Esta acción está en curso o ya se ha revisado. Actualiza la lista.",
       "providerModelOrAuto": "Envía un modelo o auto, no ambos.",
-      "restoreUnverified": "La restauración se envió, pero la configuración leída después no coincide con la versión elegida, así que puede haberse aplicado solo en parte. Phoenix la vuelve a comprobar y pide una revisión en Aprobaciones si sigue siendo distinta. Comprueba la configuración actual antes de volver a restaurar."
+      "restoreUnverified": "La restauración se envió, pero la configuración leída después no coincide con la versión elegida, así que puede haberse aplicado solo en parte. Phoenix la vuelve a comprobar y pide una revisión en Aprobaciones si sigue siendo distinta. Comprueba la configuración actual antes de volver a restaurar.",
+      "notesInvalidCharacters": "notes no debe contener caracteres de control ni caracteres de formato ocultos.",
+      "notesString": "notes debe ser una cadena o null.",
+      "notesTooLong": "notes debe tener {max} caracteres o menos."
     },
     "accessKeys": {
       "advanced": "Avanzado",
@@ -1195,7 +1198,20 @@
       "accessKeyRotatedTitle": "Clave de acceso rotada: {name}",
       "updateFailed": "No se pudo actualizar la clave de acceso.",
       "waitBeforeClose": "Espere 3 segundos antes de cerrar",
-      "working": "Trabajando..."
+      "working": "Trabajando...",
+      "cardNotes": "Notas",
+      "notesCaution": "Las notas son solo orientativas: nunca conceden acceso, cambian capacidades ni omiten aprobaciones, y un modelo puede ignorarlas. Los clientes conectados y sus proveedores de modelos las reciben, y cualquiera que pueda hablar con un agente que use esta clave de acceso puede conseguir que las repita. No incluya contraseñas ni otros secretos.",
+      "notesCount": "{count} / {max} caracteres",
+      "notesDiscard": "Descartar cambios",
+      "notesHelp": "Indicaciones para todos los agentes que usan esta clave de acceso, como el nombre de las habitaciones y los dispositivos, quién la usa o dónde se guarda la documentación del hogar. Phoenix MCP añade las notas a las instrucciones de cada agente y oculta los ID de entidad fuera del ámbito de esta clave de acceso.",
+      "notesLabel": "Notas para los agentes",
+      "notesPlaceholder": "Ejemplo: La habitación de invitados se llama el estudio. Pregunte antes de cambiar algo en el cuarto del bebé.",
+      "notesSummaryNone": "Ninguna",
+      "notesTooLong": "Las notas deben tener {max} caracteres o menos.",
+      "notesSummaryChars": {
+        "one": "{count} carácter",
+        "other": "{count} caracteres"
+      }
     },
     "mesa": {
       "addAreaProfile": "Añadir perfil de área",

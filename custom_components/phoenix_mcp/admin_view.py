@@ -43,6 +43,7 @@ from .const import (
     GITHUB_URL,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     MAX_REQUEST_BODY_BYTES,
+    ACCESS_KEY_NOTES_MAX_LENGTH,
     MIN_CONFIRM_INLINE_WAIT_SECONDS,
     MAX_BATCH_APPROVALS,
     MESA_CONFIRM_CAP,
@@ -70,10 +71,12 @@ from .policy_engine import (
 from .const import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
 from .access_key_store import (
     valid_command_routing_languages,
+    NotesError,
     PermissionNode,
     PermissionTree,
     VALID_NODE_STATES,
     access_key_name_slug,
+    normalize_notes,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -805,7 +808,7 @@ class PhoenixAdminAccessKeysView(PhoenixView):
 _PATCHABLE_ACCESS_KEY_FIELDS = {
     "name", "pass_through", "use_assist_exposure", "announce_all_tools",
     "confirm_inline_wait_seconds",
-    "rate_limit_requests", "rate_limit_burst", "persona",
+    "rate_limit_requests", "rate_limit_burst", "persona", "notes",
 } | set(CAPABILITY_NAMES)
 
 _RATE_LIMIT_MAX = 100_000
@@ -911,6 +914,24 @@ def _validated_access_key_patch(
 
     if "persona" in patchable and patchable["persona"] not in PERSONA_NAMES:
         return {}, _err("invalid_request", "Unknown persona.", 400, rid, key="unknownPersona")
+
+    if "notes" in patchable:
+        try:
+            patchable["notes"] = normalize_notes(patchable["notes"])
+        except NotesError as exc:
+            if exc.reason == "length":
+                return {}, _err(
+                    "invalid_request",
+                    f"notes must be {ACCESS_KEY_NOTES_MAX_LENGTH} characters or fewer.",
+                    400, rid, key="notesTooLong", params={"max": ACCESS_KEY_NOTES_MAX_LENGTH},
+                )
+            if exc.reason == "characters":
+                return {}, _err(
+                    "invalid_request",
+                    "notes must not contain control or hidden formatting characters.",
+                    400, rid, key="notesInvalidCharacters",
+                )
+            return {}, _err("invalid_request", "notes must be a string or null.", 400, rid, key="notesString")
 
     if "use_assist_exposure" in patchable:
         # Keyed on the RESULTING pass_through, so enabling both in one PATCH works.

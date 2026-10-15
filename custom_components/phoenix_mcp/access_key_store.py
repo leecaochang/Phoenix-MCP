@@ -53,6 +53,7 @@ from .const import (
     DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
     DEFAULT_RATE_LIMIT_BURST,
     DEFAULT_RATE_LIMIT_REQUESTS,
+    ACCESS_KEY_NOTES_MAX_LENGTH,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     MIN_CONFIRM_INLINE_WAIT_SECONDS,
     MAX_PRESETS_PER_ACCESS_KEY,
@@ -355,6 +356,9 @@ class AccessKeyRecord:
     cap_esphome_yaml: str = CAP_DENY
     cap_esphome_flash: str = CAP_DENY
     persona: str = PERSONA_CUSTOM
+    # Administrator notes: advisory prose for the agents using this access key.
+    # Key-level like the name, so presets never carry or replace them.
+    notes: str | None = None
     permissions: PermissionTree = field(default_factory=PermissionTree)
     # Settings presets (the workspace model): active_preset_id is sticky.
     # Manual edits never clear it; they are the active preset's unsaved state,
@@ -379,6 +383,11 @@ class AccessKeyRecord:
     # would advise every such access key once for nothing. The first tools/list
     # records it.
     tools_catalog_fingerprint: str = ""
+    # Notes staleness for external clients (storage only, not in to_dict):
+    # notes_version advances on every notes change; notes_delivered_version echoes
+    # it when instructions or the one-time change notice deliver the notes.
+    notes_version: int = 0
+    notes_delivered_version: int = 0
 
     def caps_dict(self) -> dict[str, str]:
         """Return the mapping of each capability name to its mode."""
@@ -414,6 +423,7 @@ class AccessKeyRecord:
             "rate_limit_requests": self.rate_limit_requests,
             "rate_limit_burst": self.rate_limit_burst,
             "persona": self.persona,
+            "notes": self.notes,
             "permissions": self.permissions.to_dict(),
             "presets": [p.to_dict() for p in self.presets],
             "active_preset_id": self.active_preset_id,
@@ -434,6 +444,8 @@ class AccessKeyRecord:
         d["settings_version"] = self.settings_version
         d["tools_list_version"] = self.tools_list_version
         d["tools_catalog_fingerprint"] = self.tools_catalog_fingerprint
+        d["notes_version"] = self.notes_version
+        d["notes_delivered_version"] = self.notes_delivered_version
         return d
 
     @classmethod
@@ -463,6 +475,7 @@ class AccessKeyRecord:
         if active_preset_id is not None and not any(p.id == active_preset_id for p in presets):
             active_preset_id = None
         settings_version = int(data.get("settings_version", 1))
+        notes_version = int(data.get("notes_version", 0))
         permissions_raw = data.get("permissions")
         if not isinstance(permissions_raw, dict):
             # Fail closed: a corrupt (non-object) permission tree loads as an
@@ -484,6 +497,7 @@ class AccessKeyRecord:
             rate_limit_requests=_load_rate(data.get("rate_limit_requests", DEFAULT_RATE_LIMIT_REQUESTS), DEFAULT_RATE_LIMIT_REQUESTS),
             rate_limit_burst=_load_rate(data.get("rate_limit_burst", DEFAULT_RATE_LIMIT_BURST), DEFAULT_RATE_LIMIT_BURST),
             persona=persona,
+            notes=_load_notes(data.get("notes"), data.get("id", "?")),
             updated_at=_parse_dt(data.get("updated_at")),
             permissions=PermissionTree.from_dict(permissions_raw),
             presets=presets,
@@ -495,6 +509,9 @@ class AccessKeyRecord:
             # so an upgrade never fires a spurious advisory.
             tools_list_version=int(data.get("tools_list_version", settings_version)),
             tools_catalog_fingerprint=str(data.get("tools_catalog_fingerprint", "") or ""),
+            notes_version=notes_version,
+            # Like tools_list_version: a record without it is not stale.
+            notes_delivered_version=int(data.get("notes_delivered_version", notes_version)),
             **cap_kwargs,
         )
 
@@ -579,6 +596,50 @@ def _clamp_range(value: Any, lo: int, hi: int, default: int) -> int:
 def _coerce_opt_str(value: object) -> str | None:
     """Return a non-empty string or None (for optional string settings)."""
     return value if isinstance(value, str) and value else None
+
+
+class NotesError(ValueError):
+    """Administrator notes broke one rule, named by `reason`: type, characters or length."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _hidden_character(char: str) -> bool:
+    """Control, bidirectional-override and tag characters, which can hide text from a reviewer."""
+    code = ord(char)
+    return ((code < 0x20 and char not in "\n\t") or 0x7F <= code <= 0x9F
+            or 0x202A <= code <= 0x202E or 0x2066 <= code <= 0x2069
+            or 0xE0000 <= code <= 0xE007F)
+
+
+def normalize_notes(value: object) -> str | None:
+    """Return administrator notes in stored form, or None when there are none.
+
+    Line endings become LF and surrounding whitespace is trimmed. Raises
+    NotesError for a non-string, a hidden character (see _hidden_character), or
+    more than ACCESS_KEY_NOTES_MAX_LENGTH characters after normalization.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise NotesError("type")
+    text = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if any(_hidden_character(char) for char in text):
+        raise NotesError("characters")
+    if len(text) > ACCESS_KEY_NOTES_MAX_LENGTH:
+        raise NotesError("length")
+    return text or None
+
+
+def _load_notes(value: object, access_key_id: object) -> str | None:
+    """Stored notes that no longer validate are dropped with a warning, never the access key."""
+    try:
+        return normalize_notes(value)
+    except NotesError as exc:
+        _LOGGER.warning("Dropping invalid notes on access key %r: %s", access_key_id, exc.reason)
+        return None
 
 
 def _closed_choice(value: object, valid: frozenset[str], default: str) -> str:
@@ -1151,10 +1212,12 @@ class AccessKeyStore:
 
         Callers must hold self.async_lock. A rate_limit_requests of 0 forces
         rate_limit_burst to 0, and any capability change re-derives the persona.
-        settings_version advances for anything beyond a rename or inline-wait
-        change. When every change was a capability-only grant (see
-        CAP_GRANT_TRANSITIONS) the grant run is recorded so admitted requests stay
-        valid (accepts_policy_version). Returns None if the access key is not found.
+        settings_version advances for anything beyond a rename, inline-wait or
+        notes change; a notes change advances notes_version instead, which drives
+        the one-time notice to external clients. When every change was a
+        capability-only grant (see CAP_GRANT_TRANSITIONS) the grant run is
+        recorded so admitted requests stay valid (accepts_policy_version).
+        Returns None if the access key is not found.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1168,6 +1231,7 @@ class AccessKeyStore:
             "rate_limit_requests",
             "rate_limit_burst",
             "persona",
+            "notes",
         }
         cap_fields = set(CAPABILITY_NAMES)
         grant_only = bool(kwargs) and access_key.persona != PERSONA_HOME_COMPANION and all(
@@ -1195,6 +1259,10 @@ class AccessKeyStore:
                     raise ValueError(f"Unknown persona: {value!r}")
                 if key == "confirm_inline_wait_seconds":
                     value = _clamp_inline_wait(value)
+                if key == "notes":
+                    value = normalize_notes(value)
+                    if value != access_key.notes:
+                        access_key.notes_version += 1
                 setattr(access_key, key, value)
         if access_key.persona == PERSONA_HOME_COMPANION:
             access_key.pass_through = False
@@ -1211,7 +1279,9 @@ class AccessKeyStore:
         # connected agent may see or do, so advance the staleness counter (drives
         # the in-band advisory). confirm_inline_wait_seconds changes neither the
         # tool list nor the caps, so like name it must not fire a spurious advisory.
-        non_invalidating = {"name", "confirm_inline_wait_seconds"}
+        # Notes are advisory prose, never authority, so they must not invalidate
+        # admitted work either.
+        non_invalidating = {"name", "confirm_inline_wait_seconds", "notes"}
         if cap_changed or any(k not in non_invalidating for k in kwargs):
             previous_version = access_key.settings_version
             access_key.settings_version += 1

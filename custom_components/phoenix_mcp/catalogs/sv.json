@@ -192,7 +192,20 @@
       "switching": "Byter...",
       "updateFailed": "Det gick inte att uppdatera åtkomstnyckeln.",
       "waitBeforeClose": "Vänta 3 sekunder innan du stänger",
-      "working": "Arbetar..."
+      "working": "Arbetar...",
+      "cardNotes": "Anteckningar",
+      "notesCaution": "Anteckningar är endast rådgivande: de ger aldrig åtkomst, ändrar inte funktioner och kringgår inte godkännanden, och en modell kan ignorera dem. Anslutna klienter och deras modellleverantörer tar emot dem, och alla som kan prata med en agent som använder den här åtkomstnyckeln kan få den att upprepa dem. Skriv inte lösenord eller andra hemligheter här.",
+      "notesCount": "{count} / {max} tecken",
+      "notesDiscard": "Förkasta ändringar",
+      "notesHelp": "Vägledning för alla agenter som använder den här åtkomstnyckeln, till exempel vad rum och enheter heter, vem som använder den eller var hushållets dokumentation finns. Phoenix MCP lägger till anteckningarna i varje agents instruktioner och döljer entitets-ID:n utanför den här åtkomstnyckelns omfång.",
+      "notesLabel": "Anteckningar för agenter",
+      "notesPlaceholder": "Exempel: Gästrummet kallas arbetsrummet. Fråga innan du ändrar något i barnrummet.",
+      "notesSummaryNone": "Inga",
+      "notesTooLong": "Anteckningar får innehålla högst {max} tecken.",
+      "notesSummaryChars": {
+        "one": "{count} tecken",
+        "other": "{count} tecken"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} måste vara en åtkomstnyckel-ID-sträng eller null.",
@@ -336,7 +349,10 @@
       "versionNotFound": "Versionen hittades inte.",
       "versionResourcePairRequired": "Ange både resource_type och resource_id, eller inget av dem för det senaste flödet.",
       "wipeConfirmationRequired": "confirm måste vara WIPE.",
-      "restoreUnverified": "Återställningen skickades, men konfigurationen som lästes tillbaka efteråt matchar inte den valda versionen, så den kan vara bara delvis tillämpad. Phoenix kontrollerar den igen och ber om granskning under Godkännanden om den fortfarande avviker. Kontrollera den aktuella konfigurationen innan du återställer igen."
+      "restoreUnverified": "Återställningen skickades, men konfigurationen som lästes tillbaka efteråt matchar inte den valda versionen, så den kan vara bara delvis tillämpad. Phoenix kontrollerar den igen och ber om granskning under Godkännanden om den fortfarande avviker. Kontrollera den aktuella konfigurationen innan du återställer igen.",
+      "notesInvalidCharacters": "notes får inte innehålla kontrolltecken eller dolda formateringstecken.",
+      "notesString": "notes måste vara en sträng eller null.",
+      "notesTooLong": "notes får innehålla högst {max} tecken."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",

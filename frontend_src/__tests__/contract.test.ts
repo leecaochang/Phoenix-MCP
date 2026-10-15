@@ -29,6 +29,7 @@ const ACCESS_KEY_RECORD_KEYS = {
   announce_all_tools: true,
   confirm_inline_wait_seconds: true,
   persona: true,
+  notes: true,
   rate_limit_requests: true,
   rate_limit_burst: true,
   permissions: true,

@@ -633,6 +633,15 @@ select.input {
 .toggle-label span, .toggle-label > label { font-size: 14px; font-weight: 500; }
 .toggle-label small { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
 .toggle-label-master { font-weight: 700; }
+
+/* Access key notes: help copy, a resizable multiline field and a footer that
+   keeps the counter and the save actions on one line until it wraps. */
+.access-key-notes-help { margin: 0 0 8px; font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
+.access-key-notes-input { display: block; min-height: 120px; resize: vertical; line-height: 1.45; }
+.access-key-notes-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.access-key-notes-count { font-size: 12px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
+.access-key-notes-count.field-error { color: var(--phx-error); }
+.access-key-notes-actions { display: flex; gap: 8px; margin-left: auto; }
 .toggle-row-plain { border: none; padding: 0; }
 .toggle-row-greyed { opacity: 0.45; pointer-events: none; }
 /* Select-backed settings need the full line length for explanatory copy. The

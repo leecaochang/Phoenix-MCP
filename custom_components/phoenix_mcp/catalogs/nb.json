@@ -192,7 +192,20 @@
       "switching": "Bytter...",
       "updateFailed": "Kunne ikke oppdatere tilgangsnøkkelen.",
       "waitBeforeClose": "Vent 3 sekunder før du lukker",
-      "working": "Arbeider..."
+      "working": "Arbeider...",
+      "cardNotes": "Notater",
+      "notesCaution": "Notater er bare rådgivende: De gir aldri tilgang, endrer ikke kapabiliteter og omgår ikke godkjenninger, og en modell kan ignorere dem. Tilkoblede klienter og modellleverandørene deres mottar dem, og alle som kan snakke med en agent som bruker denne tilgangsnøkkelen, kan få den til å gjenta dem. Ikke skriv passord eller andre hemmeligheter her.",
+      "notesCount": "{count} / {max} tegn",
+      "notesDiscard": "Forkast endringer",
+      "notesHelp": "Veiledning for alle agenter som bruker denne tilgangsnøkkelen, for eksempel hva rom og enheter heter, hvem som bruker den, eller hvor husstandens dokumentasjon ligger. Phoenix MCP legger notatene til i hver agents instruksjoner og skjuler entitets-ID-er utenfor omfanget til denne tilgangsnøkkelen.",
+      "notesLabel": "Notater til agenter",
+      "notesPlaceholder": "Eksempel: Gjesterommet kalles hobbyrommet. Spør før du endrer noe på barnerommet.",
+      "notesSummaryNone": "Ingen",
+      "notesTooLong": "Notater kan ha maksimalt {max} tegn.",
+      "notesSummaryChars": {
+        "one": "{count} tegn",
+        "other": "{count} tegn"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} må være en streng med en tilgangsnøkkel-ID eller null.",
@@ -336,7 +349,10 @@
       "versionNotFound": "Versjonen ble ikke funnet.",
       "versionResourcePairRequired": "Oppgi både resource_type og resource_id, eller ingen av dem for den nylige aktivitetsstrømmen.",
       "wipeConfirmationRequired": "confirm må være WIPE.",
-      "restoreUnverified": "Gjenopprettingen ble sendt, men konfigurasjonen som ble lest tilbake etterpå, samsvarer ikke med den valgte versjonen, så den er kanskje bare delvis brukt. Phoenix kontrollerer den på nytt og ber om gjennomgang under Godkjenninger hvis den fortsatt avviker. Sjekk gjeldende konfigurasjon før du gjenoppretter igjen."
+      "restoreUnverified": "Gjenopprettingen ble sendt, men konfigurasjonen som ble lest tilbake etterpå, samsvarer ikke med den valgte versjonen, så den er kanskje bare delvis brukt. Phoenix kontrollerer den på nytt og ber om gjennomgang under Godkjenninger hvis den fortsatt avviker. Sjekk gjeldende konfigurasjon før du gjenoppretter igjen.",
+      "notesInvalidCharacters": "notes kan ikke inneholde kontrolltegn eller skjulte formateringstegn.",
+      "notesString": "notes må være en streng eller null.",
+      "notesTooLong": "notes må ha maksimalt {max} tegn."
     },
     "agentchat": {
       "accessKey": "Tilgangsnøkkel",

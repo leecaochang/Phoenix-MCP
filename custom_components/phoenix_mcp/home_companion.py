@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from .helpers import log_internal_failure
+from .helpers import access_key_notes_block, log_internal_failure
 
 import asyncio
 from contextvars import ContextVar
@@ -382,6 +382,11 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
             "the whole task is finished. Language: " + arguments.get("language", "en")
         )
         system += _conversation_behavior_prompt(turn.style, turn.detail)
+        # Every ingress reaches this turn, so its model gets the notes the same way
+        # whether a request came from an external client, Assist, Voice, Chat or AI Task.
+        notes_block = access_key_notes_block(access_key, hass)
+        if notes_block:
+            system += "\n\n" + notes_block
         deadline = asyncio.get_running_loop().time() + HOME_COMPANION_TIMEOUT_SECONDS
         try:
             async with asyncio.timeout_at(deadline):

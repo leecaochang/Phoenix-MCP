@@ -192,7 +192,20 @@
       "switching": "Vaihdetaan...",
       "updateFailed": "Käyttöavaimen päivitys epäonnistui.",
       "waitBeforeClose": "Odota 3 sekuntia ennen sulkemista",
-      "working": "Käsitellään..."
+      "working": "Käsitellään...",
+      "cardNotes": "Muistiinpanot",
+      "notesCaution": "Muistiinpanot ovat vain ohjeellisia: ne eivät koskaan myönnä käyttöoikeutta, muuta ominaisuuksia tai ohita hyväksyntöjä, ja malli voi jättää ne huomiotta. Yhdistetyt asiakkaat ja niiden mallipalveluntarjoajat saavat ne, ja kuka tahansa, joka voi keskustella tätä käyttöavainta käyttävän agentin kanssa, voi saada sen toistamaan ne. Älä kirjoita tähän salasanoja tai muita salaisuuksia.",
+      "notesCount": "{count} / {max} merkkiä",
+      "notesDiscard": "Kumoa muutokset",
+      "notesHelp": "Ohjeita kaikille agenteille, jotka käyttävät tätä käyttöavainta, esimerkiksi mitä huoneita ja laitteita kutsutaan miksikin, kuka avainta käyttää tai missä kodin dokumentaatio on. Phoenix MCP lisää muistiinpanot jokaisen agentin ohjeisiin ja piilottaa entiteettien tunnukset, jotka ovat tämän käyttöavaimen rajauksen ulkopuolella.",
+      "notesLabel": "Muistiinpanot agenteille",
+      "notesPlaceholder": "Esimerkki: Vierashuonetta kutsutaan työhuoneeksi. Kysy ennen kuin muutat mitään lastenhuoneessa.",
+      "notesSummaryNone": "Ei mitään",
+      "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä.",
+      "notesSummaryChars": {
+        "one": "{count} merkki",
+        "other": "{count} merkkiä"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} on oltava käyttöavaimen tunnus merkkijonona tai null.",
@@ -336,7 +349,10 @@
       "versionNotFound": "Versiota ei löytynyt.",
       "versionResourcePairRequired": "Anna sekä resource_type että resource_id tai jätä molemmat pois, jos haluat viimeisimmät.",
       "wipeConfirmationRequired": "confirm on oltava WIPE.",
-      "restoreUnverified": "Palautus lähetettiin, mutta jälkikäteen luettu kokoonpano ei vastaa valittua versiota, joten se on ehkä otettu käyttöön vain osittain. Phoenix tarkistaa sen uudelleen ja pyytää tarkistusta Hyväksynnät-kohdassa, jos se poikkeaa yhä. Tarkista nykyinen kokoonpano ennen kuin palautat uudelleen."
+      "restoreUnverified": "Palautus lähetettiin, mutta jälkikäteen luettu kokoonpano ei vastaa valittua versiota, joten se on ehkä otettu käyttöön vain osittain. Phoenix tarkistaa sen uudelleen ja pyytää tarkistusta Hyväksynnät-kohdassa, jos se poikkeaa yhä. Tarkista nykyinen kokoonpano ennen kuin palautat uudelleen.",
+      "notesInvalidCharacters": "notes ei saa sisältää ohjausmerkkejä tai piilotettuja muotoilumerkkejä.",
+      "notesString": "notes on oltava merkkijono tai null.",
+      "notesTooLong": "notes saa olla enintään {max} merkkiä."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",

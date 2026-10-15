@@ -1077,7 +1077,10 @@
       "attentionSaveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia.",
       "attentionReviewConflict": "To działanie trwa lub zostało już sprawdzone. Odśwież listę.",
       "providerModelOrAuto": "Wyślij model albo auto, nie oba naraz.",
-      "restoreUnverified": "Przywracanie zostało wysłane, ale odczytana potem konfiguracja nie zgadza się z wybraną wersją, więc mogła zostać zastosowana tylko częściowo. Phoenix sprawdzi ją ponownie i poprosi o przegląd w Zatwierdzeniach, jeśli nadal się różni. Sprawdź bieżącą konfigurację przed ponownym przywróceniem."
+      "restoreUnverified": "Przywracanie zostało wysłane, ale odczytana potem konfiguracja nie zgadza się z wybraną wersją, więc mogła zostać zastosowana tylko częściowo. Phoenix sprawdzi ją ponownie i poprosi o przegląd w Zatwierdzeniach, jeśli nadal się różni. Sprawdź bieżącą konfigurację przed ponownym przywróceniem.",
+      "notesInvalidCharacters": "notes nie może zawierać znaków sterujących ani ukrytych znaków formatowania.",
+      "notesString": "notes musi być ciągiem znaków lub null.",
+      "notesTooLong": "notes może mieć co najwyżej {max} znaków."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -1373,7 +1376,22 @@
       "accessKeyRotatedTitle": "Klucz dostępu zrotowany: {name}",
       "updateFailed": "Nie udało się zaktualizować klucza dostępu.",
       "waitBeforeClose": "Poczekaj 3 sekundy przed zamknięciem",
-      "working": "Praca..."
+      "working": "Praca...",
+      "cardNotes": "Notatki",
+      "notesCaution": "Notatki mają charakter wyłącznie doradczy: nigdy nie przyznają dostępu, nie zmieniają możliwości ani nie omijają zatwierdzeń, a model może je zignorować. Otrzymują je połączeni klienci i ich dostawcy modeli, a każdy, kto może rozmawiać z agentem używającym tego klucza dostępu, może skłonić go do ich powtórzenia. Nie wpisuj tu haseł ani innych sekretów.",
+      "notesCount": "{count} / {max} znaków",
+      "notesDiscard": "Odrzuć zmiany",
+      "notesHelp": "Wskazówki dla każdego agenta, który używa tego klucza dostępu, na przykład jak nazywają się pomieszczenia i urządzenia, kto go używa lub gdzie znajduje się dokumentacja domu. Phoenix MCP dodaje notatki do instrukcji każdego agenta i ukrywa ID encji spoza zakresu tego klucza dostępu.",
+      "notesLabel": "Notatki dla agentów",
+      "notesPlaceholder": "Przykład: Pokój gościnny nazywamy gabinetem. Zapytaj, zanim zmienisz cokolwiek w pokoju dziecięcym.",
+      "notesSummaryNone": "Brak",
+      "notesTooLong": "Notatki mogą mieć co najwyżej {max} znaków.",
+      "notesSummaryChars": {
+        "one": "{count} znak",
+        "few": "{count} znaki",
+        "many": "{count} znaków",
+        "other": "{count} znaku"
+      }
     },
     "mesa": {
       "addAreaProfile": "Dodaj profil obszaru",

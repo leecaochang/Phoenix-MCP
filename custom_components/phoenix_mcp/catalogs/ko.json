@@ -899,7 +899,10 @@
       "attentionSaveFailed": "확인 결과를 저장하지 못했습니다. 작업을 계속 확인해야 합니다.",
       "attentionReviewConflict": "이 작업은 실행 중이거나 이미 확인되었습니다. 목록을 새로고침하세요.",
       "providerModelOrAuto": "모델 또는 auto 중 하나만 보내세요.",
-      "restoreUnverified": "복원 요청은 전송되었지만 이후 다시 읽은 구성이 선택한 버전과 일치하지 않아 일부만 적용되었을 수 있습니다. Phoenix가 다시 확인하고, 여전히 다르면 승인에서 검토를 요청합니다. 다시 복원하기 전에 현재 구성을 확인하세요."
+      "restoreUnverified": "복원 요청은 전송되었지만 이후 다시 읽은 구성이 선택한 버전과 일치하지 않아 일부만 적용되었을 수 있습니다. Phoenix가 다시 확인하고, 여전히 다르면 승인에서 검토를 요청합니다. 다시 복원하기 전에 현재 구성을 확인하세요.",
+      "notesInvalidCharacters": "notes에는 제어 문자나 숨겨진 서식 문자를 포함할 수 없습니다.",
+      "notesString": "notes는 문자열 또는 null이어야 합니다.",
+      "notesTooLong": "notes는 {max}자 이하여야 합니다."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -2098,7 +2101,20 @@
       "accessKeyRotatedTitle": "액세스 키 회전됨: {name}",
       "updateFailed": "액세스 키를 업데이트하지 못했습니다.",
       "waitBeforeClose": "닫기 전에 3초간 기다리십시오",
-      "working": "처리 중..."
+      "working": "처리 중...",
+      "cardNotes": "메모",
+      "notesCaution": "메모는 참고용입니다. 접근 권한을 부여하거나 기능을 변경하거나 승인을 우회하지 않으며, 모델이 무시할 수도 있습니다. 연결된 클라이언트와 해당 모델 공급자가 메모를 받으며, 이 액세스 키를 사용하는 에이전트와 대화할 수 있는 사람은 누구나 에이전트가 메모를 그대로 말하게 할 수 있습니다. 비밀번호나 기타 비밀 값은 입력하지 마세요.",
+      "notesCount": "{count} / {max}자",
+      "notesDiscard": "변경 사항 버리기",
+      "notesHelp": "이 액세스 키를 사용하는 모든 에이전트를 위한 안내입니다. 방과 기기를 부르는 이름, 사용하는 사람, 가정 문서의 위치 등을 적습니다. Phoenix MCP는 메모를 각 에이전트의 지침에 추가하고 이 액세스 키의 범위를 벗어난 엔티티 ID를 숨깁니다.",
+      "notesLabel": "에이전트용 메모",
+      "notesPlaceholder": "예: 손님방은 서재라고 부릅니다. 아이 방의 기기를 변경하기 전에 먼저 물어보세요.",
+      "notesSummaryNone": "없음",
+      "notesTooLong": "메모는 {max}자 이하여야 합니다.",
+      "notesSummaryChars": {
+        "one": "{count}자",
+        "other": "{count}자"
+      }
     },
     "routing": {
       "providerOptions": "결정 제공업체는 사고 수준 같은 채팅 옵션 없이 고정된 라우팅 선택지를 사용합니다. 모델 새로 고침은 명령을 실행하지 않고 사용 가능 여부를 확인하며, 라우팅 정확도를 테스트하지는 않습니다.",

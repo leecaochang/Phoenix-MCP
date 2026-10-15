@@ -349,7 +349,7 @@ if _ASSIST_API_SUPPORTED:
                         return deepcopy(entry[1])
                     return _llm.selector_serializer(node)
 
-                api_prompt = _build_instructions(access_key, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
+                api_prompt = _build_instructions(access_key, data, _base_url(self.hass), self.hass) + "\n\n" + _ASSIST_ADDENDUM
                 return _llm.APIInstance(
                     api=self,
                     api_prompt=api_prompt,

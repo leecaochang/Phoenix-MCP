@@ -17,6 +17,7 @@ function makeAccessKey(overrides: Partial<AccessKeyRecord> = {}): AccessKeyRecor
     updated_at: null,
     pass_through: false,
     persona: "custom",
+    notes: null,
     confirm_inline_wait_seconds: 0,
     rate_limit_requests: 60,
     rate_limit_burst: 10,

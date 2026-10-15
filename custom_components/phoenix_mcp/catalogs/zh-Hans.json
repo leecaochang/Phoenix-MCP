@@ -667,7 +667,10 @@
       "attentionSaveFailed": "无法保存核对结果。此操作仍需核对。",
       "attentionReviewConflict": "此操作正在执行或已核对。请刷新列表。",
       "providerModelOrAuto": "请只发送 model 或 auto 其中之一。",
-      "restoreUnverified": "还原已提交，但随后读回的配置与所选版本不一致，因此可能只应用了一部分。Phoenix 会重新检查，如果仍不一致，会在审批中请求复核。再次还原前，请检查当前配置。"
+      "restoreUnverified": "还原已提交，但随后读回的配置与所选版本不一致，因此可能只应用了一部分。Phoenix 会重新检查，如果仍不一致，会在审批中请求复核。再次还原前，请检查当前配置。",
+      "notesInvalidCharacters": "notes 不能包含控制字符或隐藏的格式字符。",
+      "notesString": "notes 必须是字符串或 null。",
+      "notesTooLong": "notes 不能超过 {max} 个字符。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -1274,7 +1277,20 @@
       "updateFailed": "更新访问密钥失败。",
       "waitBeforeClose": "请等待 3 秒后再关闭",
       "working": "处理中…",
-      "inlineWaitOff": "关闭（审批立即进入队列）"
+      "inlineWaitOff": "关闭（审批立即进入队列）",
+      "cardNotes": "备注",
+      "notesCaution": "备注仅供参考：它们不会授予访问权限、更改能力或绕过审批，模型也可能忽略它们。已连接的客户端及其模型提供商会收到备注，任何能与使用此访问密钥的智能体对话的人都可能让它复述备注。请勿在此填写密码或其他敏感信息。",
+      "notesCount": "{count} / {max} 个字符",
+      "notesDiscard": "放弃更改",
+      "notesHelp": "为使用此访问密钥的每个智能体提供指引，例如房间和设备的叫法、由谁使用，或家庭文档的存放位置。Phoenix MCP 会将备注添加到每个智能体的指令中，并隐藏此访问密钥范围之外的实体 ID。",
+      "notesLabel": "给智能体的备注",
+      "notesPlaceholder": "示例：客房称为书房。更改儿童房中的任何设备前请先询问。",
+      "notesSummaryNone": "无",
+      "notesTooLong": "备注不能超过 {max} 个字符。",
+      "notesSummaryChars": {
+        "one": "{count} 个字符",
+        "other": "{count} 个字符"
+      }
     },
     "settings": {
       "addProviderFirst": "请先在“智能体对话”中添加提供商账户。",

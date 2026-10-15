@@ -1067,7 +1067,10 @@
       "attentionSaveFailed": "De controle kon niet worden opgeslagen. De actie moet nog worden gecontroleerd.",
       "attentionReviewConflict": "Deze actie loopt of is al gecontroleerd. Vernieuw de lijst.",
       "providerModelOrAuto": "Stuur een model of auto, niet beide.",
-      "restoreUnverified": "Het herstellen is verzonden, maar de daarna teruggelezen configuratie komt niet overeen met de gekozen versie, dus die is mogelijk maar gedeeltelijk toegepast. Phoenix controleert het opnieuw en vraagt om een beoordeling bij Goedkeuringen als het nog steeds afwijkt. Controleer de huidige configuratie voordat je opnieuw herstelt."
+      "restoreUnverified": "Het herstellen is verzonden, maar de daarna teruggelezen configuratie komt niet overeen met de gekozen versie, dus die is mogelijk maar gedeeltelijk toegepast. Phoenix controleert het opnieuw en vraagt om een beoordeling bij Goedkeuringen als het nog steeds afwijkt. Controleer de huidige configuratie voordat je opnieuw herstelt.",
+      "notesInvalidCharacters": "notes mag geen stuurtekens of verborgen opmaaktekens bevatten.",
+      "notesString": "notes moet een tekenreeks of null zijn.",
+      "notesTooLong": "notes mag maximaal {max} tekens bevatten."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -1363,7 +1366,20 @@
       "accessKeyRotatedTitle": "Toegangssleutel geroteerd: {name}",
       "updateFailed": "Toegangssleutel bijwerken is mislukt.",
       "waitBeforeClose": "Wacht 3 seconden voordat je sluit",
-      "working": "Bezig..."
+      "working": "Bezig...",
+      "cardNotes": "Notities",
+      "notesCaution": "Notities zijn alleen een advies: ze verlenen nooit toegang, wijzigen geen mogelijkheden en omzeilen geen goedkeuringen, en een model kan ze negeren. Verbonden clients en hun modelproviders ontvangen ze, en iedereen die kan praten met een agent die deze toegangssleutel gebruikt, kan die agent ze laten herhalen. Zet hier geen wachtwoorden of andere geheimen in.",
+      "notesCount": "{count} / {max} tekens",
+      "notesDiscard": "Wijzigingen verwijderen",
+      "notesHelp": "Richtlijnen voor elke agent die deze toegangssleutel gebruikt, zoals hoe ruimtes en apparaten heten, wie de sleutel gebruikt of waar de documentatie van het huishouden staat. Phoenix MCP voegt de notities toe aan de instructies van elke agent en verbergt entiteits-ID's buiten het bereik van deze toegangssleutel.",
+      "notesLabel": "Notities voor agents",
+      "notesPlaceholder": "Voorbeeld: De logeerkamer heet de werkkamer. Vraag het eerst voordat je iets in de babykamer wijzigt.",
+      "notesSummaryNone": "Geen",
+      "notesTooLong": "Notities mogen maximaal {max} tekens bevatten.",
+      "notesSummaryChars": {
+        "one": "{count} teken",
+        "other": "{count} tekens"
+      }
     },
     "mesa": {
       "addAreaProfile": "Ruimteprofiel toevoegen",

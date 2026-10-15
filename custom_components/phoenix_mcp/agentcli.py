@@ -4513,7 +4513,7 @@ async def async_run_agent_turn(
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     system = (
-        _build_instructions(access_key, data, base_url)
+        _build_instructions(access_key, data, base_url, hass)
         + _agentcli_time_context(hass)
         + _conversation_behavior_prompt(
             conversation_style, detail_level, home_focused=home_focused,
@@ -5169,7 +5169,7 @@ async def async_run_voice_turn(
     turn = await _run_headless_turn(
         hass, data, access_key, provider, session, base_url,
         system=(
-            _build_instructions(access_key, data, base_url)
+            _build_instructions(access_key, data, base_url, hass)
             + behavior
             + _VOICE_ADDENDUM
             + _home_focus_output_contract(home_focused)
@@ -5290,7 +5290,7 @@ async def async_run_ai_task(
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     settings = data.store.get_settings()
-    system = _build_instructions(access_key, data, base_url)
+    system = _build_instructions(access_key, data, base_url, hass)
     if structure_json is None:
         system += _conversation_behavior_prompt(
             settings.ai_task_conversation_style,

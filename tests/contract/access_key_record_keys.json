@@ -41,6 +41,7 @@
     "id",
     "last_used_at",
     "name",
+    "notes",
     "pass_through",
     "permissions",
     "persona",

@@ -192,7 +192,20 @@
       "switching": "Skifter...",
       "updateFailed": "Kunne ikke opdatere adgangsnøglen.",
       "waitBeforeClose": "Vent 3 sekunder, før du lukker",
-      "working": "Arbejder..."
+      "working": "Arbejder...",
+      "cardNotes": "Noter",
+      "notesCaution": "Noter er kun vejledende: De giver aldrig adgang, ændrer ikke funktioner og omgår ikke godkendelser, og en model kan ignorere dem. Tilsluttede klienter og deres modeludbydere modtager dem, og alle, der kan tale med en agent, som bruger denne adgangsnøgle, kan få den til at gentage dem. Skriv ikke adgangskoder eller andre hemmeligheder her.",
+      "notesCount": "{count} / {max} tegn",
+      "notesDiscard": "Kassér ændringer",
+      "notesHelp": "Vejledning til alle agenter, der bruger denne adgangsnøgle, fx hvad rum og enheder hedder, hvem der bruger den, eller hvor husstandens dokumentation ligger. Phoenix MCP tilføjer noterne til hver agents instruktioner og skjuler entitets-id'er uden for denne adgangsnøgles omfang.",
+      "notesLabel": "Noter til agenter",
+      "notesPlaceholder": "Eksempel: Gæsteværelset kaldes hobbyrummet. Spørg, før der ændres noget i børneværelset.",
+      "notesSummaryNone": "Ingen",
+      "notesTooLong": "Noter må højst indeholde {max} tegn.",
+      "notesSummaryChars": {
+        "one": "{count} tegn",
+        "other": "{count} tegn"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} skal være en streng med et adgangsnøgle-ID eller null.",
@@ -336,7 +349,10 @@
       "versionNotFound": "Versionen blev ikke fundet.",
       "versionResourcePairRequired": "Angiv både resource_type og resource_id, eller ingen af dem for det seneste feed.",
       "wipeConfirmationRequired": "confirm skal være WIPE.",
-      "restoreUnverified": "Gendannelsen blev sendt, men den konfiguration, der blev læst tilbage bagefter, svarer ikke til den valgte version, så den er måske kun delvist anvendt. Phoenix kontrollerer den igen og beder om en gennemgang under Godkendelser, hvis den stadig afviger. Kontrollér den aktuelle konfiguration, før du gendanner igen."
+      "restoreUnverified": "Gendannelsen blev sendt, men den konfiguration, der blev læst tilbage bagefter, svarer ikke til den valgte version, så den er måske kun delvist anvendt. Phoenix kontrollerer den igen og beder om en gennemgang under Godkendelser, hvis den stadig afviger. Kontrollér den aktuelle konfiguration, før du gendanner igen.",
+      "notesInvalidCharacters": "notes må ikke indeholde kontroltegn eller skjulte formateringstegn.",
+      "notesString": "notes skal være en streng eller null.",
+      "notesTooLong": "notes må højst indeholde {max} tegn."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",

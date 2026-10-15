@@ -103,6 +103,8 @@ export interface AccessKeyRecord extends CapabilityFlagsMap {
   announce_all_tools?: boolean;
   confirm_inline_wait_seconds: number;
   persona: Persona;
+  // Administrator notes for the agents using this access key; null when none.
+  notes: string | null;
   rate_limit_requests: number;
   rate_limit_burst: number;
   permissions: PermissionTree;
@@ -548,6 +550,7 @@ export interface CreateAccessKeyBody {
 
 export interface PatchAccessKeyBody {
   name?: string;
+  notes?: string | null;
   pass_through?: boolean;
   confirm_pass_through?: boolean;
   rate_limit_requests?: number;

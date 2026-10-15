@@ -53,11 +53,13 @@ def payload(response):
     return json.loads(response[0]['result']['content'][0]['text'])
 
 
-def scripted(monkeypatch, rounds, *, before=None, transcripts=None):
+def scripted(monkeypatch, rounds, *, before=None, transcripts=None, prompts=None):
     provider = agentcli.ClaudeProvider(agentcli.ProviderConfig('claude','test','http://test','key'))
     catalogs = []
     async def stream(session, *, system_prompt, messages, tools, options):
         catalogs.append(tools)
+        if prompts is not None:
+            prompts.append(system_prompt)
         if transcripts is not None:
             transcripts.append(deepcopy(messages))
         if before:
@@ -460,6 +462,36 @@ async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(
     assert not companion[0].home_companion_active
 
 
+@pytest.mark.parametrize('surface',['external','voice','chat','ai_text'])
+async def test_notes_reach_the_inner_turn_the_same_way_from_every_ingress(hass,companion,monkeypatch,surface):
+    """The model doing the household work reads the notes; the wrapper primer does not."""
+    data,access_key,_,_=companion
+    await data.store.async_patch_access_key(access_key.id,notes='Call the fan the breeze. Never mention lock.door.')
+    prompts=[]
+    scripted(monkeypatch,[
+        [('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+        json.dumps({'status':'completed','message':'23 degrees.'}),
+    ],prompts=prompts)
+    provider=agentcli.build_provider(None)
+    request='Read the temperature.'
+    if surface=='external':
+        await rpc(hass,companion,args={'request':request})
+    elif surface=='voice':
+        await agentcli.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
+    elif surface=='chat':
+        async def emit(name,value):pass
+        await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
+            session=None,messages=[{'role':'user','content':request}],options={},client_ip='test',base_url='',
+            emit=emit,cancel=asyncio.Event())
+    else:
+        await agentcli.async_run_ai_task(hass,data,access_key,provider,None,'',request)
+    assert len(prompts) == 2
+    for prompt in prompts:
+        assert '<administrator_notes>\nCall the fan the breeze. Never mention <redacted-entity>.\n</administrator_notes>' in prompt
+    primer=(await rpc(hass,companion,method='initialize',args=None))[0]['result']['instructions']
+    assert 'administrator_notes' not in primer
+
+
 @pytest.mark.parametrize('surface',['voice','chat','ai_text','ai_structured'])
 async def test_owned_ingresses_delegate_original_request_once_without_report_reinterpretation(hass,companion,monkeypatch,surface):
     data,access_key,_,_=companion
@@ -601,13 +633,13 @@ async def test_voice_report_uses_current_style_and_detail(hass, companion, monke
     assert 'physical proof' in answers[2]
 
 
-def test_internal_companion_does_not_receive_external_catalog_reconnect_advice(companion):
+def test_internal_companion_does_not_receive_external_catalog_reconnect_advice(hass, companion):
     data, access_key, _, _ = companion
     assert access_key.settings_version > access_key.tools_list_version
     response = {'content':[{'type':'text','text':'Area not found.'}]}
-    assert not mcp_view._maybe_append_stale_advisory(response,access_key,data,'home_companion')
+    assert not mcp_view._maybe_append_stale_advisory(response,access_key,data,'home_companion',hass)
     assert response['content']==[{'type':'text','text':'Area not found.'}]
-    assert mcp_view._maybe_append_stale_advisory(response,access_key,data,'external-client')
+    assert mcp_view._maybe_append_stale_advisory(response,access_key,data,'external-client',hass)
     assert any('reconnect' in row['text'] for row in response['content'])
 
 

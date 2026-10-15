@@ -125,6 +125,10 @@ ACCESS_KEY_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
 DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 
+# Administrator notes on an access key: advisory prose added to the agent's
+# instructions on every surface, so the bound also caps their prompt cost.
+ACCESS_KEY_NOTES_MAX_LENGTH = 2000
+
 # Access key settings presets (named snapshots of an access key's full configuration,
 # switchable from the panel; gated by settings.access_key_presets_enabled).
 MAX_PRESETS_PER_ACCESS_KEY = 8

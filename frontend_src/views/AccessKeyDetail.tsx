@@ -13,6 +13,7 @@ import { ConnectInstructions } from "../components/ConnectInstructions";
 import { CapabilityMatrix, CAP_NAMES } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
 import { PersonaPicker } from "../components/PersonaPicker";
+import { AccessKeyNotes, notesLength } from "../components/AccessKeyNotes";
 import { PERSONAS } from "../personas";
 import { RateLimitConfig } from "../components/RateLimitConfig";
 import { CollapsibleCard } from "../components/CollapsibleCard";
@@ -23,7 +24,7 @@ import { PermissionSimulator } from "../components/PermissionSimulator";
 import { SelectByPicker } from "../components/SelectByPicker";
 import { DocsHelpLink } from "../components/common";
 import { ProfileEditor } from "./MesaView";
-import { localeDateTime, t } from "../i18n";
+import { localeDateTime, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 
 // Whether an access key change alters which tools the MCP client is shown (tools/list),
@@ -812,6 +813,9 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
     confirm: capCounts.confirm,
     deny: capCounts.deny,
   });
+  const notesSummary = accessKey.notes
+    ? tn("accessKeys.notesSummaryChars", notesLength(accessKey.notes))
+    : t("accessKeys.notesSummaryNone");
   const announceSummary = accessKey.announce_all_tools
     ? t("accessKeys.announceSummaryAll")
     : t("accessKeys.announceSummaryScoped");
@@ -988,6 +992,10 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
                 <PresetsCard accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
               </CollapsibleCard>
             )}
+
+            <CollapsibleCard title={t("accessKeys.cardNotes")} summary={notesSummary} persistKey="phx:fold:notes" docsPath="panel.html#notes">
+              <AccessKeyNotes accessKey={accessKey} onUpdate={setAccessKey} />
+            </CollapsibleCard>
 
             <div className="advanced-section-label">{t("accessKeys.advanced")}</div>
             <CollapsibleCard title={t("accessKeys.cardCapabilities")} summary={capsSummary} persistKey="phx:fold:capabilities" docsPath="capabilities.html#capability-flags">

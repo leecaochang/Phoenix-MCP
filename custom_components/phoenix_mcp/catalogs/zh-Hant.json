@@ -147,7 +147,10 @@
       "attentionSaveFailed": "無法儲存核對結果。此操作仍需核對。",
       "attentionReviewConflict": "此操作正在執行或已核對。請重新整理列表。",
       "providerModelOrAuto": "請只傳送 model 或 auto 其中之一。",
-      "restoreUnverified": "還原已送出，但之後讀回的設定與所選版本不一致，因此可能只套用了一部分。Phoenix 會重新檢查，若仍不一致，會在核准中要求複核。再次還原前，請檢查目前設定。"
+      "restoreUnverified": "還原已送出，但之後讀回的設定與所選版本不一致，因此可能只套用了一部分。Phoenix 會重新檢查，若仍不一致，會在核准中要求複核。再次還原前，請檢查目前設定。",
+      "notesInvalidCharacters": "notes 不能包含控制字元或隱藏的格式字元。",
+      "notesString": "notes 必須是字串或 null。",
+      "notesTooLong": "notes 不能超過 {max} 個字元。"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的核准。",
@@ -1963,7 +1966,20 @@
       "accessKeyRotatedTitle": "存取金鑰已輪換：{name}",
       "updateFailed": "更新存取金鑰失敗。",
       "waitBeforeClose": "請等待 3 秒後再關閉",
-      "working": "處理中…"
+      "working": "處理中…",
+      "cardNotes": "備註",
+      "notesCaution": "備註僅供參考：它們不會授予存取權限、變更能力或繞過核准，模型也可能忽略它們。已連線的用戶端及其模型提供者會收到備註，任何能與使用此存取金鑰的智慧體對話的人都可能讓它複述備註。請勿在此填寫密碼或其他敏感資訊。",
+      "notesCount": "{count} / {max} 個字元",
+      "notesDiscard": "放棄更改",
+      "notesHelp": "為使用此存取金鑰的每個智慧體提供指引，例如房間和裝置的叫法、由誰使用，或家庭文件的存放位置。Phoenix MCP 會將備註加入每個智慧體的指令中，並隱藏此存取金鑰範圍之外的實體 ID。",
+      "notesLabel": "給智慧體的備註",
+      "notesPlaceholder": "範例：客房稱為書房。變更兒童房中的任何裝置前請先詢問。",
+      "notesSummaryNone": "無",
+      "notesTooLong": "備註不能超過 {max} 個字元。",
+      "notesSummaryChars": {
+        "one": "{count} 個字元",
+        "other": "{count} 個字元"
+      }
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",

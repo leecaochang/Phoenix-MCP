@@ -89,7 +89,7 @@ class TestSurfacesAgree:
         )
         data = MagicMock()
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="off")
-        return _build_instructions(access_key, data, hass)
+        return _build_instructions(access_key, data, "http://homeassistant.local", hass)
 
     def test_the_primer_names_the_plural_wait(self, primer):
         assert "wait_for_approval ONCE with approval_ids" in primer

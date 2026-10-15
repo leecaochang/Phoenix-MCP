@@ -73,7 +73,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import _strict_phoenix_log_text, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
@@ -783,6 +783,17 @@ _STALE_CATALOG_ADVISORY = (
     "schemas does not have. If a call fails on an argument you believe is valid, "
     "that is the likely cause. Ask the user to reconnect or refresh this MCP "
     "server's tools; re-reading the capability summary will not fix it."
+)
+
+# One-time in-band notice carrying changed administrator notes to an external
+# client whose instructions predate the change (see _maybe_append_stale_advisory).
+_NOTES_CHANGED_NOTICE = (
+    "Notice: the operator changed this access key's administrator notes after your "
+    "client received its instructions. The notes below replace any earlier ones."
+)
+_NOTES_REMOVED_NOTICE = (
+    "Notice: the operator removed this access key's administrator notes after your "
+    "client received its instructions. Disregard the earlier notes."
 )
 
 
@@ -8166,6 +8177,9 @@ def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> st
             "Do not attempt to call services on entities not listed above."
         )
 
+    notes_block = access_key_notes_block(access_key, hass)
+    if notes_block:
+        lines.extend(("", notes_block))
     lines.append("")
     caps = effective_caps(access_key)
     lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval per request):")
@@ -8250,6 +8264,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
         "access_key_name": access_key.name,
         "pass_through": access_key.pass_through,
         "persona": access_key.persona,
+        "notes": access_key_notes_for_agent(access_key, hass),
         "entities": entities,
         "capability_flags": effective_caps(access_key),
         "rate_limit": {
@@ -8259,13 +8274,15 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
     }
 
 
-def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str) -> str:
+def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str, hass: HomeAssistant) -> str:
     """Access-key-aware MCP `instructions` primer, sent at every session start.
 
     Short: the etiquette that prevents the common failure modes (treating
     pending_approval as an error, retrying, ignoring the per-entity safety layer)
-    plus this access key's gated capabilities and a link to the full guide at
-    /api/phoenix-mcp/skill.
+    plus this access key's gated capabilities, its administrator notes and a link
+    to the full guide at /api/phoenix-mcp/skill. A Home Companion access key gets
+    its fixed wrapper primer: its notes go to the inner turn that does the work,
+    the same on every ingress.
     """
     from .home_companion import is_companion
     if is_companion(access_key):
@@ -8320,6 +8337,9 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
             "entity. Prefer its purpose-built triggers/conditions and ready-to-use config examples "
             "over generic state/numeric_state equivalents."
         )
+    notes_block = access_key_notes_block(access_key, hass)
+    if notes_block:
+        lines.extend(("", notes_block))
     lines.append("")
     lines.append(
         f"Full Phoenix MCP and Home Assistant usage guide: {base_url}/api/phoenix-mcp/skill (fetch it before "
@@ -8329,9 +8349,10 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
 
 
 def _maybe_append_stale_advisory(
-    tool_result: dict, access_key: AccessKeyRecord, data: PhoenixData, client_ip: str
+    tool_result: dict, access_key: AccessKeyRecord, data: PhoenixData, client_ip: str,
+    hass: HomeAssistant,
 ) -> bool:
-    """Append the one-time stale-tools/catalog notices to a result, in place.
+    """Append the one-time stale-tools/catalog/notes notices to a result, in place.
 
     Returns whether an advisory was added, which the caller records on the audit
     row. This is the stateless transport's substitute for tools/list_changed: the
@@ -8343,13 +8364,21 @@ def _maybe_append_stale_advisory(
     fingerprint differs; an empty stored fingerprint means never recorded, so
     never stale).
 
+    Changed administrator notes are a third axis with its own counter: the
+    notice carries the current notes and records them as delivered, which
+    instructions also do at initialize and server/discover. A Home Companion
+    access key never gets it, because its notes reach the inner turn on every
+    request instead.
+
     Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild their tool list every turn from the live access key and have no external
-    MCP server to reconnect. The epoch is deliberately NOT marked for them, so a
+    rebuild their tool list and instructions every turn from the live access key
+    and have no external MCP server to reconnect. Nothing is marked for them, so a
     real external client sharing the access key still gets advised.
     """
+    from .home_companion import is_companion
     internal = client_ip in (
         AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
+    content = tool_result.get("content")
     notices: list[str] = []
     if not internal:
         if access_key.settings_version > access_key.tools_list_version:
@@ -8360,10 +8389,17 @@ def _maybe_append_stale_advisory(
         ):
             notices.append(_STALE_CATALOG_ADVISORY)
     epoch = f"{access_key.settings_version}:{access_key.tools_catalog_fingerprint}"
-    if not notices or data.stale_tools_advised.get(access_key.id) == epoch:
+    if notices and data.stale_tools_advised.get(access_key.id) != epoch:
+        data.stale_tools_advised[access_key.id] = epoch
+    else:
+        notices = []
+    if (not internal and not is_companion(access_key) and isinstance(content, list)
+            and access_key.notes_version > access_key.notes_delivered_version):
+        block = access_key_notes_block(access_key, hass)
+        notices.append(f"{_NOTES_CHANGED_NOTICE}\n{block}" if block else _NOTES_REMOVED_NOTICE)
+        access_key.notes_delivered_version = access_key.notes_version
+    if not notices:
         return False
-    data.stale_tools_advised[access_key.id] = epoch
-    content = tool_result.get("content")
     if isinstance(content, list):
         content.extend({"type": "text", "text": n} for n in notices)
     return True
@@ -8427,7 +8463,7 @@ async def _dispatch_tools_call(
         outcome = "invalid_request"
         resource = tool_name
 
-    stale = _maybe_append_stale_advisory(tool_result, access_key, data, client_ip)
+    stale = _maybe_append_stale_advisory(tool_result, access_key, data, client_ip, hass)
     _log(data, access_key, request_id=request_id, method=tool_name or "tools/call",
          resource=resource, outcome=outcome, client_ip=client_ip,
          payload={"name": tool_name, "arguments": arguments},
@@ -8545,7 +8581,7 @@ async def _dispatch_mcp(
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":
             refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions." if dispatch_entered else "Permissions changed before dispatch. No action was executed. The conversation can continue using current permissions.")
-            _maybe_append_stale_advisory(refusal, access_key, data, client_ip)
+            _maybe_append_stale_advisory(refusal, access_key, data, client_ip, hass)
             return _jsonrpc_result(msg_id, refusal), method, "/api/phoenix-mcp", "denied"
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     except Exception as exc:
@@ -8578,7 +8614,7 @@ async def _dispatch_mcp_authorized(
             "resultType": "complete",
             "supportedVersions": list(MCP_PROTOCOL_VERSIONS),
             "capabilities": _SERVER_CAPABILITIES,
-            "instructions": _build_instructions(access_key, data, base_url),
+            "instructions": _build_instructions(access_key, data, base_url, hass),
             "ttlMs": MCP_DISCOVER_TTL_MS,
             # NEVER "public". The instructions name THIS access key's confirm-gated
             # capabilities, so a shared intermediary caching one access key's answer
@@ -8590,6 +8626,9 @@ async def _dispatch_mcp_authorized(
                 },
             },
         })
+        # The instructions carry the current notes; in memory, persisted by the
+        # periodic flush like tools_list_version.
+        access_key.notes_delivered_version = access_key.notes_version
         _log(data, access_key, request_id=request_id, method="server/discover",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "server/discover", "/api/phoenix-mcp", "allowed"
@@ -8609,8 +8648,9 @@ async def _dispatch_mcp_authorized(
             "protocolVersion": version,
             "capabilities": _SERVER_CAPABILITIES,
             "serverInfo": {"name": "Phoenix MCP", "version": PHOENIX_VERSION},
-            "instructions": _build_instructions(access_key, data, base_url),
+            "instructions": _build_instructions(access_key, data, base_url, hass),
         })
+        access_key.notes_delivered_version = access_key.notes_version
         _log(data, access_key, request_id=request_id, method="initialize",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "initialize", "/api/phoenix-mcp", "allowed"

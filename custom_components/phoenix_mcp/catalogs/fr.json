@@ -500,7 +500,20 @@
       "accessKeyRotatedTitle": "Clé d’accès renouvelée : {name}",
       "updateFailed": "Échec de la mise à jour de la clé d’accès.",
       "waitBeforeClose": "Attendez 3 secondes avant de fermer",
-      "working": "Traitement..."
+      "working": "Traitement...",
+      "cardNotes": "Notes",
+      "notesCaution": "Les notes sont uniquement indicatives : elles n’accordent jamais d’accès, ne modifient pas les capacités et ne contournent pas les approbations, et un modèle peut les ignorer. Les clients connectés et leurs fournisseurs de modèle les reçoivent, et toute personne pouvant parler à un agent qui utilise cette clé d’accès peut l’amener à les répéter. N’y mettez ni mots de passe ni autres secrets.",
+      "notesCount": "{count} / {max} caractères",
+      "notesDiscard": "Ignorer les modifications",
+      "notesHelp": "Indications pour chaque agent qui utilise cette clé d’accès, par exemple le nom des pièces et des appareils, qui l’utilise ou l’emplacement de la documentation du domicile. Phoenix MCP ajoute les notes aux instructions de chaque agent et masque les ID d'entité situés hors du périmètre de cette clé d’accès.",
+      "notesLabel": "Notes pour les agents",
+      "notesPlaceholder": "Exemple : La chambre d’amis s’appelle le bureau. Demandez avant de modifier quoi que ce soit dans la chambre du bébé.",
+      "notesSummaryNone": "Aucune",
+      "notesTooLong": "Les notes doivent contenir {max} caractères ou moins.",
+      "notesSummaryChars": {
+        "one": "{count} caractère",
+        "other": "{count} caractères"
+      }
     },
     "shell": {
       "tabAccessKeys": "Clés d’accès",
@@ -1786,7 +1799,10 @@
       "attentionSaveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier.",
       "attentionReviewConflict": "Cette action est en cours ou a déjà été vérifiée. Actualisez la liste.",
       "providerModelOrAuto": "Envoyez soit un modèle, soit auto, pas les deux.",
-      "restoreUnverified": "La restauration a été envoyée, mais la configuration relue ensuite ne correspond pas à la version choisie, elle n'a donc peut-être été appliquée qu'en partie. Phoenix la vérifie de nouveau et demande un examen dans Approbations si elle diffère toujours. Vérifiez la configuration actuelle avant de restaurer à nouveau."
+      "restoreUnverified": "La restauration a été envoyée, mais la configuration relue ensuite ne correspond pas à la version choisie, elle n'a donc peut-être été appliquée qu'en partie. Phoenix la vérifie de nouveau et demande un examen dans Approbations si elle diffère toujours. Vérifiez la configuration actuelle avant de restaurer à nouveau.",
+      "notesInvalidCharacters": "notes ne doit pas contenir de caractères de contrôle ni de caractères de mise en forme masqués.",
+      "notesString": "notes doit être une chaîne ou null.",
+      "notesTooLong": "notes doit contenir {max} caractères ou moins."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",

@@ -61,6 +61,19 @@
           </div>
         </details>
 
+        <h3 id="notes">Notes for agents</h3>
+        <p>The Notes card holds optional guidance for every agent that uses the access key: what rooms and devices are called, who the access key is for, or where your household documentation is kept. Notes can span several lines, up to 2,000 characters, and take effect when you press <strong>Save</strong>. Only a Home Assistant administrator can change them, here or through the <a href="admin-api.html#access-keys">admin API</a>. Agents receive them but cannot edit them. Notes belong to the access key, not to a preset, so switching presets leaves them unchanged.</p>
+        <dl class="kv">
+          <div class="kv-row"><dt>Agent Chat, the voice agent and AI Task</dt><dd>Added to the agent's instructions, starting with its next turn.</dd></div>
+          <div class="kv-row"><dt>Assist</dt><dd>Added to the prompt of the access key bound to Assist, starting with the next conversation turn.</dd></div>
+          <div class="kv-row"><dt>Connected MCP clients</dt><dd>Sent with the instructions when the client connects. After a change or removal, the next tool result any MCP client receives for the access key carries the current notes once. When several clients share the access key, the others pick up the change when they reconnect.</dd></div>
+          <div class="kv-row"><dt>Home Companion</dt><dd>Given to the model that carries out each household request, however the request arrived. The client that sends a request through <code>home_request</code> does not receive them.</dd></div>
+        </dl>
+        <div class="callout warn">
+          <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+          <div class="callout-body"><p class="callout-title">Notes are advice, not permission</p><p>Notes never grant access, change capabilities or bypass approvals, MESA or the permission tree, and a model may ignore them. Anything a note asks for beyond what the access key allows is refused exactly as before. Connected clients and model providers receive the notes, and anyone who can talk to an agent using the access key may get it to repeat them, so never put passwords or other secrets here. Each time the notes are sent, entity IDs outside the access key's current scope are replaced with <code>&lt;redacted-entity&gt;</code>, so narrowing the scope later also hides them. Agents are told that an <a href="#entity-hints">entity hint</a>, which describes one entity, takes precedence over the notes for that entity.</p></div>
+        </div>
+
         <h2 id="permission-tree">Painting the permission tree</h2>
         <p>The tree groups entities by domain and device. You rarely set every node: the usual pattern is to set a whole domain or device, leave the children grey so they inherit, then use RED to carve out exceptions. See <a href="permissions.html">Permissions</a> for how the states resolve. Three panel tools make this faster.</p>
         <p>Each row also carries a small MESA control, a <code>+</code> to create a profile or <code>MESA</code> when one already exists, which opens the profile editor over the tab without losing your place. It writes at the level of the row you clicked: a domain group authors a domain profile, a device group authors a device profile covering every entity that device owns, and an entity row authors an entity profile. Permissions and MESA are independent, so a profile written here changes what any access key may do with that entity by nature, not just this one. The <a href="mesa.html">MESA</a> page covers what the levels mean.</p>

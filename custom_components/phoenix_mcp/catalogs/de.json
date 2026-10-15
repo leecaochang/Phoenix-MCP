@@ -712,7 +712,20 @@
       "accessKeyRotatedTitle": "Zugriffsschlüssel rotiert: {name}",
       "updateFailed": "Zugriffsschlüssel konnte nicht aktualisiert werden.",
       "waitBeforeClose": "Warten Sie 3 Sekunden, bevor Sie schließen",
-      "working": "Wird verarbeitet..."
+      "working": "Wird verarbeitet...",
+      "cardNotes": "Notizen",
+      "notesCaution": "Notizen sind nur Hinweise: Sie gewähren nie Zugriff, ändern keine Fähigkeiten und umgehen keine Genehmigungen, und ein Modell kann sie ignorieren. Verbundene Clients und deren Modellanbieter erhalten sie, und wer mit einem Agenten sprechen kann, der diesen Zugriffsschlüssel verwendet, kann ihn dazu bringen, sie wiederzugeben. Tragen Sie hier keine Passwörter oder anderen Geheimnisse ein.",
+      "notesCount": "{count} / {max} Zeichen",
+      "notesDiscard": "Änderungen verwerfen",
+      "notesHelp": "Hinweise für jeden Agenten, der diesen Zugriffsschlüssel verwendet, etwa wie Räume und Geräte heißen, wer ihn nutzt oder wo die Dokumentation des Haushalts liegt. Phoenix MCP fügt die Notizen den Anweisungen jedes Agenten hinzu und blendet Entitäts-IDs außerhalb des Geltungsbereichs dieses Zugriffsschlüssels aus.",
+      "notesLabel": "Notizen für Agenten",
+      "notesPlaceholder": "Beispiel: Das Gästezimmer heißt Hobbyraum. Vor Änderungen im Kinderzimmer bitte nachfragen.",
+      "notesSummaryNone": "Keine",
+      "notesTooLong": "Notizen dürfen höchstens {max} Zeichen lang sein.",
+      "notesSummaryChars": {
+        "one": "{count} Zeichen",
+        "other": "{count} Zeichen"
+      }
     },
     "mesa": {
       "addAreaProfile": "Bereichsprofil hinzufügen",
@@ -1487,7 +1500,10 @@
       "attentionSaveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden.",
       "attentionReviewConflict": "Diese Aktion läuft oder wurde bereits geprüft. Aktualisiere die Liste.",
       "providerModelOrAuto": "Senden Sie entweder ein Modell oder auto, nicht beides.",
-      "restoreUnverified": "Die Wiederherstellung wurde gesendet, aber die danach zurückgelesene Konfiguration stimmt nicht mit der gewählten Version überein, sie ist also möglicherweise nur teilweise angewendet. Phoenix prüft sie erneut und bittet unter Genehmigungen um eine Überprüfung, falls sie weiterhin abweicht. Prüfe die aktuelle Konfiguration, bevor du erneut wiederherstellst."
+      "restoreUnverified": "Die Wiederherstellung wurde gesendet, aber die danach zurückgelesene Konfiguration stimmt nicht mit der gewählten Version überein, sie ist also möglicherweise nur teilweise angewendet. Phoenix prüft sie erneut und bittet unter Genehmigungen um eine Überprüfung, falls sie weiterhin abweicht. Prüfe die aktuelle Konfiguration, bevor du erneut wiederherstellst.",
+      "notesInvalidCharacters": "notes darf keine Steuerzeichen oder versteckten Formatierungszeichen enthalten.",
+      "notesString": "notes muss eine Zeichenfolge oder null sein.",
+      "notesTooLong": "notes darf höchstens {max} Zeichen lang sein."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
