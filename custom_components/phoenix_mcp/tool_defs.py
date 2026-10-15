@@ -2792,7 +2792,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "input_text name, min, max, pattern, mode (text|password), initial; input_select name, options "
                     "(required list), initial; input_datetime name, has_date and/or has_time, initial; input_button name; "
                     "counter name, initial, step, minimum, maximum, restore; timer name, duration (HH:MM:SS), restore; "
-                    "schedule name plus monday..sunday lists of {from, to}. Every type accepts icon. Setting initial makes "
+                    "schedule name plus monday..sunday lists of {from, to}. Every type except tag and person accepts icon. Setting initial makes "
                     "the helper start at that value after every restart instead of restoring its last state.")},
                 "flow_steps": {
                     "type": "array",
@@ -2813,7 +2813,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "edit_helper",
-        "description": "Update an existing helper's config by its helper_type and helper_id. Send only the fields to change: every other stored field keeps its current value, and null clears an optional field. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only.",
+        "description": "Update an existing helper's config by its helper_type and helper_id. Send only the fields to change: every other stored field keeps its current value, and null clears an optional field. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only. A zone's icon can be replaced but not removed.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",

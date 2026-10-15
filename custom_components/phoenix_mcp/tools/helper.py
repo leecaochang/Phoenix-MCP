@@ -40,6 +40,7 @@ from ..const import (
     CAP_DENY,
     HELPER_FIELD_HELP_MAX,
     HELPER_STEP_HELP_MAX,
+    STORAGE_HELPER_ICON_TYPES,
     STORAGE_HELPER_MERGING_TYPES,
     STORAGE_HELPER_REQUEST_FIELDS,
     STORAGE_HELPER_TYPES as HELPER_TYPES,
@@ -102,9 +103,18 @@ _TAG_CREATE_CONFIG_FIELDS = frozenset({"tag_id", "name", "description"})
 _TAG_UPDATE_CONFIG_FIELDS = frozenset({"name", "description"})
 _PERSON_CONFIG_FIELDS = frozenset({"name", "device_trackers"})
 _SCOPED_STORAGE_HELPER_TYPES = frozenset({"person", "tag", "zone"})
+# Optional stored fields with no default on the helpers HA merges updates into.
+# A complete stored version can lack them, and an update cannot remove them.
+_MERGING_OPTIONAL_FIELDS = {"zone": frozenset({"icon"}), "tag": frozenset({"name", "description"})}
+_NO_STORED_ICON = (
+    " {kind} have no stored icon; set_entity sets the icon shown for the entity."
+)
 _HELPER_CONTEXT_FINGERPRINT = "_phoenix_helper_context_fingerprint"
 _HELPER_MESA_FINGERPRINT = "_phoenix_helper_mesa_fingerprint"
 _HELPER_RESTORE_ID = "_phoenix_helper_restore_id"
+# Set only by version and recovery restore of a complete stored version: the
+# config replaces the item, rather than listing fields to change.
+_HELPER_RESTORE_REPLACE = "_phoenix_helper_restore_replace"
 # Readback that could not run, so it never equals a safety copy.
 _UNREAD = object()
 
@@ -405,6 +415,21 @@ def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -
     return str(available("tag", slugify(name) if name else tag_id))
 
 
+def _restored_helper_entity_id(hass: HomeAssistant, helper_type: str, storage_id: str) -> str:
+    """The entity ID a storage helper recreated under storage_id receives.
+
+    Home Assistant reuses its deleted registry entry's entity ID while that ID is
+    free, together with the entity's registry customizations, and otherwise
+    derives one from the storage ID.
+    """
+    registry = er.async_get(hass)
+    deleted = registry.deleted_entities.get((helper_type, helper_type, storage_id))
+    if (deleted is not None and deleted.entity_id not in registry.entities
+            and hass.states.async_available(deleted.entity_id)):
+        return deleted.entity_id
+    return f"{helper_type}.{slugify(storage_id)}"
+
+
 def _helper_create_mesa_entity(
     helper_type: str, args: dict, hass: HomeAssistant
 ) -> str:
@@ -430,7 +455,7 @@ def _helper_create_mesa_entity(
         return _predict_tag_entity_id(hass, config["tag_id"], name if isinstance(name, str) and name else None)
     restore_id = args.get(_HELPER_RESTORE_ID)
     if isinstance(restore_id, str) and restore_id.strip():
-        return f"{helper_type}.{slugify(restore_id)}"
+        return _restored_helper_entity_id(hass, helper_type, restore_id)
     suggestion: str | None = None
     if isinstance(config, dict) and isinstance(config.get("name"), str):
         suggestion = config["name"]
@@ -900,6 +925,32 @@ async def _tool_list_helpers(
     return _tool_success(json.dumps({"count": len(helpers), "helpers": helpers}, default=str)), "allowed", "list_helpers"
 
 
+def _helper_icon_error(helper_type: str, icon: Any, *, editing: bool) -> str | None:
+    """Refuse an icon value Home Assistant would reject, before any approval.
+
+    Null removes a stored icon from the helpers HA rebuilds on update. A zone
+    merges updates and its schema has no way to remove an icon, so it can only
+    be replaced; creation has nothing to remove.
+    """
+    if icon is None:
+        if not editing:
+            return "icon cannot be null when creating a helper; omit it to use the default icon."
+        if helper_type in STORAGE_HELPER_MERGING_TYPES:
+            return (
+                "Home Assistant cannot remove a zone's stored icon, only replace it. Set another "
+                "icon, or use set_entity to override the icon shown for the zone's entity."
+            )
+        return None
+    try:
+        if not isinstance(icon, str):
+            raise vol.Invalid("not a string")
+        cv.icon(icon)
+    except vol.Invalid:
+        clear = "" if helper_type in STORAGE_HELPER_MERGING_TYPES or not editing else ", or null to remove it"
+        return f'icon must be an icon name such as "mdi:sofa"{clear}.'
+    return None
+
+
 def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tuple[dict, str, str] | None:
     """Pre-gate validation for helper writes; None means OK to proceed.
 
@@ -931,6 +982,10 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
             "invalid_request",
             tool_name,
         )
+    if "icon" in config and args["helper_type"] in STORAGE_HELPER_ICON_TYPES and (
+        icon_error := _helper_icon_error(args["helper_type"], config["icon"], editing=require_id)
+    ):
+        return _tool_error(icon_error), "invalid_request", tool_name
     if args.get("helper_type") == "zone" and isinstance(config, dict):
         unknown = sorted(set(config) - _ZONE_CONFIG_FIELDS)
         if unknown:
@@ -952,6 +1007,7 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
                     "Unknown tag configuration fields: "
                     f"{', '.join(unknown)}. Allowed fields are: "
                     f"{', '.join(sorted(allowed))}."
+                    + (_NO_STORED_ICON.format(kind="Tags") if "icon" in unknown else "")
                 ),
                 "invalid_request",
                 tool_name,
@@ -994,6 +1050,7 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
                     f"{', '.join(unknown)}. Phoenix accepts only name and "
                     "device_trackers; user links and pictures remain private "
                     "and must be managed in Home Assistant."
+                    + (_NO_STORED_ICON.format(kind="People") if "icon" in unknown else "")
                 ),
                 "invalid_request",
                 tool_name,
@@ -1376,16 +1433,19 @@ async def _tool_create_helper(
     return await _execute_create_helper(approval_args, access_key, hass, data)
 
 
-def _edit_helper_update(helper_type: str, before: Any, config: dict) -> dict:
+def _edit_helper_update(helper_type: str, before: Any, config: dict, *, replace: bool = False) -> dict:
     """Return the update HA needs so that only the fields the caller named change.
 
     Most storage collections rebuild the item from the update payload alone, so
     the stored fields are resent beneath the caller's changes; an explicit null
     clears an optional field. Zone, tag and person merge in HA itself and receive
-    the caller's fields unchanged.
+    the caller's fields unchanged. A restore (`replace`) sends its version alone,
+    so a field added since that version is removed rather than carried over.
     """
     if helper_type in STORAGE_HELPER_MERGING_TYPES or not isinstance(before, dict):
         return dict(config)
+    if replace:
+        return {key: value for key, value in config.items() if key != "id" and value is not None}
     merged = {key: value for key, value in before.items() if key != "id"}
     merged.update(config)
     return {key: value for key, value in merged.items() if value is not None}
@@ -1481,44 +1541,64 @@ async def _execute_create_helper(
             return _tool_error(relationship_error), "denied", "create_helper"
     create_payload = dict(config)
     restore_id = args.get(_HELPER_RESTORE_ID)
-    if helper_type == "person" and isinstance(restore_id, str):
-        # person/create offers no explicit id. Seed the name with the original
-        # storage id, then apply the restored friendly name after HA allocates
-        # that exact id.
+    # A tag keeps its explicit tag_id. Every other storage collection derives
+    # the ID from the name, which may have changed since the helper was created,
+    # so a restore seeds the name with the original storage ID: Home Assistant
+    # then allocates that exact ID and reapplies the registry customizations it
+    # still holds for the deleted entity. The restored name follows.
+    seeded = helper_type != "tag" and isinstance(restore_id, str)
+    if seeded:
         create_payload["name"] = restore_id
     try:
         item = await async_ws_command(hass, f"{helper_type}/create", create_payload)
     except WsDispatchError as exc:
         return _tool_error(f"Failed to create helper: {exc}"), "invalid_request", "create_helper"
     new_id = item.get("id") if isinstance(item, dict) else None
-    if (
-        helper_type == "person"
-        and isinstance(restore_id, str)
-        and new_id == restore_id
-        and config.get("name") != restore_id
-    ):
-        try:
-            item = await async_ws_command(
-                hass,
-                "person/update",
-                {**config, "person_id": restore_id},
-            )
-        except WsDispatchError as exc:
+    if seeded and new_id != restore_id:
+        if new_id is not None:
             try:
                 await async_ws_command(
-                    hass, "person/delete", {"person_id": restore_id}
+                    hass, f"{helper_type}/delete", {f"{helper_type}_id": str(new_id)}
                 )
             except WsDispatchError:
                 return (
                     _tool_error(
-                        "Failed to finish restoring the person and automatic cleanup "
+                        f"Home Assistant assigned a different {helper_type} ID and automatic "
+                        "cleanup failed. Remove it in Home Assistant."
+                    ),
+                    "invalid_request",
+                    "create_helper",
+                )
+        return (
+            _tool_error(
+                f"The original {helper_type} ID is unavailable, so the restore was rolled back."
+            ),
+            "invalid_request",
+            "create_helper",
+        )
+    if seeded and config.get("name") != restore_id:
+        try:
+            item = await async_ws_command(
+                hass,
+                f"{helper_type}/update",
+                {**config, f"{helper_type}_id": restore_id},
+            )
+        except WsDispatchError as exc:
+            try:
+                await async_ws_command(
+                    hass, f"{helper_type}/delete", {f"{helper_type}_id": restore_id}
+                )
+            except WsDispatchError:
+                return (
+                    _tool_error(
+                        f"Failed to finish restoring the {helper_type} and automatic cleanup "
                         "failed. Remove it in Home Assistant."
                     ),
                     "invalid_request",
                     "create_helper",
                 )
             return (
-                _tool_error(f"Failed to finish restoring the person: {exc}"),
+                _tool_error(f"Failed to finish restoring the {helper_type}: {exc}"),
                 "invalid_request",
                 "create_helper",
             )
@@ -1579,32 +1659,6 @@ async def _execute_create_helper(
                 "denied",
                 "create_helper",
             )
-    if (
-        helper_type == "person"
-        and isinstance(restore_id, str)
-        and new_id != restore_id
-    ):
-        if new_id is not None:
-            try:
-                await async_ws_command(
-                    hass, "person/delete", {"person_id": str(new_id)}
-                )
-            except WsDispatchError:
-                return (
-                    _tool_error(
-                        "Home Assistant assigned a different person ID and automatic "
-                        "cleanup failed. Remove it in Home Assistant."
-                    ),
-                    "invalid_request",
-                    "create_helper",
-                )
-        return (
-            _tool_error(
-                "The original person ID is unavailable, so the restore was rolled back."
-            ),
-            "invalid_request",
-            "create_helper",
-        )
     post_mesa = (
         _helper_mesa_context(
             data,
@@ -2141,7 +2195,19 @@ async def _execute_edit_helper(
                 config.get("device_trackers", current.get("device_trackers", []))
             ),
         }
-    config = _edit_helper_update(str(helper_type), before_cfg, config)
+    replace = args.get(_HELPER_RESTORE_REPLACE) is True
+    if replace and helper_type in STORAGE_HELPER_MERGING_TYPES and isinstance(before_cfg, dict):
+        kept = sorted(
+            field for field in _MERGING_OPTIONAL_FIELDS.get(str(helper_type), ())
+            if before_cfg.get(field) is not None and config.get(field) is None
+        )
+        if kept:
+            return _tool_error(
+                f"Home Assistant cannot remove the {', '.join(kept)} this {helper_type} now stores, "
+                "which the restored version does not have, so it cannot be restored exactly. "
+                "Nothing was changed."
+            ), "invalid_request", "edit_helper"
+    config = _edit_helper_update(str(helper_type), before_cfg, config, replace=replace)
     payload = {**config, f"{helper_type}_id": helper_id}
     try:
         item = await _protected_storage_helper_write(args, access_key, hass, data, before_cfg, payload)

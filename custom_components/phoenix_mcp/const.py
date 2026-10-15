@@ -48,6 +48,9 @@ STORAGE_HELPER_TYPES = frozenset({
 # HA merges an update into these stored items; every other storage helper is
 # rebuilt from the update payload alone, so an omitted field would be reset.
 STORAGE_HELPER_MERGING_TYPES = frozenset({"zone", "tag", "person"})
+# Tag and person items store no icon; their entities take one only as an entity
+# registry override. Every other storage helper stores an optional icon.
+STORAGE_HELPER_ICON_TYPES = STORAGE_HELPER_TYPES - {"tag", "person"}
 WS_REQUEST_CONTROL_FIELDS = frozenset({"id", "type"})
 STORAGE_HELPER_REQUEST_FIELDS = WS_REQUEST_CONTROL_FIELDS | frozenset(
     f"{domain}_id" for domain in STORAGE_HELPER_TYPES

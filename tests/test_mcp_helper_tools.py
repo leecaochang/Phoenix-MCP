@@ -776,6 +776,14 @@ class TestInputButtonLifecycle:
         assert hass.states.get(entity_id).attributes["friendly_name"] == "Doorbell renamed"
         assert hass.states.get(entity_id).attributes["icon"] == "mdi:radiobox-marked"
 
+        # Registry customizations the operator made outside the helper's own
+        # configuration: a renamed entity ID and name/icon overrides.
+        registry.async_update_entity(
+            entity_id, new_entity_id="input_button.front_bell", name="Front bell", icon="mdi:bell",
+        )
+        entity_id = "input_button.front_bell"
+        await hass.async_block_till_done()
+
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "input_button", "helper_id": helper_id},
@@ -797,17 +805,18 @@ class TestInputButtonLifecycle:
         assert outcome == "allowed"
         restored = _json(restored_result)["helper"]
         restored_id = restored["id"]
-        assert restored_id != helper_id
-        restored_entity_id = registry.async_get_entity_id(
-            "input_button", "input_button", restored_id
-        )
-        assert restored_entity_id is not None
-        assert hass.states.get(restored_entity_id).attributes["friendly_name"] == "Doorbell renamed"
+        # The renamed helper returns under its original storage ID, so Home
+        # Assistant reapplies the deleted entity's registry customizations.
+        assert restored_id == helper_id
+        assert restored["name"] == "Doorbell renamed"
+        assert registry.async_get_entity_id("input_button", "input_button", restored_id) == entity_id
+        entry = registry.async_get(entity_id)
+        assert (entry.name, entry.icon) == ("Front bell", "mdi:bell")
+        assert hass.states.get(entity_id).attributes["friendly_name"] == "Front bell"
         restored_history = versions.list_for("helper", f"input_button:{restored_id}")
         assert restored_history[0].action == "rollback"
         assert restored_history[0].approved_by_user_id == "admin-input-button"
 
-        # A restore creates a new storage-helper id, so remove that new helper too.
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "input_button", "helper_id": restored_id},
@@ -1860,9 +1869,9 @@ class TestScheduleLifecycle:
         assert outcome == "allowed"
         restored = _json(restored_result)["helper"]
         restored_id = restored["id"]
-        assert restored_id != helper_id
-        restored_entity_id = registry.async_get_entity_id("schedule", "schedule", restored_id)
-        assert restored_entity_id is not None
+        assert restored_id == helper_id
+        assert registry.async_get_entity_id("schedule", "schedule", restored_id) == entity_id
+        assert restored["name"] == "Weekly renamed"
         assert restored["tuesday"] == edited_config["tuesday"]
         restored_history = versions.list_for("helper", f"schedule:{restored_id}")
         assert restored_history[0].action == "rollback"
@@ -2113,3 +2122,188 @@ async def test_template_creation_authority_loss_before_final_submit(hass):
     assert authority.call_count == 2
     assert not hass.config_entries.async_entries("template")
     assert not hass.config_entries.flow.async_progress_by_handler("template")
+
+
+class TestHelperIconsAndRestoreCompleteness:
+    """Icon values follow Core's schemas, and a restore reproduces its version or refuses."""
+
+    @staticmethod
+    def _data() -> PhoenixData:
+        return PhoenixData(
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore(),
+        )
+
+    @staticmethod
+    async def _zone_setup(hass: HomeAssistant) -> None:
+        assert await async_setup_component(hass, "zone", {"zone": []})
+        await hass.async_block_till_done()
+
+    @pytest.mark.parametrize(("tool", "helper_type", "config", "message"), [
+        ("edit_helper", "zone", {"icon": None}, "cannot remove a zone's stored icon"),
+        ("edit_helper", "zone", {"icon": ""}, 'icon must be an icon name such as "mdi:sofa".'),
+        ("create_helper", "input_boolean", {"name": "Guest", "icon": "sofa"}, 'such as "mdi:sofa".'),
+        ("create_helper", "input_boolean", {"name": "Guest", "icon": None}, "omit it to use the default icon"),
+        ("edit_helper", "input_boolean", {"icon": 5}, 'such as "mdi:sofa", or null to remove it.'),
+        ("create_helper", "tag", {"tag_id": "abc", "icon": "mdi:nfc"}, "Tags have no stored icon; set_entity"),
+        ("edit_helper", "person", {"icon": "mdi:account"}, "People have no stored icon; set_entity"),
+    ])
+    async def test_icon_values_are_refused_before_any_approval(
+        self, hass: HomeAssistant, tool, helper_type, config, message,
+    ):
+        args = {"helper_type": helper_type, "config": config}
+        if tool == "edit_helper":
+            args["helper_id"] = "anything"
+        data = self._data()
+        result, outcome, _ = await _call_tool(tool, args, _access_key(cap_helper_write="confirm"), hass, data)
+        assert outcome == "invalid_request"
+        assert message in result["content"][0]["text"]
+        data.store.async_save.assert_not_called()
+
+    async def test_restoring_an_older_version_removes_fields_added_since(self, hass: HomeAssistant, helper_env, hass_admin_user):
+        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.helper import _read_helper_config
+
+        data = self._data()
+        created, _, _ = await _call_tool("create_helper", {
+            "helper_type": "input_boolean", "config": {"name": "Away mode"},
+        }, _access_key(), hass, data)
+        helper_id = _json(created)["helper"]["id"]
+        _, outcome, _ = await _call_tool("edit_helper", {
+            "helper_type": "input_boolean", "helper_id": helper_id,
+            "config": {"icon": "mdi:airplane", "initial": True},
+        }, _access_key(), hass, data)
+        assert outcome == "allowed"
+        edit_record = data.versions.list_for("helper", f"input_boolean:{helper_id}")[0]
+        assert edit_record.action == "edit" and "icon" not in edit_record.before
+
+        result, outcome, _ = await async_restore_version(edit_record, "admin-1", hass, data, "before")
+        assert outcome == "allowed", result
+        stored = await _read_helper_config(hass, "input_boolean", helper_id)
+        assert stored == {"id": helper_id, "name": "Away mode"}
+        assert "icon" not in hass.states.get(f"input_boolean.{helper_id}").attributes
+
+    async def test_zone_restore_refuses_an_icon_core_cannot_remove(self, hass: HomeAssistant, hass_admin_user):
+        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.helper import _read_helper_config
+
+        await self._zone_setup(hass)
+        data = self._data()
+        created, _, _ = await _call_tool("create_helper", {"helper_type": "zone", "config": {
+            "name": "Allotment", "latitude": 1.0, "longitude": 2.0, "radius": 50,
+        }}, _access_key(), hass, data)
+        zone_id = _json(created)["helper"]["id"]
+        _, outcome, _ = await _call_tool("edit_helper", {
+            "helper_type": "zone", "helper_id": zone_id, "config": {"icon": "mdi:sprout", "radius": 80},
+        }, _access_key(), hass, data)
+        assert outcome == "allowed"
+        edit_record = data.versions.list_for("helper", f"zone:{zone_id}")[0]
+
+        recovery_records = len(data.config_recovery.records())
+        result, outcome, _ = await async_restore_version(edit_record, "admin-1", hass, data, "before")
+        assert outcome == "invalid_request"
+        assert "cannot remove the icon this zone now stores" in result["content"][0]["text"]
+        stored = await _read_helper_config(hass, "zone", zone_id)
+        assert (stored["icon"], stored["radius"]) == ("mdi:sprout", 80.0)
+        assert len(data.config_recovery.records()) == recovery_records  # nothing was dispatched
+
+        # An edit's after side holds only the fields it changed, here not the
+        # icon, so it re-applies that change rather than replacing the zone.
+        await _call_tool("edit_helper", {
+            "helper_type": "zone", "helper_id": zone_id, "config": {"radius": 30},
+        }, _access_key(), hass, data)
+        radius_record = data.versions.list_for("helper", f"zone:{zone_id}")[0]
+        assert radius_record.after == {"radius": 30}
+        await _call_tool("edit_helper", {
+            "helper_type": "zone", "helper_id": zone_id, "config": {"radius": 10},
+        }, _access_key(), hass, data)
+        result, outcome, _ = await async_restore_version(radius_record, "admin-1", hass, data, "after")
+        assert outcome == "allowed", result
+        stored = await _read_helper_config(hass, "zone", zone_id)
+        assert (stored["name"], stored["icon"], stored["radius"]) == ("Allotment", "mdi:sprout", 30.0)
+
+    async def test_tag_restore_refuses_a_description_core_cannot_remove(self, hass: HomeAssistant, hass_admin_user):
+        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.helper import _read_helper_config
+
+        assert await async_setup_component(hass, "tag", {"tag": {}})
+        data = self._data()
+        _, outcome, _ = await _call_tool("create_helper", {
+            "helper_type": "tag", "config": {"tag_id": "garden-gate", "name": "Garden gate"},
+        }, _access_key(), hass, data)
+        assert outcome == "allowed"
+        await _call_tool("edit_helper", {
+            "helper_type": "tag", "helper_id": "garden-gate", "config": {"description": "Back fence"},
+        }, _access_key(), hass, data)
+        edit_record = data.versions.list_for("helper", "tag:garden-gate")[0]
+        result, outcome, _ = await async_restore_version(edit_record, "admin-1", hass, data, "before")
+        assert outcome == "invalid_request"
+        assert "cannot remove the description this tag now stores" in result["content"][0]["text"]
+        assert (await _read_helper_config(hass, "tag", "garden-gate"))["description"] == "Back fence"
+
+    async def test_a_renamed_zone_returns_under_its_original_id_and_entity(self, hass: HomeAssistant, hass_admin_user):
+        from homeassistant.helpers import entity_registry as er
+        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.helper import _restored_helper_entity_id
+
+        await self._zone_setup(hass)
+        data = self._data()
+        created, _, _ = await _call_tool("create_helper", {"helper_type": "zone", "config": {
+            "name": "Office", "latitude": 1.0, "longitude": 2.0, "radius": 50,
+        }}, _access_key(), hass, data)
+        zone_id = _json(created)["helper"]["id"]
+        await _call_tool("edit_helper", {
+            "helper_type": "zone", "helper_id": zone_id, "config": {"name": "Studio"},
+        }, _access_key(), hass, data)
+        registry = er.async_get(hass)
+        registry.async_update_entity(f"zone.{zone_id}", new_entity_id="zone.workspace", icon="mdi:desk")
+        await hass.async_block_till_done()
+        _, outcome, _ = await _call_tool("delete_helper", {"helper_type": "zone", "helper_id": zone_id},
+                                         _access_key(), hass, data)
+        assert outcome == "allowed"
+
+        # The MESA prediction follows the deleted entry while its entity ID is free.
+        from custom_components.phoenix_mcp.tools.helper import _HELPER_RESTORE_ID, _helper_create_mesa_entity
+        assert _helper_create_mesa_entity("zone", {"config": {"name": "Studio"}, _HELPER_RESTORE_ID: zone_id}, hass) == "zone.workspace"
+        assert _restored_helper_entity_id(hass, "zone", zone_id) == "zone.workspace"
+        hass.states.async_set("zone.workspace", "0")
+        assert _restored_helper_entity_id(hass, "zone", zone_id) == f"zone.{zone_id}"
+        hass.states.async_remove("zone.workspace")
+
+        deleted = data.versions.list_for("helper", f"zone:{zone_id}")[0]
+        result, outcome, _ = await async_restore_version(deleted, "admin-1", hass, data)
+        assert outcome == "allowed", result
+        body = _json(result)
+        assert (body["helper"]["id"], body["helper"]["name"], body["status"]) == (zone_id, "Studio", "verified")
+        assert registry.async_get_entity_id("zone", "zone", zone_id) == "zone.workspace"
+        assert registry.async_get("zone.workspace").icon == "mdi:desk"
+
+    async def test_recreation_reports_partial_when_saved_fields_do_not_read_back(
+        self, hass: HomeAssistant, helper_env, hass_admin_user,
+    ):
+        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+
+        data = self._data()
+        created, _, _ = await _call_tool("create_helper", {
+            "helper_type": "input_boolean", "config": {"name": "Night mode", "icon": "mdi:weather-night"},
+        }, _access_key(), hass, data)
+        helper_id = _json(created)["helper"]["id"]
+        await _call_tool("delete_helper", {"helper_type": "input_boolean", "helper_id": helper_id},
+                         _access_key(), hass, data)
+        deleted = data.versions.list_for("helper", f"input_boolean:{helper_id}")[0]
+        with patch("custom_components.phoenix_mcp.mcp_view._read_helper_config",
+                   AsyncMock(return_value={"id": helper_id, "name": "Night mode"})):
+            result, outcome, _ = await async_restore_version(deleted, "admin-1", hass, data)
+        assert outcome == "invalid_request"
+        assert _json(result)["status"] == "partial"
+
+    @pytest.mark.parametrize(("tool", "marker"), [
+        ("edit_helper", "_phoenix_helper_restore_replace"),
+        ("create_helper", "_phoenix_helper_restore_id"),
+    ])
+    async def test_agents_cannot_send_the_internal_restore_markers(self, hass: HomeAssistant, helper_env, tool, marker):
+        args = {"helper_type": "input_boolean", "config": {"name": "Guest"}, marker: "guest"}
+        if tool == "edit_helper":
+            args["helper_id"] = "guest"
+        result, outcome, _ = await _call_tool(tool, args, _access_key(), hass, self._data())
+        assert outcome == "invalid_request"
+        assert marker in result["content"][0]["text"]

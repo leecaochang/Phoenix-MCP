@@ -5457,12 +5457,9 @@ async def async_restore_version(
     record: Any, admin_user_id: str, hass: HomeAssistant, data: PhoenixData, side: str | None = None
 ) -> tuple[dict, str, str]:
     """Re-apply a stored config version under admin authority."""
-    if side == "before":
-        target = record.before
-    elif side == "after":
-        target = record.after
-    else:
-        target = record.after if record.after is not None else record.before
+    if side not in ("before", "after"):
+        side = "after" if record.after is not None else "before"
+    target = record.before if side == "before" else record.after
     if not isinstance(target, dict):
         return _tool_error("This version has no configuration to restore on that side."), "invalid_request", "async_restore_version"
     # The executors manage ids themselves; a stored config may carry one (e.g. a
@@ -5538,7 +5535,13 @@ async def async_restore_version(
                 }
             recovery_source.set({"snapshot_type": "storage_helper", "helper_type": ht, "helper_id": hid, "config": target})
             if exists:
-                return await _execute_edit_helper({"helper_type": ht, "helper_id": hid, "config": target}, access_key, hass, data)
+                from .tools.helper import _HELPER_RESTORE_REPLACE
+                # A before side is the whole stored item. A zone or tag edit's
+                # after side holds only the fields that edit changed, so it is
+                # applied as that edit again rather than as a replacement.
+                complete = side == "before" or getattr(record, "action", None) != "edit" or ht not in ("zone", "tag")
+                return await _execute_edit_helper({"helper_type": ht, "helper_id": hid, "config": target,
+                                                   _HELPER_RESTORE_REPLACE: complete}, access_key, hass, data)
             from .tools.helper import _helper_create_mesa_entity, _enforce_helper_mesa_context
             create_args = {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}
             mesa_precheck = _enforce_helper_mesa_context(create_args, access_key, hass, data,
@@ -5565,8 +5568,13 @@ async def async_restore_version(
                         body = json.loads(restored[0]["content"][0]["text"])
                         new_id = body["helper"]["id"]
                         observed = await _read_helper_config(hass, ht, new_id)
-                        await data.config_recovery.mark(rid, "verified" if observed is not None else "partial", replacement_helper_id=new_id)
-                        if observed is None:
+                        # Each restored field must read back as saved; tag_id is
+                        # the tag's identity, stored as its id.
+                        verified = isinstance(observed, dict) and all(
+                            observed.get(key) == value for key, value in target.items() if key != "tag_id"
+                        )
+                        await data.config_recovery.mark(rid, "verified" if verified else "partial", replacement_helper_id=new_id)
+                        if not verified:
                             return _tool_error(json.dumps({"status": "partial", "recovery_id": rid,
                                 "replacement_helper_id": new_id, "retry_safe": False})), "invalid_request", "async_restore_version"
                         body.update(recovery_id=rid, status="verified", retry_safe=False)
