@@ -73,7 +73,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
@@ -247,7 +247,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -8159,9 +8159,9 @@ def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> st
         for state in states:
             perm = resolve(state.entity_id, access_key, hass)
             if perm == Permission.WRITE:
-                accessible.append((state.entity_id, "READ/WRITE", get_effective_hint(access_key, state.entity_id, hass, entity_hints)))
+                accessible.append((state.entity_id, "READ/WRITE", entity_hint_for_agent(access_key, state.entity_id, hass, entity_hints)))
             elif perm == Permission.READ:
-                accessible.append((state.entity_id, "READ", get_effective_hint(access_key, state.entity_id, hass, entity_hints)))
+                accessible.append((state.entity_id, "READ", entity_hint_for_agent(access_key, state.entity_id, hass, entity_hints)))
 
         accessible.sort(key=lambda x: x[0])
         lines.append("You have access to the following Home Assistant entities:")
@@ -8218,6 +8218,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
 
     entities: list[dict] = []
     states = hass.states.async_all()
+    entity_hints = hass.data[DOMAIN].store.get_entity_hints()
 
     if access_key.pass_through:
         _expose_check = None
@@ -8238,13 +8239,11 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
             if _expose_check is not None and not _expose_check(eid):
                 continue
             area_id = _resolve_area_id(entry, dev_registry)
-            entities.append({
-                "entity_id": eid,
-                "permission": "READ/WRITE",
-                "area_id": area_id,
-            })
+            row: dict = {"entity_id": eid, "permission": "READ/WRITE", "area_id": area_id}
+            if hint := entity_hint_for_agent(access_key, eid, hass, entity_hints):
+                row["hint"] = hint
+            entities.append(row)
     else:
-        entity_hints = hass.data[DOMAIN].store.get_entity_hints()
         for state in states:
             perm = resolve(state.entity_id, access_key, hass)
             if perm not in (Permission.READ, Permission.WRITE):
@@ -8253,7 +8252,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
             area_id = _resolve_area_id(entry, dev_registry)
             perm_str = "READ/WRITE" if perm == Permission.WRITE else "READ"
             e: dict = {"entity_id": state.entity_id, "permission": perm_str, "area_id": area_id}
-            hint = get_effective_hint(access_key, state.entity_id, hass, entity_hints)
+            hint = entity_hint_for_agent(access_key, state.entity_id, hass, entity_hints)
             if hint:
                 e["hint"] = hint
             entities.append(e)

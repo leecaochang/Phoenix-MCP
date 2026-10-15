@@ -109,6 +109,9 @@ class _Store:
         self.get_settings = mesa_off_store().get_settings
         self.get_access_key_by_id = MagicMock(return_value=None)
 
+    def get_entity_hints(self) -> dict:
+        return {}
+
     def get_pending_approvals(self) -> list:
         return self.pending
 

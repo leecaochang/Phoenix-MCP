@@ -105,11 +105,16 @@
         </figure>
 
         <h3 id="entity-hints">Entity hints</h3>
-        <p>After granting access to an entity, you can attach an optional hint that is surfaced to the connected AI, to clarify what an entity represents, for example <em>"This lamp is on Rachel's desk, not the ceiling light."</em> Hints are capped at 200 characters and come in two scopes:</p>
+        <p>After granting access to an entity, you can attach an optional hint that tells agents what the entity is or how to use it, for example <em>"This lamp is on Rachel's desk, not the ceiling light."</em> Hints are capped at 200 characters and come in two scopes:</p>
         <dl class="kv">
           <div class="kv-row"><dt>This access key only</dt><dd>A per-access-key hint, stored on the permission node. It is visible only to this access key and takes precedence over a global hint.</dd></div>
-          <div class="kv-row"><dt>All access keys</dt><dd>A global hint for the entity, applied to every access key that can see it. Useful when the clarification is about the entity itself, not one agent's view of it.</dd></div>
+          <div class="kv-row"><dt>All access keys</dt><dd>A global hint for the entity, applied to every access key that can see it, pass-through access keys included. Useful when the clarification is about the entity itself, not one agent's view of it.</dd></div>
         </dl>
+        <p>Agents receive the hint where they look the entity up: every <code>search_entities</code> result for the entity and <code>describe_entity</code> carry it as <code>hint</code>, and the context documents list it next to each entity they include. An entity without a hint adds nothing to those results.</p>
+        <div class="callout warn">
+          <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+          <div class="callout-body"><p class="callout-title">Hints are advice, not permission</p><p>A hint never grants access or bypasses capabilities, approvals, MESA or the permission tree, and a model may ignore it. Connected clients and model providers receive hints, so never put passwords, door codes or other secrets in one. Each time a hint is sent, entity IDs outside the reading access key's current scope are replaced with <code>&lt;redacted-entity&gt;</code>, so a global hint that mentions another entity's ID does not reveal that ID to access keys that cannot see the entity. Entity names and other details written as prose are sent as written.</p></div>
+        </div>
         <figure class="screenshot">
           <img src="assets/entity-hint.png" alt="The entity hint editor with the access-key-only and all-access-keys scope toggle" loading="lazy" />
           <figcaption>The hint editor, with the access-key-only / all-access-keys toggle.</figcaption>

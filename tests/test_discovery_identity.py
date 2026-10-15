@@ -59,7 +59,7 @@ async def test_idless_consumers_use_loaded_identity_without_guessing(hass, idles
             rows = body["consumers"]
         elif tool == "describe_entity":
             body = _body(await discovery._tool_describe_entity({"entity_id": "light.visible"}, access_key, hass,
-                SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None))))
+                SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None, get_entity_hints=dict))))
             rows = body["referenced_by"]
         else:
             body = _body(await discovery._tool_whatif({"entity_id": "light.visible", "hypothetical_state": "on"}, access_key, hass))
@@ -78,7 +78,7 @@ async def test_search_handles_malformed_friendly_names(hass, name, query):
     hass.states.async_set("light.alpha", "on", {"friendly_name": "Alpha"})
     hass.states.async_set("light.odd", "off", {"friendly_name": name})
     body = _body(await discovery._tool_search_entities({"query": query}, _access_key(), hass,
-        SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None))))
+        SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None, get_entity_hints=dict))))
     assert all(row["friendly_name"] is None or isinstance(row["friendly_name"], str) for row in body["entities"])
 
 

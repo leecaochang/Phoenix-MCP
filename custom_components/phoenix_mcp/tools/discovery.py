@@ -63,7 +63,7 @@ from ..tool_contracts import normalize_tool_args
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
-from ..helpers import effective_cap, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
+from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
@@ -1359,13 +1359,13 @@ def _search_candidate_ids(
 
 
 def _annotate_search_rows(
-    rows: list[dict], registry: Any, data: PhoenixData, access_key: AccessKeyRecord
+    rows: list[dict], registry: Any, data: PhoenixData, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> None:
-    """Add MESA control_mode and entity_category to the returned rows, in place.
+    """Add MESA control_mode, entity_category and the operator hint to the returned rows, in place.
 
-    Both run on the CAPPED result page rather than every match, to bound cost.
+    All run on the CAPPED result page rather than every match, to bound cost.
     control_mode is omitted when autonomous (the default) so it does not bloat
-    every row; entity_category is omitted when unset.
+    every row; entity_category and hint are omitted when unset.
     """
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:
@@ -1381,6 +1381,11 @@ def _annotate_search_rows(
         entry = registry.async_get(row["entity_id"])
         if entry is not None and entry.entity_category is not None:
             row["entity_category"] = entry.entity_category.value
+
+    entity_hints = data.store.get_entity_hints()
+    for row in rows:
+        if hint := entity_hint_for_agent(access_key, row["entity_id"], hass, entity_hints):
+            row["hint"] = hint
 
 
 def _search_membership(
@@ -1529,7 +1534,7 @@ async def _tool_search_entities(
     for row in results:
         row.pop("_aliases", None)
 
-    _annotate_search_rows(results, registry, data, access_key)
+    _annotate_search_rows(results, registry, data, access_key, hass)
     if include_membership:
         budget = [MAX_SEARCH_MEMBER_CHECKS]
         for row in results:
@@ -2407,6 +2412,9 @@ async def _tool_describe_entity(
     # is meaningful: an entity with no names is not addressable by voice.
     if entry is not None:
         body["aliases"] = er.async_get_entity_aliases(hass, entry)
+
+    if hint := entity_hint_for_agent(access_key, entity_id, hass, data.store.get_entity_hints()):
+        body["hint"] = hint
 
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:

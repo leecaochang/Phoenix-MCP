@@ -53,8 +53,9 @@ grain of the model gives the smoothest results and avoids dead ends.
   `registry_state: all` to include registry entries with no live state. Those
   registry-only rows require inherited device/domain permission. This is
   keyword/attribute search over names and Assist aliases; `area` also accepts a
-  floor. Page with `offset` while `has_more` is true. To read several known
-  entities at once, pass `get_state` a list of entity IDs.
+  floor. Page with `offset` while `has_more` is true. A row carries `hint`, the
+  operator's note on that entity, when one is set; hints are not searched. To
+  read several known entities at once, pass `get_state` a list of entity IDs.
 - `recognize_intent`: diagnose how Home Assistant's default voice grammar reads
   one sentence without executing it. A match includes parsed slots and only
   entity targets in this access key's read scope; an incomplete match includes the
@@ -71,7 +72,8 @@ grain of the model gives the smoothest results and avoids dead ends.
 - `describe_entity`: one entity's state when available, its safe registry
   metadata (including disabled/hidden state, labels, categories and overrides),
   the services that act on it, its MESA profile and `control_mode`, what
-  references it, and the spoken names Assist matches it by (`aliases`).
+  references it, the spoken names Assist matches it by (`aliases`), and the
+  operator's `hint` when one is set.
 - `describe_area`: a registry, state, and MESA rollup for one area.
 - `find_available_actions`: the services you may actually invoke on an entity or
   area, already filtered by your capabilities and MESA's control mode.

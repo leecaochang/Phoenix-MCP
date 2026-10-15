@@ -48,6 +48,7 @@ from .const import (
 from .policy_engine import (
     Permission,
     assist_expose_check,
+    get_effective_hint,
     is_sensitive_key,
     parse_relative_time,
     resolve,
@@ -1115,6 +1116,22 @@ def redact_entity_ids_outside(
 ) -> str:
     """The worker-thread form: redact against visible_entity_ids computed on the loop."""
     return _redact_entity_ids(text, hass, lambda eid: eid.lower() in visible, sentinel)
+
+
+def entity_hint_for_agent(
+    access_key: AccessKeyRecord, entity_id: str, hass: HomeAssistant, entity_hints: dict[str, str] | None,
+) -> str | None:
+    """The entity's effective hint as this access key may read it, or None. Event loop only.
+
+    Hints are administrator text, and a global hint reaches every access key that
+    can see the entity, so it can name entities this key cannot. Secret-shaped
+    text is scrubbed and entity IDs outside the current scope are replaced at
+    delivery, so a later scope change also hides what a saved hint names.
+    """
+    hint = get_effective_hint(access_key, entity_id, hass, entity_hints)
+    if not isinstance(hint, str) or not hint:
+        return None
+    return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(hint) or "", access_key, hass) or None
 
 
 def _logger_prefix_matches(logger_name: str, prefix: str) -> bool:

@@ -280,7 +280,7 @@ async def test_analysis_omits_hidden_consumer_identity_but_reaches_visible_match
     with open(hass.config.path("automations.yaml"), "w") as file:
         file.write("- id: hidden-auto\n  alias: hidden-name\n  triggers:\n  - trigger: state\n    entity_id: light.visible\n    to: 'off'\n  actions: []\n")
     caller = access_key(cap_search="allow")
-    data = SimpleNamespace(store=SimpleNamespace(get_settings=lambda: SimpleNamespace(mesa_mode="off")), mesa=None)
+    data = SimpleNamespace(store=SimpleNamespace(get_settings=lambda: SimpleNamespace(mesa_mode="off"), get_entity_hints=dict), mesa=None)
 
     async def invoke():
         if tool == "describe":

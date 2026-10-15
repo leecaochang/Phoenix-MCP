@@ -140,7 +140,7 @@ GET    /api/phoenix-mcp/admin/access-keys/{id}/scope                          Re
         <p><code>bulk-select</code> resolves the selected area, label, or integration on the server and atomically applies the state to its device and entity nodes. <code>GREY</code> removes explicit nodes. The response is <code>{ permissions, summary }</code>; the summary includes the selector, state, affected counts, registry-only deviceless count, required domain IDs, and shared-device count.</p>
 
         <h2 id="entity-hints">Entity hints</h2>
-        <p>Global hints apply to every access key that can see the entity. A per-access-key permission-node hint (above) always takes precedence over the global one. Both are capped at 200 characters.</p>
+        <p>Global hints apply to every access key that can see the entity. A per-access-key permission-node hint (above) always takes precedence over the global one. Both are capped at 200 characters. Agents receive the effective hint on <code>search_entities</code> results, <code>describe_entity</code> and the context documents, with entity IDs outside the access key's current scope replaced by <code>&lt;redacted-entity&gt;</code> and secret-shaped text scrubbed.</p>
         <pre class="code" data-lang="http" data-label="Entity hints"><code>GET  /api/phoenix-mcp/admin/entity-hints               The global entity_id > hint map
 PUT  /api/phoenix-mcp/admin/entity-hints/{entity_id}   Set or clear one global hint</code></pre>
         <pre class="code" data-lang="json" data-label="Global hint body"><code>{ "hint": "Garage side door" }   // null clears the hint</code></pre>

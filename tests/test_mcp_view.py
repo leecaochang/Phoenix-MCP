@@ -2384,7 +2384,7 @@ async def test_context_plain_entity_with_hint_appears():
     data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value="The main kitchen light"):
+         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value="The main kitchen light"):
         from custom_components.phoenix_mcp.policy_engine import Permission
 
         def resolve_side_effect(eid, tok, hass):
@@ -2409,7 +2409,7 @@ async def test_context_plain_entity_without_hint_renders_normally():
     data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
+         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
 
         def resolve_side_effect(eid, tok, hass):
@@ -2433,7 +2433,7 @@ async def test_context_plain_read_permission_shows_read_only():
     data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
+         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.READ
         hass = _make_hass_with_states(data, ["sensor.temp"])
@@ -2451,7 +2451,7 @@ async def test_context_json_entity_with_hint():
     data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value="Holiday lights power switch"):
+         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value="Holiday lights power switch"):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
@@ -2480,7 +2480,7 @@ async def test_context_json_entity_without_hint_has_no_hint_key():
     data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
+         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
