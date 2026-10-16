@@ -1976,7 +1976,7 @@
       "agentcliNoAccounts": "Ei vielä palveluntarjoajan tilejä.",
       "agentcliNoModels": "(malleja ei ole saatavilla)",
       "agentcliNotSet": "(ei asetettu)",
-      "agentcliProbeBody": "Phoenix lähettää muutaman <strong>yhden tokenin pyynnön</strong> palveluntarjoajalle {name} käyttäen mallia <strong>{model}</strong> ja lukee, mitkä valinnat API hyväksyy tai torjuu. Tämä käyttää omaa API-saldoasi. Määrä on pieni, muttei olematon, eikä mikään muu tämän kortin painike maksa mitään.",
+      "agentcliProbeBody": "Phoenix lähettää muutaman <strong>yhden tokenin pyynnön</strong> palveluntarjoajalle {name} käyttäen mallia <strong>{model}</strong> ja lukee, mitkä valinnat API hyväksyy tai torjuu. Jos malli ei ole ilmoittanut, hyväksyykö se kuvia, Phoenix lähettää myös yhden pienen testikuvan ja lukee vastauksen. Tämä käyttää omaa API-saldoasi. Määrä on pieni, muttei olematon, eikä mikään muu tämän kortin painike maksa mitään.",
       "agentcliProbeCaps": "Tarkista valinnat",
       "agentcliProbeCapsChecked": "Tarkista valinnat (tarkistettu viimeksi {when})",
       "agentcliProbeOnAdd": "Tarkista, mitkä valinnat tämä malli hyväksyy (käyttää pienen määrän API-saldoa)",
@@ -2222,7 +2222,10 @@
       "wipeSubmit": "Tyhjennä valitut tiedot",
       "wipeTitle": "Tyhjennä Phoenix MCP -tiedot",
       "wipeTypeConfirm": "Kirjoita WIPE vahvistaaksesi",
-      "wipeWarning": "Valitse, mitä poistetaan. Tätä ei voi peruuttaa."
+      "wipeWarning": "Valitse, mitä poistetaan. Tätä ei voi peruuttaa.",
+      "agentcliProbedVisionSeen": "Kuvatarkistus: malli luki testikuvan, joten liitetyt kuvat ja kameran kuvat lähetetään sille.",
+      "agentcliProbedVisionUnseen": "Kuvatarkistus: malli ei pystynyt lukemaan testikuvaa, joten Phoenix käsittelee sitä pelkkää tekstiä käsittelevänä.",
+      "agentcliProbedVisionInconclusive": "Kuvatarkistus: käyttökelpoista vastausta ei tullut, joten kuvatuki on yhä tuntematon."
     },
     "shell": {
       "agentChat": "Agent Chat",

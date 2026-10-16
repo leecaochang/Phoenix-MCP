@@ -752,6 +752,34 @@ describe("AgentCliSettings capability probe", () => {
     expect(await screen.findByText(/does not validate the options/)).toBeTruthy();
   });
 
+  it.each([
+    [{ vision: true }, /the model read the test image/],
+    [{ vision: false }, /could not read the test image, so Phoenix treats it as text-only/],
+    [{}, /no usable answer came back/],
+  ])("reports the image check when it ran (%o)", async (probed, finding) => {
+    probeAgentCliCapabilities.mockResolvedValue({
+      model: "m", probed, calls: 4, checked_at: "2026-08-04T00:00:00Z", effort_checkable: true,
+      answered: true, vision_checked: true,
+    });
+    renderCard();
+    fireEvent.click(await screen.findByLabelText("Check options"));
+    expect(await screen.findByText(/test image and reads the answer/)).toBeTruthy();
+    fireEvent.click(await screen.findByText("Check now"));
+    expect(await screen.findByText(finding)).toBeTruthy();
+  });
+
+  it("says nothing about images when the check did not run", async () => {
+    probeAgentCliCapabilities.mockResolvedValue({
+      model: "m", probed: { vision: true }, calls: 3, checked_at: "2026-08-04T00:00:00Z", effort_checkable: true,
+      answered: true, vision_checked: false,
+    });
+    renderCard();
+    fireEvent.click(await screen.findByLabelText("Check options"));
+    fireEvent.click(await screen.findByText("Check now"));
+    expect(await screen.findByText(/3 requests/)).toBeTruthy();
+    expect(screen.queryByText(/Image check/)).toBeNull();
+  });
+
   it("cannot be run on an account with no model chosen", async () => {
     getAgentCliProviders.mockResolvedValue({
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "" }],

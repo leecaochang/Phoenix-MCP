@@ -1348,7 +1348,7 @@
       "agentcliRemoveAccount": "{name} を削除",
       "agentcliProbing": "確認中...",
       "agentcliProbeTitle": "このモデルが受け付けるオプションを確認",
-      "agentcliProbeBody": "Phoenix は <strong>{model}</strong> を使用して {name} に<strong>一トークンのリクエスト</strong>を数回送信し、API が受け付けるオプションと拒否するオプションを確認します。自分の API クレジットを少量使用します。このカードで費用が発生するボタンはこれだけです。",
+      "agentcliProbeBody": "Phoenix は <strong>{model}</strong> を使用して {name} に<strong>一トークンのリクエスト</strong>を数回送信し、API が受け付けるオプションと拒否するオプションを確認します。モデルが画像を受け付けるかどうかを示していない場合、Phoenix は小さなテスト画像も一枚送信し、その回答を確認します。自分の API クレジットを少量使用します。このカードで費用が発生するボタンはこれだけです。",
       "agentcliProbeRun": "今すぐ確認",
       "agentcliProbed": "{calls} 回のリクエストで確認しました。{found}",
       "agentcliProbedLevels": "受け付けられた思考レベル: {levels}。",
@@ -1607,7 +1607,10 @@
       "providerChecksHelp": "各プロバイダーのモデル一覧を定期的に再取得し、自動のアカウントが新しいモデルに追従し、提供終了したモデルを置き換えます。オフにすると、更新を押したときだけ確認します。",
       "providerChecksHoursLabel": "確認間隔（時間）",
       "providerChecksHoursHelp": "{min} 〜 {max} 時間。",
-      "providerChecksHoursAria": "プロバイダー確認の間隔（時間）"
+      "providerChecksHoursAria": "プロバイダー確認の間隔（時間）",
+      "agentcliProbedVisionSeen": "画像チェック：モデルはテスト画像を読み取れたため、添付画像とカメラ画像を送信します。",
+      "agentcliProbedVisionUnseen": "画像チェック：モデルはテスト画像を読み取れなかったため、Phoenix はテキスト専用として扱います。",
+      "agentcliProbedVisionInconclusive": "画像チェック：有効な回答が得られなかったため、画像への対応状況は不明のままです。"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

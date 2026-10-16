@@ -1976,7 +1976,7 @@
       "agentcliNoAccounts": "Ingen leverandørkontoer ennå.",
       "agentcliNoModels": "(ingen modeller tilgjengelige)",
       "agentcliNotSet": "(ikke angitt)",
-      "agentcliProbeBody": "Phoenix sender noen <strong>forespørsler på ett token</strong> til {name} med <strong>{model}</strong>, og leser hvilke alternativer API-et godtar eller avslår. Dette bruker av din egen API-kvote. Det er et lite beløp, men ikke ingenting, og ingen andre knapper på dette kortet koster noe.",
+      "agentcliProbeBody": "Phoenix sender noen <strong>forespørsler på ett token</strong> til {name} med <strong>{model}</strong>, og leser hvilke alternativer API-et godtar eller avslår. Hvis modellen ikke har oppgitt om den godtar bilder, sender Phoenix også ett lite testbilde og leser svaret. Dette bruker av din egen API-kvote. Det er et lite beløp, men ikke ingenting, og ingen andre knapper på dette kortet koster noe.",
       "agentcliProbeCaps": "Sjekk alternativer",
       "agentcliProbeCapsChecked": "Sjekk alternativer (sist sjekket {when})",
       "agentcliProbeOnAdd": "Sjekk hvilke alternativer denne modellen godtar (bruker litt av API-kvoten)",
@@ -2222,7 +2222,10 @@
       "wipeSubmit": "Tøm valgte data",
       "wipeTitle": "Tøm Phoenix MCP-data",
       "wipeTypeConfirm": "Skriv WIPE for å bekrefte",
-      "wipeWarning": "Velg hva som skal slettes. Dette kan ikke angres."
+      "wipeWarning": "Velg hva som skal slettes. Dette kan ikke angres.",
+      "agentcliProbedVisionSeen": "Bildesjekk: modellen leste testbildet, så vedlagte bilder og kamerabilder sendes til den.",
+      "agentcliProbedVisionUnseen": "Bildesjekk: modellen kunne ikke lese testbildet, så Phoenix behandler den som kun tekst.",
+      "agentcliProbedVisionInconclusive": "Bildesjekk: det kom ikke noe brukbart svar, så bildestøtten er fortsatt ukjent."
     },
     "shell": {
       "agentChat": "Agent Chat",

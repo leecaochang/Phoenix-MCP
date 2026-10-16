@@ -65,7 +65,9 @@ function WarningBadge({ text, onShow }: { text: string; onShow: () => void }) {
  *  text is translated at RENDER time. */
 type CardResult =
   | { kind: "refreshed"; models: number; declared: boolean }
-  | { kind: "probed"; calls: number; levels?: string[]; effortCheckable: boolean; answered: boolean }
+  | { kind: "probed"; calls: number; levels?: string[]; effortCheckable: boolean; answered: boolean;
+      /** The image check's finding, present only when it ran. */
+      vision?: "seen" | "unseen" | "inconclusive" }
   | { kind: "failed"; message: string };
 
 /** Turn a probe response into its card result, or throw so the caller reports a failure.
@@ -97,6 +99,9 @@ function probedCard(r: Awaited<ReturnType<typeof api.probeAgentCliCapabilities>>
     answered: r.answered === true,
     levels,
     effortCheckable: r.effort_checkable === true,
+    ...(r.vision_checked === true ? {
+      vision: r.probed.vision === true ? "seen" : r.probed.vision === false ? "unseen" : "inconclusive",
+    } as const : {}),
   };
 }
 
@@ -117,7 +122,10 @@ function cardResultText(r: CardResult): string {
     : r.effortCheckable
       ? t("settings.agentcliProbedNothing")
       : t("settings.agentcliProbedNoLevels");
-  return t("settings.agentcliProbed", { calls: r.calls, found });
+  const vision = r.vision === "seen" ? t("settings.agentcliProbedVisionSeen")
+    : r.vision === "unseen" ? t("settings.agentcliProbedVisionUnseen")
+      : r.vision === "inconclusive" ? t("settings.agentcliProbedVisionInconclusive") : "";
+  return [t("settings.agentcliProbed", { calls: r.calls, found }), vision].filter(Boolean).join(" ");
 }
 
 function notifyChanged() {

@@ -999,7 +999,7 @@
       "agentcliRemoveAccount": "{name} entfernen",
       "agentcliProbing": "Wird geprüft...",
       "agentcliProbeTitle": "Prüfen, welche Optionen dieses Modell akzeptiert",
-      "agentcliProbeBody": "Phoenix sendet einige <strong>Anfragen mit einem Token</strong> an {name} unter Verwendung von <strong>{model}</strong> und liest aus, welche Optionen die API akzeptiert oder ablehnt. Dies verbraucht Ihr eigenes API-Guthaben. Es ist ein kleiner Betrag, aber nicht nichts, und keine andere Schaltfläche auf dieser Karte kostet etwas.",
+      "agentcliProbeBody": "Phoenix sendet einige <strong>Anfragen mit einem Token</strong> an {name} unter Verwendung von <strong>{model}</strong> und liest aus, welche Optionen die API akzeptiert oder ablehnt. Wenn das Modell nicht angegeben hat, ob es Bilder akzeptiert, sendet Phoenix außerdem ein kleines Testbild und liest die Antwort aus. Dies verbraucht Ihr eigenes API-Guthaben. Es ist ein kleiner Betrag, aber nicht nichts, und keine andere Schaltfläche auf dieser Karte kostet etwas.",
       "agentcliProbeRun": "Jetzt prüfen",
       "agentcliProbed": "Geprüft mit {calls} Anfragen. {found}",
       "agentcliProbedLevels": "Akzeptierte Denkstufen: {levels}.",
@@ -1258,7 +1258,10 @@
       "providerChecksHelp": "Liest die Modellliste jedes Anbieters regelmäßig neu, damit Konten im Automatikmodus neuen Modellen folgen und eingestellte ersetzen. Ausschalten, um nur beim Klick auf Aktualisieren zu prüfen.",
       "providerChecksHoursLabel": "Prüfen alle (Stunden)",
       "providerChecksHoursHelp": "Zwischen {min} und {max} Stunden.",
-      "providerChecksHoursAria": "Stunden zwischen den Anbieterprüfungen"
+      "providerChecksHoursAria": "Stunden zwischen den Anbieterprüfungen",
+      "agentcliProbedVisionSeen": "Bildprüfung: Das Modell hat das Testbild gelesen, daher werden ihm angehängte Bilder und Kamerabilder gesendet.",
+      "agentcliProbedVisionUnseen": "Bildprüfung: Das Modell konnte das Testbild nicht lesen, daher behandelt Phoenix es als reines Textmodell.",
+      "agentcliProbedVisionInconclusive": "Bildprüfung: Es kam keine verwertbare Antwort, daher ist die Bildunterstützung weiterhin unbekannt."
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",

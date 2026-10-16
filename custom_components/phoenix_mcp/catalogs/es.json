@@ -1495,7 +1495,7 @@
       "agentcliRemoveAccount": "Eliminar {name}",
       "agentcliProbing": "Comprobando...",
       "agentcliProbeTitle": "Comprobar qué opciones acepta este modelo",
-      "agentcliProbeBody": "Phoenix enviará unas cuantas <strong>solicitudes de un solo token</strong> a {name} usando <strong>{model}</strong> y leerá qué opciones acepta o rechaza la API. Esto consume su propio crédito de la API. Es una cantidad pequeña, pero no nula, y ningún otro botón de esta tarjeta tiene coste alguno.",
+      "agentcliProbeBody": "Phoenix enviará unas cuantas <strong>solicitudes de un solo token</strong> a {name} usando <strong>{model}</strong> y leerá qué opciones acepta o rechaza la API. Si el modelo no ha indicado si acepta imágenes, Phoenix también envía una pequeña imagen de prueba y lee la respuesta. Esto consume su propio crédito de la API. Es una cantidad pequeña, pero no nula, y ningún otro botón de esta tarjeta tiene coste alguno.",
       "agentcliProbeRun": "Comprobar ahora",
       "agentcliProbed": "Comprobado con {calls} solicitudes. {found}",
       "agentcliProbedLevels": "Niveles de razonamiento aceptados: {levels}.",
@@ -1754,7 +1754,10 @@
       "providerChecksHelp": "Vuelve a leer periódicamente la lista de modelos de cada proveedor para que las cuentas en Automático sigan los modelos nuevos y sustituyan los retirados. Desactívalo para comprobar solo al pulsar Actualizar.",
       "providerChecksHoursLabel": "Comprobar cada (horas)",
       "providerChecksHoursHelp": "Entre {min} y {max} horas.",
-      "providerChecksHoursAria": "Horas entre comprobaciones de proveedores"
+      "providerChecksHoursAria": "Horas entre comprobaciones de proveedores",
+      "agentcliProbedVisionSeen": "Comprobación de imagen: el modelo leyó la imagen de prueba, por lo que se le envían las imágenes adjuntas y las imágenes de la cámara.",
+      "agentcliProbedVisionUnseen": "Comprobación de imagen: el modelo no pudo leer la imagen de prueba, por lo que Phoenix lo trata como solo texto.",
+      "agentcliProbedVisionInconclusive": "Comprobación de imagen: no llegó una respuesta utilizable, por lo que la compatibilidad con imágenes sigue siendo desconocida."
     },
     "approvalSummary": {
       "action.approve": "Aprobar y ejecutar",

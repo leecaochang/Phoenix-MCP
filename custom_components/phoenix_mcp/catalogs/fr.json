@@ -1133,7 +1133,7 @@
       "agentcliRemoveAccount": "Supprimer {name}",
       "agentcliProbing": "Vérification...",
       "agentcliProbeTitle": "Vérifier les options acceptées par ce modèle",
-      "agentcliProbeBody": "Phoenix enverra quelques <strong>requêtes d'un jeton</strong> à {name} en utilisant <strong>{model}</strong>, et lira les options que l'API accepte ou refuse. Cela utilise votre propre crédit API. C'est une petite quantité, mais pas nulle, et aucun autre bouton de cette carte ne coûte quoi que ce soit.",
+      "agentcliProbeBody": "Phoenix enverra quelques <strong>requêtes d'un jeton</strong> à {name} en utilisant <strong>{model}</strong>, et lira les options que l'API accepte ou refuse. Si le modèle n'a pas indiqué s'il accepte les images, Phoenix envoie aussi une petite image de test et lit la réponse. Cela utilise votre propre crédit API. C'est une petite quantité, mais pas nulle, et aucun autre bouton de cette carte ne coûte quoi que ce soit.",
       "agentcliProbeRun": "Vérifier maintenant",
       "agentcliProbed": "Vérifié avec {calls} requêtes. {found}",
       "agentcliProbedLevels": "Niveaux de réflexion acceptés : {levels}.",
@@ -1392,7 +1392,10 @@
       "providerChecksHelp": "Relit périodiquement la liste de modèles de chaque fournisseur pour que les comptes en Automatique suivent les nouveaux modèles et remplacent ceux qui sont retirés. Désactivez pour ne vérifier qu'avec Actualiser.",
       "providerChecksHoursLabel": "Vérifier toutes les (heures)",
       "providerChecksHoursHelp": "Entre {min} et {max} heures.",
-      "providerChecksHoursAria": "Heures entre deux vérifications des fournisseurs"
+      "providerChecksHoursAria": "Heures entre deux vérifications des fournisseurs",
+      "agentcliProbedVisionSeen": "Vérification d'image : le modèle a lu l'image de test, les images jointes et les images de la caméra lui sont donc envoyées.",
+      "agentcliProbedVisionUnseen": "Vérification d'image : le modèle n'a pas pu lire l'image de test, Phoenix le traite donc comme un modèle texte uniquement.",
+      "agentcliProbedVisionInconclusive": "Vérification d'image : aucune réponse exploitable n'est revenue, la prise en charge des images reste donc inconnue."
     },
     "agentchat": {
       "announceApproval": "L'action {name} nécessite votre approbation.",

@@ -1697,7 +1697,7 @@
       "agentcliNoAccounts": "Nie ma jeszcze kont dostawców.",
       "agentcliNoModels": "(brak dostępnych modeli)",
       "agentcliNotSet": "(nieustawione)",
-      "agentcliProbeBody": "Phoenix wyśle kilka <strong>żądań jednego tokena</strong> do {name} przy użyciu <strong>{model}</strong> i odczyta, które opcje API akceptuje lub odrzuca. Wykorzystuje to Twój własny limit API. To niewielka ilość, ale nie zero, a żaden inny przycisk na tej karcie nic nie kosztuje.",
+      "agentcliProbeBody": "Phoenix wyśle kilka <strong>żądań jednego tokena</strong> do {name} przy użyciu <strong>{model}</strong> i odczyta, które opcje API akceptuje lub odrzuca. Jeśli model nie określił, czy przyjmuje obrazy, Phoenix wyśle też jeden mały obraz testowy i odczyta odpowiedź. Wykorzystuje to Twój własny limit API. To niewielka ilość, ale nie zero, a żaden inny przycisk na tej karcie nic nie kosztuje.",
       "agentcliProbeCaps": "Sprawdź opcje",
       "agentcliProbeCapsChecked": "Sprawdź opcje (ostatnio sprawdzono {when})",
       "agentcliProbeOnAdd": "Sprawdź, które opcje akceptuje ten model (zużywa niewielką ilość limitu API)",
@@ -1952,7 +1952,10 @@
       "providerChecksHelp": "Okresowo odczytuje ponownie listę modeli każdego dostawcy, aby konta w trybie automatycznym podążały za nowymi modelami i zastępowały wycofane. Wyłącz, aby sprawdzać tylko po naciśnięciu Odśwież.",
       "providerChecksHoursLabel": "Sprawdzaj co (godziny)",
       "providerChecksHoursHelp": "Od {min} do {max} godzin.",
-      "providerChecksHoursAria": "Godziny między sprawdzeniami dostawców"
+      "providerChecksHoursAria": "Godziny między sprawdzeniami dostawców",
+      "agentcliProbedVisionSeen": "Test obrazu: model odczytał obraz testowy, więc załączone obrazy i obrazy kamer są do niego wysyłane.",
+      "agentcliProbedVisionUnseen": "Test obrazu: model nie odczytał obrazu testowego, więc Phoenix traktuje go jako model wyłącznie tekstowy.",
+      "agentcliProbedVisionInconclusive": "Test obrazu: nie wróciła użyteczna odpowiedź, więc obsługa obrazów nadal jest nieznana."
     },
     "approvalSummary": {
       "action.approve": "Zatwierdź i wykonaj",

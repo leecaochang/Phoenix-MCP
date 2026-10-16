@@ -1976,7 +1976,7 @@
       "agentcliNoAccounts": "Inga leverantörskonton ännu.",
       "agentcliNoModels": "(inga modeller tillgängliga)",
       "agentcliNotSet": "(inte angivet)",
-      "agentcliProbeBody": "Phoenix skickar några <strong>begäranden med en token</strong> till {name} med <strong>{model}</strong> och läser av vilka alternativ API:t accepterar eller avvisar. Detta använder din egen API-kredit. Det är en liten summa, men inte ingenting, och ingen annan knapp på det här kortet kostar något.",
+      "agentcliProbeBody": "Phoenix skickar några <strong>begäranden med en token</strong> till {name} med <strong>{model}</strong> och läser av vilka alternativ API:t accepterar eller avvisar. Om modellen inte har angett om den accepterar bilder skickar Phoenix också en liten testbild och läser svaret. Detta använder din egen API-kredit. Det är en liten summa, men inte ingenting, och ingen annan knapp på det här kortet kostar något.",
       "agentcliProbeCaps": "Kontrollera alternativ",
       "agentcliProbeCapsChecked": "Kontrollera alternativ (senast kontrollerat {when})",
       "agentcliProbeOnAdd": "Kontrollera vilka alternativ modellen accepterar (använder en liten mängd API-kredit)",
@@ -2222,7 +2222,10 @@
       "wipeSubmit": "Radera vald data",
       "wipeTitle": "Radera Phoenix MCP-data",
       "wipeTypeConfirm": "Skriv WIPE för att bekräfta",
-      "wipeWarning": "Välj vad som ska raderas. Detta kan inte ångras."
+      "wipeWarning": "Välj vad som ska raderas. Detta kan inte ångras.",
+      "agentcliProbedVisionSeen": "Bildkontroll: modellen läste testbilden, så bifogade bilder och kamerabilder skickas till den.",
+      "agentcliProbedVisionUnseen": "Bildkontroll: modellen kunde inte läsa testbilden, så Phoenix behandlar den som endast text.",
+      "agentcliProbedVisionInconclusive": "Bildkontroll: inget användbart svar kom tillbaka, så bildstödet är fortfarande okänt."
     },
     "shell": {
       "agentChat": "Agent Chat",

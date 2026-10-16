@@ -1529,7 +1529,7 @@
       "agentcliNoAccounts": "尚無提供者帳戶。",
       "agentcliNoModels": "（沒有可用的模型）",
       "agentcliNotSet": "（未設定）",
-      "agentcliProbeBody": "Phoenix 會用 <strong>{model}</strong> 向 {name} 傳送幾次<strong>僅一個 token 的請求</strong>，看介面接受還是拒絕各個選項。這會消耗您自己的 API 額度：金額很小，但並非為零，而本卡片上的其他按鈕都不產生費用。",
+      "agentcliProbeBody": "Phoenix 會用 <strong>{model}</strong> 向 {name} 傳送幾次<strong>僅一個 token 的請求</strong>，看介面接受還是拒絕各個選項。如果模型未說明是否接受影像，Phoenix 還會傳送一張小測試影像並讀取回答。這會消耗您自己的 API 額度：金額很小，但並非為零，而本卡片上的其他按鈕都不產生費用。",
       "agentcliProbeCaps": "檢測可用選項",
       "agentcliProbeCapsChecked": "檢測可用選項（上次檢測於 {when}）",
       "agentcliProbeOnAdd": "檢測該模型接受哪些選項（會消耗少量 API 額度）",
@@ -1784,7 +1784,10 @@
       "providerChecksHelp": "定期重新讀取每個供應商的模型清單，使自動模式的帳戶跟隨新模型並取代已下線的模型。關閉後僅在按下重新整理時檢查。",
       "providerChecksHoursLabel": "檢查間隔（小時）",
       "providerChecksHoursHelp": "介於 {min} 到 {max} 小時之間。",
-      "providerChecksHoursAria": "供應商檢查間隔（小時）"
+      "providerChecksHoursAria": "供應商檢查間隔（小時）",
+      "agentcliProbedVisionSeen": "影像檢查：模型讀取了測試影像，因此會向其傳送附加的影像和攝影機影像。",
+      "agentcliProbedVisionUnseen": "影像檢查：模型無法讀取測試影像，因此 Phoenix 將其視為純文字模型。",
+      "agentcliProbedVisionInconclusive": "影像檢查：沒有收到可用的回答，因此影像支援情況仍然未知。"
     },
     "shell": {
       "agentChat": "Agent Chat",

@@ -1136,7 +1136,7 @@
       "agentcliRemoveAccount": "Remove {name}",
       "agentcliProbing": "Checking...",
       "agentcliProbeTitle": "Check which options this model accepts",
-      "agentcliProbeBody": "Phoenix will send a few <strong>one-token requests</strong> to {name} using <strong>{model}</strong>, and read which options the API accepts or refuses. This uses your own API credit. It is a small amount, but not nothing, and no other button on this card costs anything.",
+      "agentcliProbeBody": "Phoenix will send a few <strong>one-token requests</strong> to {name} using <strong>{model}</strong>, and read which options the API accepts or refuses. If the model has not said whether it accepts images, Phoenix also sends one small test image and reads the answer. This uses your own API credit. It is a small amount, but not nothing, and no other button on this card costs anything.",
       "agentcliProbeRun": "Check now",
       "agentcliProbed": "Checked with {calls} requests. {found}",
       "agentcliProbedLevels": "Thinking levels accepted: {levels}.",
@@ -1395,7 +1395,10 @@
       "providerChecksHelp": "Periodically re-read each provider's model list so Automatic accounts follow new models and replace retired ones. Turn this off to check only when you press Refresh.",
       "providerChecksHoursLabel": "Check every (hours)",
       "providerChecksHoursHelp": "Between {min} and {max} hours.",
-      "providerChecksHoursAria": "Hours between provider checks"
+      "providerChecksHoursAria": "Hours between provider checks",
+      "agentcliProbedVisionSeen": "Image check: the model read the test image, so attached images and camera results are sent to it.",
+      "agentcliProbedVisionUnseen": "Image check: the model could not read the test image, so Phoenix treats it as text-only.",
+      "agentcliProbedVisionInconclusive": "Image check: no usable answer came back, so image support is still unknown."
     },
     "agentchat": {
       "announceApproval": "Action {name} needs your approval.",

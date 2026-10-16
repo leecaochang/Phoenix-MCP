@@ -1667,7 +1667,7 @@
       "agentcliNoAccounts": "Nog geen provideraccounts.",
       "agentcliNoModels": "(geen modellen beschikbaar)",
       "agentcliNotSet": "(niet ingesteld)",
-      "agentcliProbeBody": "Phoenix stuurt een paar <strong>verzoeken van één token</strong> naar {name} met <strong>{model}</strong> en leest welke opties de API accepteert of weigert. Dit verbruikt je eigen API-tegoed. Het is een klein bedrag, maar niet niets, en geen enkele andere knop op deze kaart kost iets.",
+      "agentcliProbeBody": "Phoenix stuurt een paar <strong>verzoeken van één token</strong> naar {name} met <strong>{model}</strong> en leest welke opties de API accepteert of weigert. Als het model niet heeft aangegeven of het afbeeldingen accepteert, stuurt Phoenix ook één kleine testafbeelding en leest het antwoord. Dit verbruikt je eigen API-tegoed. Het is een klein bedrag, maar niet niets, en geen enkele andere knop op deze kaart kost iets.",
       "agentcliProbeCaps": "Opties controleren",
       "agentcliProbeCapsChecked": "Opties controleren (laatst gecontroleerd {when})",
       "agentcliProbeOnAdd": "Controleren welke opties dit model accepteert (verbruikt een kleine hoeveelheid API-tegoed)",
@@ -1922,7 +1922,10 @@
       "providerChecksHelp": "Leest regelmatig de modellijst van elke aanbieder opnieuw, zodat accounts op Automatisch nieuwe modellen volgen en ingetrokken modellen vervangen. Zet dit uit om alleen te controleren als je op Vernieuwen drukt.",
       "providerChecksHoursLabel": "Controleer elke (uren)",
       "providerChecksHoursHelp": "Tussen {min} en {max} uur.",
-      "providerChecksHoursAria": "Uren tussen aanbiedercontroles"
+      "providerChecksHoursAria": "Uren tussen aanbiedercontroles",
+      "agentcliProbedVisionSeen": "Afbeeldingscontrole: het model las de testafbeelding, dus bijgevoegde afbeeldingen en camerabeelden worden ernaar gestuurd.",
+      "agentcliProbedVisionUnseen": "Afbeeldingscontrole: het model kon de testafbeelding niet lezen, dus Phoenix behandelt het als alleen tekst.",
+      "agentcliProbedVisionInconclusive": "Afbeeldingscontrole: er kwam geen bruikbaar antwoord terug, dus ondersteuning voor afbeeldingen is nog onbekend."
     },
     "approvalSummary": {
       "action.approve": "Goedkeuren en uitvoeren",

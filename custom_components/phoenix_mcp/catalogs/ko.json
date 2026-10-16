@@ -1186,7 +1186,7 @@
       "agentcliRemoveAccount": "{name} 제거",
       "agentcliProbing": "확인 중...",
       "agentcliProbeTitle": "이 모델이 허용하는 옵션 확인",
-      "agentcliProbeBody": "Phoenix는 {name}에 <strong>단일 토큰 요청</strong>을 몇 번 보내어 <strong>{model}</strong>이(가) 허용하거나 거부하는 옵션을 확인합니다. 이 과정은 사용자 본인의 API 크레딧을 사용합니다. 소액이지만 무료는 아니며, 이 카드의 다른 버튼은 비용이 들지 않습니다.",
+      "agentcliProbeBody": "Phoenix는 {name}에 <strong>단일 토큰 요청</strong>을 몇 번 보내어 <strong>{model}</strong>이(가) 허용하거나 거부하는 옵션을 확인합니다. 모델이 이미지를 받는지 여부를 밝히지 않았다면 Phoenix는 작은 테스트 이미지도 한 장 보내고 응답을 확인합니다. 이 과정은 사용자 본인의 API 크레딧을 사용합니다. 소액이지만 무료는 아니며, 이 카드의 다른 버튼은 비용이 들지 않습니다.",
       "agentcliProbeRun": "지금 확인",
       "agentcliProbed": "요청 {calls}건으로 확인했습니다. {found}",
       "agentcliProbedLevels": "허용되는 사고 수준: {levels}.",
@@ -1445,7 +1445,10 @@
       "providerChecksHelp": "각 공급자의 모델 목록을 주기적으로 다시 읽어 자동 계정이 새 모델을 따르고 중단된 모델을 대체합니다. 끄면 새로고침을 누를 때만 확인합니다.",
       "providerChecksHoursLabel": "확인 주기(시간)",
       "providerChecksHoursHelp": "{min}~{max}시간.",
-      "providerChecksHoursAria": "공급자 확인 간격(시간)"
+      "providerChecksHoursAria": "공급자 확인 간격(시간)",
+      "agentcliProbedVisionSeen": "이미지 확인: 모델이 테스트 이미지를 읽었으므로 첨부 이미지와 카메라 이미지를 모델에 보냅니다.",
+      "agentcliProbedVisionUnseen": "이미지 확인: 모델이 테스트 이미지를 읽지 못했으므로 Phoenix는 텍스트 전용으로 처리합니다.",
+      "agentcliProbedVisionInconclusive": "이미지 확인: 사용할 수 있는 응답이 없어 이미지 지원 여부는 여전히 알 수 없습니다."
     },
     "approvalSummary": {
       "action.approve": "승인 및 실행",

@@ -411,6 +411,9 @@ AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
 # temperature), so this is a backstop that keeps a new knob from turning a button
 # into unbounded spend.
 AGENTCLI_PROBE_MAX_CALLS = 10
+# Output room for the image check's short answer, with headroom for models
+# that reason before replying.
+AGENTCLI_PROBE_IMAGE_MAX_TOKENS = 2048
 
 # How long a refusal LEARNED from a real turn is honoured before Phoenix tries
 # the option again. It expires because the fact came from one moment in one

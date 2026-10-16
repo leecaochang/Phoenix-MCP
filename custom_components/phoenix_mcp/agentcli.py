@@ -29,8 +29,11 @@ from datetime import datetime, timedelta, tzinfo
 import ipaddress
 import json
 import logging
+import random
 import re
+import struct
 import uuid
+import zlib
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable, cast
@@ -78,6 +81,7 @@ from .const import (
     AGENTCLI_EFFORT_LEVEL_ORDER,
     AGENTCLI_LEARNABLE_OPTIONS,
     AGENTCLI_LEARNED_REFUSAL_TTL_DAYS,
+    AGENTCLI_PROBE_IMAGE_MAX_TOKENS,
     AGENTCLI_PROBE_MAX_CALLS,
     AGENTCLI_PROBE_SENTINEL,
     AGENTCLI_DEEPSEEK_BASE_URL,
@@ -144,6 +148,8 @@ _LOGGER = logging.getLogger(__name__)
 # Fast-failing timeout for the setup/validation probes so an unreachable host
 # does not hang the panel for the OS default (~20s).
 _PROBE_TIMEOUT = ClientTimeout(total=10, connect=5, sock_connect=5)
+# The image check waits for a real answer, which a reasoning model can take a while to give.
+_IMAGE_PROBE_TIMEOUT = ClientTimeout(total=90, connect=5, sock_connect=5)
 # How many distinct model ids an account remembers having seen listed.
 _MODEL_SEEN_LIMIT = 1000
 # OpenAI models that rejected the forced `reasoning_effort: none` of a tool turn
@@ -1881,6 +1887,25 @@ class ClaudeProvider:
             "content-type": "application/json",
         }
 
+    async def probe_image(self, session: ClientSession, image: str, question: str) -> tuple[int | None, str]:
+        """Status and reply text for one question about an attached PNG (see async_probe_vision)."""
+        body = {"model": self.cfg.model, "max_tokens": AGENTCLI_PROBE_IMAGE_MAX_TOKENS,
+                "messages": [self.user_message(question, [{"mime_type": "image/png", "data": image}])]}
+        try:
+            async with session.post(f"{self.cfg.base_url}/v1/messages", headers=self._headers(), json=body,
+                                    timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                data = await resp.json(content_type=None)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None, ""
+        blocks = data.get("content") if isinstance(data, dict) else None
+        if not isinstance(blocks, list):
+            return 200, ""
+        return 200, "".join(block["text"] for block in blocks
+                            if isinstance(block, dict) and block.get("type") == "text"
+                            and isinstance(block.get("text"), str))
+
     async def probe_option(self, session: ClientSession, extra: dict) -> int | None:
         """HTTP status for the smallest possible completion carrying `extra`.
 
@@ -2343,6 +2368,63 @@ def _effort_probe_body(kind: str, level: str) -> dict | None:
     return None
 
 
+# Six colours every vision model names the same way. The check paints three of
+# them, in a random order, as vertical stripes.
+_PROBE_COLOURS: dict[str, tuple[int, int, int]] = {
+    "red": (220, 30, 30), "green": (30, 160, 60), "blue": (30, 70, 210),
+    "yellow": (240, 210, 30), "black": (15, 15, 15), "white": (250, 250, 250),
+}
+_PROBE_COLOUR_WORD = re.compile(r"\b(" + "|".join(_PROBE_COLOURS) + r")\b")
+_PROBE_IMAGE_QUESTION = (
+    "This image has three vertical stripes. Name their colors from left to right, using only these words: "
+    + ", ".join(_PROBE_COLOURS) + ". Reply with just the three words, separated by commas."
+)
+
+
+def _probe_stripes() -> list[str]:
+    return random.SystemRandom().sample(list(_PROBE_COLOURS), 3)
+
+
+def _stripe_png(stripes: list[str], width: int = 240, height: int = 80) -> str:
+    """A base64 PNG of equal vertical stripes, built without an imaging library."""
+    row = b"\0" + b"".join(bytes(_PROBE_COLOURS[colour]) * (width // len(stripes)) for colour in stripes)
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
+
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", width // len(stripes) * len(stripes), height, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(row * height)) + chunk(b"IEND", b""))
+    return base64.b64encode(png).decode()
+
+
+async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> bool | None:
+    """Whether the selected model can read an image, established by showing it one.
+
+    Some providers accept image parts but drop them before the model, which then
+    answers as if none was sent; no status code reveals that. So the check asks
+    a question only sight can answer: three stripe colours in a random order,
+    which a text-only model guesses right about once in 120 tries.
+
+    True when all three are named in order. False when the model answers but
+    gets them wrong or cannot see them, or the provider refuses the image as
+    unsupported input. None when there is no usable answer (unreachable, a rate
+    limit, an outage, or an empty reply from a model that spent its output on
+    reasoning), which establishes nothing and must not be recorded.
+    """
+    stripes = _probe_stripes()
+    status, text = await build_provider(cfg).probe_image(session, _stripe_png(stripes), _PROBE_IMAGE_QUESTION)
+    _LOGGER.debug("Image check for %s %s answered %s with %d characters", cfg.kind, cfg.model, status, len(text))
+    if status == 400 and _IMAGE_REFUSAL.search(text.lower()):
+        return False
+    if status != 200:
+        return None
+    reply = re.sub(r"(?is)<think>.*?</think>", "", text).strip().lower()
+    if not reply:
+        return None
+    return _PROBE_COLOUR_WORD.findall(reply)[:3] == stripes
+
+
 async def async_probe_capabilities(
     session: ClientSession, cfg: ProviderConfig,
 ) -> tuple[dict, int, bool]:
@@ -2755,6 +2837,32 @@ class OpenAICompatProvider:
             return models or ([self.cfg.model] if self.cfg.model else [])
         except (ClientError, asyncio.TimeoutError):
             return [self.cfg.model] if self.cfg.model else []
+
+    async def probe_image(self, session: ClientSession, image: str, question: str) -> tuple[int | None, str]:
+        """Status and reply text for one question about an attached PNG (see async_probe_vision)."""
+        token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
+                       else "max_tokens")
+        body: dict = {"model": self.cfg.model, token_limit: AGENTCLI_PROBE_IMAGE_MAX_TOKENS, "stream": False,
+                      "messages": [self.user_message(question, [{"mime_type": "image/png", "data": image}])]}
+        if self.definition.reasoning == "deepseek":
+            # A DeepSeek reasoning model can spend the whole allowance thinking
+            # about an image it cannot see and return no answer; it has an off switch.
+            body["thinking"] = {"type": "disabled"}
+        try:
+            async with session.post(self._chat_url(), headers=self._headers(), json=body,
+                                    timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                data = await resp.json(content_type=None)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None, ""
+        choices = data.get("choices") if isinstance(data, dict) else None
+        message = choices[0].get("message") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") for part in content
+                              if isinstance(part, dict) and isinstance(part.get("text"), str))
+        return 200, content if isinstance(content, str) else ""
 
     async def probe_option(self, session: ClientSession, extra: dict) -> int | None:
         """HTTP status for the smallest possible completion carrying `extra`.
@@ -6396,6 +6504,14 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
             )
         session = async_get_clientsession(self.hass)
         probed, calls, answered = await async_probe_capabilities(session, cfg)
+        # Image support is checked only when nothing has said what it is: a
+        # provider's own declaration, or a refusal learned in conversation.
+        vision_checked = answered and cfg.vision is None
+        if vision_checked:
+            vision = await async_probe_vision(session, cfg)
+            calls += 1
+            if vision is not None:
+                probed["vision"] = vision
 
         # Merged over what the provider DECLARED rather than replacing it: the two
         # answer different questions (declared says what exists, probed says what
@@ -6427,6 +6543,8 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
             # key, unreachable). Reporting that as a finding about the model
             # would blame the provider for an account problem.
             "answered": answered,
+            # Whether the image check ran; probed.vision says what it found.
+            "vision_checked": vision_checked,
         }, request_id=rid)
 
 

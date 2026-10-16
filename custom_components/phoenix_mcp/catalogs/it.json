@@ -1316,7 +1316,7 @@
       "agentcliNoAccounts": "Non ci sono ancora account provider.",
       "agentcliNoModels": "(nessun modello disponibile)",
       "agentcliNotSet": "(non impostato)",
-      "agentcliProbeBody": "Phoenix invierà alcune <strong>richieste di un solo token</strong> a {name} usando <strong>{model}</strong> e leggerà quali opzioni l'API accetta o rifiuta. Questo consuma il tuo credito API. È una quantità piccola, ma non nulla, e nessun altro pulsante di questa scheda ha un costo.",
+      "agentcliProbeBody": "Phoenix invierà alcune <strong>richieste di un solo token</strong> a {name} usando <strong>{model}</strong> e leggerà quali opzioni l'API accetta o rifiuta. Se il modello non ha indicato se accetta immagini, Phoenix invia anche una piccola immagine di prova e ne legge la risposta. Questo consuma il tuo credito API. È una quantità piccola, ma non nulla, e nessun altro pulsante di questa scheda ha un costo.",
       "agentcliProbeCaps": "Verifica opzioni",
       "agentcliProbeCapsChecked": "Verifica opzioni (ultima verifica {when})",
       "agentcliProbeOnAdd": "Verifica quali opzioni accetta questo modello (consuma una piccola quantità di credito API)",
@@ -1571,7 +1571,10 @@
       "providerChecksHelp": "Rilegge periodicamente l'elenco dei modelli di ogni provider, così gli account su Automatico seguono i nuovi modelli e sostituiscono quelli ritirati. Disattiva per controllare solo con Aggiorna.",
       "providerChecksHoursLabel": "Controlla ogni (ore)",
       "providerChecksHoursHelp": "Tra {min} e {max} ore.",
-      "providerChecksHoursAria": "Ore tra i controlli dei provider"
+      "providerChecksHoursAria": "Ore tra i controlli dei provider",
+      "agentcliProbedVisionSeen": "Controllo immagine: il modello ha letto l'immagine di prova, quindi gli vengono inviate le immagini allegate e quelle della telecamera.",
+      "agentcliProbedVisionUnseen": "Controllo immagine: il modello non è riuscito a leggere l'immagine di prova, quindi Phoenix lo tratta come solo testo.",
+      "agentcliProbedVisionInconclusive": "Controllo immagine: non è arrivata una risposta utilizzabile, quindi il supporto per le immagini resta sconosciuto."
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",

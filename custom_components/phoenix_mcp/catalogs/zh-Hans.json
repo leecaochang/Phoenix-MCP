@@ -1322,7 +1322,7 @@
       "agentcliRemoveAccount": "移除 {name}",
       "agentcliProbing": "检测中…",
       "agentcliProbeTitle": "检测该模型接受哪些选项",
-      "agentcliProbeBody": "Phoenix 会用 <strong>{model}</strong> 向 {name} 发送几次<strong>仅一个 token 的请求</strong>，看接口接受还是拒绝各个选项。这会消耗您自己的 API 额度：金额很小，但并非为零，而本卡片上的其他按钮都不产生费用。",
+      "agentcliProbeBody": "Phoenix 会用 <strong>{model}</strong> 向 {name} 发送几次<strong>仅一个 token 的请求</strong>，看接口接受还是拒绝各个选项。如果模型未说明是否接受图像，Phoenix 还会发送一张小测试图像并读取回答。这会消耗您自己的 API 额度：金额很小，但并非为零，而本卡片上的其他按钮都不产生费用。",
       "agentcliProbeRun": "开始检测",
       "agentcliProbed": "已用 {calls} 次请求完成检测。{found}",
       "agentcliProbedLevels": "接受的思考档位：{levels}。",
@@ -1581,7 +1581,10 @@
       "providerChecksHelp": "定期重新读取每个提供商的模型列表，使自动模式的账户跟随新模型并替换已下线的模型。关闭后仅在点击刷新时检查。",
       "providerChecksHoursLabel": "检查间隔（小时）",
       "providerChecksHoursHelp": "介于 {min} 到 {max} 小时之间。",
-      "providerChecksHoursAria": "提供商检查间隔（小时）"
+      "providerChecksHoursAria": "提供商检查间隔（小时）",
+      "agentcliProbedVisionSeen": "图像检查：模型读取了测试图像，因此会向其发送附加的图像和摄像头图像。",
+      "agentcliProbedVisionUnseen": "图像检查：模型无法读取测试图像，因此 Phoenix 将其视为纯文本模型。",
+      "agentcliProbedVisionInconclusive": "图像检查：没有收到可用的回答，因此图像支持情况仍然未知。"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的审批。",
