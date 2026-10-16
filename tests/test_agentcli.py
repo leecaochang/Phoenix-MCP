@@ -1830,11 +1830,37 @@ def test_focus_marker_strips_from_provider_message_shapes(assistant_msg):
     assert "No." in json.dumps(cleaned)
 
 
-def test_focus_prefix_buffer_never_exposes_a_marker_only_stream():
+@pytest.mark.parametrize("ending", ["", "  ", "\n"])
+def test_focus_prefix_buffer_never_exposes_a_marker_only_stream(ending):
     focus = agentcli._FocusPrefixBuffer(enabled=True)
-    assert focus.feed(agentcli._HOME_FOCUS_REFUSAL_MARKER) == ""
+    assert focus.feed(agentcli._HOME_FOCUS_REFUSAL_MARKER + ending) == ""
     assert focus.finish() == ""
     assert focus.declined is True
+
+
+@pytest.mark.parametrize("chunks", [
+    # Gemini's compatibility stream sends whole sentences, so the marker and
+    # the refusal arrive together in one chunk far longer than the marker.
+    ["PHXFOCUS:This conversation is in Home-focused mode, so I can only assist with operating your home."],
+    ["\n" * 80 + "PHXFOCUS: No, that is outside this home.", " More text."],
+    ["PHX", "FOCUS:" + "x" * 200],
+    ["PHXFOCUS:", "  ", "Outside this home."],
+])
+def test_focus_prefix_buffer_strips_a_marker_in_a_long_first_chunk(chunks):
+    focus = agentcli._FocusPrefixBuffer(enabled=True)
+    visible = "".join(focus.feed(chunk) for chunk in chunks) + focus.finish()
+    assert focus.declined is True
+    assert agentcli._HOME_FOCUS_REFUSAL_MARKER not in visible
+    assert visible.strip()
+
+
+def test_focus_prefix_buffer_releases_ordinary_text_unchanged():
+    long_text = "Your porch light is on and the back door is locked. " * 3
+    for chunks in ([long_text], ["Your", " porch light is on."], [" " * 100, "Hello"]):
+        focus = agentcli._FocusPrefixBuffer(enabled=True)
+        visible = "".join(focus.feed(chunk) for chunk in chunks) + focus.finish()
+        assert visible == "".join(chunks)
+        assert focus.declined is False
 
 
 @pytest.mark.asyncio

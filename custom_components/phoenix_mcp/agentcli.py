@@ -4308,19 +4308,22 @@ class _FocusPrefixBuffer:
             return text
         self.pending += text
         candidate = self.pending.lstrip()
-        if len(self.pending) > len(_HOME_FOCUS_REFUSAL_MARKER) + 64:
-            self.decided = True
-            visible = self.pending
-            self.pending = ""
-            return visible
-        if _HOME_FOCUS_REFUSAL_MARKER.startswith(candidate):
-            return ""
+        # The marker check comes first: some providers stream whole sentences,
+        # so the marker can arrive inside a chunk longer than the hold limit.
+        bounded = len(self.pending) <= len(_HOME_FOCUS_REFUSAL_MARKER) + 64
         if candidate.startswith(_HOME_FOCUS_REFUSAL_MARKER):
+            if bounded and not candidate[len(_HOME_FOCUS_REFUSAL_MARKER):].strip():
+                # Wait for the refusal itself so its leading space is stripped too.
+                return ""
             self.decided = True
             self.declined = True
             visible, _ = _strip_focus_marker_text(self.pending)
             self.pending = ""
             return visible
+        # Hold only text that could still become the marker, and only a bounded
+        # run of leading whitespace before it.
+        if bounded and _HOME_FOCUS_REFUSAL_MARKER.startswith(candidate):
+            return ""
         self.decided = True
         visible = self.pending
         self.pending = ""
@@ -4329,14 +4332,10 @@ class _FocusPrefixBuffer:
     def finish(self) -> str:
         if not self.pending:
             return ""
-        if self.pending.lstrip() == _HOME_FOCUS_REFUSAL_MARKER:
-            self.pending = ""
-            self.decided = True
-            self.declined = True
-            return ""
-        visible = self.pending
+        visible, declined = _strip_focus_marker_text(self.pending)
         self.pending = ""
         self.decided = True
+        self.declined = self.declined or declined
         return visible
 
 
