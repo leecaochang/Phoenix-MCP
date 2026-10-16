@@ -352,7 +352,16 @@
       "restoreUnverified": "Gendannelsen blev sendt, men den konfiguration, der blev læst tilbage bagefter, svarer ikke til den valgte version, så den er måske kun delvist anvendt. Phoenix kontrollerer den igen og beder om en gennemgang under Godkendelser, hvis den stadig afviger. Kontrollér den aktuelle konfiguration, før du gendanner igen.",
       "notesInvalidCharacters": "notes må ikke indeholde kontroltegn eller skjulte formateringstegn.",
       "notesString": "notes skal være en streng eller null.",
-      "notesTooLong": "notes må højst indeholde {max} tegn."
+      "notesTooLong": "notes må højst indeholde {max} tegn.",
+      "attachmentsInvalid": "De vedhæftede billeder kunne ikke læses.",
+      "attachmentsTooMany": "Vedhæft højst {max} billeder til én besked.",
+      "attachmentTooLarge": "Et vedhæftet billede er større end {max} MB.",
+      "attachmentsTooLarge": "De vedhæftede billeder er tilsammen større end {max} MB.",
+      "attachmentUnsupported": "Vedhæft et JPEG-, PNG- eller GIF-billede.",
+      "attachmentDimensions": "Et vedhæftet billede er større end {max} pixel på én side.",
+      "attachmentsContinue": "Billeder kan kun vedhæftes en ny besked.",
+      "attachmentsCompanion": "Home Companion tager kun imod tekstkommandoer, så der kan ikke vedhæftes billeder.",
+      "attachmentsVisionUnsupported": "Denne model accepterer ikke billeder."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -476,7 +485,21 @@
       "verboseHint": "Vis agentens værktøjskald, værktøjsresultater og tænkning. Fra viser kun det endelige svar.",
       "workingOn": "Arbejder: {name}",
       "workingSpinner": "Arbejder…",
-      "providerDetail": "Udbyderoplysning: {detail}"
+      "providerDetail": "Udbyderoplysning: {detail}",
+      "attachImage": "Vedhæft billede",
+      "attachmentAlt": "Vedhæftet billede {name}",
+      "removeAttachment": "Fjern {name}",
+      "attachmentGone": "{name} blev ikke gemt efter genindlæsning.",
+      "attachTooMany": {
+        "one": "Du kan højst vedhæfte {count} billede til én besked.",
+        "other": "Du kan højst vedhæfte {count} billeder til én besked."
+      },
+      "attachNotImage": "{name} er ikke et billede.",
+      "attachTooLarge": "{name} er for stort til at blive vedhæftet.",
+      "attachUnreadable": "{name} kunne ikke læses som et billede.",
+      "attachVisionUnknown": "Denne model har ikke oplyst, om den accepterer billeder. Hvis udbyderen afviser dem, huskes det for denne model.",
+      "attachNoVision": "Denne model accepterer ikke billeder.",
+      "attachCompanion": "Home Companion tager kun imod tekstkommandoer, så der kan ikke vedhæftes billeder."
     },
     "approvalSummary": {
       "action.approve": "Godkend og udfør",

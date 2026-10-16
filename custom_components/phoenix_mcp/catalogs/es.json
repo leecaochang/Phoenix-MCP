@@ -751,7 +751,21 @@
       "workingOn": "Trabajando: {name}",
       "workingSpinner": "Trabajando…",
       "chatEnded": "Chat finalizado.",
-      "providerDetail": "Detalle del proveedor: {detail}"
+      "providerDetail": "Detalle del proveedor: {detail}",
+      "attachImage": "Adjuntar imagen",
+      "attachmentAlt": "Imagen adjunta {name}",
+      "removeAttachment": "Quitar {name}",
+      "attachmentGone": "{name} no se conservó tras la recarga.",
+      "attachTooMany": {
+        "one": "Puede adjuntar como máximo {count} imagen a un mensaje.",
+        "other": "Puede adjuntar como máximo {count} imágenes a un mensaje."
+      },
+      "attachNotImage": "{name} no es una imagen.",
+      "attachTooLarge": "{name} es demasiado grande para adjuntarlo.",
+      "attachUnreadable": "No se pudo leer {name} como imagen.",
+      "attachVisionUnknown": "Este modelo no ha indicado si acepta imágenes. Si el proveedor las rechaza, se recordará para este modelo.",
+      "attachNoVision": "Este modelo no acepta imágenes.",
+      "attachCompanion": "Home Companion solo acepta comandos de texto, por lo que no se pueden adjuntar imágenes."
     },
     "diff": {
       "blueprint.create": "Crear el plano {domain} '{rel}'",
@@ -1010,7 +1024,16 @@
       "restoreUnverified": "La restauración se envió, pero la configuración leída después no coincide con la versión elegida, así que puede haberse aplicado solo en parte. Phoenix la vuelve a comprobar y pide una revisión en Aprobaciones si sigue siendo distinta. Comprueba la configuración actual antes de volver a restaurar.",
       "notesInvalidCharacters": "notes no debe contener caracteres de control ni caracteres de formato ocultos.",
       "notesString": "notes debe ser una cadena o null.",
-      "notesTooLong": "notes debe tener {max} caracteres o menos."
+      "notesTooLong": "notes debe tener {max} caracteres o menos.",
+      "attachmentsInvalid": "No se pudieron leer las imágenes adjuntas.",
+      "attachmentsTooMany": "Adjunte como máximo {max} imágenes a un mensaje.",
+      "attachmentTooLarge": "Una imagen adjunta supera los {max} MB.",
+      "attachmentsTooLarge": "Las imágenes adjuntas superan los {max} MB en total.",
+      "attachmentUnsupported": "Adjunte una imagen JPEG, PNG o GIF.",
+      "attachmentDimensions": "Una imagen adjunta supera los {max} píxeles en un lado.",
+      "attachmentsContinue": "Las imágenes solo se pueden adjuntar a un mensaje nuevo.",
+      "attachmentsCompanion": "Home Companion solo acepta comandos de texto, por lo que no se pueden adjuntar imágenes.",
+      "attachmentsVisionUnsupported": "Este modelo no acepta imágenes."
     },
     "accessKeys": {
       "advanced": "Avanzado",
@@ -1458,7 +1481,7 @@
       "agentcliAdding": "Añadiendo {name}",
       "agentcliApiKey": "Clave de API",
       "agentcliBaseUrl": "URL base",
-      "agentcliCard": "Chat de agente",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "Falló la conexión.",
       "agentcliDefaultModel": "Modelo predeterminado: {model}",
       "agentcliChangeModel": "Cambiar modelo predeterminado",
@@ -2090,7 +2113,7 @@
         "description": "Puede leer entidades, ejecutar servicios y realizar anuncios. Las cerraduras, las alarmas, las persianas y las válvulas requieren aprobación."
       },
       "home_companion": {
-        "label": "Asistente del hogar",
+        "label": "Home Companion",
         "description": "Diseñado para Agent Chat y Voice: una herramienta para consultar información del hogar y controlar dispositivos. Usa el modelo de conversación de Voice.",
         "setup": "Elige un proveedor y un modelo en los ajustes de voz. Concede acceso de lectura o escritura mediante el árbol de permisos habitual. Las capacidades habilitan o deshabilitan el acceso dentro del catálogo doméstico; las herramientas de configuración y creación siguen sin estar disponibles. El modo de acceso directo y el anuncio de todas las herramientas están deshabilitados."
       }
@@ -2108,7 +2131,7 @@
       "killSwitchTitle": "Phoenix MCP no está atendiendo ninguna solicitud de agente. Desactive el interruptor de emergencia en Configuración para reanudar.",
       "killSwitchFull": "EL INTERRUPTOR DE EMERGENCIA ESTÁ ACTIVO",
       "killSwitchShort": "INTERRUPTOR DE EMERGENCIA ACTIVADO",
-      "agentChat": "Chat de agente",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "Aprobaciones ({count} pendientes)",
       "renderFailed": "No se pudo mostrar esta vista. Actualiza para volver a intentarlo o elige otra sección."
     },
@@ -2204,12 +2227,12 @@
         "mb": "Almacenamiento máximo (MB)"
       },
       "source": {
-        "agentcli": "Chat del agente",
+        "agentcli": "Agent Chat",
         "voice": "Agente de voz",
         "ai_task": "Tarea de IA",
         "assist": "Proveedor de herramientas de Assist",
         "mcp": "Cliente MCP externo",
-        "home_companion": "Asistente del hogar"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Turno completo",

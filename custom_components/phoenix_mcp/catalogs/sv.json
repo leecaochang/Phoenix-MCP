@@ -352,7 +352,16 @@
       "restoreUnverified": "Återställningen skickades, men konfigurationen som lästes tillbaka efteråt matchar inte den valda versionen, så den kan vara bara delvis tillämpad. Phoenix kontrollerar den igen och ber om granskning under Godkännanden om den fortfarande avviker. Kontrollera den aktuella konfigurationen innan du återställer igen.",
       "notesInvalidCharacters": "notes får inte innehålla kontrolltecken eller dolda formateringstecken.",
       "notesString": "notes måste vara en sträng eller null.",
-      "notesTooLong": "notes får innehålla högst {max} tecken."
+      "notesTooLong": "notes får innehålla högst {max} tecken.",
+      "attachmentsInvalid": "De bifogade bilderna kunde inte läsas.",
+      "attachmentsTooMany": "Bifoga högst {max} bilder till ett meddelande.",
+      "attachmentTooLarge": "En bifogad bild är större än {max} MB.",
+      "attachmentsTooLarge": "De bifogade bilderna är tillsammans större än {max} MB.",
+      "attachmentUnsupported": "Bifoga en JPEG-, PNG- eller GIF-bild.",
+      "attachmentDimensions": "En bifogad bild är större än {max} pixlar på en sida.",
+      "attachmentsContinue": "Bilder kan bara bifogas till ett nytt meddelande.",
+      "attachmentsCompanion": "Home Companion tar bara emot textkommandon, så bilder kan inte bifogas.",
+      "attachmentsVisionUnsupported": "Den här modellen accepterar inte bilder."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -476,7 +485,21 @@
       "verboseHint": "Visa agentens verktygsanrop, verktygsresultat och tänkande. Av visar endast det slutliga svaret.",
       "workingOn": "Arbetar: {name}",
       "workingSpinner": "Arbetar…",
-      "providerDetail": "Leverantörens detalj: {detail}"
+      "providerDetail": "Leverantörens detalj: {detail}",
+      "attachImage": "Bifoga bild",
+      "attachmentAlt": "Bifogad bild {name}",
+      "removeAttachment": "Ta bort {name}",
+      "attachmentGone": "{name} sparades inte efter omladdningen.",
+      "attachTooMany": {
+        "one": "Du kan bifoga högst {count} bild till ett meddelande.",
+        "other": "Du kan bifoga högst {count} bilder till ett meddelande."
+      },
+      "attachNotImage": "{name} är inte en bild.",
+      "attachTooLarge": "{name} är för stor för att bifogas.",
+      "attachUnreadable": "{name} kunde inte läsas som en bild.",
+      "attachVisionUnknown": "Den här modellen har inte angett om den accepterar bilder. Om leverantören avvisar dem sparas det för den här modellen.",
+      "attachNoVision": "Den här modellen accepterar inte bilder.",
+      "attachCompanion": "Home Companion tar bara emot textkommandon, så bilder kan inte bifogas."
     },
     "approvalSummary": {
       "action.approve": "Godkänn och kör",

@@ -238,6 +238,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
         "panel.settings.agentcliRegion",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionChina",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionGlobal",  # Region name or label spelled the same as English in this language.
@@ -296,6 +302,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
         "panel.settings.agentcliRegionEu",  # Region name or label spelled the same as English in this language.
         "panel.conversations.conversation",  # French cognate: Conversation.
         "panel.conversations.sourceLabel",  # Shared technical term or cognate.
@@ -315,6 +327,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
         "panel.settings.agentcliRegionChina",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionGlobal",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliZaiChina",  # Region name or label spelled the same as English in this language.
@@ -338,6 +356,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
         "panel.conversations.providerLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # Italian shares these with English as loanwords, HA terms, product
@@ -366,6 +388,22 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
+    }),
+    "ja": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
+    }),
+    "ko": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
         # Bare templates and shared technical fragments with no prose to translate.
@@ -404,6 +442,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
         "panel.settings.agentcliRegionChina",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliZaiChina",  # Region name or label spelled the same as English in this language.
         "panel.conversations.providerLabel",  # Shared technical term or cognate.
@@ -459,6 +501,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "voice.provider_error",                # "Sorry, {reason}.", "Sorry" is a cognate
     }),
     "pl": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
         "panel.settings.agentcliRegion",  # Region name or label spelled the same as English in this language.
         "panel.conversations.modelLabel",  # Shared technical term or cognate.
         # Polish keeps these as shared loanwords, technical terms, and bare
@@ -483,6 +531,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "ru": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
         # A bare separator fragment and a code-span-plus-colon template carry no
         # translatable prose; Russian keeps the same separator and colon.
         "panel.agentchat.approvalReason",  # " - {reason}"
@@ -524,6 +578,22 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
+    }),
+    "zh-Hans": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
+        "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
+    }),
+    "zh-Hant": frozenset({
+        # Product names kept in English, as the localized READMEs do.
+        "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
+        "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
+        "panel.personas.home_companion.label",  # "Home Companion"
+        "panel.settings.agentcliCard",  # "Agent Chat", a Phoenix product name
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
 }

@@ -66,6 +66,9 @@ from .approvals import (
 from .const import (
     DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
     AGENTCLI_ANTHROPIC_VERSION,
+    AGENTCLI_ATTACHMENT_MAX_BYTES, AGENTCLI_ATTACHMENT_MAX_COUNT,
+    AGENTCLI_ATTACHMENT_MAX_EDGE_PX, AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES,
+    AGENTCLI_REQUEST_BODY_BYTES, MAX_REQUEST_BODY_BYTES,
     PROVIDER_API_KEY_MAX_LENGTH,
     AGENTCLI_APPROVAL_WAIT_SECONDS,
     AGENTCLI_PROGRESS_INTERVAL_SECONDS,
@@ -1771,6 +1774,16 @@ class ClaudeProvider:
             out.append({"name": name, "description": description, "input_schema": schema})
         return out
 
+    def user_message(self, text: str, images: list[dict[str, str]]) -> dict:
+        """The administrator's message with attached images first, as Anthropic recommends."""
+        content: list[dict] = [{
+            "type": "image",
+            "source": {"type": "base64", "media_type": image["mime_type"], "data": image["data"]},
+        } for image in images]
+        if text:
+            content.append({"type": "text", "text": text})
+        return {"role": "user", "content": content}
+
     def append_assistant(self, messages: list[dict], assistant_msg: dict) -> None:
         messages.append(assistant_msg)
 
@@ -2260,6 +2273,15 @@ def _mistral_capabilities(data: list[dict], models: list[str]) -> dict[str, dict
     return out
 
 
+# How providers word "this model cannot take image input": an unsupported
+# statement next to image/vision, or a schema that has no image content type.
+_IMAGE_REFUSAL = re.compile(
+    r"(?:image|vision|multi-?modal)[^.]*(?:not supported|unsupported|only supported by|not enabled|not available)"
+    r"|(?:does not|doesn't|do not|cannot|can't) (?:support|accept|process|handle)[^.]*(?:image|vision|multi-?modal)"
+    r"|unknown variant `?image_url"
+)
+
+
 def _refused_option(status: int, message: str, sent: dict) -> str | None:
     """The request key a provider just refused, when it named one of ours.
 
@@ -2273,6 +2295,14 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
     if status != 400 or not message:
         return None
     low = message.lower()
+    if _IMAGE_REFUSAL.search(low) and any(
+        isinstance(block, dict) and block.get("type") in ("image", "image_url")
+        for msg in sent.get("messages") or [] if isinstance(msg, dict) and isinstance(msg.get("content"), list)
+        for block in msg["content"]
+    ):
+        # A model that cannot take image input. Size or format complaints about
+        # one image do not match, so they never disable attachments.
+        return "images"
     if "tools" in sent and re.search(
         r"(?:tool|function)[ -]calling[^.]*(?:not supported|requires)|use the responses api", low,
     ):
@@ -2567,6 +2597,20 @@ class OpenAICompatProvider:
                 "name": name, "description": description, "parameters": schema,
             }})
         return out
+
+    def user_message(self, text: str, images: list[dict[str, str]]) -> dict:
+        """The administrator's message with attached images as data-URI content parts."""
+        content: list[dict] = []
+        for image in images:
+            data_uri = f"data:{image['mime_type']};base64,{image['data']}"
+            content.append({
+                "type": "image_url",
+                # Same Mistral difference as tool-result images below.
+                "image_url": data_uri if self.definition.model_filter == "mistral" else {"url": data_uri},
+            })
+        if text:
+            content.append({"type": "text", "text": text})
+        return {"role": "user", "content": content}
 
     def append_assistant(self, messages: list[dict], assistant_msg: dict) -> None:
         messages.append(assistant_msg)
@@ -3373,6 +3417,160 @@ def _extract_image_blocks(content: Any) -> list[dict[str, str]]:
         if not decoded or len(decoded) > 4 * 1024 * 1024:
             continue
         images.append({"data": data, "mime_type": mime_type})
+    return images
+
+
+# JPEG start-of-frame markers carry the dimensions; C4, C8 and CC share the
+# range but are table and extension markers.
+_JPEG_SOF = frozenset(range(0xC0, 0xD0)) - {0xC4, 0xC8, 0xCC}
+
+
+def _image_kind_and_size(data: bytes) -> tuple[str, int, int] | None:
+    """The MIME type and pixel size an image's own header declares, or None.
+
+    Read from the bytes rather than trusted from the request, so a renamed or
+    truncated file is refused before it reaches a provider.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24 and data[12:16] == b"IHDR":
+        return "image/png", int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+        return "image/gif", int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")
+    if not data.startswith(b"\xff\xd8\xff"):
+        return None
+    index = 2
+    while index + 4 <= len(data):
+        if data[index] != 0xFF:
+            return None
+        marker = data[index + 1]
+        if marker == 0xFF:
+            index += 1
+            continue
+        if marker == 0x01 or 0xD0 <= marker <= 0xD9:
+            index += 2
+            continue
+        length = int.from_bytes(data[index + 2:index + 4], "big")
+        if length < 2:
+            return None
+        if marker in _JPEG_SOF:
+            if index + 9 > len(data):
+                return None
+            height = int.from_bytes(data[index + 5:index + 7], "big")
+            width = int.from_bytes(data[index + 7:index + 9], "big")
+            return "image/jpeg", width, height
+        index += 2 + length
+    return None
+
+
+_MIB = 1024 * 1024
+
+
+def _attachments_unreadable(rid: str) -> web.Response:
+    return _err("invalid_request", "The attached images could not be read.", 400, rid, key="attachmentsInvalid")
+
+
+def _attachment_too_large(rid: str) -> web.Response:
+    return _err("invalid_request", f"An attached image is larger than {AGENTCLI_ATTACHMENT_MAX_BYTES // _MIB} MB.",
+                400, rid, key="attachmentTooLarge", params={"max": AGENTCLI_ATTACHMENT_MAX_BYTES // _MIB})
+
+
+# Base64 characters every image in one message may use, with room for each
+# image part's data-URI prefix.
+_ATTACHMENT_BUDGET_CHARS = -(-AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES * 4 // 3) + 1024
+
+
+_UNSEEN_IMAGE_NOTE = "[An image was attached here, but this model cannot see images.]"
+
+
+def _without_history_images(messages: list) -> None:
+    """Replace every image part in a request's history with a short text note.
+
+    For a model known not to see images: a refused image would otherwise be
+    resent with the history and refused again on every later message. Covers
+    attachments in user messages and camera images inside tool results. Edits
+    the request's own parsed body in place, iteratively, so a deeply nested
+    history cannot exhaust the stack.
+    """
+    stack: list[Any] = [messages]
+    while stack:
+        item = stack.pop()
+        slots = enumerate(item) if isinstance(item, list) else item.items() if isinstance(item, dict) else ()
+        for slot, child in list(slots):
+            if isinstance(child, dict) and child.get("type") in ("image", "image_url"):
+                item[slot] = {"type": "text", "text": _UNSEEN_IMAGE_NOTE}
+            elif isinstance(child, (list, dict)):
+                stack.append(child)
+
+
+def _image_payload_chars(value: Any) -> int:
+    """Base64 characters of the image parts in a chat history.
+
+    The browser resends the newest attached images (and camera results) with
+    the history, so those ride in the attachment budget instead of the ordinary
+    body cap. Iterative, so a deeply nested history cannot exhaust the stack.
+    """
+    total = 0
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, list):
+            stack.extend(item)
+        elif isinstance(item, dict):
+            source = item.get("source")
+            url = item.get("image_url")
+            if item.get("type") == "image" and isinstance(source, dict) and isinstance(source.get("data"), str):
+                total += len(source["data"])
+            elif item.get("type") == "image_url" and isinstance(url, (dict, str)):
+                url = url.get("url") if isinstance(url, dict) else url
+                total += len(url) if isinstance(url, str) else 0
+            else:
+                stack.extend(item.values())
+    return total
+
+
+def _chat_attachments(value: Any, rid: str) -> list[dict[str, str]] | web.Response:
+    """Validate the images an administrator attached to one chat message.
+
+    Returns the normalized images, or the refusal to send. Every image must
+    decode, match the type its header declares and fit the count, size and
+    dimension bounds; one bad image refuses the message rather than sending the
+    rest.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return _attachments_unreadable(rid)
+    if len(value) > AGENTCLI_ATTACHMENT_MAX_COUNT:
+        return _err("invalid_request", f"Attach at most {AGENTCLI_ATTACHMENT_MAX_COUNT} images to one message.",
+                    400, rid, key="attachmentsTooMany", params={"max": AGENTCLI_ATTACHMENT_MAX_COUNT})
+    images: list[dict[str, str]] = []
+    total = 0
+    for item in value:
+        data = item.get("data") if isinstance(item, dict) else None
+        declared = item.get("mime_type") if isinstance(item, dict) else None
+        if not isinstance(data, str) or not isinstance(declared, str):
+            return _attachments_unreadable(rid)
+        if len(data) > -(-AGENTCLI_ATTACHMENT_MAX_BYTES * 4 // 3):
+            return _attachment_too_large(rid)
+        try:
+            decoded = base64.b64decode(data, validate=True)
+        except (ValueError, binascii.Error):
+            return _attachments_unreadable(rid)
+        if len(decoded) > AGENTCLI_ATTACHMENT_MAX_BYTES:
+            return _attachment_too_large(rid)
+        header = _image_kind_and_size(decoded)
+        if header is None or header[0] != declared.lower().strip():
+            return _err("invalid_request", "Attach a JPEG, PNG or GIF image.", 400, rid, key="attachmentUnsupported")
+        kind, width, height = header
+        if not (0 < width <= AGENTCLI_ATTACHMENT_MAX_EDGE_PX and 0 < height <= AGENTCLI_ATTACHMENT_MAX_EDGE_PX):
+            return _err("invalid_request",
+                        f"An attached image is larger than {AGENTCLI_ATTACHMENT_MAX_EDGE_PX} pixels on a side.",
+                        400, rid, key="attachmentDimensions", params={"max": AGENTCLI_ATTACHMENT_MAX_EDGE_PX})
+        total += len(decoded)
+        if total > AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES:
+            return _err("invalid_request",
+                        f"The attached images are larger than {AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES // _MIB} MB together.",
+                        400, rid, key="attachmentsTooLarge", params={"max": AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES // _MIB})
+        images.append({"data": data, "mime_type": kind})
     return images
 
 
@@ -5413,9 +5611,15 @@ class PhoenixAgentCliChatView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
-        body = await _read_body(request, rid)
+        # Room for base64 images; everything else keeps the ordinary cap below.
+        body = await _read_body(request, rid, limit=AGENTCLI_REQUEST_BODY_BYTES)
         if isinstance(body, web.Response):
             return body
+        attachments = body.pop("attachments", None)
+        history_images = _image_payload_chars(body.get("messages"))
+        if (history_images > _ATTACHMENT_BUDGET_CHARS
+                or len(json.dumps(body).encode()) - history_images > MAX_REQUEST_BODY_BYTES):
+            return _err("request_too_large", "Request body too large.", 413, rid, key="bodyTooLarge")
         data = self.hass.data.get(DOMAIN)
         if data is None:
             return _err(
@@ -5460,9 +5664,32 @@ class PhoenixAgentCliChatView(PhoenixView):
                 key="providerModelMissing",
             )
 
+        images = _chat_attachments(attachments, rid)
+        if isinstance(images, web.Response):
+            return images
+        if images:
+            from .home_companion import is_companion  # noqa: PLC0415
+            if body.get("continue") is True:
+                # Continue adds no message to carry them.
+                return _err("invalid_request", "Images can only be attached to a new message.", 400, rid,
+                            key="attachmentsContinue")
+            if is_companion(access_key):
+                # Home Companion delegates only the text command.
+                return _err("invalid_request",
+                            "Home Companion takes text commands only, so images cannot be attached.", 400, rid,
+                            key="attachmentsCompanion")
+            if cfg.vision is False:
+                # Declared or learned. Unknown support is sent, and a refusal
+                # teaches Phoenix (see _refused_option).
+                return _err("invalid_request", "This model does not accept images.", 400, rid,
+                            key="attachmentsVisionUnsupported")
+
+        provider = build_provider(cfg)
         messages = body.get("messages")
         if not isinstance(messages, list):
             messages = []
+        if cfg.vision is False:
+            _without_history_images(messages)
         if body.get("continue") is True:
             # Resume a turn that paused at the round-cap checkpoint: no new user
             # message is appended; the model continues from the tool results the
@@ -5474,15 +5701,16 @@ class PhoenixAgentCliChatView(PhoenixView):
                 )
         else:
             user_text = str(body.get("user") or "")
-            if not user_text.strip():
+            if not user_text.strip() and not images:
                 return _err(
                     "invalid_request", "Empty message.", 400, rid,
                     key="emptyMessage",
                 )
-            messages = [*messages, {"role": "user", "content": user_text}]
+            message = ({"role": "user", "content": user_text} if not images
+                       else provider.user_message(user_text if user_text.strip() else "", images))
+            messages = [*messages, message]
         options = body.get("options") if isinstance(body.get("options"), dict) else {}
 
-        provider = build_provider(cfg)
         session = async_get_clientsession(self.hass)
         base_url = str(request.url.origin())
         client_ip = AGENTCLI_CLIENT_IP or get_client_ip(request)

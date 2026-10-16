@@ -308,7 +308,7 @@
         "description": "Peut lire les entités, exécuter des services et faire des annonces. Les serrures, les alarmes, les volets et les vannes nécessitent une approbation."
       },
       "home_companion": {
-        "label": "Compagnon domestique",
+        "label": "Home Companion",
         "description": "Conçu pour Agent Chat et Voice : un outil pour consulter les informations du domicile et contrôler les appareils. Utilise le modèle de conversation de Voice.",
         "setup": "Choisissez un fournisseur et un modèle dans les paramètres vocaux. Accordez un accès en lecture ou en écriture via l’arbre habituel des permissions. Les capacités activent ou désactivent l’accès au catalogue domestique ; les outils de configuration et de création restent indisponibles. Le mode de passage direct et l’annonce de tous les outils sont désactivés."
       }
@@ -528,7 +528,7 @@
       "killSwitchTitle": "Phoenix MCP ne traite aucune demande d'agent. Désactivez le coupe-circuit dans Paramètres pour reprendre.",
       "killSwitchFull": "COUPE-CIRCUIT ACTIF",
       "killSwitchShort": "COUPE-CIRCUIT ACTIVÉ",
-      "agentChat": "Chat de l'agent",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "Approbations ({count} en attente)",
       "renderFailed": "Cette vue ne peut pas être affichée. Actualisez pour réessayer ou choisissez une autre section."
     },
@@ -1119,7 +1119,7 @@
       "agentcliAdding": "Ajout de {name}",
       "agentcliApiKey": "Clé API",
       "agentcliBaseUrl": "URL de base",
-      "agentcliCard": "Chat de l'agent",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "Échec de la connexion.",
       "agentcliDefaultModel": "Modèle par défaut : {model}",
       "agentcliChangeModel": "Changer le modèle par défaut",
@@ -1516,7 +1516,21 @@
         "too_many_tools": "Cette clé d’accès annonce {count} outils, mais {provider} en accepte au maximum {limit} par requête. Réduisez les capacités de la clé d’accès ou choisissez un autre fournisseur."
       },
       "chatEnded": "Discussion terminée.",
-      "providerDetail": "Détail du fournisseur : {detail}"
+      "providerDetail": "Détail du fournisseur : {detail}",
+      "attachImage": "Joindre une image",
+      "attachmentAlt": "Image jointe {name}",
+      "removeAttachment": "Retirer {name}",
+      "attachmentGone": "{name} n'a pas été conservé après le rechargement.",
+      "attachTooMany": {
+        "one": "Vous pouvez joindre au plus {count} image à un message.",
+        "other": "Vous pouvez joindre au plus {count} images à un message."
+      },
+      "attachNotImage": "{name} n'est pas une image.",
+      "attachTooLarge": "{name} est trop volumineux pour être joint.",
+      "attachUnreadable": "{name} n'a pas pu être lu comme une image.",
+      "attachVisionUnknown": "Ce modèle n'a pas indiqué s'il accepte les images. Si le fournisseur les refuse, cela est mémorisé pour ce modèle.",
+      "attachNoVision": "Ce modèle n'accepte pas les images.",
+      "attachCompanion": "Home Companion n'accepte que des commandes textuelles ; les images ne peuvent donc pas être jointes."
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",
@@ -1803,7 +1817,16 @@
       "restoreUnverified": "La restauration a été envoyée, mais la configuration relue ensuite ne correspond pas à la version choisie, elle n'a donc peut-être été appliquée qu'en partie. Phoenix la vérifie de nouveau et demande un examen dans Approbations si elle diffère toujours. Vérifiez la configuration actuelle avant de restaurer à nouveau.",
       "notesInvalidCharacters": "notes ne doit pas contenir de caractères de contrôle ni de caractères de mise en forme masqués.",
       "notesString": "notes doit être une chaîne ou null.",
-      "notesTooLong": "notes doit contenir {max} caractères ou moins."
+      "notesTooLong": "notes doit contenir {max} caractères ou moins.",
+      "attachmentsInvalid": "Les images jointes n'ont pas pu être lues.",
+      "attachmentsTooMany": "Joignez au plus {max} images à un message.",
+      "attachmentTooLarge": "Une image jointe dépasse {max} MB.",
+      "attachmentsTooLarge": "Les images jointes dépassent {max} MB au total.",
+      "attachmentUnsupported": "Joignez une image JPEG, PNG ou GIF.",
+      "attachmentDimensions": "Une image jointe dépasse {max} pixels sur un côté.",
+      "attachmentsContinue": "Les images ne peuvent être jointes qu'à un nouveau message.",
+      "attachmentsCompanion": "Home Companion n'accepte que des commandes textuelles ; les images ne peuvent donc pas être jointes.",
+      "attachmentsVisionUnsupported": "Ce modèle n'accepte pas les images."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2204,12 +2227,12 @@
         "mb": "Stockage maximal (MB)"
       },
       "source": {
-        "agentcli": "Discussion avec l’agent",
+        "agentcli": "Agent Chat",
         "voice": "Agent vocal",
         "ai_task": "Tâche IA",
         "assist": "Fournisseur d'outils Assist",
         "mcp": "Client MCP externe",
-        "home_companion": "Compagnon du foyer"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Tour complet",

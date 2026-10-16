@@ -76,8 +76,8 @@ describe("conversation survives a reload", () => {
     expect(turn.entries[0].dataUrl).toBeUndefined();
     expect(turn.messages).toEqual([
       { role: "assistant", content: [
-        { type: "text", text: "[camera image unavailable after reload]" },
-        { type: "text", text: "[camera image unavailable after reload]" },
+        { type: "text", text: "[image unavailable after reload]" },
+        { type: "text", text: "[image unavailable after reload]" },
       ] },
     ]);
   });

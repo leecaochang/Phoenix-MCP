@@ -178,13 +178,15 @@ def require_admin(method: Callable) -> Callable:
     return wrapper
 
 
-async def _read_body(request: web.Request, request_id: str = "") -> dict | web.Response:
-    """Read and parse the request body as a JSON object.
+async def _read_body(
+    request: web.Request, request_id: str = "", *, limit: int = MAX_REQUEST_BODY_BYTES,
+) -> dict | web.Response:
+    """Read and parse the request body as a JSON object of at most `limit` bytes.
 
     Returns an empty dict for requests with no body. Returns an error response
     on read failure, invalid JSON, or a non-object body.
     """
-    if request.content_length is not None and request.content_length > MAX_REQUEST_BODY_BYTES:
+    if request.content_length is not None and request.content_length > limit:
         return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
 
     # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as the
@@ -198,12 +200,12 @@ async def _read_body(request: web.Request, request_id: str = "") -> dict | web.R
     total = 0
     try:
         while True:
-            chunk = await request.content.read(MAX_REQUEST_BODY_BYTES - total + 1)
+            chunk = await request.content.read(limit - total + 1)
             if not chunk:
                 break
             chunks.append(chunk)
             total += len(chunk)
-            if total > MAX_REQUEST_BODY_BYTES:
+            if total > limit:
                 return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
             at_eof = getattr(request.content, "at_eof", None)
             if callable(at_eof) and at_eof():

@@ -31,7 +31,7 @@
       "invalidResponse": "서버가 올바르지 않은 응답을 반환했습니다. 새로고침한 후 다시 시도하세요."
     },
     "shell": {
-      "agentChat": "에이전트 채팅",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "승인 ({count}개 대기 중)",
       "documentation": "문서",
       "killSwitchFull": "킬 스위치 활성화됨",
@@ -91,7 +91,7 @@
         "description": "엔티티를 읽고, 서비스를 실행하고, 안내 방송을 할 수 있습니다. 잠금, 경보, 커버, 밸브에는 승인이 필요합니다."
       },
       "home_companion": {
-        "label": "홈 도우미",
+        "label": "Home Companion",
         "description": "Agent Chat과 Voice용: 하나의 작업 도구로 집안 정보를 조회하고 기기를 제어합니다. Voice 대화 모델을 사용합니다.",
         "setup": "음성 설정에서 제공자와 모델을 선택하세요. 일반 권한 트리에서 읽기 또는 쓰기 권한을 부여하세요. 기능 설정으로 가정용 목록 내 접근을 활성화하거나 비활성화할 수 있습니다. 설정 및 작성 도구는 사용할 수 없습니다. 패스스루와 모든 도구 공개는 비활성화됩니다."
       }
@@ -644,7 +644,21 @@
         "too_many_tools": "이 액세스 키는 도구 {count}개를 제공하지만 {provider}에서는 요청 한 번에 최대 {limit}개까지만 받습니다. 액세스 키의 기능을 줄이거나 다른 공급자를 선택하세요."
       },
       "chatEnded": "채팅이 종료되었습니다.",
-      "providerDetail": "공급자 세부 정보: {detail}"
+      "providerDetail": "공급자 세부 정보: {detail}",
+      "attachImage": "이미지 첨부",
+      "attachmentAlt": "첨부된 이미지 {name}",
+      "removeAttachment": "{name} 제거",
+      "attachmentGone": "{name}은(는) 다시 로드 후 유지되지 않았습니다.",
+      "attachTooMany": {
+        "one": "한 메시지에 이미지를 최대 {count}개까지 첨부할 수 있습니다.",
+        "other": "한 메시지에 이미지를 최대 {count}개까지 첨부할 수 있습니다."
+      },
+      "attachNotImage": "{name}은(는) 이미지가 아닙니다.",
+      "attachTooLarge": "{name}은(는) 너무 커서 첨부할 수 없습니다.",
+      "attachUnreadable": "{name}을(를) 이미지로 읽을 수 없습니다.",
+      "attachVisionUnknown": "이 모델은 이미지를 받는지 여부를 밝히지 않았습니다. 공급자가 이미지를 거부하면 이 모델에 대해 그 사실이 기억됩니다.",
+      "attachNoVision": "이 모델은 이미지를 받지 않습니다.",
+      "attachCompanion": "Home Companion은 텍스트 명령만 받으므로 이미지를 첨부할 수 없습니다."
     },
     "diff": {
       "blueprint.create": "{domain} 블루프린트 '{rel}' 생성",
@@ -903,7 +917,16 @@
       "restoreUnverified": "복원 요청은 전송되었지만 이후 다시 읽은 구성이 선택한 버전과 일치하지 않아 일부만 적용되었을 수 있습니다. Phoenix가 다시 확인하고, 여전히 다르면 승인에서 검토를 요청합니다. 다시 복원하기 전에 현재 구성을 확인하세요.",
       "notesInvalidCharacters": "notes에는 제어 문자나 숨겨진 서식 문자를 포함할 수 없습니다.",
       "notesString": "notes는 문자열 또는 null이어야 합니다.",
-      "notesTooLong": "notes는 {max}자 이하여야 합니다."
+      "notesTooLong": "notes는 {max}자 이하여야 합니다.",
+      "attachmentsInvalid": "첨부된 이미지를 읽을 수 없습니다.",
+      "attachmentsTooMany": "한 메시지에 이미지를 최대 {max}개까지 첨부하십시오.",
+      "attachmentTooLarge": "첨부된 이미지가 {max} MB보다 큽니다.",
+      "attachmentsTooLarge": "첨부된 이미지의 합계가 {max} MB보다 큽니다.",
+      "attachmentUnsupported": "JPEG, PNG 또는 GIF 이미지를 첨부하십시오.",
+      "attachmentDimensions": "첨부된 이미지의 한 변이 {max}픽셀보다 깁니다.",
+      "attachmentsContinue": "이미지는 새 메시지에만 첨부할 수 있습니다.",
+      "attachmentsCompanion": "Home Companion은 텍스트 명령만 받으므로 이미지를 첨부할 수 없습니다.",
+      "attachmentsVisionUnsupported": "이 모델은 이미지를 받지 않습니다."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -1149,7 +1172,7 @@
       "agentcliAdding": "{name} 추가 중",
       "agentcliApiKey": "API 키",
       "agentcliBaseUrl": "기본 URL",
-      "agentcliCard": "에이전트 채팅",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "연결에 실패했습니다.",
       "agentcliDefaultModel": "기본 모델: {model}",
       "agentcliChangeModel": "기본 모델 변경",
@@ -2209,12 +2232,12 @@
         "mb": "최대 저장 공간(MB)"
       },
       "source": {
-        "agentcli": "에이전트 채팅",
+        "agentcli": "Agent Chat",
         "voice": "음성 에이전트",
         "ai_task": "AI 작업",
         "assist": "Assist 도구 공급자",
         "mcp": "외부 MCP 클라이언트",
-        "home_companion": "홈 컴패니언"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "전체 턴",

@@ -150,7 +150,16 @@
       "restoreUnverified": "還原已送出，但之後讀回的設定與所選版本不一致，因此可能只套用了一部分。Phoenix 會重新檢查，若仍不一致，會在核准中要求複核。再次還原前，請檢查目前設定。",
       "notesInvalidCharacters": "notes 不能包含控制字元或隱藏的格式字元。",
       "notesString": "notes 必須是字串或 null。",
-      "notesTooLong": "notes 不能超過 {max} 個字元。"
+      "notesTooLong": "notes 不能超過 {max} 個字元。",
+      "attachmentsInvalid": "無法讀取附加的影像。",
+      "attachmentsTooMany": "每則訊息最多附加 {max} 張影像。",
+      "attachmentTooLarge": "附加的影像大於 {max} MB。",
+      "attachmentsTooLarge": "附加的影像合計大於 {max} MB。",
+      "attachmentUnsupported": "請附加 JPEG、PNG 或 GIF 影像。",
+      "attachmentDimensions": "附加的影像有一邊超過 {max} 像素。",
+      "attachmentsContinue": "只能為新訊息附加影像。",
+      "attachmentsCompanion": "Home Companion 僅接受文字指令，因此無法附加影像。",
+      "attachmentsVisionUnsupported": "此模型不接受影像。"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的核准。",
@@ -274,7 +283,21 @@
       "workingOn": "處理中：{name}",
       "workingSpinner": "處理中…",
       "chatEnded": "聊天已結束。",
-      "providerDetail": "提供者詳情：{detail}"
+      "providerDetail": "提供者詳情：{detail}",
+      "attachImage": "附加影像",
+      "attachmentAlt": "已附加的影像 {name}",
+      "removeAttachment": "移除 {name}",
+      "attachmentGone": "重新載入後未保留 {name}。",
+      "attachTooMany": {
+        "one": "每則訊息最多可附加 {count} 張影像。",
+        "other": "每則訊息最多可附加 {count} 張影像。"
+      },
+      "attachNotImage": "{name} 不是影像。",
+      "attachTooLarge": "{name} 太大，無法附加。",
+      "attachUnreadable": "無法將 {name} 讀取為影像。",
+      "attachVisionUnknown": "此模型未說明是否接受影像。如果提供者拒絕影像，系統會為此模型記住這一點。",
+      "attachNoVision": "此模型不接受影像。",
+      "attachCompanion": "Home Companion 僅接受文字指令，因此無法附加影像。"
     },
     "approvalSummary": {
       "action.approve": "核准並執行",
@@ -1430,7 +1453,7 @@
         "label": "語音助理"
       },
       "home_companion": {
-        "label": "家居助手",
+        "label": "Home Companion",
         "description": "專為 Agent Chat 和 Voice 設計：透過一個任務工具讀取家庭資訊並控制裝置。使用 Voice 的對話模型。",
         "setup": "在語音設定中選擇供應商和模型。透過一般權限樹授予讀取或寫入權限。能力設定可啟用或停用家庭工具目錄內的存取；設定和編寫工具仍不可用。直通模式和公布所有工具均已停用。"
       }
@@ -1488,7 +1511,7 @@
       "agentcliAdding": "正在新增 {name}",
       "agentcliApiKey": "API 金鑰",
       "agentcliBaseUrl": "基礎 URL",
-      "agentcliCard": "智慧體對話",
+      "agentcliCard": "Agent Chat",
       "agentcliChangeModel": "更換預設模型",
       "agentcliConnectionFailed": "連線失敗。",
       "agentcliDefaultModel": "預設模型：{model}",
@@ -1764,7 +1787,7 @@
       "providerChecksHoursAria": "供應商檢查間隔（小時）"
     },
     "shell": {
-      "agentChat": "智慧體對話",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "核准（{count} 項待處理）",
       "documentation": "文件",
       "killSwitchFull": "緊急停止開關已啟用",
@@ -2209,12 +2232,12 @@
         "mb": "最大儲存量（MB）"
       },
       "source": {
-        "agentcli": "代理聊天",
+        "agentcli": "Agent Chat",
         "voice": "語音智慧體",
         "ai_task": "AI 任務",
         "assist": "Assist 工具提供方",
         "mcp": "外部 MCP 用戶端",
-        "home_companion": "家庭夥伴"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "完整回合",

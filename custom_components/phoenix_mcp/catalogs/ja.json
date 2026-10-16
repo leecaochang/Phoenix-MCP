@@ -308,7 +308,7 @@
         "description": "エンティティを読み取り、サービスを実行し、アナウンスを流せます。ロック、アラーム、カバー、バルブには承認が必要です。"
       },
       "home_companion": {
-        "label": "ホームコンパニオン",
+        "label": "Home Companion",
         "description": "Agent Chat と Voice 向け。家庭内の情報確認と機器操作を一つのタスクツールで行います。Voice の会話モデルを使用します。",
         "setup": "音声設定でプロバイダーとモデルを選択してください。通常の権限ツリーで読み取りまたは書き込み権限を付与します。機能設定では家庭用カタログ内のアクセスを有効または無効にできます。設定変更や作成用のツールは利用できません。パススルーと全ツールの公開は無効です。"
       }
@@ -326,7 +326,7 @@
       "killSwitchTitle": "Phoenix MCP はエージェントからのリクエストを処理していません。再開するには設定でキルスイッチを無効にしてください。",
       "killSwitchFull": "キルスイッチが作動中です",
       "killSwitchShort": "キルスイッチ オン",
-      "agentChat": "エージェントチャット",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "承認（{count} 件が承認待ち）",
       "renderFailed": "この画面を表示できませんでした。更新して再試行するか、別のセクションを選択してください。"
     },
@@ -1067,7 +1067,16 @@
       "restoreUnverified": "復元は送信されましたが、その後に読み戻した設定が選択したバージョンと一致しないため、一部しか適用されていない可能性があります。Phoenix が再確認し、まだ異なる場合は承認でレビューを求めます。もう一度復元する前に、現在の設定を確認してください。",
       "notesInvalidCharacters": "notes に制御文字や非表示の書式文字を含めることはできません。",
       "notesString": "notes は文字列または null にしてください。",
-      "notesTooLong": "notes は {max} 文字以内にしてください。"
+      "notesTooLong": "notes は {max} 文字以内にしてください。",
+      "attachmentsInvalid": "添付された画像を読み取れませんでした。",
+      "attachmentsTooMany": "一つのメッセージに添付できる画像は最大 {max} 枚です。",
+      "attachmentTooLarge": "添付された画像が {max} MB を超えています。",
+      "attachmentsTooLarge": "添付された画像の合計が {max} MB を超えています。",
+      "attachmentUnsupported": "JPEG、PNG、GIF のいずれかの画像を添付してください。",
+      "attachmentDimensions": "添付された画像の一辺が {max} ピクセルを超えています。",
+      "attachmentsContinue": "画像は新しいメッセージにのみ添付できます。",
+      "attachmentsCompanion": "Home Companion はテキストのコマンドのみを受け付けるため、画像を添付できません。",
+      "attachmentsVisionUnsupported": "このモデルは画像を受け付けません。"
     },
     "agentchat": {
       "announceApproval": "アクション {name} には承認が必要です。",
@@ -1191,7 +1200,21 @@
         "too_many_tools": "このアクセスキーは {count} 個のツールを公開していますが、{provider} が一度のリクエストで受け付けるのは最大 {limit} 個です。アクセスキーの機能を絞り込むか、別のプロバイダーを選択してください。"
       },
       "chatEnded": "チャットが終了しました。",
-      "providerDetail": "プロバイダーの詳細: {detail}"
+      "providerDetail": "プロバイダーの詳細: {detail}",
+      "attachImage": "画像を添付",
+      "attachmentAlt": "添付画像 {name}",
+      "removeAttachment": "{name} を削除",
+      "attachmentGone": "{name} は再読み込み後に保持されていません。",
+      "attachTooMany": {
+        "one": "一つのメッセージに添付できる画像は最大 {count} 枚です。",
+        "other": "一つのメッセージに添付できる画像は最大 {count} 枚です。"
+      },
+      "attachNotImage": "{name} は画像ではありません。",
+      "attachTooLarge": "{name} は大きすぎるため添付できません。",
+      "attachUnreadable": "{name} を画像として読み取れませんでした。",
+      "attachVisionUnknown": "このモデルは画像を受け付けるかどうかを示していません。プロバイダーが画像を拒否した場合、このモデルについてそのことが記録されます。",
+      "attachNoVision": "このモデルは画像を受け付けません。",
+      "attachCompanion": "Home Companion はテキストのコマンドのみを受け付けるため、画像を添付できません。"
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",
@@ -1311,7 +1334,7 @@
       "agentcliAdding": "{name} を追加中",
       "agentcliApiKey": "API キー",
       "agentcliBaseUrl": "ベース URL",
-      "agentcliCard": "エージェントチャット",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "接続に失敗しました。",
       "agentcliDefaultModel": "既定のモデル: {model}",
       "agentcliChangeModel": "既定のモデルを変更",
@@ -2204,12 +2227,12 @@
         "mb": "最大ストレージ（MB）"
       },
       "source": {
-        "agentcli": "エージェントチャット",
+        "agentcli": "Agent Chat",
         "voice": "音声エージェント",
         "ai_task": "AI タスク",
         "assist": "Assist ツールプロバイダー",
         "mcp": "外部 MCP クライアント",
-        "home_companion": "ホームコンパニオン"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "完全なターン",

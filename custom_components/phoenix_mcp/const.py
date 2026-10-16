@@ -429,6 +429,9 @@ AGENTCLI_LEARNABLE_OPTIONS = {
     "think": "thinking",
     "enable_thinking": "thinking",
     "tools": "tools",
+    # Not a request key: _refused_option reports it when an attached image was
+    # refused as unsupported input, which teaches Phoenix the model lacks vision.
+    "images": "vision",
 }
 # Per-turn cap on provider and tool round trips before the loop pauses. In the
 # interactive chat this is a "continue?" checkpoint (the operator can grant
@@ -447,6 +450,18 @@ AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
 AGENTCLI_MAX_TOOLS_PER_REQUEST = 128
 # Longest provider error-envelope message shown to an administrator.
 AGENTCLI_PROVIDER_DETAIL_CHARS = 300
+# Images an administrator attaches to one Agent Chat message. The browser
+# re-encodes each to a JPEG with a long edge of at most
+# AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX; the server bounds stay independent of it.
+# The edge bound is the largest image any supported provider documents accepting.
+AGENTCLI_ATTACHMENT_MAX_COUNT = 4
+AGENTCLI_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024
+AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES = 4 * 1024 * 1024
+AGENTCLI_ATTACHMENT_MAX_EDGE_PX = 8000
+AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX = 1568
+# The chat request carries its history plus base64 attachments, so it gets the
+# ordinary body cap plus room for the encoded attachment total.
+AGENTCLI_REQUEST_BODY_BYTES = MAX_REQUEST_BODY_BYTES + -(-AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES * 4 // 3) + 65_536
 # Cap on the between-newline SSE buffer from a provider stream. A real frame is a
 # few KB; this bounds a faulty/hostile provider that never sends a newline.
 AGENTCLI_MAX_SSE_BUFFER_BYTES = 8 * 1024 * 1024

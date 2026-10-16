@@ -169,7 +169,7 @@
         "label": "Spraakassistent"
       },
       "home_companion": {
-        "label": "Huisassistent",
+        "label": "Home Companion",
         "description": "Ontworpen voor Agent Chat en Voice: één taaktool voor informatie over het huis en apparaatbediening. Gebruikt het gespreksmodel van Voice.",
         "setup": "Kies een provider en model in de spraakinstellingen. Verleen lees- of schrijftoegang via de normale machtigingsboom. Mogelijkheden schakelen toegang binnen de huishoudcatalogus in of uit; configuratie- en ontwerptools blijven niet beschikbaar. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld."
       }
@@ -924,7 +924,21 @@
       "workingOn": "Bezig: {name}",
       "workingSpinner": "Bezig…",
       "chatEnded": "Chat beëindigd.",
-      "providerDetail": "Providerdetail: {detail}"
+      "providerDetail": "Providerdetail: {detail}",
+      "attachImage": "Afbeelding bijvoegen",
+      "attachmentAlt": "Bijgevoegde afbeelding {name}",
+      "removeAttachment": "{name} verwijderen",
+      "attachmentGone": "{name} is na het herladen niet bewaard.",
+      "attachTooMany": {
+        "one": "Per bericht kan maximaal {count} afbeelding worden bijgevoegd.",
+        "other": "Per bericht kunnen maximaal {count} afbeeldingen worden bijgevoegd."
+      },
+      "attachNotImage": "{name} is geen afbeelding.",
+      "attachTooLarge": "{name} is te groot om bij te voegen.",
+      "attachUnreadable": "{name} kon niet als afbeelding worden gelezen.",
+      "attachVisionUnknown": "Dit model heeft niet aangegeven of het afbeeldingen accepteert. Als de provider ze weigert, wordt dat voor dit model onthouden.",
+      "attachNoVision": "Dit model accepteert geen afbeeldingen.",
+      "attachCompanion": "Home Companion accepteert alleen tekstopdrachten, dus afbeeldingen kunnen niet worden bijgevoegd."
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",
@@ -1071,7 +1085,16 @@
       "restoreUnverified": "Het herstellen is verzonden, maar de daarna teruggelezen configuratie komt niet overeen met de gekozen versie, dus die is mogelijk maar gedeeltelijk toegepast. Phoenix controleert het opnieuw en vraagt om een beoordeling bij Goedkeuringen als het nog steeds afwijkt. Controleer de huidige configuratie voordat je opnieuw herstelt.",
       "notesInvalidCharacters": "notes mag geen stuurtekens of verborgen opmaaktekens bevatten.",
       "notesString": "notes moet een tekenreeks of null zijn.",
-      "notesTooLong": "notes mag maximaal {max} tekens bevatten."
+      "notesTooLong": "notes mag maximaal {max} tekens bevatten.",
+      "attachmentsInvalid": "De bijgevoegde afbeeldingen konden niet worden gelezen.",
+      "attachmentsTooMany": "Voeg maximaal {max} afbeeldingen bij één bericht.",
+      "attachmentTooLarge": "Een bijgevoegde afbeelding is groter dan {max} MB.",
+      "attachmentsTooLarge": "De bijgevoegde afbeeldingen zijn samen groter dan {max} MB.",
+      "attachmentUnsupported": "Voeg een JPEG-, PNG- of GIF-afbeelding bij.",
+      "attachmentDimensions": "Een bijgevoegde afbeelding is aan een zijde groter dan {max} pixels.",
+      "attachmentsContinue": "Afbeeldingen kunnen alleen bij een nieuw bericht worden gevoegd.",
+      "attachmentsCompanion": "Home Companion accepteert alleen tekstopdrachten, dus afbeeldingen kunnen niet worden bijgevoegd.",
+      "attachmentsVisionUnsupported": "Dit model accepteert geen afbeeldingen."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2281,12 +2304,12 @@
         "mb": "Maximale opslag (MB)"
       },
       "source": {
-        "agentcli": "Agentchat",
+        "agentcli": "Agent Chat",
         "voice": "Spraakagent",
         "ai_task": "AI-taak",
         "assist": "Assist-toolprovider",
         "mcp": "Externe MCP-client",
-        "home_companion": "Huisgenoot"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Volledige beurt",

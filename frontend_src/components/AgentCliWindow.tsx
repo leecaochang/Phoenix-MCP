@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
+import { mdiClose, mdiPaperclip } from "@mdi/js";
+import {
+  ATTACHMENT_MAX_COUNT, AttachmentError, imageFiles, prepareAttachment, withoutSentImages,
+  type ChatAttachment,
+} from "../utils/chat_attachments";
 import {
   getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns, getLogConversationId,
   getSessionDraft, setSessionDraft,
@@ -26,7 +31,7 @@ import type {
   DeclaredModelCaps,
   AccessKeyRecord,
 } from "../types";
-import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t } from "../i18n";
+import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
@@ -35,7 +40,7 @@ import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 // optional: restored session entries may lack it, and the timestamp display
 // skips those.
 type ChatEntry =
-  | { kind: "user"; text: string; ts?: number }
+  | { kind: "user"; text: string; ts?: number; images?: { name: string; dataUrl?: string }[] }
   | { kind: "assistant"; text: string; thinking: string; ts?: number }
   | { kind: "tool_call"; id: string; name: string; args: unknown }
   | { kind: "tool_result"; id: string; name: string; isError: boolean; summary: string }
@@ -194,9 +199,17 @@ export function trimTurns(turns: Turn[], scrollback: number): Turn[] {
   return kept;
 }
 
-export function memoryMessages(turns: Turn[], scrollback: number): unknown[] {
+/** Model memory for the next request. Only the newest attached images are
+ *  resent, so follow-up questions can still look at them; earlier ones, and
+ *  those too once a new message attaches images, become a short note. */
+export function memoryMessages(turns: Turn[], scrollback: number, replacingImages = false): unknown[] {
   if (scrollback <= 0) return [];
-  return turns.flatMap((turn) => turn.messages);
+  const carriedImages = (turn: Turn) => turn.entries.some(
+    (entry) => entry.kind === "user" && Array.isArray(entry.images) && entry.images.length > 0);
+  let newest = -1;
+  turns.forEach((turn, index) => { if (carriedImages(turn)) newest = index; });
+  return turns.flatMap((turn, index) => (carriedImages(turn) && (index !== newest || replacingImages)
+    ? withoutSentImages(turn.messages) : turn.messages));
 }
 
 // Wall-clock label for a transcript entry, in the viewer's locale convention.
@@ -635,6 +648,9 @@ export function AgentCliWindow({
   // unmounting (navigating away in HA), the same way the transcript does. The
   // wizard's one-shot prefill still wins when present.
   const [input, setInput] = useState(saved.prefill || getSessionDraft());
+  // Images waiting in the composer. Session-only: never written to browser storage.
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachError, setAttachError] = useState("");
   const [sending, setSending] = useState(false);
   const turnGenerationRef = useRef(0);
   // Non-null when the last turn paused at the round-cap checkpoint (its value is
@@ -683,6 +699,9 @@ export function AgentCliWindow({
   const closingPopupRef = useRef(false);
   const cancelledRef = useRef(false);
   const lastQueryRef = useRef("");
+  // Images sent with the running turn, restored to the composer if it is cancelled.
+  const lastAttachmentsRef = useRef<ChatAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // The authoritative copy of the running turn. Every change goes through
   // updateLive, which writes the ref synchronously: a stream whose last event and
   // end arrive together finalizes the turn before React renders that event, and
@@ -966,6 +985,9 @@ export function AgentCliWindow({
     resetUsage();
     setGearOpen(false);
     setAnnouncement("");
+    // Images waiting to be sent belong to the conversation being cleared.
+    setAttachments([]);
+    setAttachError("");
   }, [resetUsage, updateLive]);
 
   // Cancel the running turn: abort the request, ignore any late response, and
@@ -1000,6 +1022,9 @@ export function AgentCliWindow({
     setSessionDraft(draft, persistenceOwner);
     flushSessionDraft(persistenceOwner);
     setInput(draft);
+    const sentImages = lastAttachmentsRef.current;
+    lastAttachmentsRef.current = [];
+    if (sentImages.length) setAttachments((current) => (current.length ? current : sentImages));
   }, [input, persistenceOwner, scrollbackLines, turns, updateLive]);
 
 
@@ -1092,6 +1117,7 @@ export function AgentCliWindow({
     mode: "user" | "continue",
     text: string,
     memoryOverride?: unknown[],
+    images: ChatAttachment[] = [],
   ) => {
     if (sending) return;
     const generation = ++turnGenerationRef.current;
@@ -1099,6 +1125,7 @@ export function AgentCliWindow({
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
+    lastAttachmentsRef.current = images;
     const stateless = accessKeys.find((accessKey) => accessKey.id === accessKeyId)?.persona === "home_companion";
     if (stateless) {
       setTurns([]);
@@ -1109,10 +1136,13 @@ export function AgentCliWindow({
     usageBaseRef.current = stateless ? { input: 0, output: 0 }
       : { input: usageRef.current.input, output: usageRef.current.output };
     turnSawUsageRef.current = false;
-    updateLive(mode === "continue" ? [] : [{ kind: "user", text, ts: Date.now() }]);
+    updateLive(mode === "continue" ? [] : [{
+      kind: "user", text, ts: Date.now(),
+      ...(images.length ? { images: images.map((image) => ({ name: image.name, dataUrl: image.dataUrl })) } : {}),
+    }]);
     setSending(true);
 
-    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines);
+    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines, images.length > 0);
     const sentLen = sentMessages.length;
     let newMessages: unknown[] = [];
     const ac = new AbortController();
@@ -1164,6 +1194,7 @@ export function AgentCliWindow({
           messages: sentMessages,
           log_conversation_id: getLogConversationId(sentMessages.length > 0, persistenceOwner),
           ...(mode === "continue" ? { continue: true } : { user: text }),
+          ...(images.length ? { attachments: images.map((image) => ({ mime_type: image.mimeType, data: image.data })) } : {}),
           options: buildOptions(kind, options, caps),
         },
         (name, payload) => {
@@ -1265,6 +1296,10 @@ export function AgentCliWindow({
                 const messageParams = p.message_params && typeof p.message_params === "object"
                   ? p.message_params as Record<string, string | number> : undefined;
                 const rateLimit = providerRateLimit(p.rate_limit);
+                if (p.refused === "images") {
+                  // The server has just recorded that this model refuses images.
+                  window.dispatchEvent(new CustomEvent("phx-agentcli-providers-changed"));
+                }
                 // The provider's own error sentence, clipped and scrubbed server-side.
                 const providerDetail = typeof p.provider_detail === "string" && p.provider_detail
                   ? p.provider_detail : undefined;
@@ -1316,9 +1351,16 @@ export function AgentCliWindow({
     }
   }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive]);
 
+  // Why images cannot go with the next message, when they cannot. Unknown model
+  // support is allowed: the composer says so, and a provider refusal is learned.
+  const companionKey = accessKeys.find((accessKey) => accessKey.id === accessKeyId)?.persona === "home_companion";
+  const attachBlocked = instances.length === 0 ? t("agentchat.configureFirst")
+    : companionKey ? t("agentchat.attachCompanion")
+    : declaredCaps?.vision === false ? t("agentchat.attachNoVision") : "";
+
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if ((!text && !attachments.length) || sending) return;
     // Slash commands are handled locally and never sent to the model. /clear
     // starts a new conversation, identical to the gear's Clear chat history.
     if (text.toLowerCase() === "/clear") {
@@ -1326,12 +1368,42 @@ export function AgentCliWindow({
       clearHistory();
       return;
     }
+    if (attachments.length && attachBlocked) {
+      setAttachError(attachBlocked);
+      return;
+    }
     // The onboarding wizard listens for this to auto-close once the user has
     // sent their first prompt through the window it opened.
     window.dispatchEvent(new CustomEvent("phx-agentcli-sent"));
     setInput("");
-    void runTurn("user", text);
-  }, [input, sending, runTurn, clearHistory]);
+    const images = attachments;
+    setAttachments([]);
+    setAttachError("");
+    void runTurn("user", text, undefined, images);
+  }, [input, sending, runTurn, clearHistory, attachments, attachBlocked]);
+
+  const addFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setAttachError("");
+    if (attachBlocked) {
+      setAttachError(attachBlocked);
+      return;
+    }
+    const room = ATTACHMENT_MAX_COUNT - attachments.length;
+    if (files.length > room) setAttachError(tn("agentchat.attachTooMany", ATTACHMENT_MAX_COUNT));
+    const prepared: ChatAttachment[] = [];
+    for (const file of files.slice(0, Math.max(0, room))) {
+      try {
+        prepared.push(await prepareAttachment(file));
+      } catch (err) {
+        const problem = err instanceof AttachmentError ? err.problem : "unreadable";
+        setAttachError(t(problem === "type" ? "agentchat.attachNotImage"
+          : problem === "size" ? "agentchat.attachTooLarge" : "agentchat.attachUnreadable", { name: file.name }));
+      }
+    }
+    // Two quick pastes can both see room; the slice keeps the limit.
+    if (prepared.length) setAttachments((current) => [...current, ...prepared].slice(0, ATTACHMENT_MAX_COUNT));
+  }, [attachBlocked, attachments.length]);
 
   // Grant the agent another batch of rounds from where it paused: resends the
   // held conversation with continue:true, no new user message.
@@ -1781,7 +1853,16 @@ export function AgentCliWindow({
   };
 
   const content = (
-    <div ref={rootRef} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}>
+    <div ref={rootRef} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}
+         // Files dropped anywhere on the window attach; unhandled, the browser
+         // would open the image in place of Home Assistant.
+         onDragOver={(e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); }}
+         onDrop={(e) => {
+           if (!e.dataTransfer?.types.includes("Files")) return;
+           e.preventDefault();
+           // A drop is deliberate: report non-images rather than ignore them.
+           void addFiles(Array.from(e.dataTransfer.files));
+         }}>
       {/* Persistent polite announcer; mounted unconditionally so assistive
           tech reliably picks up updates (live regions must pre-exist). */}
       <div className="sr-only" role="status">{announcement}</div>
@@ -1948,7 +2029,50 @@ export function AgentCliWindow({
             </div>
           )}
 
+          {(attachments.length > 0 || attachError) && (
+            <div className="agentcli-attachments">
+              {attachments.length > 0 && (
+                <ul className="agentcli-attachment-list">
+                  {attachments.map((attachment) => (
+                    <li key={attachment.id} className="agentcli-attachment">
+                      <img src={attachment.dataUrl} alt={t("agentchat.attachmentAlt", { name: attachment.name })} />
+                      <button type="button" className="agentcli-attachment-remove"
+                              aria-label={t("agentchat.removeAttachment", { name: attachment.name })}
+                              title={t("agentchat.removeAttachment", { name: attachment.name })}
+                              onClick={() => {
+                                setAttachError("");
+                                setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+                              }}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiClose} /></svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {attachments.length > 0 && (attachBlocked || declaredCaps?.vision !== true) && (
+                <div className="agentcli-attachment-note">{attachBlocked || t("agentchat.attachVisionUnknown")}</div>
+              )}
+              {attachError && <div className="agentcli-attachment-error" role="alert">{attachError}</div>}
+            </div>
+          )}
+
           <div className="agentcli-input">
+            <input
+              ref={fileInputRef} type="file" accept="image/*" multiple hidden
+              onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void addFiles(files); }}
+            />
+            <button
+              type="button" className="btn btn-sm agentcli-attach-btn"
+              aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")}
+              aria-disabled={Boolean(attachBlocked) || attachments.length >= ATTACHMENT_MAX_COUNT}
+              onClick={() => {
+                if (attachBlocked) setAttachError(attachBlocked);
+                else if (attachments.length >= ATTACHMENT_MAX_COUNT) setAttachError(tn("agentchat.attachTooMany", ATTACHMENT_MAX_COUNT));
+                else fileInputRef.current?.click();
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiPaperclip} /></svg>
+            </button>
             {/* Stays editable while a turn runs so the next message can be drafted;
                 send() and runTurn() refuse a second turn until this one ends. */}
             <textarea
@@ -1960,13 +2084,19 @@ export function AgentCliWindow({
               rows={2}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+              onPaste={(e) => {
+                const files = imageFiles(e.clipboardData);
+                if (files.length) { e.preventDefault(); void addFiles(files); }
+              }}
             />
             {sending ? (
               <button className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()} title={t("agentchat.stopRequest")}>
                 {t("common.cancel")}
               </button>
             ) : (
-              <button className="btn btn-primary btn-sm" aria-disabled={noInstances || !input.trim()} onClick={() => { if (!noInstances) void send(); }}>
+              <button className="btn btn-primary btn-sm"
+                      aria-disabled={noInstances || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
+                      onClick={() => { if (!noInstances) void send(); }}>
                 {t("agentchat.send")}
               </button>
             )}
@@ -2143,8 +2273,24 @@ function ChatItem({
     )
     : null;
   switch (entry.kind) {
-    case "user":
-      return <div className="agentcli-msg agentcli-msg-user">{entry.text}{ts}</div>;
+    case "user": {
+      // Browser storage keeps only each image's name, so a restored entry says
+      // the image is gone instead of showing it.
+      const images = Array.isArray(entry.images)
+        ? entry.images.filter((image) => image && typeof image.name === "string") : [];
+      return (
+        <div className="agentcli-msg agentcli-msg-user">
+          {images.length > 0 && (
+            <div className="agentcli-msg-images">
+              {images.map((image, index) => (typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")
+                ? <img key={index} src={image.dataUrl} alt={t("agentchat.attachmentAlt", { name: image.name })} />
+                : <span key={index} className="agentcli-msg-image-gone">{t("agentchat.attachmentGone", { name: image.name })}</span>))}
+            </div>
+          )}
+          {entry.text}{ts}
+        </div>
+      );
+    }
     case "assistant": {
       const hasReply = entry.text.trim().length > 0;
       const hasVisibleThinking = verbose && entry.thinking.trim().length > 0;

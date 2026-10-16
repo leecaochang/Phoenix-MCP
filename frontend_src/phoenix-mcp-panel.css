@@ -2623,6 +2623,25 @@ hui-card { display: block; min-width: 0; }
 .agentcli-tool-image img { display: block; max-width: 100%; height: auto; border-radius: var(--phx-radius-sm); border: 1px solid var(--phx-divider); }
 .agentcli-tool-image figcaption { margin-top: 4px; font-size: 0.85em; color: var(--phx-text-2); }
 .agentcli-tool-image-unavailable { padding: 10px; border: 1px dashed var(--phx-divider); border-radius: var(--phx-radius-sm); color: var(--phx-text-2); font-size: 0.92em; }
+/* Images attached to a user message, and the composer's preview strip. */
+.agentcli-msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.agentcli-msg-images img { display: block; max-width: 100%; max-height: 180px; height: auto; border-radius: var(--phx-radius-sm); border: 1px solid var(--phx-divider); }
+.agentcli-msg-image-gone { padding: 4px 8px; border: 1px dashed var(--phx-divider); border-radius: var(--phx-radius-sm); color: var(--phx-text-2); font-size: 0.88em; }
+.agentcli-attachments { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 0; border-top: 1px solid var(--phx-border); }
+.agentcli-attachment-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.agentcli-attachment { position: relative; }
+.agentcli-attachment img { display: block; width: 56px; height: 56px; object-fit: cover; border-radius: var(--phx-radius-sm); border: 1px solid var(--phx-divider); }
+.agentcli-attachment-remove {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  border-radius: 50%; border: 1px solid var(--phx-border); background: var(--phx-surface); color: var(--phx-text);
+}
+.agentcli-attachment-remove svg { width: 14px; height: 14px; fill: currentColor; }
+.agentcli-attachment-note { font-size: 0.85em; color: var(--phx-text-2); }
+.agentcli-attachment-error { font-size: 0.85em; color: var(--phx-error); }
+.agentcli-attach-btn { padding: 0 8px; }
+.agentcli-attach-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.agentcli-attach-btn[aria-disabled="true"] { opacity: 0.5; }
 /* Live progress from a held tool (a firmware build). Visible regardless of the
    verbose toggle, since during a multi-minute call it is the only sign of life. */
 .agentcli-progress {
@@ -2667,6 +2686,8 @@ hui-card { display: block; min-width: 0; }
   border-top: 1px solid var(--phx-border);
   align-items: stretch;
 }
+/* The preview strip above already draws the divider. */
+.agentcli-attachments + .agentcli-input { border-top: none; }
 /* Send/Cancel matches the textarea height in the same row. */
 .agentcli-input > button { align-self: stretch; display: inline-flex; align-items: center; justify-content: center; }
 .agentcli-cancel-btn { background: var(--phx-surface); border-color: var(--phx-error); color: var(--phx-error); }

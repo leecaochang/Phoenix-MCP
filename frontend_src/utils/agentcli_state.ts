@@ -213,11 +213,22 @@ function sanitizeForPersistence(value: unknown): unknown {
       unavailable: true,
     };
   }
+  // Attached images likewise: the transcript keeps each name, never the pixels.
+  if (record.kind === "user" && Array.isArray(record.images)) {
+    const { images, ...rest } = record;
+    return {
+      ...(sanitizeForPersistence(rest) as Record<string, unknown>),
+      images: (images as unknown[]).map((image) => {
+        const name = image && typeof image === "object" ? (image as Record<string, unknown>).name : undefined;
+        return { name: typeof name === "string" ? name : "" };
+      }),
+    };
+  }
   if (record.type === "image") {
-    return { type: "text", text: "[camera image unavailable after reload]" };
+    return { type: "text", text: "[image unavailable after reload]" };
   }
   if (record.type === "image_url") {
-    return { type: "text", text: "[camera image unavailable after reload]" };
+    return { type: "text", text: "[image unavailable after reload]" };
   }
 
   return Object.fromEntries(

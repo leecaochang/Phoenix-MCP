@@ -352,7 +352,16 @@
       "restoreUnverified": "Palautus lähetettiin, mutta jälkikäteen luettu kokoonpano ei vastaa valittua versiota, joten se on ehkä otettu käyttöön vain osittain. Phoenix tarkistaa sen uudelleen ja pyytää tarkistusta Hyväksynnät-kohdassa, jos se poikkeaa yhä. Tarkista nykyinen kokoonpano ennen kuin palautat uudelleen.",
       "notesInvalidCharacters": "notes ei saa sisältää ohjausmerkkejä tai piilotettuja muotoilumerkkejä.",
       "notesString": "notes on oltava merkkijono tai null.",
-      "notesTooLong": "notes saa olla enintään {max} merkkiä."
+      "notesTooLong": "notes saa olla enintään {max} merkkiä.",
+      "attachmentsInvalid": "Liitettyjä kuvia ei voitu lukea.",
+      "attachmentsTooMany": "Liitä yhteen viestiin enintään {max} kuvaa.",
+      "attachmentTooLarge": "Liitetty kuva on suurempi kuin {max} MB.",
+      "attachmentsTooLarge": "Liitetyt kuvat ovat yhteensä suurempia kuin {max} MB.",
+      "attachmentUnsupported": "Liitä JPEG-, PNG- tai GIF-kuva.",
+      "attachmentDimensions": "Liitetty kuva on jollakin sivulla suurempi kuin {max} pikseliä.",
+      "attachmentsContinue": "Kuvia voi liittää vain uuteen viestiin.",
+      "attachmentsCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää.",
+      "attachmentsVisionUnsupported": "Tämä malli ei hyväksy kuvia."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -476,7 +485,21 @@
       "verboseHint": "Näytä agentin työkalukutsut, työkalutulokset ja miettiminen. Pois päältä näytetään vain lopullinen vastaus.",
       "workingOn": "Työn alla: {name}",
       "workingSpinner": "Työskennellään…",
-      "providerDetail": "Palveluntarjoajan lisätiedot: {detail}"
+      "providerDetail": "Palveluntarjoajan lisätiedot: {detail}",
+      "attachImage": "Liitä kuva",
+      "attachmentAlt": "Liitetty kuva {name}",
+      "removeAttachment": "Poista {name}",
+      "attachmentGone": "Kuvaa {name} ei säilytetty uudelleenlatauksen jälkeen.",
+      "attachTooMany": {
+        "one": "Yhteen viestiin voi liittää enintään {count} kuvan.",
+        "other": "Yhteen viestiin voi liittää enintään {count} kuvaa."
+      },
+      "attachNotImage": "{name} ei ole kuva.",
+      "attachTooLarge": "{name} on liian suuri liitettäväksi.",
+      "attachUnreadable": "Tiedostoa {name} ei voitu lukea kuvana.",
+      "attachVisionUnknown": "Tämä malli ei ole ilmoittanut, hyväksyykö se kuvia. Jos palveluntarjoaja torjuu ne, tämä muistetaan tämän mallin kohdalla.",
+      "attachNoVision": "Tämä malli ei hyväksy kuvia.",
+      "attachCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää."
     },
     "approvalSummary": {
       "action.approve": "Hyväksy ja suorita",

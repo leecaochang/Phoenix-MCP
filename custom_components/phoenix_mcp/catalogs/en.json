@@ -1519,7 +1519,21 @@
         "ollama_backend": "The provider is temporarily unavailable.",
         "auth": "The provider blocked this response. It will not be retried.",
         "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried."
-      }
+      },
+      "attachImage": "Attach image",
+      "attachmentAlt": "Attached image {name}",
+      "removeAttachment": "Remove {name}",
+      "attachmentGone": "{name} was not kept after reload.",
+      "attachTooMany": {
+        "one": "You can attach up to {count} image to one message.",
+        "other": "You can attach up to {count} images to one message."
+      },
+      "attachNotImage": "{name} is not an image.",
+      "attachTooLarge": "{name} is too large to attach.",
+      "attachUnreadable": "{name} could not be read as an image.",
+      "attachVisionUnknown": "This model has not said whether it accepts images. If the provider refuses them, that is remembered for this model.",
+      "attachNoVision": "This model does not accept images.",
+      "attachCompanion": "Home Companion takes text commands only, so images cannot be attached."
     },
     "diff": {
       "blueprint.create": "Create {domain} blueprint '{rel}'",
@@ -1807,7 +1821,16 @@
       "attentionNotReviewable": "This item cannot be acknowledged.",
       "attentionSaveFailed": "The review could not be saved. The action still needs review.",
       "attentionReviewConflict": "This action is running or has already been reviewed. Refresh the list.",
-      "providerModelOrAuto": "Send either a model or auto, not both."
+      "providerModelOrAuto": "Send either a model or auto, not both.",
+      "attachmentsInvalid": "The attached images could not be read.",
+      "attachmentsTooMany": "Attach at most {max} images to one message.",
+      "attachmentTooLarge": "An attached image is larger than {max} MB.",
+      "attachmentsTooLarge": "The attached images are larger than {max} MB together.",
+      "attachmentUnsupported": "Attach a JPEG, PNG or GIF image.",
+      "attachmentDimensions": "An attached image is larger than {max} pixels on a side.",
+      "attachmentsContinue": "Images can only be attached to a new message.",
+      "attachmentsCompanion": "Home Companion takes text commands only, so images cannot be attached.",
+      "attachmentsVisionUnsupported": "This model does not accept images."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",

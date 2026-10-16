@@ -145,7 +145,16 @@
       "restoreUnverified": "Il ripristino è stato inviato, ma la configurazione riletta in seguito non corrisponde alla versione scelta, quindi potrebbe essere stata applicata solo in parte. Phoenix la ricontrolla e chiede una revisione in Approvazioni se è ancora diversa. Controlla la configurazione corrente prima di ripristinare di nuovo.",
       "notesInvalidCharacters": "notes non deve contenere caratteri di controllo o caratteri di formattazione nascosti.",
       "notesString": "notes deve essere una stringa o null.",
-      "notesTooLong": "notes deve contenere al massimo {max} caratteri."
+      "notesTooLong": "notes deve contenere al massimo {max} caratteri.",
+      "attachmentsInvalid": "Impossibile leggere le immagini allegate.",
+      "attachmentsTooMany": "Allega al massimo {max} immagini a un messaggio.",
+      "attachmentTooLarge": "Un'immagine allegata supera {max} MB.",
+      "attachmentsTooLarge": "Le immagini allegate superano {max} MB in totale.",
+      "attachmentUnsupported": "Allega un'immagine JPEG, PNG o GIF.",
+      "attachmentDimensions": "Un'immagine allegata supera {max} pixel su un lato.",
+      "attachmentsContinue": "Le immagini possono essere allegate solo a un nuovo messaggio.",
+      "attachmentsCompanion": "Home Companion accetta solo comandi di testo, quindi non è possibile allegare immagini.",
+      "attachmentsVisionUnsupported": "Questo modello non accetta immagini."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -269,7 +278,21 @@
       "workingOn": "In corso: {name}",
       "workingSpinner": "In corso…",
       "chatEnded": "Chat terminata.",
-      "providerDetail": "Dettaglio del provider: {detail}"
+      "providerDetail": "Dettaglio del provider: {detail}",
+      "attachImage": "Allega immagine",
+      "attachmentAlt": "Immagine allegata {name}",
+      "removeAttachment": "Rimuovi {name}",
+      "attachmentGone": "{name} non è stato conservato dopo la ricarica.",
+      "attachTooMany": {
+        "one": "Puoi allegare al massimo {count} immagine a un messaggio.",
+        "other": "Puoi allegare al massimo {count} immagini a un messaggio."
+      },
+      "attachNotImage": "{name} non è un'immagine.",
+      "attachTooLarge": "{name} è troppo grande per essere allegato.",
+      "attachUnreadable": "Impossibile leggere {name} come immagine.",
+      "attachVisionUnknown": "Questo modello non ha indicato se accetta immagini. Se il provider le rifiuta, il rifiuto viene memorizzato per questo modello.",
+      "attachNoVision": "Questo modello non accetta immagini.",
+      "attachCompanion": "Home Companion accetta solo comandi di testo, quindi non è possibile allegare immagini."
     },
     "audit": {
       "allOutcomes": "Tutti gli esiti",
@@ -973,7 +996,7 @@
         "label": "Assistente vocale"
       },
       "home_companion": {
-        "label": "Assistente domestico",
+        "label": "Home Companion",
         "description": "Pensato per Agent Chat e Voice: uno strumento per consultare informazioni sulla casa e controllare i dispositivi. Usa il modello di conversazione di Voice.",
         "setup": "Scegli un provider e un modello nelle impostazioni vocali. Concedi accesso in lettura o scrittura tramite il normale albero dei permessi. Le capacità abilitano o disabilitano l’accesso nel catalogo domestico; gli strumenti di configurazione e creazione restano indisponibili. Il pass-through e l’annuncio di tutti gli strumenti sono disabilitati."
       }
@@ -2204,12 +2227,12 @@
         "mb": "Spazio massimo (MB)"
       },
       "source": {
-        "agentcli": "Chat agente",
+        "agentcli": "Agent Chat",
         "voice": "Agente vocale",
         "ai_task": "Attività IA",
         "assist": "Provider di strumenti Assist",
         "mcp": "Client MCP esterno",
-        "home_companion": "Compagno di casa"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Turno completo",

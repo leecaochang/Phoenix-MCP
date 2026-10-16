@@ -352,7 +352,16 @@
       "restoreUnverified": "Gjenopprettingen ble sendt, men konfigurasjonen som ble lest tilbake etterpå, samsvarer ikke med den valgte versjonen, så den er kanskje bare delvis brukt. Phoenix kontrollerer den på nytt og ber om gjennomgang under Godkjenninger hvis den fortsatt avviker. Sjekk gjeldende konfigurasjon før du gjenoppretter igjen.",
       "notesInvalidCharacters": "notes kan ikke inneholde kontrolltegn eller skjulte formateringstegn.",
       "notesString": "notes må være en streng eller null.",
-      "notesTooLong": "notes må ha maksimalt {max} tegn."
+      "notesTooLong": "notes må ha maksimalt {max} tegn.",
+      "attachmentsInvalid": "De vedlagte bildene kunne ikke leses.",
+      "attachmentsTooMany": "Legg ved høyst {max} bilder i én melding.",
+      "attachmentTooLarge": "Et vedlagt bilde er større enn {max} MB.",
+      "attachmentsTooLarge": "De vedlagte bildene er til sammen større enn {max} MB.",
+      "attachmentUnsupported": "Legg ved et JPEG-, PNG- eller GIF-bilde.",
+      "attachmentDimensions": "Et vedlagt bilde er større enn {max} piksler på én side.",
+      "attachmentsContinue": "Bilder kan bare legges ved en ny melding.",
+      "attachmentsCompanion": "Home Companion tar bare imot tekstkommandoer, så bilder kan ikke legges ved.",
+      "attachmentsVisionUnsupported": "Denne modellen godtar ikke bilder."
     },
     "agentchat": {
       "accessKey": "Tilgangsnøkkel",
@@ -476,7 +485,21 @@
       "verboseHint": "Vis agentens verktøykall, verktøyresultater og tenkning. Av viser bare det endelige svaret.",
       "workingOn": "Arbeider: {name}",
       "workingSpinner": "Arbeider…",
-      "providerDetail": "Leverandørdetalj: {detail}"
+      "providerDetail": "Leverandørdetalj: {detail}",
+      "attachImage": "Legg ved bilde",
+      "attachmentAlt": "Vedlagt bilde {name}",
+      "removeAttachment": "Fjern {name}",
+      "attachmentGone": "{name} ble ikke beholdt etter innlasting på nytt.",
+      "attachTooMany": {
+        "one": "Du kan legge ved høyst {count} bilde i én melding.",
+        "other": "Du kan legge ved høyst {count} bilder i én melding."
+      },
+      "attachNotImage": "{name} er ikke et bilde.",
+      "attachTooLarge": "{name} er for stort til å legges ved.",
+      "attachUnreadable": "{name} kunne ikke leses som et bilde.",
+      "attachVisionUnknown": "Denne modellen har ikke oppgitt om den godtar bilder. Hvis leverandøren avslår dem, huskes det for denne modellen.",
+      "attachNoVision": "Denne modellen godtar ikke bilder.",
+      "attachCompanion": "Home Companion tar bare imot tekstkommandoer, så bilder kan ikke legges ved."
     },
     "approvalSummary": {
       "action.approve": "Godkjenn og utfør",

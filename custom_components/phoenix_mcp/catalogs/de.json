@@ -224,7 +224,21 @@
         "too_many_tools": "Dieser Zugriffsschlüssel stellt {count} Tools bereit, aber {provider} akzeptiert höchstens {limit} pro Anfrage. Schränken Sie die Fähigkeiten des Zugriffsschlüssels ein oder wählen Sie einen anderen Anbieter."
       },
       "chatEnded": "Chat beendet.",
-      "providerDetail": "Anbieterdetails: {detail}"
+      "providerDetail": "Anbieterdetails: {detail}",
+      "attachImage": "Bild anhängen",
+      "attachmentAlt": "Angehängtes Bild {name}",
+      "removeAttachment": "{name} entfernen",
+      "attachmentGone": "{name} wurde nach dem Neuladen nicht beibehalten.",
+      "attachTooMany": {
+        "one": "Sie können höchstens {count} Bild an eine Nachricht anhängen.",
+        "other": "Sie können höchstens {count} Bilder an eine Nachricht anhängen."
+      },
+      "attachNotImage": "{name} ist kein Bild.",
+      "attachTooLarge": "{name} ist zu groß zum Anhängen.",
+      "attachUnreadable": "{name} konnte nicht als Bild gelesen werden.",
+      "attachVisionUnknown": "Dieses Modell hat nicht angegeben, ob es Bilder akzeptiert. Lehnt der Anbieter sie ab, wird das für dieses Modell vermerkt.",
+      "attachNoVision": "Dieses Modell akzeptiert keine Bilder.",
+      "attachCompanion": "Home Companion nimmt nur Textbefehle an, daher können keine Bilder angehängt werden."
     },
     "caps": {
       "cap_config_read": {
@@ -413,7 +427,7 @@
         "description": "Kann Entitäten lesen, Dienste ausführen und Durchsagen machen. Schlösser, Alarmanlagen, Abdeckungen und Ventile erfordern eine Genehmigung."
       },
       "home_companion": {
-        "label": "Hausbegleiter",
+        "label": "Home Companion",
         "description": "Für Agent Chat und Voice: ein Aufgabenwerkzeug für Informationen zum Zuhause und die Gerätesteuerung. Nutzt das Voice-Konversationsmodell.",
         "setup": "Wählen Sie einen Anbieter und ein Modell in den Spracheinstellungen. Gewähren Sie Lese- oder Schreibzugriff über den normalen Berechtigungsbaum. Fähigkeiten aktivieren oder deaktivieren den Zugriff innerhalb des Haushaltskatalogs; Konfigurations- und Erstellungswerkzeuge bleiben nicht verfügbar. Durchleitung und die Bekanntgabe aller Werkzeuge sind deaktiviert."
       }
@@ -971,7 +985,7 @@
       "agentcliAdding": "{name} wird hinzugefügt",
       "agentcliApiKey": "API-Schlüssel",
       "agentcliBaseUrl": "Basis-URL",
-      "agentcliCard": "Agent-Chat",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "Verbindung fehlgeschlagen.",
       "agentcliDefaultModel": "Standardmodell: {model}",
       "agentcliChangeModel": "Standardmodell ändern",
@@ -1503,7 +1517,16 @@
       "restoreUnverified": "Die Wiederherstellung wurde gesendet, aber die danach zurückgelesene Konfiguration stimmt nicht mit der gewählten Version überein, sie ist also möglicherweise nur teilweise angewendet. Phoenix prüft sie erneut und bittet unter Genehmigungen um eine Überprüfung, falls sie weiterhin abweicht. Prüfe die aktuelle Konfiguration, bevor du erneut wiederherstellst.",
       "notesInvalidCharacters": "notes darf keine Steuerzeichen oder versteckten Formatierungszeichen enthalten.",
       "notesString": "notes muss eine Zeichenfolge oder null sein.",
-      "notesTooLong": "notes darf höchstens {max} Zeichen lang sein."
+      "notesTooLong": "notes darf höchstens {max} Zeichen lang sein.",
+      "attachmentsInvalid": "Die angehängten Bilder konnten nicht gelesen werden.",
+      "attachmentsTooMany": "Hängen Sie höchstens {max} Bilder an eine Nachricht an.",
+      "attachmentTooLarge": "Ein angehängtes Bild ist größer als {max} MB.",
+      "attachmentsTooLarge": "Die angehängten Bilder sind zusammen größer als {max} MB.",
+      "attachmentUnsupported": "Hängen Sie ein JPEG-, PNG- oder GIF-Bild an.",
+      "attachmentDimensions": "Ein angehängtes Bild ist auf einer Seite größer als {max} Pixel.",
+      "attachmentsContinue": "Bilder können nur an eine neue Nachricht angehängt werden.",
+      "attachmentsCompanion": "Home Companion nimmt nur Textbefehle an, daher können keine Bilder angehängt werden.",
+      "attachmentsVisionUnsupported": "Dieses Modell akzeptiert keine Bilder."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -1831,7 +1854,7 @@
       "killSwitchTitle": "Phoenix MCP bedient derzeit keine Agentenanfragen. Deaktivieren Sie den Kill-Schalter unter Einstellungen, um fortzufahren.",
       "killSwitchFull": "KILL-SCHALTER IST AKTIV",
       "killSwitchShort": "KILL-SCHALTER AN",
-      "agentChat": "Agent-Chat",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "Genehmigungen ({count} ausstehend)",
       "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisiere sie oder wähle einen anderen Bereich."
     },
@@ -2204,12 +2227,12 @@
         "mb": "Maximaler Speicher (MB)"
       },
       "source": {
-        "agentcli": "Agent-Chat",
+        "agentcli": "Agent Chat",
         "voice": "Sprachagent",
         "ai_task": "KI-Aufgabe",
         "assist": "Assist-Tool-Anbieter",
         "mcp": "Externer MCP-Client",
-        "home_companion": "Hausbegleiter"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Vollständiger Durchgang",

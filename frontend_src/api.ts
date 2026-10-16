@@ -488,6 +488,8 @@ export interface AgentCliChatBody {
   // existing conversation with no new user message.
   user?: string;
   continue?: boolean;
+  // Images attached to the new user message, as base64 JPEG bytes.
+  attachments?: { mime_type: string; data: string }[];
   // One-turn Home-focused override. Valid only alongside a new user message.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options?: Record<string, any>;

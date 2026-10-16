@@ -26,7 +26,7 @@
       "invalidResponse": "服务器返回了无效响应。请刷新后重试。"
     },
     "shell": {
-      "agentChat": "智能体对话",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "审批（{count} 项待处理）",
       "documentation": "文档",
       "killSwitchFull": "紧急停止开关已启用",
@@ -229,7 +229,7 @@
       "helper": "角色决定初始的能力配置。您可以在“高级”中逐项调整。当您的设置不再与任何预设匹配时，角色会自动变为“自定义”。",
       "noEsphome": "未在此系统上检测到 ESPHome",
       "home_companion": {
-        "label": "家居助手",
+        "label": "Home Companion",
         "description": "专为 Agent Chat 和 Voice 设计：通过一个任务工具读取家庭信息并控制设备。使用 Voice 的对话模型。",
         "setup": "在语音设置中选择提供商和模型。通过常规权限树授予读取或写入权限。能力设置可启用或禁用家庭工具目录内的访问；配置和编写工具仍不可用。直通模式和公布所有工具均已禁用。"
       }
@@ -670,7 +670,16 @@
       "restoreUnverified": "还原已提交，但随后读回的配置与所选版本不一致，因此可能只应用了一部分。Phoenix 会重新检查，如果仍不一致，会在审批中请求复核。再次还原前，请检查当前配置。",
       "notesInvalidCharacters": "notes 不能包含控制字符或隐藏的格式字符。",
       "notesString": "notes 必须是字符串或 null。",
-      "notesTooLong": "notes 不能超过 {max} 个字符。"
+      "notesTooLong": "notes 不能超过 {max} 个字符。",
+      "attachmentsInvalid": "无法读取附加的图像。",
+      "attachmentsTooMany": "每条消息最多附加 {max} 张图像。",
+      "attachmentTooLarge": "附加的图像大于 {max} MB。",
+      "attachmentsTooLarge": "附加的图像合计大于 {max} MB。",
+      "attachmentUnsupported": "请附加 JPEG、PNG 或 GIF 图像。",
+      "attachmentDimensions": "附加的图像有一边超过 {max} 像素。",
+      "attachmentsContinue": "只能为新消息附加图像。",
+      "attachmentsCompanion": "Home Companion 仅接受文本命令，因此无法附加图像。",
+      "attachmentsVisionUnsupported": "此模型不接受图像。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -1299,7 +1308,7 @@
       "agentcliAdding": "正在添加 {name}",
       "agentcliApiKey": "API 密钥",
       "agentcliBaseUrl": "基础 URL",
-      "agentcliCard": "智能体对话",
+      "agentcliCard": "Agent Chat",
       "agentcliConnectionFailed": "连接失败。",
       "agentcliDefaultModel": "默认模型：{model}",
       "agentcliChangeModel": "更换默认模型",
@@ -1696,7 +1705,21 @@
       "workingOn": "处理中：{name}",
       "workingSpinner": "处理中…",
       "chatEnded": "聊天已结束。",
-      "providerDetail": "提供商详情：{detail}"
+      "providerDetail": "提供商详情：{detail}",
+      "attachImage": "附加图像",
+      "attachmentAlt": "已附加的图像 {name}",
+      "removeAttachment": "移除 {name}",
+      "attachmentGone": "重新加载后未保留 {name}。",
+      "attachTooMany": {
+        "one": "每条消息最多可附加 {count} 张图像。",
+        "other": "每条消息最多可附加 {count} 张图像。"
+      },
+      "attachNotImage": "{name} 不是图像。",
+      "attachTooLarge": "{name} 太大，无法附加。",
+      "attachUnreadable": "无法将 {name} 读取为图像。",
+      "attachVisionUnknown": "此模型未说明是否接受图像。如果提供商拒绝图像，系统会为此模型记住这一点。",
+      "attachNoVision": "此模型不接受图像。",
+      "attachCompanion": "Home Companion 仅接受文本命令，因此无法附加图像。"
     },
     "wizard": {
       "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择 <strong>W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",
@@ -2204,12 +2227,12 @@
         "mb": "最大存储量（MB）"
       },
       "source": {
-        "agentcli": "智能体聊天",
+        "agentcli": "Agent Chat",
         "voice": "语音智能体",
         "ai_task": "AI 任务",
         "assist": "Assist 工具提供方",
         "mcp": "外部 MCP 客户端",
-        "home_companion": "家庭伙伴"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "完整轮次",

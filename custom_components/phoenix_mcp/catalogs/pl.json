@@ -78,7 +78,7 @@
   },
   "panel": {
     "shell": {
-      "agentChat": "Czat agenta",
+      "agentChat": "Agent Chat",
       "approvalsTabAria": "Zatwierdzenia ({count} oczekujących)",
       "documentation": "Dokumentacja",
       "killSwitchFull": "WYŁĄCZNIK AWARYJNY JEST AKTYWNY",
@@ -169,7 +169,7 @@
         "label": "Asystent głosowy"
       },
       "home_companion": {
-        "label": "Asystent domowy",
+        "label": "Home Companion",
         "description": "Do Agent Chat i Voice: jedno narzędzie do odczytu informacji o domu i sterowania urządzeniami. Korzysta z modelu konwersacji Voice.",
         "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj dostęp do odczytu lub zapisu przez standardowe drzewo uprawnień. Funkcje włączają lub wyłączają dostęp w katalogu domowym; narzędzia konfiguracji i tworzenia pozostają niedostępne. Tryb bezpośredni i ogłaszanie wszystkich narzędzi są wyłączone."
       }
@@ -934,7 +934,23 @@
       "workingOn": "Praca: {name}",
       "workingSpinner": "Praca…",
       "chatEnded": "Czat zakończony.",
-      "providerDetail": "Szczegóły dostawcy: {detail}"
+      "providerDetail": "Szczegóły dostawcy: {detail}",
+      "attachImage": "Załącz obraz",
+      "attachmentAlt": "Załączony obraz {name}",
+      "removeAttachment": "Usuń {name}",
+      "attachmentGone": "Plik {name} nie został zachowany po przeładowaniu.",
+      "attachTooMany": {
+        "one": "Do jednej wiadomości można załączyć maksymalnie {count} obraz.",
+        "few": "Do jednej wiadomości można załączyć maksymalnie {count} obrazy.",
+        "many": "Do jednej wiadomości można załączyć maksymalnie {count} obrazów.",
+        "other": "Do jednej wiadomości można załączyć maksymalnie {count} obrazu."
+      },
+      "attachNotImage": "Plik {name} nie jest obrazem.",
+      "attachTooLarge": "Plik {name} jest za duży, aby go załączyć.",
+      "attachUnreadable": "Nie udało się odczytać pliku {name} jako obrazu.",
+      "attachVisionUnknown": "Ten model nie określił, czy przyjmuje obrazy. Jeśli dostawca je odrzuci, zostanie to zapamiętane dla tego modelu.",
+      "attachNoVision": "Ten model nie przyjmuje obrazów.",
+      "attachCompanion": "Home Companion przyjmuje tylko polecenia tekstowe, więc nie można załączać obrazów."
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",
@@ -1081,7 +1097,16 @@
       "restoreUnverified": "Przywracanie zostało wysłane, ale odczytana potem konfiguracja nie zgadza się z wybraną wersją, więc mogła zostać zastosowana tylko częściowo. Phoenix sprawdzi ją ponownie i poprosi o przegląd w Zatwierdzeniach, jeśli nadal się różni. Sprawdź bieżącą konfigurację przed ponownym przywróceniem.",
       "notesInvalidCharacters": "notes nie może zawierać znaków sterujących ani ukrytych znaków formatowania.",
       "notesString": "notes musi być ciągiem znaków lub null.",
-      "notesTooLong": "notes może mieć co najwyżej {max} znaków."
+      "notesTooLong": "notes może mieć co najwyżej {max} znaków.",
+      "attachmentsInvalid": "Nie udało się odczytać załączonych obrazów.",
+      "attachmentsTooMany": "Liczba załączonych obrazów w jednej wiadomości nie może przekroczyć {max}.",
+      "attachmentTooLarge": "Załączony obraz jest większy niż {max} MB.",
+      "attachmentsTooLarge": "Załączone obrazy są łącznie większe niż {max} MB.",
+      "attachmentUnsupported": "Załącz obraz JPEG, PNG lub GIF.",
+      "attachmentDimensions": "Załączony obraz ma bok dłuższy niż {max} pikseli.",
+      "attachmentsContinue": "Obrazy można załączyć tylko do nowej wiadomości.",
+      "attachmentsCompanion": "Home Companion przyjmuje tylko polecenia tekstowe, więc nie można załączać obrazów.",
+      "attachmentsVisionUnsupported": "Ten model nie przyjmuje obrazów."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -1654,7 +1679,7 @@
       "agentcliAdding": "Dodawanie {name}",
       "agentcliApiKey": "Klucz API",
       "agentcliBaseUrl": "Bazowy adres URL",
-      "agentcliCard": "Czat agenta",
+      "agentcliCard": "Agent Chat",
       "agentcliChangeModel": "Zmień model domyślny",
       "agentcliConnectionFailed": "Połączenie nie powiodło się.",
       "agentcliDefaultModel": "Model domyślny: {model}",
@@ -2309,12 +2334,12 @@
         "mb": "Maksymalna pamięć (MB)"
       },
       "source": {
-        "agentcli": "Czat agenta",
+        "agentcli": "Agent Chat",
         "voice": "Agent głosowy",
         "ai_task": "Zadanie AI",
         "assist": "Dostawca narzędzi Assist",
         "mcp": "Zewnętrzny klient MCP",
-        "home_companion": "Towarzysz domu"
+        "home_companion": "Home Companion"
       },
       "coverage": {
         "full_turn": "Pełna tura",
