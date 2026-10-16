@@ -233,6 +233,67 @@ async def test_rate_limit_headers_are_not_forwarded_for_another_provider():
 
 
 @pytest.mark.asyncio
+async def test_retry_after_is_the_only_header_forwarded_for_another_provider():
+    """aiohttp hands adapters a case-insensitive multidict, so the fixture uses one."""
+    from multidict import CIMultiDict, CIMultiDictProxy
+
+    cfg = ProviderConfig(
+        kind="groq", model="m", base_url="https://api.groq.com/openai/v1", api_key="k")
+    response = _FakeResp(429, text_data="Rate limit exceeded", headers=CIMultiDictProxy(CIMultiDict({
+        "Retry-After": "7",
+        "X-RateLimit-Limit-Requests-Minute": "30",
+        "X-RateLimit-Remaining": "0",
+    })))
+
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
+    assert events[0]["code"] == "rate_limit"
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 7}
+
+
+@pytest.mark.asyncio
+async def test_claude_rate_limit_carries_retry_after_seconds():
+    cfg = ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k")
+    body = '{"type": "error", "error": {"type": "rate_limit_error", "message": "Too many tokens."}}'
+    response = _FakeResp(429, text_data=body, headers={
+        "retry-after": "23",
+        "anthropic-ratelimit-input-tokens-remaining": "0",
+    })
+
+    events = await _collect(ClaudeProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
+    assert events[0]["code"] == "rate_limit" and events[0]["retryable"] is True
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 23}
+
+
+@pytest.mark.parametrize("value", ["Wed, 21 Oct 2026 07:28:00 GMT", "1.5", "-3", "", "١٢"])
+@pytest.mark.asyncio
+async def test_retry_after_without_delay_seconds_is_dropped(value):
+    cfg = ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k")
+    response = _FakeResp(429, text_data="slow down", headers={"Retry-After": value})
+
+    events = await _collect(ClaudeProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
+    assert events[0]["code"] == "rate_limit"
+    assert "rate_limit" not in events[0]
+
+
+@pytest.mark.asyncio
+async def test_retry_after_outside_a_rate_limit_is_not_reported():
+    cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
+    response = _FakeResp(503, text_data="overloaded", headers={"Retry-After": "30"})
+
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
+    assert events[0]["code"] == "upstream"
+    assert "rate_limit" not in events[0]
+
+
+@pytest.mark.asyncio
 async def test_openai_stream_accumulates_split_tool_args():
     body = _sse(
         'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}',

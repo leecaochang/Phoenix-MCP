@@ -1189,16 +1189,23 @@ _MISTRAL_RATE_LIMIT_HEADER_FIELDS: tuple[tuple[str, str], ...] = (
     ("x-ratelimit-tokens-query-cost", "query_cost"),
     ("retry-after", "retry_after_seconds"),
 )
+# Retry-After (RFC 9110) means the same thing from every provider. Other
+# providers' x-ratelimit-* headers count different windows under similar names,
+# so only Mistral's documented set is read. Only the delay-seconds form is
+# accepted; an HTTP-date value is dropped rather than converted.
+_RETRY_AFTER_HEADER_FIELDS: tuple[tuple[str, str], ...] = (
+    ("retry-after", "retry_after_seconds"),
+)
 
 
-def _mistral_rate_limit_headers(headers: Any) -> dict[str, int]:
-    """Safe numeric Mistral quota diagnostics from one HTTP response."""
+def _rate_limit_headers(headers: Any, fields: tuple[tuple[str, str], ...]) -> dict[str, int]:
+    """Safe numeric quota diagnostics from one HTTP 429 response."""
     try:
         raw = {str(name).lower(): str(value).strip() for name, value in headers.items()}
     except (AttributeError, TypeError, ValueError):
         return {}
     out: dict[str, int] = {}
-    for header, field in _MISTRAL_RATE_LIMIT_HEADER_FIELDS:
+    for header, field in fields:
         value = raw.get(header)
         if value is None or not value.isascii() or not value.isdecimal():
             continue
@@ -1944,9 +1951,12 @@ class ClaudeProvider:
                             _CLAUDE_NO_ADAPTIVE.add(self.cfg.model)
                             _use_enabled_thinking(body)
                             continue
+                        rate_limit = (_rate_limit_headers(resp.headers, _RETRY_AFTER_HEADER_FIELDS)
+                                      if resp.status == 429 else {})
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
                                             retryable=resp.status in (429, 500, 502, 503, 504, 529),
-                                            refused=_refused_option(resp.status, msg, body))
+                                            refused=_refused_option(resp.status, msg, body),
+                                            **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
                     async for ev in self._parse(resp):
                         yield ev
@@ -2922,10 +2932,11 @@ class OpenAICompatProvider:
                         # Ollama commonly 500s on an unknown/hallucinated tool name.
                         code = _http_failure_code(resp.status, "ollama_backend" if self._is_ollama else "upstream")
                         retryable = resp.status in (429, 500, 502, 503)
-                        rate_limit = (
-                            _mistral_rate_limit_headers(resp.headers)
-                            if self.definition.model_filter == "mistral" and resp.status == 429 else {}
-                        )
+                        rate_limit = _rate_limit_headers(
+                            resp.headers,
+                            _MISTRAL_RATE_LIMIT_HEADER_FIELDS if self.definition.model_filter == "mistral"
+                            else _RETRY_AFTER_HEADER_FIELDS,
+                        ) if resp.status == 429 else {}
                         yield _http_failure(self.kind, resp.status, text, code=code, retryable=retryable,
                                             refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
@@ -4222,9 +4233,9 @@ async def _consume_model_stream(
                                     if ev.get("provider_detail") else {}),
                                  **({"provider_code": ev["provider_code"]}
                                     if ev.get("provider_code") else {}),
-                                 # Mistral's adapter has already reduced response
-                                 # headers to a strict allowlist of safe numeric
-                                 # quota fields. Preserve that structured snapshot
+                                 # The adapter has already reduced response headers
+                                 # to a strict allowlist of safe numeric quota
+                                 # fields. Preserve that structured snapshot
                                  # through the provider-to-SSE translation.
                                  **({"rate_limit": ev["rate_limit"]}
                                     if ev.get("rate_limit") else {}),
