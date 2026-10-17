@@ -3692,6 +3692,7 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_state": frozenset({"last_changed", "last_updated", "last_reported"}),
     "get_history": frozenset({
         "start", "end", "when", "last_changed", "last_updated", "last_reported",
+        "first_transition", "last_transition", "first_entered", "last_entered",
     }),
     "get_statistics": frozenset({"start", "end", "last_reset"}),
     "get_logbook": frozenset({"start_time", "end_time", "when"}),

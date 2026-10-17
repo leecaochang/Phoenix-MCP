@@ -143,6 +143,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "happened). Defaults to state_changes, which returns compact attribute-free state transitions and "
             "supports arbitrary time ranges. significant_states returns scrubbed full state records "
             "that Home Assistant considers significant, not every sample, and is limited to 7 days. "
+            "summary returns per-state durations and entry counts instead of rows (how long a light was on, "
+            "how often a pump started); a zero or total is definitive only when complete is true. Zone states "
+            "are occupant counts: occupied time is the sum of counts above 0. "
             "Follow has_more with next_cursor and the same order; there is intentionally no estimated total."
         ),
         "inputSchema": {
@@ -159,9 +162,12 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 },
                 "mode": {
                     "type": "string",
-                    "enum": ["state_changes", "significant_states"],
+                    "enum": ["state_changes", "significant_states", "summary"],
                     "default": "state_changes",
-                    "description": "state_changes: compact state transitions. significant_states: scrubbed significant state records.",
+                    "description": (
+                        "state_changes: compact state transitions. significant_states: scrubbed significant state "
+                        "records. summary: per-state totals; omit limit and order."
+                    ),
                 },
                 "limit": {
                     "type": "integer",

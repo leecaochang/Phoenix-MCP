@@ -47,6 +47,8 @@ CASES = [
     ("search_entities", {"domain": [1]}, "invalid_request"),
     ("get_history", {"entity_id": LAMP, "order": "random"}, "invalid_request"),
     ("get_history", {"entity_id": LAMP, "limit": 1001}, "invalid_request"),
+    ("get_history", {"entity_id": LAMP, "mode": "summary", "limit": 10}, "invalid_request"),
+    ("get_history", {"entity_id": LAMP, "mode": "totals"}, "invalid_request"),
     ("get_logs", {"level": "INFO"}, "invalid_request"),
     ("get_logs", {"search": "x" * 513}, "invalid_request"),
     ("call_service", {"service": _SERVICE, "targets": _TARGETS}, "allowed"),

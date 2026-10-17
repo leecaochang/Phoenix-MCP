@@ -94,6 +94,10 @@ grain of the model gives the smoothest results and avoids dead ends.
   pages: continue only when `has_more` is true, using `next_cursor` as the next
   call's `cursor`. There is no total to infer. `significant_states` is a
   scrubbed significant-state view, not every sample, and accepts at most 7 days.
+  For how long something was in a state or how often it changed, use
+  `get_history` `mode: "summary"`: per-state durations and entry counts with no
+  rows. Read `complete` before reporting a zero or a total; unrecorded time is
+  not a state. A zone's states are occupant counts.
 - `compare_entities`: whether one entity can stand in for another, BEFORE you
   repoint automations, scripts or dashboard cards from one to the other. It
   names attributes the replacement lacks, attributes whose value differs, and

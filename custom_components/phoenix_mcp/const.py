@@ -61,6 +61,13 @@ SERVICE_TARGET_MAX_GROUPS = 32
 SERVICE_TARGET_MAX_IDS = 1024
 # One get_state call reads at most this many explicit entity IDs.
 GET_STATE_MAX_IDS = 1024
+# get_history summary mode: Recorder rows per database page, rows one call may
+# fold (so at most this many divided by the page size queries), wall-clock
+# seconds before no further page starts, and states listed individually.
+HISTORY_SUMMARY_PAGE_ROWS = 1000
+HISTORY_SUMMARY_MAX_ROWS = 20000
+HISTORY_SUMMARY_MAX_SECONDS = 10.0
+HISTORY_SUMMARY_MAX_STATES = 50
 # Offset-paged registry and calendar reads.
 DEVICE_LIST_DEFAULT_LIMIT = 100
 DEVICE_LIST_MAX_LIMIT = 500
