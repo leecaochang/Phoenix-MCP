@@ -15,15 +15,11 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-import math
+from datetime import datetime
 import time
 from typing import Any
 
-from homeassistant.util import dt as dt_util
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=dt_util.UTC)
-_MICROSECOND = timedelta(microseconds=1)
+from .recorder_queries import ceil_us, from_us
 
 Row = tuple[int, str]
 # fetch(after_us, before_us, limit, include_start_state) -> ascending rows.
@@ -32,30 +28,6 @@ Fetch = Callable[[int, int, int, bool], Awaitable[list[Row]]]
 
 class SummaryUnavailableError(Exception):
     """The bounded scan found no safe page end, or no safe cursor once over budget."""
-
-
-def to_us(value: datetime) -> int:
-    return (dt_util.as_utc(value) - _EPOCH) // _MICROSECOND
-
-
-def from_us(value: int) -> datetime:
-    return _EPOCH + timedelta(microseconds=value)
-
-
-def stamp_us(timestamp: float) -> int:
-    """The smallest microsecond n whose bound from_us(n) is not earlier than a stored timestamp.
-
-    Core stores float timestamps finer than a microsecond and compares them with
-    the bound's datetime.timestamp(), which equals n / 1_000_000. With this
-    mapping a lower bound of from_us(n) excludes exactly the rows stamped n or
-    earlier, so a page boundary never reads its last row again.
-    """
-    stamp = math.ceil(timestamp * 1_000_000)
-    while (stamp - 1) / 1_000_000 >= timestamp:
-        stamp -= 1
-    while stamp / 1_000_000 < timestamp:
-        stamp += 1
-    return stamp
 
 
 def read_state_change_page(
@@ -73,7 +45,7 @@ def read_state_change_page(
     states = history.state_changes_during_period(
         hass, from_us(after_us), from_us(before_us), entity_id, True, False, limit, include_start_state,
     ).get(entity_id, [])
-    return [(stamp_us(state.last_updated_timestamp), state.state) for state in states]
+    return [(ceil_us(state.last_updated_timestamp), state.state) for state in states]
 
 
 def group_cut(rows: list[Row]) -> int | None:

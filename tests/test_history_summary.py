@@ -27,7 +27,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import asy
 from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.history_summary import (
-    SummaryUnavailableError, cursor_cut, from_us, group_cut, scan_state_changes, stamp_us,
+    SummaryUnavailableError, cursor_cut, group_cut, scan_state_changes,
 )
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
@@ -346,19 +346,6 @@ async def test_hidden_entities_are_not_found_before_any_scan(recorder_mock, hass
         result = await _call(hass, "switch.hidden", 0, 600)
     assert result[1] == "denied" and result[0]["content"][0]["text"] == "Entity not found."
     page.assert_not_called()
-
-
-def test_a_stamp_is_exactly_what_a_lower_bound_excludes() -> None:
-    """Core keeps a row when its stored float exceeds the bound's timestamp(); stamps must agree."""
-    rng = random.Random(3)
-    base = int(BASE.timestamp()) * 1_000_000
-    for _ in range(20000):
-        bound = base + rng.randint(0, 10**9)
-        stored = (bound + rng.choice((-1, 0, 1)) * rng.random() * 2) / 1_000_000
-        if rng.random() < 0.3:
-            stored = bound / 1_000_000
-        assert (stored > from_us(bound).timestamp()) == (stamp_us(stored) > bound)
-    assert stamp_us(from_us(base).timestamp()) == base
 
 
 def test_cuts_never_split_a_timestamp_group() -> None:

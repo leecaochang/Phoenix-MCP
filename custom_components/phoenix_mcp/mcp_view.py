@@ -75,10 +75,17 @@ from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
 from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
-from .history_summary import SummaryUnavailableError, read_state_change_page, scan_state_changes, summary_body, to_us
+from .history_summary import SummaryUnavailableError, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     RecorderWindow,
+    backward_page_start,
+    ceil_us,
+    floor_us,
+    forward_page_end,
+    from_us,
+    row_timestamp,
+    to_us,
     newest_page,
     STATISTIC_PERIOD_LIMITS,
     recorder_envelope,
@@ -980,20 +987,42 @@ async def _tool_get_history(
             result = cast(dict[str, list[Any]], await instance.async_add_executor_job(fn))
             return result.get(entity_id, [])
 
+        older = False
         if not newest:
             states_list = await fetch(lower, upper, window.limit + 1)
-            has_more = len(states_list) > window.limit
-            states_list = states_list[:window.limit]
         elif mode == "state_changes":
-            states_list, has_more = await newest_page(fetch, lower, upper, window.limit)
+            # One extra row lets the page end between two rows a cursor can separate.
+            states_list, older = await newest_page(fetch, lower, upper, window.limit + 1)
         else:
             # Significant states are already bounded to 7 days and read whole.
             states_list = await fetch(lower, upper, None)
-            has_more = len(states_list) > window.limit
-            states_list = states_list[-window.limit:]
     except Exception:
         _LOGGER.warning("MCP history call failed for entity %s", entity_id, exc_info=True)
         return _tool_error("History call failed."), "denied", entity_id
+
+    # Core filters on stored float timestamps finer than a microsecond, so the
+    # cursor is derived from those floats: a cursor taken from a row's rounded
+    # time would read that row again or skip a neighbour in the same microsecond.
+    stamps = [row_timestamp(state) for state in states_list]
+    has_more = older or len(states_list) > window.limit
+    cursor: datetime | None = None
+    if has_more:
+        if any(stamp is None for stamp in stamps):
+            _LOGGER.warning("MCP history row for entity %s has no usable timestamp", entity_id)
+            return _tool_error("History call returned an invalid timestamp."), "invalid_request", entity_id
+        known = cast(list[float], stamps)
+        if not newest:
+            count = forward_page_end(known, window.limit)
+            if count is not None:
+                states_list, cursor = states_list[:count], from_us(ceil_us(known[count - 1]))
+        else:
+            first = backward_page_start(known, window.limit)
+            if first is not None:
+                states_list, cursor = states_list[first:], from_us(floor_us(known[first]))
+        if cursor is None:
+            return _tool_error(
+                "More history rows share one microsecond than this limit allows; increase limit."
+            ), "invalid_request", entity_id
 
     page_dicts: list[dict[str, Any]] = [
         dict(s.as_dict()) if hasattr(s, "as_dict") else dict(s) for s in states_list
@@ -1014,16 +1043,12 @@ async def _tool_get_history(
             }
             for d in page_dicts
         ]
-    last_timestamp = state_timestamp(page_dicts[-1]) if page_dicts else None
-    if has_more and last_timestamp is None:
-        _LOGGER.warning("MCP history row for entity %s has no usable timestamp", entity_id)
-        return _tool_error("History call returned an invalid timestamp."), "invalid_request", entity_id
     if newest:
-        covered_start = last_timestamp if has_more and last_timestamp is not None else window.start
+        covered_start = cursor if cursor is not None else window.start
         covered_end = upper
     else:
         covered_start = window.page_start
-        covered_end = last_timestamp if has_more and last_timestamp is not None else window.end
+        covered_end = cursor if cursor is not None else window.end
     warnings = retention_warnings("short_term", window.start, keep_days, utcnow())
     body = recorder_envelope(
         entity_id=entity_id,
@@ -1038,7 +1063,7 @@ async def _tool_get_history(
         ),
         effective_limit=window.limit,
         has_more=has_more,
-        next_cursor=last_timestamp if has_more else None,
+        next_cursor=cursor,
         retention=retention_metadata("short_term", keep_days),
         warnings=warnings,
         result_key="history",

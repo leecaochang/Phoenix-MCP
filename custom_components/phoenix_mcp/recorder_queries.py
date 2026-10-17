@@ -5,6 +5,7 @@ from __future__ import annotations
 from calendar import monthrange
 from dataclasses import dataclass
 import logging
+import math
 from datetime import datetime, timedelta
 from collections.abc import Mapping
 from typing import Any, Literal, cast
@@ -121,6 +122,84 @@ async def newest_page(fetch: Any, start: datetime, end: datetime, limit: int) ->
             if len(rows) == limit:
                 break
     return best, True
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=dt_util.UTC)
+_MICROSECOND = timedelta(microseconds=1)
+
+
+def to_us(value: datetime) -> int:
+    return (dt_util.as_utc(value) - _EPOCH) // _MICROSECOND
+
+
+def from_us(value: int) -> datetime:
+    return _EPOCH + timedelta(microseconds=value)
+
+
+def ceil_us(timestamp: float) -> int:
+    """The smallest microsecond n with n / 1_000_000 >= a stored Recorder timestamp.
+
+    Core stores float timestamps finer than a microsecond and keeps a row only
+    when it is strictly later than a lower bound's datetime.timestamp(), which for
+    from_us(n) equals n / 1_000_000. A lower bound of from_us(n) therefore
+    excludes exactly the rows whose ceil_us is n or less.
+    """
+    stamp = math.ceil(timestamp * 1_000_000)
+    while (stamp - 1) / 1_000_000 >= timestamp:
+        stamp -= 1
+    while stamp / 1_000_000 < timestamp:
+        stamp += 1
+    return stamp
+
+
+def floor_us(timestamp: float) -> int:
+    """The largest microsecond n with n / 1_000_000 <= a stored Recorder timestamp.
+
+    An exclusive upper bound of from_us(n) keeps exactly the rows whose floor_us
+    is below n.
+    """
+    stamp = math.floor(timestamp * 1_000_000)
+    while (stamp + 1) / 1_000_000 <= timestamp:
+        stamp += 1
+    while stamp / 1_000_000 > timestamp:
+        stamp -= 1
+    return stamp
+
+
+def row_timestamp(state: Any) -> float | None:
+    """The stored last_updated float Core's range filters compare, or None if absent."""
+    value = getattr(state, "last_updated_timestamp", None)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    stamp = state_timestamp(dict(state.as_dict()) if hasattr(state, "as_dict") else dict(state))
+    return stamp.timestamp() if stamp is not None else None
+
+
+def forward_page_end(stamps: list[float], limit: int) -> int | None:
+    """How many rows an oldest-first page returns when later rows follow, or None.
+
+    stamps are ascending with at least one row past the page. The page ends
+    where the next row has a later ceil_us, so a cursor of the last returned
+    row's ceil_us excludes the page and nothing after it.
+    """
+    for count in range(min(limit, len(stamps) - 1), 0, -1):
+        if ceil_us(stamps[count - 1]) < ceil_us(stamps[count]):
+            return count
+    return None
+
+
+def backward_page_start(stamps: list[float], limit: int) -> int | None:
+    """The index of the oldest row a newest-first page returns when older rows remain, or None.
+
+    stamps are ascending and the rows before the returned index, plus any older
+    unread rows, belong to later pages. The page starts where the row has a later
+    floor_us than its predecessor, so a cursor of that floor_us keeps exactly the
+    older rows.
+    """
+    for index in range(max(1, len(stamps) - limit), len(stamps)):
+        if floor_us(stamps[index]) > floor_us(stamps[index - 1]):
+            return index
+    return None
 
 
 def iso_utc(value: datetime) -> str:
