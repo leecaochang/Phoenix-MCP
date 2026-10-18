@@ -107,6 +107,10 @@ from .const import (
     AGENTCLI_GROK_US_BASE_URL,
     AGENTCLI_OPENAI_BASE_URL,
     AGENTCLI_OPENCODE_BASE_URL,
+    AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    AGENTCLI_OPENCODE_CONSOLE_MODELS_URL,
+    AGENTCLI_OPENCODE_CHAT_MODELS,
+    AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
     AGENTCLI_MIMO_BASE_URL,
     AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
     AGENTCLI_TENCENT_GUANGZHOU_BASE_URL,
@@ -160,7 +164,7 @@ _OPENAI_NO_EFFORT_NONE: set[str] = set()
 # back verbatim with its tool calls on the next round. Kimi's thinking models and
 # Qwen's preserve_thinking models take it the same way; others use the field for
 # display only.
-_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks"})
+_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode"})
 # Upper bound on catalogue pages followed, so a misbehaving provider cannot loop forever.
 _MODEL_LIST_MAX_PAGES = 10
 
@@ -301,6 +305,7 @@ class ProviderChoice:
     label: str
     label_key: str | None = None
     base_url: str | None = None
+    models_url: str | None = None
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {"value": self.value, "label": self.label}
@@ -433,6 +438,13 @@ _MIMO_ENDPOINTS = (
     ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENTCLI_MIMO_BASE_URL),
     ProviderChoice("token_plan", "Token Plan", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
 )
+_OPENCODE_ENDPOINTS = (
+    ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENTCLI_OPENCODE_BASE_URL),
+    ProviderChoice(
+        "console", "Console", "settings.agentcliOpenCodeConsole",
+        AGENTCLI_OPENCODE_CONSOLE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_MODELS_URL,
+    ),
+)
 
 _PROVIDER_LABEL_KEYS = {
     "claude": "settings.providerAnthropic",
@@ -515,7 +527,12 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS,
             reasoning="probed_effort", model_filter="tencent",
         ),
-        _definition("opencode", "OpenCode Zen", AGENTCLI_OPENCODE_BASE_URL, reasoning="probed_effort", model_filter="opencode"),
+        _definition(
+            "opencode", "OpenCode", AGENTCLI_OPENCODE_BASE_URL,
+            fields=(ProviderField("endpoint_id", "choice", "settings.agentcliOpenCodeRoute",
+                                  choices=_OPENCODE_ENDPOINTS), _API_KEY_FIELD),
+            endpoints=_OPENCODE_ENDPOINTS, reasoning="probed_effort", model_filter="opencode",
+        ),
         _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
         _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort", model_filter="openrouter"),
@@ -682,8 +699,9 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the identity used to reject exact duplicate accounts.
 
     The endpoint for Ollama, the credential for most kinds, and endpoint plus
-    credential for Qwen, Z.ai and Tencent. Compared in memory only; never stored
-    or returned.
+    credential for Qwen and providers with endpoint-bound keys. OpenCode keeps
+    its credential identity across Zen and Console. Compared in memory only;
+    never stored or returned.
     """
     if kind == "ollama":
         return kind, _normalized_provider_url(cfg.get("base_url"))
@@ -693,7 +711,7 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
             str(cfg.get("api_key") or "").strip(),
         ))
     definition = PROVIDER_DEFINITIONS.get(kind)
-    if definition is not None and definition.endpoints:
+    if definition is not None and definition.endpoints and kind != "opencode":
         return kind, "\0".join((
             str(cfg.get("endpoint_id") or definition.endpoints[0].value),
             str(cfg.get("api_key") or "").strip(),
@@ -2577,21 +2595,22 @@ async def _ollama_capabilities(
 # OpenCode Zen serves one catalogue through several wire formats. Only the
 # chat-completions family is reachable by this client, so models Zen documents on
 # its Responses, Anthropic-messages, Gemini or typed-decision endpoints are left
-# out. Matching is by vendor family word, never by version, so a new release of a
-# family is classified the same way as the last one. A family Phoenix has not seen
-# is kept, because chat completions is Zen's default endpoint.
+# out. Legacy accounts retain their family fallback plus exact qualified
+# exceptions; Console requires documented per-model Chat Completions support.
 _OPENCODE_OTHER_ENDPOINT_RE = re.compile(
     r"^(?:gpt|grok|claude|gemini|jev|muse|qwen)", re.I,
 )
 
 
-def _filter_opencode_models(models: list[str]) -> list[str]:
-    """Keep the Zen models that answer on /chat/completions."""
-    chat = sorted(
+def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
+    """Require Console endpoint evidence and preserve qualified legacy exceptions."""
+    known_chat = (AGENTCLI_OPENCODE_CHAT_MODELS if verified_only
+                  else AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS)
+    return sorted(
         m for m in models
-        if not _OPENCODE_OTHER_ENDPOINT_RE.match(m) and not _NON_CHAT_MODEL_RE.search(m)
+        if m in known_chat or (not verified_only and not _OPENCODE_OTHER_ENDPOINT_RE.match(m)
+                               and not _NON_CHAT_MODEL_RE.search(m))
     )
-    return chat or sorted(models)
 
 
 def _filter_meta_models(models: list[str]) -> list[str]:
@@ -2662,6 +2681,23 @@ class OpenAICompatProvider:
         # Ollama exposes the OpenAI shape under /v1; DeepSeek at the root.
         return f"{self.cfg.base_url}/v1/chat/completions" if self._is_ollama \
             else f"{self.cfg.base_url}/chat/completions"
+
+    def _models_url(self) -> str:
+        for choice in self.definition.endpoints:
+            if choice.base_url == self.cfg.base_url and choice.models_url:
+                return choice.models_url
+        return f"{self.cfg.base_url}/models"
+
+    @property
+    def _is_opencode_console(self) -> bool:
+        return self.kind == "opencode" and self.cfg.base_url == AGENTCLI_OPENCODE_CONSOLE_BASE_URL
+
+    @property
+    def _unsupported_model_api(self) -> bool:
+        return self._is_opencode_console and self.cfg.model not in AGENTCLI_OPENCODE_CHAT_MODELS
+
+    def _model_fallback(self) -> list[str]:
+        return [self.cfg.model] if self.cfg.model and not self._unsupported_model_api else []
 
     def _headers(self) -> dict:
         # Every keyed backend uses a Bearer header, including Ollama Cloud; only
@@ -2739,7 +2775,7 @@ class OpenAICompatProvider:
                         return False, "API key rejected."
                     label = "Ollama Cloud" if self._is_ollama_cloud else "Ollama"
                     return False, f"{label} returned HTTP {resp.status}."
-            async with session.get(f"{self.cfg.base_url}/models", headers=self._headers(),
+            async with session.get(self._models_url(), headers=self._headers(),
                                    timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status == 200:
                     return True, ""
@@ -2793,16 +2829,19 @@ class OpenAICompatProvider:
                 self.model_created = _created_map(body.get("models", []))
                 return [m.get("name") or m.get("model") for m in body.get("models", [])
                         if (m.get("name") or m.get("model"))]
-            async with session.get(f"{self.cfg.base_url}/models", headers=self._headers(),
+            async with session.get(self._models_url(), headers=self._headers(),
                                    timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status != 200:
-                    return [self.cfg.model] if self.cfg.model else []
+                    return self._model_fallback()
                 body = await resp.json(content_type=None)
             data = (
                 body if self.definition.models_shape == "list" and isinstance(body, list)
                 else body.get("data", []) if isinstance(body, dict)
                 else []
             )
+            if self.definition.model_filter == "opencode":
+                data = [row for row in (data if isinstance(data, list) else []) if isinstance(row, dict)
+                        and isinstance(row.get("id"), str) and row["id"]]
             data = [row for row in data if not _is_expired(row)]
             self.model_created = _created_map(data)
             if self.definition.model_filter == "openrouter":
@@ -2829,17 +2868,19 @@ class OpenAICompatProvider:
             elif self.definition.model_filter == "together":
                 return _filter_together_models(data)
             elif self.definition.model_filter == "opencode":
-                models = _filter_opencode_models(models)
+                return _filter_opencode_models(models, verified_only=self._is_opencode_console)
             elif self.definition.model_filter == "meta":
                 models = _filter_meta_models(models)
             elif self.definition.model_filter == "chat":
                 models = _filter_generic_chat_models(models)
             return models or ([self.cfg.model] if self.cfg.model else [])
-        except (ClientError, asyncio.TimeoutError):
-            return [self.cfg.model] if self.cfg.model else []
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return self._model_fallback()
 
     async def probe_image(self, session: ClientSession, image: str, question: str) -> tuple[int | None, str]:
         """Status and reply text for one question about an attached PNG (see async_probe_vision)."""
+        if self._unsupported_model_api:
+            return 400, ""
         token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
                        else "max_tokens")
         body: dict = {"model": self.cfg.model, token_limit: AGENTCLI_PROBE_IMAGE_MAX_TOKENS, "stream": False,
@@ -2870,6 +2911,8 @@ class OpenAICompatProvider:
         None when the provider could not be reached at all, which is not an
         answer about the option and must not be recorded as one.
         """
+        if self._unsupported_model_api:
+            return 400
         # OpenAI's reasoning models reject max_tokens, and Meta deprecates it.
         token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
                        else "max_tokens")
@@ -2930,6 +2973,10 @@ class OpenAICompatProvider:
         tools: list[dict], options: dict,
     ) -> AsyncIterator[dict]:
         # OpenAI shape carries the system prompt as the first message.
+        if self._unsupported_model_api:
+            yield _norm(EV_ERROR, status=0, code="model_api_unsupported",
+                        message="This model is not qualified for OpenCode Chat Completions.", retryable=False)
+            return
         full_messages = [{"role": "system", "content": system_prompt}, *messages]
         body: dict = {
             "model": self.cfg.model,
@@ -5225,7 +5272,9 @@ async def _run_headless_turn(
                 return _HeadlessTurnResult(
                     final_text, review_urls,
                     outcome=TURN_OUTCOME_UNKNOWN if write_started else TURN_PROVIDER_ERROR,
-                    detail=str(ev.get("message") or _HEADLESS_PROVIDER_ERROR),
+                    detail=(voice_text(routing_language, "model_api_unsupported")
+                            if ev.get("code") == "model_api_unsupported"
+                            else str(ev.get("message") or _HEADLESS_PROVIDER_ERROR)),
                     focus_declined=focus_declined,
                 )
         if correct_format:

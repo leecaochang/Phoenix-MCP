@@ -426,7 +426,8 @@
         "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "provider_rejected": "Palveluntarjoaja torjui tämän pyynnön. Sitä ei yritetä uudelleen.",
         "bad_tool_call_retry": "Malli lähetti työkalukutsun, jonka argumentit eivät olleet kelvollista JSONia. Mitään siitä vastauksesta ei suoritettu; virhe palautettiin, jotta malli voi lähettää kutsun uudelleen.",
-        "too_many_tools": "Tämä käyttöavain tarjoaa {count} työkalua, mutta {provider} hyväksyy enintään {limit} yhdessä pyynnössä. Rajaa käyttöavaimen ominaisuuksia tai valitse toinen palveluntarjoaja."
+        "too_many_tools": "Tämä käyttöavain tarjoaa {count} työkalua, mutta {provider} hyväksyy enintään {limit} yhdessä pyynnössä. Rajaa käyttöavaimen ominaisuuksia tai valitse toinen palveluntarjoaja.",
+        "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli."
       },
       "options": "Asetukset",
       "pausedAfter": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?",
@@ -2149,7 +2150,7 @@
       "providerOllamaCloud": "Ollama (pilvi)",
       "providerOllamaLocal": "Ollama (paikallinen)",
       "providerOpenAI": "OpenAI",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOpenRouter": "OpenRouter",
       "providerQwen": "Alibaba Cloud Model Studio / Qwen",
       "providerTencent": "Tencent Cloud TokenHub",
@@ -2225,7 +2226,10 @@
       "wipeWarning": "Valitse, mitä poistetaan. Tätä ei voi peruuttaa.",
       "agentcliProbedVisionSeen": "Kuvatarkistus: malli luki testikuvan, joten liitetyt kuvat ja kameran kuvat lähetetään sille.",
       "agentcliProbedVisionUnseen": "Kuvatarkistus: malli ei pystynyt lukemaan testikuvaa, joten Phoenix käsittelee sitä pelkkää tekstiä käsittelevänä.",
-      "agentcliProbedVisionInconclusive": "Kuvatarkistus: käyttökelpoista vastausta ei tullut, joten kuvatuki on yhä tuntematon."
+      "agentcliProbedVisionInconclusive": "Kuvatarkistus: käyttökelpoista vastausta ei tullut, joten kuvatuki on yhä tuntematon.",
+      "agentcliOpenCodeRoute": "API-reitti",
+      "agentcliOpenCodeZen": "Zen (vanha)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2450,6 +2454,7 @@
     "output_limit": "Valitettavasti malli tuotti liikaa tulostetta, joten pysähdyin.",
     "prior_action_unresolved": "Tätä pyyntöä ei suoritettu, koska aiempi toiminto vaatii tarkistusta. Avaa Tarvitsee huomiotasi Phoenix MCP:ssä.",
     "provider_error": "Valitettavasti {reason}.",
-    "unavailable": "Phoenix MCP -ääniagentti ei ole tällä hetkellä saatavilla."
+    "unavailable": "Phoenix MCP -ääniagentti ei ole tällä hetkellä saatavilla.",
+    "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli."
   }
 }

@@ -689,7 +689,8 @@
         "quota": "La cuenta del proveedor se ha quedado sin crédito o ha alcanzado su límite de gasto. No se volverá a intentar.",
         "provider_rejected": "El proveedor rechazó esta solicitud. No se volverá a intentar.",
         "bad_tool_call_retry": "El modelo envió una llamada de herramienta cuyos argumentos no eran JSON válido. No se ejecutó nada de esa respuesta; se devolvió el error para que el modelo pueda volver a enviar la llamada.",
-        "too_many_tools": "Esta clave de acceso anuncia {count} herramientas, pero {provider} acepta como máximo {limit} por solicitud. Reduzca las capacidades de la clave de acceso o elija otro proveedor."
+        "too_many_tools": "Esta clave de acceso anuncia {count} herramientas, pero {provider} acepta como máximo {limit} por solicitud. Reduzca las capacidades de la clave de acceso o elija otro proveedor.",
+        "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible."
       },
       "options": "Opciones",
       "pausedAfter": "Pausado tras {count} pasos. ¿Continuar investigando?",
@@ -1653,7 +1654,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (nube)",
       "providerOllamaLocal": "Ollama (local)",
       "providerOpenAI": "OpenAI",
@@ -1757,7 +1758,10 @@
       "providerChecksHoursAria": "Horas entre comprobaciones de proveedores",
       "agentcliProbedVisionSeen": "Comprobación de imagen: el modelo leyó la imagen de prueba, por lo que se le envían las imágenes adjuntas y las imágenes de la cámara.",
       "agentcliProbedVisionUnseen": "Comprobación de imagen: el modelo no pudo leer la imagen de prueba, por lo que Phoenix lo trata como solo texto.",
-      "agentcliProbedVisionInconclusive": "Comprobación de imagen: no llegó una respuesta utilizable, por lo que la compatibilidad con imágenes sigue siendo desconocida."
+      "agentcliProbedVisionInconclusive": "Comprobación de imagen: no llegó una respuesta utilizable, por lo que la compatibilidad con imágenes sigue siendo desconocida.",
+      "agentcliOpenCodeRoute": "Ruta de API",
+      "agentcliOpenCodeZen": "Zen (anterior)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "approvalSummary": {
       "action.approve": "Aprobar y ejecutar",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{count} {kind} en {area}",
     "companion_unavailable_targets": "No disponibles ({count}): {names}. Compruébalos en Home Assistant; no vuelvas a enviar comandos.",
     "companion_unverified_targets": "Sin verificar ({count}): {names}. Compruébalos en Home Assistant; no vuelvas a enviar comandos.",
-    "companion_verification_progress": "Home Assistant informa de los ajustes solicitados para {count} de {total} objetivos."
+    "companion_verification_progress": "Home Assistant informa de los ajustes solicitados para {count} de {total} objetivos.",
+    "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible."
   }
 }

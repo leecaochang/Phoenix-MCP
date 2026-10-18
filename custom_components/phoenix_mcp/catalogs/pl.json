@@ -74,7 +74,8 @@
     "companion_group_targets": "{count} {kind} w {area}",
     "companion_unavailable_targets": "Niedostępne ({count}): {names}. Sprawdź w Home Assistant; nie wysyłaj poleceń ponownie.",
     "companion_unverified_targets": "Niezweryfikowane ({count}): {names}. Sprawdź w Home Assistant; nie wysyłaj poleceń ponownie.",
-    "companion_verification_progress": "Home Assistant zgłasza żądane ustawienia dla {count} z {total} celów."
+    "companion_verification_progress": "Home Assistant zgłasza żądane ustawienia dla {count} z {total} celów.",
+    "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model."
   },
   "panel": {
     "shell": {
@@ -872,7 +873,8 @@
         "quota": "Konto dostawcy wyczerpało środki lub osiągnęło limit wydatków. Próba nie zostanie ponowiona.",
         "provider_rejected": "Dostawca odrzucił to żądanie. Próba nie zostanie ponowiona.",
         "bad_tool_call_retry": "Model wysłał wywołanie narzędzia, którego argumenty nie były prawidłowym JSON-em. Nic z tej odpowiedzi nie zostało wykonane; błąd został zwrócony, aby model mógł ponownie wysłać wywołanie.",
-        "too_many_tools": "Ten klucz dostępu udostępnia {count} narzędzi, ale {provider} przyjmuje najwyżej {limit} w jednym żądaniu. Ogranicz możliwości klucza dostępu lub wybierz innego dostawcę."
+        "too_many_tools": "Ten klucz dostępu udostępnia {count} narzędzi, ale {provider} przyjmuje najwyżej {limit} w jednym żądaniu. Ogranicz możliwości klucza dostępu lub wybierz innego dostawcę.",
+        "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model."
       },
       "options": "Opcje",
       "pausedAfter": "Wstrzymano po {count} krokach. Kontynuować badanie?",
@@ -1851,7 +1853,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (chmura)",
       "providerOllamaLocal": "Ollama (lokalny)",
       "providerOpenAI": "OpenAI",
@@ -1955,7 +1957,10 @@
       "providerChecksHoursAria": "Godziny między sprawdzeniami dostawców",
       "agentcliProbedVisionSeen": "Test obrazu: model odczytał obraz testowy, więc załączone obrazy i obrazy kamer są do niego wysyłane.",
       "agentcliProbedVisionUnseen": "Test obrazu: model nie odczytał obrazu testowego, więc Phoenix traktuje go jako model wyłącznie tekstowy.",
-      "agentcliProbedVisionInconclusive": "Test obrazu: nie wróciła użyteczna odpowiedź, więc obsługa obrazów nadal jest nieznana."
+      "agentcliProbedVisionInconclusive": "Test obrazu: nie wróciła użyteczna odpowiedź, więc obsługa obrazów nadal jest nieznana.",
+      "agentcliOpenCodeRoute": "Trasa API",
+      "agentcliOpenCodeZen": "Zen (starszy)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "approvalSummary": {
       "action.approve": "Zatwierdź i wykonaj",

@@ -1291,7 +1291,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (nuage)",
       "providerOllamaLocal": "Ollama (en local)",
       "providerOpenAI": "OpenAI",
@@ -1395,7 +1395,10 @@
       "providerChecksHoursAria": "Heures entre deux vérifications des fournisseurs",
       "agentcliProbedVisionSeen": "Vérification d'image : le modèle a lu l'image de test, les images jointes et les images de la caméra lui sont donc envoyées.",
       "agentcliProbedVisionUnseen": "Vérification d'image : le modèle n'a pas pu lire l'image de test, Phoenix le traite donc comme un modèle texte uniquement.",
-      "agentcliProbedVisionInconclusive": "Vérification d'image : aucune réponse exploitable n'est revenue, la prise en charge des images reste donc inconnue."
+      "agentcliProbedVisionInconclusive": "Vérification d'image : aucune réponse exploitable n'est revenue, la prise en charge des images reste donc inconnue.",
+      "agentcliOpenCodeRoute": "Route API",
+      "agentcliOpenCodeZen": "Zen (ancien)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "agentchat": {
       "announceApproval": "L'action {name} nécessite votre approbation.",
@@ -1516,7 +1519,8 @@
         "quota": "Le compte de fournisseur n’a plus de crédit ou a atteint sa limite de dépenses. Aucun nouvel essai ne sera effectué.",
         "provider_rejected": "Le fournisseur a refusé cette requête. Aucun nouvel essai ne sera effectué.",
         "bad_tool_call_retry": "Le modèle a envoyé un appel d'outil dont les arguments n'étaient pas du JSON valide. Rien de cette réponse n'a été exécuté ; l'erreur a été renvoyée pour que le modèle puisse renvoyer l'appel.",
-        "too_many_tools": "Cette clé d’accès annonce {count} outils, mais {provider} en accepte au maximum {limit} par requête. Réduisez les capacités de la clé d’accès ou choisissez un autre fournisseur."
+        "too_many_tools": "Cette clé d’accès annonce {count} outils, mais {provider} en accepte au maximum {limit} par requête. Réduisez les capacités de la clé d’accès ou choisissez un autre fournisseur.",
+        "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge."
       },
       "chatEnded": "Discussion terminée.",
       "providerDetail": "Détail du fournisseur : {detail}",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{count} {kind} dans {area}",
     "companion_unavailable_targets": "Indisponibles ({count}) : {names}. Vérifiez dans Home Assistant ; ne renvoyez pas les commandes.",
     "companion_unverified_targets": "Non vérifiés ({count}) : {names}. Vérifiez dans Home Assistant ; ne renvoyez pas les commandes.",
-    "companion_verification_progress": "Home Assistant indique les réglages demandés pour {count} cibles sur {total}."
+    "companion_verification_progress": "Home Assistant indique les réglages demandés pour {count} cibles sur {total}.",
+    "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge."
   }
 }

@@ -221,7 +221,8 @@
         "quota": "Das Anbieterkonto hat kein Guthaben mehr oder sein Ausgabenlimit erreicht. Sie wird nicht erneut angefordert.",
         "provider_rejected": "Der Anbieter hat diese Anfrage abgelehnt. Sie wird nicht erneut angefordert.",
         "bad_tool_call_retry": "Das Modell hat einen Tool-Aufruf gesendet, dessen Argumente kein gültiges JSON waren. Aus dieser Antwort wurde nichts ausgeführt; der Fehler wurde zurückgegeben, damit das Modell den Aufruf erneut senden kann.",
-        "too_many_tools": "Dieser Zugriffsschlüssel stellt {count} Tools bereit, aber {provider} akzeptiert höchstens {limit} pro Anfrage. Schränken Sie die Fähigkeiten des Zugriffsschlüssels ein oder wählen Sie einen anderen Anbieter."
+        "too_many_tools": "Dieser Zugriffsschlüssel stellt {count} Tools bereit, aber {provider} akzeptiert höchstens {limit} pro Anfrage. Schränken Sie die Fähigkeiten des Zugriffsschlüssels ein oder wählen Sie einen anderen Anbieter.",
+        "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell."
       },
       "chatEnded": "Chat beendet.",
       "providerDetail": "Anbieterdetails: {detail}",
@@ -1157,7 +1158,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (Cloud)",
       "providerOllamaLocal": "Ollama (lokal)",
       "providerOpenAI": "OpenAI",
@@ -1261,7 +1262,10 @@
       "providerChecksHoursAria": "Stunden zwischen den Anbieterprüfungen",
       "agentcliProbedVisionSeen": "Bildprüfung: Das Modell hat das Testbild gelesen, daher werden ihm angehängte Bilder und Kamerabilder gesendet.",
       "agentcliProbedVisionUnseen": "Bildprüfung: Das Modell konnte das Testbild nicht lesen, daher behandelt Phoenix es als reines Textmodell.",
-      "agentcliProbedVisionInconclusive": "Bildprüfung: Es kam keine verwertbare Antwort, daher ist die Bildunterstützung weiterhin unbekannt."
+      "agentcliProbedVisionInconclusive": "Bildprüfung: Es kam keine verwertbare Antwort, daher ist die Bildunterstützung weiterhin unbekannt.",
+      "agentcliOpenCodeRoute": "API-Zugangsweg",
+      "agentcliOpenCodeZen": "Zen (bisherig)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{count} {kind} in {area}",
     "companion_unavailable_targets": "Nicht verfügbar ({count}): {names}. In Home Assistant prüfen; Befehle nicht erneut senden.",
     "companion_unverified_targets": "Nicht bestätigt ({count}): {names}. In Home Assistant prüfen; Befehle nicht erneut senden.",
-    "companion_verification_progress": "Home Assistant meldet die gewünschten Einstellungen für {count} von {total} Zielen."
+    "companion_verification_progress": "Home Assistant meldet die gewünschten Einstellungen für {count} von {total} Zielen.",
+    "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell."
   }
 }

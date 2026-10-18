@@ -431,6 +431,22 @@ async def test_voice_turn_provider_error_yields_spoken_fallback():
     assert "the model is down" in text
 
 
+@pytest.mark.asyncio
+async def test_voice_turn_local_model_api_refusal_uses_the_conversation_language():
+    stream = _staged_stream([{
+        "type": EV_ERROR, "code": "model_api_unsupported", "message": "English diagnostic",
+    }])
+    with patch.object(agentcli, "_stream_turn_resilient", stream), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _MockProvider(), MagicMock(),
+            "http://h", "hi", language="zh-Hans",
+        )
+    assert "English diagnostic" not in text
+    assert "请选择受支持的模型" in text
+
+
 # --------------------------------------------------------------------------- #
 # async_voice_answer (config resolution)
 # --------------------------------------------------------------------------- #

@@ -1197,7 +1197,8 @@
         "quota": "プロバイダーアカウントのクレジットが不足しているか、支出上限に達しています。再試行しません。",
         "provider_rejected": "プロバイダーがこのリクエストを拒否しました。再試行しません。",
         "bad_tool_call_retry": "モデルが送信したツール呼び出しの引数が有効な JSON ではありませんでした。その応答からは何も実行されていません。モデルが呼び出しを再送できるよう、エラーを返しました。",
-        "too_many_tools": "このアクセスキーは {count} 個のツールを公開していますが、{provider} が一度のリクエストで受け付けるのは最大 {limit} 個です。アクセスキーの機能を絞り込むか、別のプロバイダーを選択してください。"
+        "too_many_tools": "このアクセスキーは {count} 個のツールを公開していますが、{provider} が一度のリクエストで受け付けるのは最大 {limit} 個です。アクセスキーの機能を絞り込むか、別のプロバイダーを選択してください。",
+        "model_api_unsupported": "このモデルは OpenCode Chat Completions での動作が確認されていません。対応モデルを選択してください。"
       },
       "chatEnded": "チャットが終了しました。",
       "providerDetail": "プロバイダーの詳細: {detail}",
@@ -1506,7 +1507,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama（クラウド）",
       "providerOllamaLocal": "Ollama（ローカル）",
       "providerOpenAI": "OpenAI",
@@ -1610,7 +1611,10 @@
       "providerChecksHoursAria": "プロバイダー確認の間隔（時間）",
       "agentcliProbedVisionSeen": "画像チェック：モデルはテスト画像を読み取れたため、添付画像とカメラ画像を送信します。",
       "agentcliProbedVisionUnseen": "画像チェック：モデルはテスト画像を読み取れなかったため、Phoenix はテキスト専用として扱います。",
-      "agentcliProbedVisionInconclusive": "画像チェック：有効な回答が得られなかったため、画像への対応状況は不明のままです。"
+      "agentcliProbedVisionInconclusive": "画像チェック：有効な回答が得られなかったため、画像への対応状況は不明のままです。",
+      "agentcliOpenCodeRoute": "API 接続先",
+      "agentcliOpenCodeZen": "Zen（従来）",
+      "agentcliOpenCodeConsole": "Console"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{area}の{kind} {count}個",
     "companion_unavailable_targets": "利用不可（{count}件）：{names}。Home Assistantで確認し、コマンドを再送しないでください。",
     "companion_unverified_targets": "未確認（{count}件）：{names}。Home Assistantで確認し、コマンドを再送しないでください。",
-    "companion_verification_progress": "Home Assistantは{total}件中{count}件の対象で要求された設定を報告しています。"
+    "companion_verification_progress": "Home Assistantは{total}件中{count}件の対象で要求された設定を報告しています。",
+    "model_api_unsupported": "このモデルは OpenCode Chat Completions での動作が確認されていません。対応モデルを選択してください。"
   }
 }

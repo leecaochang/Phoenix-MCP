@@ -1546,7 +1546,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOpenAI": "OpenAI",
       "providerOpenRouter": "OpenRouter",
       "providerQwen": "阿里云百炼 / Qwen",
@@ -1584,7 +1584,10 @@
       "providerChecksHoursAria": "提供商检查间隔（小时）",
       "agentcliProbedVisionSeen": "图像检查：模型读取了测试图像，因此会向其发送附加的图像和摄像头图像。",
       "agentcliProbedVisionUnseen": "图像检查：模型无法读取测试图像，因此 Phoenix 将其视为纯文本模型。",
-      "agentcliProbedVisionInconclusive": "图像检查：没有收到可用的回答，因此图像支持情况仍然未知。"
+      "agentcliProbedVisionInconclusive": "图像检查：没有收到可用的回答，因此图像支持情况仍然未知。",
+      "agentcliOpenCodeRoute": "API 路由",
+      "agentcliOpenCodeZen": "Zen（旧版）",
+      "agentcliOpenCodeConsole": "Console"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的审批。",
@@ -1652,7 +1655,8 @@
         "quota": "提供商账户余额不足或已达到支出上限，不会重试。",
         "provider_rejected": "提供商拒绝了此请求，不会重试。",
         "bad_tool_call_retry": "模型发送的工具调用参数不是有效的 JSON。该响应中的任何内容都未执行；已将错误返回给模型，以便其重新发送该调用。",
-        "too_many_tools": "此访问密钥提供 {count} 个工具，但 {provider} 每个请求最多只接受 {limit} 个。请缩减该访问密钥的能力，或选择其他提供商。"
+        "too_many_tools": "此访问密钥提供 {count} 个工具，但 {provider} 每个请求最多只接受 {limit} 个。请缩减该访问密钥的能力，或选择其他提供商。",
+        "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。"
       },
       "options": "选项",
       "pausedAfter": "已在 {count} 步后暂停。是否继续处理？",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{area}中的{count}个{kind}",
     "companion_unavailable_targets": "不可用（{count}个）：{names}。请在 Home Assistant 中检查，不要重新发送命令。",
     "companion_unverified_targets": "未验证（{count}个）：{names}。请在 Home Assistant 中检查，不要重新发送命令。",
-    "companion_verification_progress": "Home Assistant 报告 {total} 个目标中的 {count} 个已处于请求的设置。"
+    "companion_verification_progress": "Home Assistant 报告 {total} 个目标中的 {count} 个已处于请求的设置。",
+    "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。"
   }
 }

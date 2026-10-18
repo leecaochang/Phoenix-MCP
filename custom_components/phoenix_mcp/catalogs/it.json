@@ -216,7 +216,8 @@
         "quota": "L'account del provider ha esaurito il credito o ha raggiunto il limite di spesa. Non verrà ritentata.",
         "provider_rejected": "Il provider ha rifiutato questa richiesta. Non verrà ritentata.",
         "bad_tool_call_retry": "Il modello ha inviato una chiamata a uno strumento i cui argomenti non erano JSON valido. Nulla di quella risposta è stato eseguito; l'errore è stato restituito perché il modello possa inviare di nuovo la chiamata.",
-        "too_many_tools": "Questa chiave di accesso annuncia {count} strumenti, ma {provider} ne accetta al massimo {limit} per richiesta. Riduci le capacità della chiave di accesso o scegli un altro provider."
+        "too_many_tools": "Questa chiave di accesso annuncia {count} strumenti, ma {provider} ne accetta al massimo {limit} per richiesta. Riduci le capacità della chiave di accesso o scegli un altro provider.",
+        "model_api_unsupported": "Questo modello non è stato verificato per OpenCode Chat Completions. Scegli un modello supportato."
       },
       "options": "Opzioni",
       "pausedAfter": "In pausa dopo {count} passaggi. Continuare l'analisi?",
@@ -1473,7 +1474,7 @@
       "providerOllamaCloud": "Ollama (cloud)",
       "providerOllamaLocal": "Ollama (locale)",
       "providerOpenAI": "OpenAI",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOpenRouter": "OpenRouter",
       "providerQwen": "Alibaba Cloud Model Studio / Qwen",
       "providerTogether": "Together",
@@ -1574,7 +1575,10 @@
       "providerChecksHoursAria": "Ore tra i controlli dei provider",
       "agentcliProbedVisionSeen": "Controllo immagine: il modello ha letto l'immagine di prova, quindi gli vengono inviate le immagini allegate e quelle della telecamera.",
       "agentcliProbedVisionUnseen": "Controllo immagine: il modello non è riuscito a leggere l'immagine di prova, quindi Phoenix lo tratta come solo testo.",
-      "agentcliProbedVisionInconclusive": "Controllo immagine: non è arrivata una risposta utilizzabile, quindi il supporto per le immagini resta sconosciuto."
+      "agentcliProbedVisionInconclusive": "Controllo immagine: non è arrivata una risposta utilizzabile, quindi il supporto per le immagini resta sconosciuto.",
+      "agentcliOpenCodeRoute": "Percorso API",
+      "agentcliOpenCodeZen": "Zen (precedente)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{count} {kind} in {area}",
     "companion_unavailable_targets": "Non disponibili ({count}): {names}. Verifica in Home Assistant; non inviare di nuovo i comandi.",
     "companion_unverified_targets": "Non verificati ({count}): {names}. Verifica in Home Assistant; non inviare di nuovo i comandi.",
-    "companion_verification_progress": "Home Assistant riporta le impostazioni richieste per {count} di {total} destinazioni."
+    "companion_verification_progress": "Home Assistant riporta le impostazioni richieste per {count} di {total} destinazioni.",
+    "model_api_unsupported": "Questo modello non è stato verificato per OpenCode Chat Completions. Scegli un modello supportato."
   }
 }

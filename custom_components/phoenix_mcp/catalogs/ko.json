@@ -641,7 +641,8 @@
         "quota": "공급자 계정의 크레딧이 소진되었거나 지출 한도에 도달했습니다. 재시도하지 않습니다.",
         "provider_rejected": "공급자가 이 요청을 거부했습니다. 재시도하지 않습니다.",
         "bad_tool_call_retry": "모델이 보낸 도구 호출의 인수가 유효한 JSON이 아니었습니다. 해당 응답에서는 아무것도 실행되지 않았습니다. 모델이 호출을 다시 보낼 수 있도록 오류를 반환했습니다.",
-        "too_many_tools": "이 액세스 키는 도구 {count}개를 제공하지만 {provider}에서는 요청 한 번에 최대 {limit}개까지만 받습니다. 액세스 키의 기능을 줄이거나 다른 공급자를 선택하세요."
+        "too_many_tools": "이 액세스 키는 도구 {count}개를 제공하지만 {provider}에서는 요청 한 번에 최대 {limit}개까지만 받습니다. 액세스 키의 기능을 줄이거나 다른 공급자를 선택하세요.",
+        "model_api_unsupported": "이 모델은 OpenCode Chat Completions에서 검증되지 않았습니다. 지원되는 모델을 선택하세요."
       },
       "chatEnded": "채팅이 종료되었습니다.",
       "providerDetail": "공급자 세부 정보: {detail}",
@@ -1344,7 +1345,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (클라우드)",
       "providerOllamaLocal": "Ollama (로컬)",
       "providerOpenAI": "OpenAI",
@@ -1448,7 +1449,10 @@
       "providerChecksHoursAria": "공급자 확인 간격(시간)",
       "agentcliProbedVisionSeen": "이미지 확인: 모델이 테스트 이미지를 읽었으므로 첨부 이미지와 카메라 이미지를 모델에 보냅니다.",
       "agentcliProbedVisionUnseen": "이미지 확인: 모델이 테스트 이미지를 읽지 못했으므로 Phoenix는 텍스트 전용으로 처리합니다.",
-      "agentcliProbedVisionInconclusive": "이미지 확인: 사용할 수 있는 응답이 없어 이미지 지원 여부는 여전히 알 수 없습니다."
+      "agentcliProbedVisionInconclusive": "이미지 확인: 사용할 수 있는 응답이 없어 이미지 지원 여부는 여전히 알 수 없습니다.",
+      "agentcliOpenCodeRoute": "API 경로",
+      "agentcliOpenCodeZen": "Zen (기존)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "approvalSummary": {
       "action.approve": "승인 및 실행",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{area}의 {kind} {count}개",
     "companion_unavailable_targets": "사용 불가({count}개): {names}. Home Assistant에서 확인하고 명령을 다시 보내지 마세요.",
     "companion_unverified_targets": "확인되지 않음({count}개): {names}. Home Assistant에서 확인하고 명령을 다시 보내지 마세요.",
-    "companion_verification_progress": "Home Assistant가 {total}개 대상 중 {count}개에 대해 요청한 설정을 보고합니다."
+    "companion_verification_progress": "Home Assistant가 {total}개 대상 중 {count}개에 대해 요청한 설정을 보고합니다.",
+    "model_api_unsupported": "이 모델은 OpenCode Chat Completions에서 검증되지 않았습니다. 지원되는 모델을 선택하세요."
   }
 }

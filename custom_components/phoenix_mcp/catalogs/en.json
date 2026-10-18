@@ -1294,7 +1294,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (cloud)",
       "providerOllamaLocal": "Ollama (local)",
       "providerOpenAI": "OpenAI",
@@ -1398,7 +1398,10 @@
       "providerChecksHoursAria": "Hours between provider checks",
       "agentcliProbedVisionSeen": "Image check: the model read the test image, so attached images and camera results are sent to it.",
       "agentcliProbedVisionUnseen": "Image check: the model could not read the test image, so Phoenix treats it as text-only.",
-      "agentcliProbedVisionInconclusive": "Image check: no usable answer came back, so image support is still unknown."
+      "agentcliProbedVisionInconclusive": "Image check: no usable answer came back, so image support is still unknown.",
+      "agentcliOpenCodeRoute": "API route",
+      "agentcliOpenCodeZen": "Zen (legacy)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "agentchat": {
       "announceApproval": "Action {name} needs your approval.",
@@ -1521,7 +1524,8 @@
         "rate_limit": "The provider is temporarily unavailable.",
         "ollama_backend": "The provider is temporarily unavailable.",
         "auth": "The provider blocked this response. It will not be retried.",
-        "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried."
+        "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried.",
+        "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model."
       },
       "attachImage": "Attach image",
       "attachmentAlt": "Attached image {name}",
@@ -2449,6 +2453,7 @@
     "local_summary_count": "Among entities exposed to Assist that I can access: {matched} of {total} have state {state}; {unknown} have unknown or unavailable state.",
     "local_summary_total": "Among entities exposed to Assist that I can access: {total} entities; {unknown} have unknown or unavailable state.",
     "local_unauthorized": "This access key is no longer authorized.",
+    "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",

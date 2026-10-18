@@ -221,7 +221,8 @@
         "quota": "提供者帳戶餘額不足或已達到支出上限，不會重試。",
         "provider_rejected": "提供者拒絕了此請求，不會重試。",
         "bad_tool_call_retry": "模型送出的工具呼叫參數不是有效的 JSON。該回應中的任何內容都未執行；已將錯誤傳回給模型，以便其重新發送該呼叫。",
-        "too_many_tools": "此存取金鑰提供 {count} 個工具，但 {provider} 每個請求最多只接受 {limit} 個。請縮減該存取金鑰的能力，或選擇其他提供者。"
+        "too_many_tools": "此存取金鑰提供 {count} 個工具，但 {provider} 每個請求最多只接受 {limit} 個。請縮減該存取金鑰的能力，或選擇其他提供者。",
+        "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。"
       },
       "options": "選項",
       "pausedAfter": "已在 {count} 步後暫停。是否繼續處理？",
@@ -1683,7 +1684,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama（雲端）",
       "providerOllamaLocal": "Ollama（本地）",
       "providerOpenAI": "OpenAI",
@@ -1787,7 +1788,10 @@
       "providerChecksHoursAria": "供應商檢查間隔（小時）",
       "agentcliProbedVisionSeen": "影像檢查：模型讀取了測試影像，因此會向其傳送附加的影像和攝影機影像。",
       "agentcliProbedVisionUnseen": "影像檢查：模型無法讀取測試影像，因此 Phoenix 將其視為純文字模型。",
-      "agentcliProbedVisionInconclusive": "影像檢查：沒有收到可用的回答，因此影像支援情況仍然未知。"
+      "agentcliProbedVisionInconclusive": "影像檢查：沒有收到可用的回答，因此影像支援情況仍然未知。",
+      "agentcliOpenCodeRoute": "API 路由",
+      "agentcliOpenCodeZen": "Zen（舊版）",
+      "agentcliOpenCodeConsole": "Console"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2450,6 +2454,7 @@
     "companion_group_targets": "{area}中的{count}個{kind}",
     "companion_unavailable_targets": "無法使用（{count}個）：{names}。請在 Home Assistant 中檢查，不要重新傳送命令。",
     "companion_unverified_targets": "未驗證（{count}個）：{names}。請在 Home Assistant 中檢查，不要重新傳送命令。",
-    "companion_verification_progress": "Home Assistant 回報 {total} 個目標中的 {count} 個已處於要求的設定。"
+    "companion_verification_progress": "Home Assistant 回報 {total} 個目標中的 {count} 個已處於要求的設定。",
+    "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。"
   }
 }

@@ -74,7 +74,8 @@
     "companion_group_targets": "{count} {kind} в {area}",
     "companion_unavailable_targets": "Недоступны ({count}): {names}. Проверьте в Home Assistant; не отправляйте команды повторно.",
     "companion_unverified_targets": "Не проверены ({count}): {names}. Проверьте в Home Assistant; не отправляйте команды повторно.",
-    "companion_verification_progress": "Home Assistant сообщает о запрошенных настройках для {count} из {total} целей."
+    "companion_verification_progress": "Home Assistant сообщает о запрошенных настройках для {count} из {total} целей.",
+    "model_api_unsupported": "Эта модель не проверена для OpenCode Chat Completions. Выберите поддерживаемую модель."
   },
   "panel": {
     "adminError": {
@@ -293,7 +294,8 @@
         "quota": "На учётной записи провайдера закончились средства или достигнут лимит расходов. Повторной попытки не будет.",
         "provider_rejected": "Провайдер отклонил этот запрос. Повторной попытки не будет.",
         "bad_tool_call_retry": "Модель отправила вызов инструмента с аргументами, которые не являются допустимым JSON. Ничего из этого ответа не было выполнено; ошибка возвращена модели, чтобы она могла отправить вызов ещё раз.",
-        "too_many_tools": "Этот ключ доступа предоставляет {count} инструментов, но {provider} принимает не более {limit} в одном запросе. Сократите возможности ключа доступа или выберите другого провайдера."
+        "too_many_tools": "Этот ключ доступа предоставляет {count} инструментов, но {provider} принимает не более {limit} в одном запросе. Сократите возможности ключа доступа или выберите другого провайдера.",
+        "model_api_unsupported": "Эта модель не проверена для OpenCode Chat Completions. Выберите поддерживаемую модель."
       },
       "options": "Параметры",
       "pausedAfter": "Пауза после {count} шагов. Продолжить исследование?",
@@ -1779,7 +1781,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (облако)",
       "providerOllamaLocal": "Ollama (локально)",
       "providerOpenAI": "OpenAI",
@@ -1883,7 +1885,10 @@
       "providerChecksHoursAria": "Часов между проверками провайдеров",
       "agentcliProbedVisionSeen": "Проверка изображения: модель прочитала тестовое изображение, поэтому ей отправляются прикреплённые изображения и изображения камер.",
       "agentcliProbedVisionUnseen": "Проверка изображения: модель не смогла прочитать тестовое изображение, поэтому Phoenix считает её только текстовой.",
-      "agentcliProbedVisionInconclusive": "Проверка изображения: пригодный ответ не получен, поэтому поддержка изображений по-прежнему неизвестна."
+      "agentcliProbedVisionInconclusive": "Проверка изображения: пригодный ответ не получен, поэтому поддержка изображений по-прежнему неизвестна.",
+      "agentcliOpenCodeRoute": "Маршрут API",
+      "agentcliOpenCodeZen": "Zen (прежний)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "shell": {
       "agentChat": "Agent Chat",

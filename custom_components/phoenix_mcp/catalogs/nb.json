@@ -426,7 +426,8 @@
         "upstream": "Leverandøren er midlertidig utilgjengelig.",
         "provider_rejected": "Leverandøren avslo denne forespørselen. Den vil ikke bli forsøkt på nytt.",
         "bad_tool_call_retry": "Modellen sendte et verktøykall der argumentene ikke var gyldig JSON. Ingenting fra det svaret ble utført; feilen ble sendt tilbake slik at modellen kan sende kallet på nytt.",
-        "too_many_tools": "Denne tilgangsnøkkelen tilbyr {count} verktøy, men {provider} godtar høyst {limit} per forespørsel. Begrens tilgangsnøkkelens kapabiliteter eller velg en annen leverandør."
+        "too_many_tools": "Denne tilgangsnøkkelen tilbyr {count} verktøy, men {provider} godtar høyst {limit} per forespørsel. Begrens tilgangsnøkkelens kapabiliteter eller velg en annen leverandør.",
+        "model_api_unsupported": "Denne modellen er ikke kvalifisert for OpenCode Chat Completions. Velg en støttet modell."
       },
       "options": "Alternativer",
       "pausedAfter": "Satt på pause etter {count} trinn. Fortsette å undersøke?",
@@ -2149,7 +2150,7 @@
       "providerOllamaCloud": "Ollama (sky)",
       "providerOllamaLocal": "Ollama (lokal)",
       "providerOpenAI": "OpenAI",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOpenRouter": "OpenRouter",
       "providerQwen": "Alibaba Cloud Model Studio / Qwen",
       "providerTencent": "Tencent Cloud TokenHub",
@@ -2225,7 +2226,10 @@
       "wipeWarning": "Velg hva som skal slettes. Dette kan ikke angres.",
       "agentcliProbedVisionSeen": "Bildesjekk: modellen leste testbildet, så vedlagte bilder og kamerabilder sendes til den.",
       "agentcliProbedVisionUnseen": "Bildesjekk: modellen kunne ikke lese testbildet, så Phoenix behandler den som kun tekst.",
-      "agentcliProbedVisionInconclusive": "Bildesjekk: det kom ikke noe brukbart svar, så bildestøtten er fortsatt ukjent."
+      "agentcliProbedVisionInconclusive": "Bildesjekk: det kom ikke noe brukbart svar, så bildestøtten er fortsatt ukjent.",
+      "agentcliOpenCodeRoute": "API-rute",
+      "agentcliOpenCodeZen": "Zen (eldre)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2450,6 +2454,7 @@
     "output_limit": "Beklager, modellen produserte for mye utdata, så jeg stoppet.",
     "prior_action_unresolved": "Denne forespørselen ble ikke utført fordi en tidligere handling må sjekkes. Åpne Trenger oppmerksomhet i Phoenix MCP.",
     "provider_error": "Beklager, {reason}.",
-    "unavailable": "Phoenix MCP-taleagenten er utilgjengelig akkurat nå."
+    "unavailable": "Phoenix MCP-taleagenten er utilgjengelig akkurat nå.",
+    "model_api_unsupported": "Denne modellen er ikke kvalifisert for OpenCode Chat Completions. Velg en støttet modell."
   }
 }

@@ -74,7 +74,8 @@
     "companion_group_targets": "{count} {kind} in {area}",
     "companion_unavailable_targets": "Niet beschikbaar ({count}): {names}. Controleer in Home Assistant; stuur geen opdrachten opnieuw.",
     "companion_unverified_targets": "Niet geverifieerd ({count}): {names}. Controleer in Home Assistant; stuur geen opdrachten opnieuw.",
-    "companion_verification_progress": "Home Assistant meldt de gevraagde instellingen voor {count} van {total} doelen."
+    "companion_verification_progress": "Home Assistant meldt de gevraagde instellingen voor {count} van {total} doelen.",
+    "model_api_unsupported": "Dit model is niet gevalideerd voor OpenCode Chat Completions. Kies een ondersteund model."
   },
   "panel": {
     "shell": {
@@ -862,7 +863,8 @@
         "quota": "Het provideraccount heeft geen tegoed meer of heeft de bestedingslimiet bereikt. Er volgt geen nieuwe poging.",
         "provider_rejected": "De provider heeft dit verzoek geweigerd. Er volgt geen nieuwe poging.",
         "bad_tool_call_retry": "Het model stuurde een toolaanroep waarvan de argumenten geen geldige JSON waren. Niets uit die reactie is uitgevoerd; de fout is teruggestuurd zodat het model de aanroep opnieuw kan sturen.",
-        "too_many_tools": "Deze toegangssleutel biedt {count} tools aan, maar {provider} accepteert er maximaal {limit} per verzoek. Beperk de mogelijkheden van de toegangssleutel of kies een andere provider."
+        "too_many_tools": "Deze toegangssleutel biedt {count} tools aan, maar {provider} accepteert er maximaal {limit} per verzoek. Beperk de mogelijkheden van de toegangssleutel of kies een andere provider.",
+        "model_api_unsupported": "Dit model is niet gevalideerd voor OpenCode Chat Completions. Kies een ondersteund model."
       },
       "options": "Opties",
       "pausedAfter": "Gepauzeerd na {count} stappen. Verder onderzoeken?",
@@ -1821,7 +1823,7 @@
       "providerMiniMax": "MiniMax",
       "providerMistral": "Mistral AI",
       "providerNvidia": "NVIDIA NIM",
-      "providerOpenCodeZen": "OpenCode Zen",
+      "providerOpenCodeZen": "OpenCode",
       "providerOllamaCloud": "Ollama (cloud)",
       "providerOllamaLocal": "Ollama (lokaal)",
       "providerOpenAI": "OpenAI",
@@ -1925,7 +1927,10 @@
       "providerChecksHoursAria": "Uren tussen aanbiedercontroles",
       "agentcliProbedVisionSeen": "Afbeeldingscontrole: het model las de testafbeelding, dus bijgevoegde afbeeldingen en camerabeelden worden ernaar gestuurd.",
       "agentcliProbedVisionUnseen": "Afbeeldingscontrole: het model kon de testafbeelding niet lezen, dus Phoenix behandelt het als alleen tekst.",
-      "agentcliProbedVisionInconclusive": "Afbeeldingscontrole: er kwam geen bruikbaar antwoord terug, dus ondersteuning voor afbeeldingen is nog onbekend."
+      "agentcliProbedVisionInconclusive": "Afbeeldingscontrole: er kwam geen bruikbaar antwoord terug, dus ondersteuning voor afbeeldingen is nog onbekend.",
+      "agentcliOpenCodeRoute": "API-pad",
+      "agentcliOpenCodeZen": "Zen (bestaand)",
+      "agentcliOpenCodeConsole": "Console"
     },
     "approvalSummary": {
       "action.approve": "Goedkeuren en uitvoeren",

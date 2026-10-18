@@ -369,13 +369,31 @@ AGENTCLI_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 AGENTCLI_TOGETHER_BASE_URL = "https://api.together.ai/v1"
 AGENTCLI_CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 AGENTCLI_FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
-# OpenCode Zen publishes an OpenAI-compatible Chat Completions API and a live
-# account-scoped model catalog at this base URL.
 AGENTCLI_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
 AGENTCLI_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.com/v1"
 AGENTCLI_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
 AGENTCLI_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
 AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
+# Keep Zen as the default for accounts saved before Console routing existed.
+AGENTCLI_OPENCODE_CONSOLE_BASE_URL = "https://opencode.ai/inference/openai/v1"
+AGENTCLI_OPENCODE_CONSOLE_MODELS_URL = "https://opencode.ai/inference/v1/models"
+# The public catalog exposes ids but no API-family metadata. Console eligibility
+# needs a documented Chat Completions endpoint or a qualified live tool round.
+# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18).
+AGENTCLI_OPENCODE_CHAT_MODELS = frozenset({
+    "qwen3.8-max", "deepseek-v4.1-flash", "deepseek-v4-pro",
+    "minimax-m3", "minimax-m2.7", "minimax-m2.5", "glm-5.3-flash",
+    "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6",
+    "kimi-k2.7-code", "kimi-k3", "mistral-large-4", "big-pickle",
+    "glm-5.3-flash-free", "deepseek-v4.1-flash-free", "space-bunny-free",
+    "beam-free", "ll-alpha-free", "longcat-2.5-preview-free", "exo-free",
+    "mimo-v2.6-flash-free", "mimo-v2.5-free", "nemotron-3-ultra-free",
+    "nemotron-3.5-lightning-free", "nemotron-3.5-super-vl-free",
+    # The table lists Messages, but live Chat Completions tool rounds also pass.
+    "qwen3.5-plus",
+})
+# Exact exceptions to the legacy family filter, qualified on the Zen route.
+AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS = frozenset({"qwen3.8-max", "qwen3.5-plus"})
 # Regional and plan-specific endpoints a provider documents next to its default.
 # An API key is bound to the region or plan it was issued for, so each is a
 # separate choice rather than a rewrite of the default URL.
@@ -1965,6 +1983,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     # output and is not translated.
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_error": "Sorry, {reason}.",
+    "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
     "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",
     "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs attention in Phoenix MCP.",
     'companion_accepted_direct': 'Home Assistant accepted the command for {names}.',

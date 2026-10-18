@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 from datetime import timedelta
@@ -63,11 +64,12 @@ class _Session:
         return self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
 
     def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
-        return self._next(method="GET", url=url, params=params)
+        return self._next(method="GET", url=url, params=params, headers=headers, allow_redirects=allow_redirects)
 
     def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
         # A copy: the provider edits its body in place when it retries.
-        return self._next(method="POST", url=url, json=copy.deepcopy(json))
+        return self._next(method="POST", url=url, json=copy.deepcopy(json), headers=headers,
+                          allow_redirects=allow_redirects)
 
 
 def _sse(*frames: str) -> bytes:
@@ -333,10 +335,186 @@ def test_gemini_filter_drops_media_and_live_models():
     assert _filter_gemini_models(ids) == ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
 
 
-def test_opencode_keeps_only_chat_completions_families():
+def test_opencode_legacy_allows_qualified_qwen_models_without_opening_the_family():
     ids = ["gpt-5.5", "claude-sonnet-5-5", "gemini-3.8-flash", "jev-1.13", "grok-4.7", "muse-spark-1.3",
-           "qwen3.8-max", "deepseek-flash", "kimi-k3", "glm-5.3", "big-pickle", "minimax-m3"]
-    assert _filter_opencode_models(ids) == ["big-pickle", "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3"]
+           "qwen3.8-max", "qwen3.5-plus", "qwen3.8-flash", "qwen-next", "deepseek-flash", "kimi-k3", "glm-5.3",
+           "big-pickle", "minimax-m3"]
+    assert _filter_opencode_models(ids) == [
+        "big-pickle", "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3", "qwen3.5-plus", "qwen3.8-max",
+    ]
+
+
+@pytest.mark.parametrize("verified_only", [False, True])
+def test_opencode_never_restores_an_unsupported_catalog(verified_only):
+    assert _filter_opencode_models(
+        ["gpt-6.1-sol", "claude-sonnet-5-5", "qwen3.8-flash", "jev-1.13"],
+        verified_only=verified_only,
+    ) == []
+
+
+def test_opencode_console_requires_per_model_endpoint_evidence():
+    ids = ["qwen3.8-max", "qwen3.5-plus", "qwen3.8-flash", "kimi-k3", "new-vendor-model", "test"]
+    assert _filter_opencode_models(ids, verified_only=True) == ["kimi-k3", "qwen3.5-plus", "qwen3.8-max"]
+    assert _filter_opencode_models(ids) == ["kimi-k3", "new-vendor-model", "qwen3.5-plus", "qwen3.8-max", "test"]
+
+
+@pytest.mark.asyncio
+async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_identity(hass):
+    from custom_components.phoenix_mcp.const import (
+        AGENTCLI_OPENCODE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    )
+
+    legacy = await agentcli._probe_config("opencode", {"api_key": "secret"})
+    console = await agentcli._probe_config("opencode", {
+        "api_key": "secret", "endpoint_id": "console", "base_url": "https://untrusted.example",
+    })
+    assert isinstance(legacy, ProviderConfig) and isinstance(console, ProviderConfig)
+    assert legacy.base_url == AGENTCLI_OPENCODE_BASE_URL
+    assert console.base_url == AGENTCLI_OPENCODE_CONSOLE_BASE_URL
+    assert "base_url" not in agentcli._stored_setup_config(console)
+    assert agentcli._stored_setup_config(console)["endpoint_id"] == "console"
+    assert isinstance(await agentcli._probe_config("opencode", {
+        "api_key": "secret", "endpoint_id": "https://untrusted.example",
+    }), agentcli.ProbeConfigError)
+    old = {"api_key": "secret", "model": "kimi-k3"}
+    store = agentcli.AgentCliStore(AsyncMock())
+    iid = await store.add("opencode", old)
+    snapshot = copy.deepcopy(store.get(iid))
+    assert store.resolve(iid).base_url == AGENTCLI_OPENCODE_BASE_URL
+    assert store.resolve(iid).model == "kimi-k3"
+    assert store.has_duplicate("opencode", agentcli._stored_setup_config(console))
+    assert store.get(iid) == snapshot
+    public = next(p for p in agentcli._provider_catalog() if p["kind"] == "opencode")
+    assert "Bearer secret" not in json.dumps(public)
+    assert "https://" not in json.dumps(public)
+    assert [c["value"] for c in public["fields"][0]["choices"]] == ["zen", "console"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["zen", "console"])
+@pytest.mark.parametrize("model", ["qwen3.8-max", "qwen3.5-plus"])
+async def test_opencode_catalog_and_all_inference_probes_use_their_own_urls(route, model):
+    cfg = await agentcli._probe_config("opencode", {
+        "api_key": "secret", "endpoint_id": route, "model": model,
+    })
+    provider = OpenAICompatProvider(cfg)
+    base = "https://opencode.ai/zen/v1" if route == "zen" else "https://opencode.ai/inference/openai/v1"
+    catalog = f"{base}/models" if route == "zen" else "https://opencode.ai/inference/v1/models"
+    session = _Session(_Resp(json_data={"data": [{"id": "kimi-k3"}, {"id": "qwen3.8-max"}, {"id": "qwen3.5-plus"}, {"id": "qwen3.8-flash"}]}))
+    assert await provider.validate(session) == (True, "")
+    assert await provider.list_models(session) == ["kimi-k3", "qwen3.5-plus", "qwen3.8-max"]
+    assert await provider.probe_option(session, {}) == 200
+    await provider.probe_image(session, "image", "question")
+    assert [c["url"] for c in session.calls] == [catalog, catalog, f"{base}/chat/completions", f"{base}/chat/completions"]
+    assert all(c["allow_redirects"] is False for c in session.calls)
+    assert all(c["headers"]["Authorization"] == "Bearer secret" for c in session.calls)
+
+
+def test_opencode_does_not_redirect_credentials_from_a_saved_custom_url():
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="custom", base_url="https://operator.example/v1", endpoint_id="console",
+    ))
+    assert provider._models_url() == "https://operator.example/v1/models"
+    assert provider._chat_url() == "https://operator.example/v1/chat/completions"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data", [None, {}, [None, "bad", {"id": 12}, {"id": ""}, {"id": "qwen3.8-flash"}]])
+async def test_opencode_console_catalog_refuses_bad_rows_without_restoring_the_saved_model(data):
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    ))
+    assert await provider.list_models(_Session(_Resp(json_data={"data": data}))) == []
+
+
+@pytest.mark.asyncio
+async def test_opencode_console_refuses_other_api_families_before_any_network_call():
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="qwen3.8-flash", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    ))
+    session = _Session()
+    events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
+    assert events[0]["code"] == "model_api_unsupported" and not events[0]["retryable"]
+    assert await provider.probe_option(session, {}) == 400
+    assert await provider.probe_image(session, "image", "question") == (400, "")
+    assert await provider.list_models(_Session(_Resp(status=503))) == []
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_flags():
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    ))
+    frame = {"choices": [{"delta": {"reasoning_content": "retained reasoning", "tool_calls": [{
+        "index": 0, "id": "call_1", "function": {"name": "read", "arguments": '{"x":1}'},
+    }]}, "finish_reason": "tool_calls"}]}
+    session = _Session(_Resp(body=_sse("data: " + json.dumps(frame))))
+    tools = provider.format_tools([{"name": "read", "description": "Read", "inputSchema": {
+        "type": "object", "properties": {"x": {"type": "integer"}}, "required": ["x"],
+    }}])
+    assert tools[0]["function"]["parameters"]["properties"]["x"] == {"type": "integer"}
+    messages = [{"role": "user", "content": "Read."}]
+    events = await _collect(provider.stream_turn(session, system_prompt="", messages=messages, tools=tools, options={}))
+    assistant = events[-1]["assistant_msg"]
+    assert assistant["reasoning_content"] == "retained reasoning"
+    assert not any(e["type"] == "thinking_delta" for e in events)
+    provider.append_assistant(messages, assistant)
+    provider.append_tool_results(messages, [{"tool_use_id": "call_1", "tool_name": "read", "content": "1"}])
+    await _collect(provider.stream_turn(session, system_prompt="", messages=messages, tools=tools, options={}))
+    body = session.calls[-1]["json"]
+    assert body["messages"][-2] == assistant
+    assert body["messages"][-1]["tool_call_id"] == "call_1"
+    assert body["tools"] == tools
+    assert "stream_options" not in body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "error", "code", "retryable"), [
+    (401, {"type": "CreditsError", "message": "Insufficient balance."}, "quota", False),
+    (402, {"message": "No credit."}, "quota", False),
+    (429, {"type": "RateLimitError", "message": "Slow down."}, "rate_limit", True),
+    (403, {"type": "FreeTierError", "message": "Free tier requires OpenCode."}, "auth", False),
+])
+async def test_opencode_console_keeps_billing_and_rate_limit_classifications(status, error, code, retryable):
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    ))
+    session = _Session(_Resp(status=status, text=json.dumps({"error": error})))
+    events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
+    assert events[0]["code"] == code and events[0]["retryable"] is retryable
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_opencode_stream_cancellation_closes_the_response_without_retrying():
+    entered, closed = asyncio.Event(), asyncio.Event()
+
+    class WaitingContent:
+        async def iter_chunked(self, _n):
+            entered.set()
+            await asyncio.Event().wait()
+            yield b""
+
+    class WaitingResponse(_Resp):
+        async def __aexit__(self, *_a):
+            closed.set()
+            return False
+
+    response = WaitingResponse()
+    response.content = WaitingContent()
+    session = _Session(response)
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="opencode", model="kimi-k3", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+    ))
+    task = asyncio.create_task(_collect(provider.stream_turn(
+        session, system_prompt="", messages=[], tools=[], options={},
+    )))
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert closed.is_set() and len(session.calls) == 1
 
 
 def test_meta_filter_excludes_non_chat_and_data_sharing_models():
