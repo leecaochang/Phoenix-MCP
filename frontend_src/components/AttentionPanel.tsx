@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { AttentionItem } from "../types";
 import { localeDateTime, localeNumber, t } from "../i18n";
 import { BusyButton } from "./BusyButton";
+import { Icon } from "../ui/Icon";
 
 const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
 const HELP = { mesa: "attention.mesaHelp", calendar_storage: "attention.calendar_storageHelp" };
@@ -79,7 +80,7 @@ export function AttentionPanel() {
   return <section className="phx-attention" ref={section} aria-label={t("attention.title")}>
     <button className="phx-attention-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
       <span>{t("attention.title")}{items.length > 0 && <span className="phx-attention-count">{localeNumber(items.length)}</span>}</span>
-      <svg className="phx-attention-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      <Icon name="expand" size={16} className="phx-attention-chevron" />
     </button>
     <div className="phx-attention-body" id={bodyId} hidden={!open}>
       <div className="phx-attention-refresh">

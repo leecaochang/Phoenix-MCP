@@ -44,6 +44,16 @@ describe("phoenix-mcp-panel custom element shell", () => {
     expect(unmountSpy).toHaveBeenCalled();
   });
 
+  it("registers the bundled font in the page, outside its shadow root", () => {
+    // Browsers ignore @font-face inside a shadow root, so the face has to land
+    // in the owning document for the panel's text to use it.
+    const el = document.createElement("phoenix-mcp-panel");
+    document.body.appendChild(el);
+    expect(document.head.querySelector("#phx-font-face")?.textContent).toContain('"Phoenix Inter"');
+    expect(el.shadowRoot?.querySelector("#phx-font-face")).toBeNull();
+    el.remove();
+  });
+
   it("renders the app once hass is provided", () => {
     const el = document.createElement("phoenix-mcp-panel") as PanelEl;
     document.body.appendChild(el);

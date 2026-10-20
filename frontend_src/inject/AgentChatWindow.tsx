@@ -20,6 +20,8 @@ import {
   AGENTCHAT_REVIEW_OPENED_EVENT,
 } from "../utils/agentchat_review";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import { ensurePhoenixFont } from "../ui/fonts";
+import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getHass(): any {
@@ -173,24 +175,13 @@ export function focusAgentChatPopup(): boolean {
 // element itself cannot be queried for its resolved class here: HA mounts
 // panels behind several nested shadow roots, so document.querySelector
 // never reaches it.
-function resolveThemeClass(): "phx-theme-dark" | "phx-theme-light" | null {
-  let saved: string | null = null;
-  try { saved = localStorage.getItem("phx-theme"); } catch { /* storage blocked */ }
-  if (saved === "light") return "phx-theme-light";
-  if (saved === "dark") return "phx-theme-dark";
-  try {
-    const dark = getHass()?.themes?.darkMode;
-    if (dark === true) return "phx-theme-dark";
-    if (dark === false) return "phx-theme-light";
-  } catch { /* leave to prefers-color-scheme */ }
-  return null;
+function pageDarkMode(): boolean | undefined {
+  try { return getHass()?.themes?.darkMode; } catch { return undefined; }
 }
 
 function applyTheme(): void {
   if (!host) return;
-  host.classList.remove("phx-theme-dark", "phx-theme-light");
-  const cls = resolveThemeClass();
-  if (cls) host.classList.add(cls);
+  applyThemeClass(host, resolveThemeClass(pageDarkMode()));
 }
 
 // The window persists across HA navigation and theme flips, so a one-shot
@@ -270,6 +261,7 @@ export function showAgentChat(accessKeyId?: string): void {
   applyTheme();
   watchTheme();
   watchApprovalReview();
+  ensurePhoenixFont(document);
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = PANEL_CSS + "\n.agentcli-window{pointer-events:auto;}";

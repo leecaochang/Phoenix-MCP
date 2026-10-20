@@ -17,6 +17,8 @@ import { ProfileEditor } from "../views/MesaView";
 import { Modal } from "../components/Modal";
 import { Loading, ErrorMsg } from "../components/common";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import { ensurePhoenixFont } from "../ui/fonts";
+import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 import { hasMessage, loadTranslations, resolveLanguage, t } from "../i18n";
 
 import { JS_BUILD } from "../version";
@@ -166,6 +168,7 @@ class QuickAddElement extends HTMLElement {
     // lets the shared .modal-backdrop (dim + blur) show the HA page behind it.
     this.style.cssText = "position:fixed; inset:0; z-index:2147483600; background:transparent;";
     this._applyTheme();
+    ensurePhoenixFont(this.ownerDocument);
     const shadow = this.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = PANEL_CSS;
@@ -197,18 +200,17 @@ class QuickAddElement extends HTMLElement {
     );
   }
 
-  // Match HA's current theme: PANEL_CSS only switches to dark via the
-  // .phx-theme-dark class (or an OS prefers-color-scheme match), but HA's dark
-  // mode is its own setting, so read it from the page hass like the panel does.
+  // Follow the same theme as the panel: the Phoenix choice from Settings, or,
+  // under "auto", Home Assistant's own dark-mode flag read from the page hass.
   private _applyTheme() {
+    let dark: boolean | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dark = (document.querySelector("home-assistant") as any)?.hass?.themes?.darkMode;
-      if (dark === true) this.classList.add("phx-theme-dark");
-      else if (dark === false) this.classList.add("phx-theme-light");
+      dark = (document.querySelector("home-assistant") as any)?.hass?.themes?.darkMode;
     } catch {
       // Leave to prefers-color-scheme.
     }
+    applyThemeClass(this, resolveThemeClass(dark));
   }
 
   private _close() {

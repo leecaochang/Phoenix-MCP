@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
 import { AuditTable } from "../components/AuditTable";
-import { RefreshIcon } from "../index";
+import { RefreshIcon } from "../components/common";
 import { t } from "../i18n";
 import { auditSourceFilterValue } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";

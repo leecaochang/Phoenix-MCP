@@ -1,4 +1,3 @@
-import { mdiContentCopy, mdiCheck, mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
@@ -7,6 +6,7 @@ import { BusyButton } from "../components/BusyButton";
 import { RefreshIcon } from "../components/common";
 import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
+import { Icon, type IconName } from "../ui/Icon";
 
 const LABEL_KEYS: Record<string, Record<string, string>> = {
   "source": {
@@ -93,7 +93,7 @@ function TextEvidence({ value, code = false }: { value: unknown; code?: boolean 
       setCopyState("");
       try { await copyToClipboard(text); setCopyState("copied"); }
       catch { setCopyState("failed"); }
-    }}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={copyState === "copied" ? mdiCheck : mdiContentCopy} /></svg></button>
+    }}><Icon name={copyState === "copied" ? "check" : "copy"} size={18} /></button>
     <span role="status" className={copyState === "failed" ? "conversation-copy-feedback" : "sr-only"}>{feedback}</span>
   </div>;
 
@@ -124,16 +124,16 @@ function outcomeSignal(outcome: string): Signal {
   if (["allowed", "approved", "completed", "produced", "ok"].includes(outcome)) return "success";
   return "neutral";
 }
-function outcomeIcon(outcome: string): string {
-  if (["denied", "rejected"].includes(outcome)) return mdiCancel;
-  if (outcomeSignal(outcome) === "error") return mdiAlertCircleOutline;
-  if (["pending_approval", "running"].includes(outcome)) return mdiClockOutline;
-  if (["paused", "cancelled"].includes(outcome)) return mdiPauseCircleOutline;
-  if (outcomeSignal(outcome) === "warning") return mdiAlertOutline;
-  return outcomeSignal(outcome) === "success" ? mdiCheckCircleOutline : mdiInformationOutline;
+function outcomeIcon(outcome: string): IconName {
+  if (["denied", "rejected"].includes(outcome)) return "denied";
+  if (outcomeSignal(outcome) === "error") return "error";
+  if (["pending_approval", "running"].includes(outcome)) return "pending";
+  if (["paused", "cancelled"].includes(outcome)) return "paused";
+  if (outcomeSignal(outcome) === "warning") return "warning";
+  return outcomeSignal(outcome) === "success" ? "success" : "info";
 }
-function SignalIcon({ path, signal = "neutral" }: { path: string; signal?: Signal }) {
-  return <svg className={`conversation-icon conversation-signal-${signal}`} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={path} /></svg>;
+function SignalIcon({ name, signal = "neutral" }: { name: IconName; signal?: Signal }) {
+  return <Icon name={name} size={20} className={`conversation-icon conversation-signal-${signal}`} />;
 }
 
 function rowStatus(entry: ConversationSummary): string {
@@ -210,19 +210,19 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
   const outcome = LABEL_KEYS.outcome[candidate] ? candidate : "";
   const signal = event.kind === "error" ? (payload?.code === "cancelled" ? "warning" : "error")
     : event.kind === "approval_requested" || event.kind === "continue_required" ? "warning" : outcomeSignal(outcome);
-  const path = signal === "error" ? outcomeIcon(outcome || "failed")
-    : event.kind === "tool_call" || event.kind === "assistant_text" ? mdiArrowTopRight
-    : event.kind === "tool_result" ? (signal === "warning" ? outcomeIcon(outcome) : mdiArrowBottomLeft)
-    : event.kind === "change" ? mdiFileDocumentEditOutline
-    : event.kind === "routing" ? mdiSourceBranch
-    : event.kind === "approval_requested" ? mdiClockOutline
-    : event.kind === "continue_required" || payload?.code === "cancelled" ? mdiPauseCircleOutline : outcomeIcon(outcome);
+  const icon: IconName = signal === "error" ? outcomeIcon(outcome || "failed")
+    : event.kind === "tool_call" || event.kind === "assistant_text" ? "outgoing"
+    : event.kind === "tool_result" ? (signal === "warning" ? outcomeIcon(outcome) : "incoming")
+    : event.kind === "change" ? "change"
+    : event.kind === "routing" ? "routing"
+    : event.kind === "approval_requested" ? "pending"
+    : event.kind === "continue_required" || payload?.code === "cancelled" ? "paused" : outcomeIcon(outcome);
   const heading = event.kind === "assistant_text" ? t(responseStatus ? "conversations.response" : "conversations.event.assistant_text")
     : event.kind === "routing" ? routeHeading(payload)
     : event.kind === "notice" && payload?.reason === "execution_unknown" ? t("conversations.executionUnknown")
     : event.kind === "tool_call" && OPERATION_KEYS[name] ? t(OPERATION_KEYS[name]) : label("event", event.kind);
   return <li className={`conversation-event conversation-event-${signal}`}>
-    <SignalIcon path={path} signal={signal} />
+    <SignalIcon name={icon} signal={signal} />
     <div className="conversation-event-body">
     <div className="conversation-event-heading">
       <span><strong>{heading}</strong>{name && <> <code>{name}</code></>}</span>
@@ -274,7 +274,7 @@ function TimelineRow({ item, finalIndex, running, responseStatus }: { item: Time
   const signal = outcomeSignal(outcome);
   const heading = OPERATION_KEYS[name] ? t(OPERATION_KEYS[name]) : label("event", "tool_call");
   return <li className={`conversation-event conversation-event-${signal}`}>
-    <SignalIcon path={outcomeIcon(outcome)} signal={signal} />
+    <SignalIcon name={outcomeIcon(outcome)} signal={signal} />
     <div className="conversation-event-body">
       <div className="conversation-event-heading"><span><strong>{heading}</strong> <code>{name}</code></span><time dateTime={item.event.timestamp}>{localeDateTime(item.event.timestamp)}</time></div>
       <p className={`conversation-outcome conversation-signal-${signal}`}>{label("outcome", outcome)}</p>
@@ -314,7 +314,7 @@ function EntryDetail({ id, revision, accessKeyNames }: { id: string; revision: s
     {entry.coverage === "tool_exchange" && <p className="conversation-secondary">{t("conversations.groupingUnavailable")}</p>}
     {entry.omissions.map(reason => <p className="banner banner-warning" key={reason}>{label("omission", reason)}</p>)}
     <section aria-label={t("conversations.prompt")}>
-      <h3><SignalIcon path={mdiArrowBottomLeft} />{t("conversations.prompt")}</h3>
+      <h3><SignalIcon name="incoming" />{t("conversations.prompt")}</h3>
       {entry.prompt !== null ? <PromptEvidence value={entry.prompt} /> : <p className="conversation-secondary">{unavailable(entry, "prompt")}</p>}
     </section>
     <section aria-label={t("conversations.activity")}>
@@ -324,8 +324,8 @@ function EntryDetail({ id, revision, accessKeyNames }: { id: string; revision: s
     </section>
     {!!entry.omitted_events && <p className="banner banner-warning">{t("conversations.omittedEvents", { count: localeNumber(entry.omitted_events) })}</p>}
     {finalTextIndex < 0 && <section aria-label={t("conversations.response")}>
-      <h3><SignalIcon path={mdiArrowTopRight} signal={outcomeSignal(entry.response_status)} />{t("conversations.response")}</h3>
-      <p className={`conversation-response-status conversation-signal-${outcomeSignal(entry.response_status)}`}><SignalIcon path={outcomeIcon(entry.response_status)} signal={outcomeSignal(entry.response_status)} />{label("responseStatus", entry.response_status)}</p>
+      <h3><SignalIcon name="outgoing" signal={outcomeSignal(entry.response_status)} />{t("conversations.response")}</h3>
+      <p className={`conversation-response-status conversation-signal-${outcomeSignal(entry.response_status)}`}><SignalIcon name={outcomeIcon(entry.response_status)} signal={outcomeSignal(entry.response_status)} />{label("responseStatus", entry.response_status)}</p>
       {entry.response !== null ? <TextEvidence value={entry.response} /> : <p className="conversation-secondary">{unavailable(entry, "response")}</p>}
     </section>}
     <details className="conversation-technical"><summary>{t("conversations.technical")}</summary><p className="conversation-secondary">{t("conversations.deliveryUnverified")}</p><TextEvidence value={{
@@ -434,7 +434,7 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
             <span className="conversation-secondary">{label("source", entry.source)} · {localeDateTime(entry.latest_at ?? entry.started_at)}{entry.turns ? ` · ${t("conversations.turns", { count: localeNumber(entry.turns.length) })}` : ""}</span>
             <span className="conversation-secondary">{[entry.tool_count ? tn("conversations.toolCount", entry.tool_count) : "", entry.change_count ? tn("conversations.changeCount", entry.change_count) : "", entry.tool_count ? t("conversations.execution", { outcome: label("outcome", entry.execution_status) }) : ""].filter(Boolean).join(" · ")}</span>
           </span>
-          <span className={`conversation-status conversation-signal-${outcomeSignal(rowStatus(entry))}`}><SignalIcon path={outcomeIcon(rowStatus(entry))} signal={outcomeSignal(rowStatus(entry))} />{label("outcome", rowStatus(entry))}</span>
+          <span className={`conversation-status conversation-signal-${outcomeSignal(rowStatus(entry))}`}><SignalIcon name={outcomeIcon(rowStatus(entry))} signal={outcomeSignal(rowStatus(entry))} />{label("outcome", rowStatus(entry))}</span>
         </summary>
         {open.has(entry.id) && (entry.turns ? <ConversationDetail entry={entry} accessKeyNames={accessKeyNames} /> : <EntryDetail id={entry.id} revision={entry.updated_at} accessKeyNames={accessKeyNames} />)}
       </details>)}

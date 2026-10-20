@@ -3,7 +3,7 @@ import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
 import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
-import { Loading, ErrorMsg, RefreshIcon } from "../index";
+import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import { compareStrings, localeDateTime, t } from "../i18n";
 

@@ -7,7 +7,7 @@ import { toYaml } from "../components/YamlView";
 import { CodeToggle, diffLines, RawDiffPane, LayoutToggle, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
 import { YamlView } from "../components/YamlView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode, useHuiCardReady } from "../components/DashboardPreview";
-import { Loading, ErrorMsg, RefreshIcon } from "../index";
+import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
 import { formatDateTime } from "../utils";
 import { useLatestRequest } from "../utils/latest_request";
 import { matchesListSearch } from "../utils/list_search";

@@ -93,3 +93,22 @@ it("provides a visible keyboard ring and hides closed documentation drawers", ()
     expect(drawers.some((block) => /visibility:\s*hidden/.test(block[2])), selector).toBe(true);
   }
 });
+
+it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s neutral chrome legible and operable", (_theme, values) => {
+  // Text and the read signal hold 4.5:1 on every surface a panel or window can
+  // paint; the ink focus ring and field borders are non-text UI and hold 3:1.
+  const surfaces = ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-accent-lt"];
+  for (const surface of surfaces) {
+    for (const text of ["--phx-text", "--phx-text-2"]) {
+      expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-read"]), rgb(values[surface])), `read on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  for (const surface of ["--phx-surface", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  expect(contrast(rgb(values["--phx-accent-fg"]), rgb(values["--phx-accent"])), "primary button").toBeGreaterThanOrEqual(4.5);
+});

@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { toYaml, YamlView } from "./YamlView";
 import { t } from "../i18n";
+import { Icon } from "../ui/Icon";
 
 // The approval diff carries before/after as JSON strings (possibly truncated).
 // Render them as YAML so the line diff reads like the stored config; if a side
@@ -84,12 +85,7 @@ export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => 
       aria-pressed={code}
       title={label}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-           strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-           style={{ display: "block" }}>
-        <path d="M5.5 4.5 2 8l3.5 3.5" />
-        <path d="M10.5 4.5 14 8l-3.5 3.5" />
-      </svg>
+      <Icon name="code" size={16} style={{ display: "block" }} />
     </button>
   );
 }
@@ -107,21 +103,8 @@ export function LayoutToggle({ stacked, onToggle }: { stacked: boolean; onToggle
       aria-label={label}
       title={label}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: "block" }}>
-        {stacked ? (
-          // Target = side-by-side: two vertical panes.
-          <>
-            <rect x="2" y="2.5" width="5" height="11" rx="1" />
-            <rect x="9" y="2.5" width="5" height="11" rx="1" />
-          </>
-        ) : (
-          // Target = stacked: two horizontal panes.
-          <>
-            <rect x="2.5" y="2" width="11" height="5" rx="1" />
-            <rect x="2.5" y="9" width="11" height="5" rx="1" />
-          </>
-        )}
-      </svg>
+      {/* The icon shows the layout the button switches TO. */}
+      <Icon name={stacked ? "sideBySide" : "stacked"} size={16} style={{ display: "block" }} />
     </button>
   );
 }

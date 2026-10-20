@@ -11,8 +11,8 @@
     "lint": "eslint frontend_src"
   },
   "dependencies": {
-    "@mdi/js": "^7.4.47",
     "js-yaml": "^4.3.2",
+    "lucide-react": "1.52.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

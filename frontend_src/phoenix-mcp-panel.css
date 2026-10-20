@@ -8,50 +8,57 @@
    Design tokens - light mode (default)
    ============================================================ */
 :host {
-  --phx-bg:           #fafafa;
+  --phx-bg:           #f3f3f3;
   --phx-surface:      #ffffff;
-  --phx-surface-2:    #f4f4f5;
-  /* Light-mode text-bearing tokens sit one shade darker than the classic
-     amber-600/zinc-500 palette so small text hits WCAG 4.5:1 on every
-     surface it is used on (white, surface-2, and the translucent tint
-     backgrounds). Dark mode has its own ramp below and already passes. */
-  --phx-accent:       #b45309;
-  --phx-accent-hov:   #92400e;
-  --phx-accent-lt:    #faf3e8;
+  --phx-surface-2:    #f5f5f5;
+  /* Neutral chrome: the accent is ink, and color appears only where it
+     carries meaning (success, error, warning, read). Light greys follow Home
+     Assistant's light theme; every text-bearing token holds WCAG 4.5:1 on each
+     surface and status tint, and focus rings and field borders hold 3:1. */
+  --phx-accent:       #141414;
+  --phx-accent-hov:   #3a3a3a;
+  --phx-accent-lt:    #ebebeb;
   --phx-accent-fg:    #ffffff;
-  --phx-text:         #18181b;
-  --phx-text-2:       #52525b;
-  --phx-border:       #e4e4e7;
-  --phx-divider:      #f1f1f2;
-  --phx-success:      #0d5228;
-  --phx-success-bg:   rgba(22,163,74,0.1);
-  --phx-error:        #991b1b;
-  --phx-error-bg:     rgba(220,38,38,0.1);
-  --phx-warning:      #92400e;
-  --phx-warning-bg:   rgba(217,119,6,0.1);
-  --phx-info:         #52525b;
-  --phx-info-bg:      rgba(113,113,122,0.10);
-  --phx-shadow:       0 1px 3px rgba(24,24,27,0.08), 0 1px 2px rgba(24,24,27,0.05);
-  --phx-shadow-md:    0 4px 16px rgba(24,24,27,0.1), 0 2px 6px rgba(24,24,27,0.06);
-  --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.18);
-  --phx-radius:       12px;
-  --phx-radius-sm:    8px;
-  --phx-radius-xs:    6px;
+  --phx-text:         #141414;
+  --phx-text-2:       #5e5e5e;
+  --phx-border:       #e1e1e1;
+  --phx-divider:      #ececec;
+  --phx-success:      #257343;
+  --phx-success-bg:   rgba(37,115,67,0.10);
+  --phx-error:        #ad333a;
+  --phx-error-bg:     rgba(173,51,58,0.10);
+  --phx-warning:      #865c00;
+  --phx-warning-bg:   rgba(134,92,0,0.10);
+  --phx-info:         #5e5e5e;
+  --phx-info-bg:      rgba(0,0,0,0.06);
+  --phx-shadow:       none;
+  --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.16);
+  --phx-radius:       8px;
+  --phx-radius-sm:    6px;
+  --phx-radius-xs:    4px;
   /* Semantic z-index scale: sticky detail header < tab bar < dropdown < modal. */
   --phx-z-sticky:     10;
   --phx-z-tabbar:     20;
   --phx-z-dropdown:   30;
   --phx-z-modal:      100;
   --phx-z-agentcli:   200;
-  --phx-grey-tint:    rgba(0,0,0,0.07);
-  --phx-hover:        #eeeef1;
-  --phx-purple:       #52525b;
-  --phx-purple-bg:    rgba(113,113,122,0.10);
-  /* Agent Chat window: a shade darker than --phx-surface so the floating
-     window reads as a distinct layer over the Phoenix MCP panel behind it, not a
-     seamless continuation of it. */
-  --phx-agentcli-surface:  #d4d4d8;
-  --phx-agentcli-titlebar: #c6c6cb;
+  --phx-grey-tint:    rgba(0,0,0,0.06);
+  --phx-hover:        #efefef;
+  --phx-purple:       #5e5e5e;
+  --phx-purple-bg:    rgba(0,0,0,0.06);
+  /* Agent Chat window surfaces. The floating window is set apart from the
+     panel behind it by its hairline border and shadow, not by a darker fill. */
+  --phx-agentcli-surface:  #ffffff;
+  --phx-agentcli-titlebar: #f5f5f5;
+  --phx-font:         "Phoenix Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --phx-raised:       #ffffff;
+  --phx-line-strong:  #c4c4c4;
+  --phx-field-border: #8a8a8a;
+  --phx-focus:        #141414;
+  --phx-accent-wash:  rgba(0,0,0,0.04);
+  --phx-read:         #175fb0;
+  --phx-read-bg:      rgba(23,95,176,0.10);
 
   /* Native controls (selects, scrollbars) render from the browser's
      color-scheme, which they would otherwise inherit from the HA page;
@@ -66,7 +73,8 @@
   touch-action: pan-y;
   background: var(--phx-bg);
   color: var(--phx-text);
-  font-family: var(--ha-font-family-body, Roboto, Noto, sans-serif);
+  font-family: var(--phx-font);
+  font-feature-settings: "cv11";
   font-size: 14px;
   line-height: 1.5;
 }
@@ -77,70 +85,83 @@
    the class at all and silently misbehaves. */
 @media (prefers-color-scheme: dark) {
   :host(:not(.phx-theme-light)) {
-    --phx-bg:           #18181b;
-    --phx-surface:      #27272a;
-    --phx-surface-2:    #1e1e21;
-    --phx-accent:       #f59e0b;
-    --phx-accent-hov:   #fbbf24;
-    --phx-accent-lt:    #3d2806;
-    --phx-accent-fg:    #18181b;
-    --phx-text:         #fafafa;
-    --phx-text-2:       #a1a1aa;
-    --phx-border:       #3f3f46;
-    --phx-divider:      #27272a;
-    --phx-success:      #4ade80;
-    --phx-success-bg:   rgba(74,222,128,0.12);
-    --phx-error:        #f87171;
-    --phx-error-bg:     rgba(248,113,113,0.12);
-    --phx-warning:      #fbbf24;
-    --phx-warning-bg:   rgba(251,191,36,0.12);
-    --phx-info:         #a1a1aa;
-    --phx-info-bg:      rgba(161,161,170,0.12);
-    --phx-shadow:       0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-    --phx-shadow-md:    0 4px 16px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
-    --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.6);
+    --phx-bg:           #111111;
+    --phx-surface:      #1c1c1c;
+    --phx-surface-2:    #232323;
+    --phx-accent:       #e1e1e1;
+    --phx-accent-hov:   #ffffff;
+    --phx-accent-lt:    #323232;
+    --phx-accent-fg:    #111111;
+    --phx-text:         #e1e1e1;
+    --phx-text-2:       #9b9b9b;
+    --phx-border:       #333333;
+    --phx-divider:      #262626;
+    --phx-success:      #85daa0;
+    --phx-success-bg:   rgba(133,218,160,0.12);
+    --phx-error:        #ff9b9f;
+    --phx-error-bg:     rgba(255,155,159,0.12);
+    --phx-warning:      #f2cc75;
+    --phx-warning-bg:   rgba(242,204,117,0.12);
+    --phx-info:         #9b9b9b;
+    --phx-info-bg:      rgba(255,255,255,0.06);
+    --phx-shadow:       none;
+    --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.45);
+    --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
     --phx-grey-tint:    rgba(255,255,255,0.08);
-    --phx-hover:        rgba(255,255,255,0.06);
-    --phx-purple:       #a1a1aa;
-    --phx-purple-bg:    rgba(161,161,170,0.12);
-    /* Agent Chat window: a shade lighter than --phx-surface for the same
-       reason as the light-mode value above, mirrored for dark mode. */
-    --phx-agentcli-surface:  #323238;
-    --phx-agentcli-titlebar: #2b2b30;
+    --phx-hover:        #2a2a2a;
+    --phx-purple:       #9b9b9b;
+    --phx-purple-bg:    rgba(255,255,255,0.06);
+    /* Dark greys follow Home Assistant's default dark theme. */
+    --phx-agentcli-surface:  #1c1c1c;
+    --phx-agentcli-titlebar: #232323;
+    --phx-raised:       #242424;
+    --phx-line-strong:  #4a4a4a;
+    --phx-field-border: #737373;
+    --phx-focus:        #e1e1e1;
+    --phx-accent-wash:  rgba(255,255,255,0.04);
+    --phx-read:         #89baff;
+    --phx-read-bg:      rgba(137,186,255,0.12);
     color-scheme: dark;
   }
 }
 
 /* Forced dark (overrides system light preference) */
 :host(.phx-theme-dark) {
-  --phx-bg:           #18181b;
-  --phx-surface:      #27272a;
-  --phx-surface-2:    #1e1e21;
-  --phx-accent:       #f59e0b;
-  --phx-accent-hov:   #fbbf24;
-  --phx-accent-lt:    #3d2806;
-  --phx-accent-fg:    #18181b;
-  --phx-text:         #fafafa;
-  --phx-text-2:       #a1a1aa;
-  --phx-border:       #3f3f46;
-  --phx-divider:      #27272a;
-  --phx-success:      #4ade80;
-  --phx-success-bg:   rgba(74,222,128,0.12);
-  --phx-error:        #f87171;
-  --phx-error-bg:     rgba(248,113,113,0.12);
-  --phx-warning:      #fbbf24;
-  --phx-warning-bg:   rgba(251,191,36,0.12);
-  --phx-info:         #a1a1aa;
-  --phx-info-bg:      rgba(161,161,170,0.12);
-  --phx-shadow:       0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --phx-shadow-md:    0 4px 16px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
-  --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.6);
+  --phx-bg:           #111111;
+  --phx-surface:      #1c1c1c;
+  --phx-surface-2:    #232323;
+  --phx-accent:       #e1e1e1;
+  --phx-accent-hov:   #ffffff;
+  --phx-accent-lt:    #323232;
+  --phx-accent-fg:    #111111;
+  --phx-text:         #e1e1e1;
+  --phx-text-2:       #9b9b9b;
+  --phx-border:       #333333;
+  --phx-divider:      #262626;
+  --phx-success:      #85daa0;
+  --phx-success-bg:   rgba(133,218,160,0.12);
+  --phx-error:        #ff9b9f;
+  --phx-error-bg:     rgba(255,155,159,0.12);
+  --phx-warning:      #f2cc75;
+  --phx-warning-bg:   rgba(242,204,117,0.12);
+  --phx-info:         #9b9b9b;
+  --phx-info-bg:      rgba(255,255,255,0.06);
+  --phx-shadow:       none;
+  --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.45);
+  --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
   --phx-grey-tint:    rgba(255,255,255,0.08);
-  --phx-hover:        rgba(255,255,255,0.06);
-  --phx-purple:       #a1a1aa;
-  --phx-purple-bg:    rgba(161,161,170,0.12);
-  --phx-agentcli-surface:  #323238;
-  --phx-agentcli-titlebar: #2b2b30;
+  --phx-hover:        #2a2a2a;
+  --phx-purple:       #9b9b9b;
+  --phx-purple-bg:    rgba(255,255,255,0.06);
+  --phx-agentcli-surface:  #1c1c1c;
+  --phx-agentcli-titlebar: #232323;
+  --phx-raised:       #242424;
+  --phx-line-strong:  #4a4a4a;
+  --phx-field-border: #737373;
+  --phx-focus:        #e1e1e1;
+  --phx-accent-wash:  rgba(255,255,255,0.04);
+  --phx-read:         #89baff;
+  --phx-read-bg:      rgba(137,186,255,0.12);
   color-scheme: dark;
 }
 
@@ -150,7 +171,7 @@
 * { box-sizing: border-box; }
 
 *:focus-visible {
-  outline: 2px solid var(--phx-accent);
+  outline: 2px solid var(--phx-focus);
   outline-offset: 2px;
 }
 .input:focus-visible { outline: none; }
@@ -415,6 +436,7 @@
   justify-content: center;
   gap: 6px;
   padding: 8px 16px;
+  min-height: 36px;
   border: none;
   border-radius: var(--phx-radius-sm);
   cursor: pointer;
@@ -437,7 +459,7 @@
 .btn-outline {
   background: transparent;
   color: var(--phx-accent);
-  border: 1.5px solid var(--phx-accent);
+  border: 1px solid var(--phx-line-strong);
 }
 .btn-outline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-lt); }
 .btn-text {
@@ -455,8 +477,13 @@
   border: 1px solid var(--phx-border);
 }
 .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); color: var(--phx-text); }
-.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-sm { min-height: 26px; padding: 4px 10px; font-size: 12px; }
 .btn-icon { padding: 6px 8px; }
+/* Compact controls keep a comfortable target on touch screens. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 36px; }
+}
 .btn-warning { background: var(--phx-warning); color: var(--phx-accent-fg); }
 .btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); }
 .btn-text-danger { color: var(--phx-error); }
@@ -521,7 +548,7 @@
   display: inline-flex; align-items: center; gap: 6px; border: none; background: none;
   padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.row-link-btn:hover { color: var(--phx-accent); }
+.row-link-btn:hover { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .row-link-btn-stack { flex-direction: column; align-items: flex-start; max-width: 100%; }
 .sort-arrow { display: inline-block; margin-left: 3px; font-size: 9px; opacity: 0.35; }
 .sort-arrow.active { opacity: 1; }
@@ -550,7 +577,7 @@
 }
 .input {
   padding: 9px 12px;
-  border: 1.5px solid var(--phx-border);
+  border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
   color: var(--phx-text);
@@ -590,7 +617,7 @@ select.input {
 .toggle-switch-track {
   position: absolute;
   inset: 0;
-  background: var(--phx-border);
+  background: var(--phx-field-border);
   border-radius: 24px;
   transition: background 0.2s;
   pointer-events: none;
@@ -602,7 +629,7 @@ select.input {
   width: 18px;
   left: 3px;
   top: 3px;
-  background: #fff;
+  background: var(--phx-accent-fg);
   border-radius: 50%;
   transition: transform 0.2s;
   box-shadow: var(--phx-shadow);
@@ -1520,7 +1547,7 @@ select.input {
 .settings-divider { border: none; border-top: 1px solid var(--phx-divider); margin: 10px 0; }
 .settings-toggle-mt { margin-top: 8px; }
 .settings-info-list { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-.settings-info-link { color: var(--phx-accent); }
+.settings-info-link { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .settings-info-note { font-size: 13px; color: var(--phx-text-2); }
 .settings-danger-header { color: var(--phx-error); }
 .settings-version { text-align: right; font-size: 11px; color: var(--phx-text-2); margin-top: 8px; opacity: 0.6; }
@@ -2037,7 +2064,7 @@ hui-card { display: block; min-width: 0; }
 .approval-reject-row { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .approval-reason-label { font-size: 11px; color: var(--phx-text-2); }
 .approval-reason-input {
-  padding: 6px 10px; border: 1px solid var(--phx-border);
+  padding: 6px 10px; border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-xs); font-size: 13px; font-family: inherit;
   background: var(--phx-surface); color: var(--phx-text);
 }
@@ -2190,7 +2217,7 @@ hui-card { display: block; min-width: 0; }
   position: relative;
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   padding: 6px 8px; min-height: 40px; cursor: text;
-  border: 1.5px solid var(--phx-border); border-radius: var(--phx-radius-sm);
+  border: 1px solid var(--phx-field-border); border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
 }
 .tag-input:focus-within { border-color: var(--phx-accent); box-shadow: 0 0 0 3px var(--phx-accent-lt); }
@@ -2228,7 +2255,7 @@ hui-card { display: block; min-width: 0; }
 .mesa-taglabel-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .link-btn {
   border: none; background: none; cursor: pointer; padding: 0;
-  color: var(--phx-accent); font-size: 12px; font-weight: 600; font-family: inherit;
+  color: var(--phx-accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: underline; text-underline-offset: 2px;
 }
 .link-btn:hover { text-decoration: underline; }
 .tag-reco { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px 0; }
@@ -2426,15 +2453,19 @@ hui-card { display: block; min-width: 0; }
 .agentcli-window.agentcli-minimized .agentcli-title-icon { width: 16px; height: 16px; border-radius: 3px; }
 .agentcli-titlebar-actions { display: flex; align-items: center; gap: 4px; }
 .agentcli-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   color: var(--phx-text-2);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 4px 6px;
   border-radius: var(--phx-radius-xs);
 }
+.agentcli-icon-btn svg { display: block; }
 .agentcli-icon-btn:hover { background: var(--phx-hover); color: var(--phx-text); }
 .agentcli-pop-btn {
   display: inline-flex;
@@ -2442,24 +2473,14 @@ hui-card { display: block; min-width: 0; }
   justify-content: center;
   padding: 3px 6px;
 }
-.agentcli-pop-btn svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-}
+.agentcli-pop-btn svg { display: block; width: 16px; height: 16px; }
 .agentcli-gear-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 2px 7px;
 }
-.agentcli-gear-btn svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
+.agentcli-gear-btn svg { display: block; width: 18px; height: 18px; }
 
 .agentcli-popout-error {
   padding: 8px 10px;
@@ -2559,7 +2580,7 @@ hui-card { display: block; min-width: 0; }
 .agentcli-copy-btn:hover { background: var(--phx-hover); opacity: 1; }
 .agentcli-copy-btn:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: 1px; }
 .agentcli-copy-btn.is-copied { color: var(--phx-accent); opacity: 1; }
-.agentcli-copy-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.agentcli-copy-btn svg { width: 14px; height: 14px; }
 .agentcli-thinking { font-size: 0.92em; color: var(--phx-text-2); margin-bottom: 6px; }
 .agentcli-thinking-body {
   margin: 4px 0 0;
@@ -2592,7 +2613,7 @@ hui-card { display: block; min-width: 0; }
   overscroll-behavior: contain;
 }
 .agentcli-md pre code { background: none; padding: 0; }
-.agentcli-md a { color: var(--phx-accent); }
+.agentcli-md a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .agentcli-md blockquote {
   margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--phx-border); color: var(--phx-text-2);
 }
@@ -2628,11 +2649,11 @@ hui-card { display: block; min-width: 0; }
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   border-radius: 50%; border: 1px solid var(--phx-border); background: var(--phx-surface); color: var(--phx-text);
 }
-.agentcli-attachment-remove svg { width: 14px; height: 14px; fill: currentColor; }
+.agentcli-attachment-remove svg { width: 14px; height: 14px; }
 .agentcli-attachment-note { font-size: 0.85em; color: var(--phx-text-2); }
 .agentcli-attachment-error { font-size: 0.85em; color: var(--phx-error); }
 .agentcli-attach-btn { padding: 0 8px; }
-.agentcli-attach-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.agentcli-attach-btn svg { width: 18px; height: 18px; }
 .agentcli-attach-btn[aria-disabled="true"] { opacity: 0.5; }
 /* Live progress from a held tool (a firmware build). Visible regardless of the
    verbose toggle, since during a multi-minute call it is the only sign of life. */
@@ -2706,7 +2727,7 @@ hui-card { display: block; min-width: 0; }
   min-height: calc(2.8em + 14px);
   max-height: calc(8.4em + 14px);
   padding: 6px 8px;
-  border: 1px solid var(--phx-border);
+  border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
   color: var(--phx-text);
@@ -2795,7 +2816,7 @@ hui-card { display: block; min-width: 0; }
 .agentcli-settings-form .banner-error { white-space: pre-line; }
 .agentcli-settings-form input {
   font: inherit; font-size: 13px; padding: 6px 8px;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
+  border: 1px solid var(--phx-field-border); border-radius: var(--phx-radius-sm);
   background: var(--phx-surface); color: var(--phx-text);
 }
 .agentcli-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -2980,7 +3001,7 @@ hui-card { display: block; min-width: 0; }
 .conversation-evidence { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 8px; }
 .conversation-evidence-content { flex: 1; min-width: 0; }
 .conversation-copy.btn-icon { flex: 0 0 28px; width: 28px; height: 28px; padding: 4px; color: var(--phx-text-2); }
-.conversation-copy svg { width: 18px; height: 18px; fill: currentColor; }
+.conversation-copy svg { width: 18px; height: 18px; }
 .conversation-copy-feedback { flex-basis: 100%; }
 .conversation-evidence pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: "Roboto Mono", monospace; font-size: 13px; }
 .conversation-evidence > span { font-size: 12px; color: var(--phx-text-2); }
@@ -2992,7 +3013,7 @@ hui-card { display: block; min-width: 0; }
 .conversation-event-body { min-width: 0; }
 .conversation-event-error { background: var(--phx-error-bg); }
 .conversation-error-message { margin: 8px 0; }
-.conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: currentColor; }
+.conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; }
 .conversation-signal-neutral { color: var(--phx-text-2); }
 .conversation-signal-success { color: var(--phx-success); }
 .conversation-signal-warning { color: var(--phx-warning); }

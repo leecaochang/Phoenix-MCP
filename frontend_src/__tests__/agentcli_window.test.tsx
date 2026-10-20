@@ -649,11 +649,8 @@ describe("AgentCliWindow pop-out", () => {
 
     const popOutButton = screen.getByRole("button", { name: "Pop out to a separate window" });
     const popOutIcon = popOutButton.querySelector("svg");
-    expect(popOutIcon).toHaveAttribute("fill", "currentColor");
-    expect(popOutIcon?.querySelector("path")).toHaveAttribute(
-      "d",
-      "M14 3V5H17.59L7.76 14.83L9.17 16.24L19 6.41V10H21V3M19 19H5V5H12V3H5C3.89 3 3 3.9 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z",
-    );
+    expect(popOutIcon).toHaveClass("lucide-square-arrow-out-up-right");
+    expect(popOutIcon).toHaveAttribute("aria-hidden", "true");
     const inAppGearPath = screen.getByRole("button", { name: "Options" })
       .querySelector("svg path")?.getAttribute("d");
     expect(inAppGearPath).toBeTruthy();
@@ -672,8 +669,8 @@ describe("AgentCliWindow pop-out", () => {
     expect(popupUi.getByRole("dialog", { name: "Agent Chat" })).toHaveClass("agentcli-popped-out");
     const popInButton = popupUi.getByRole("button", { name: "Pop back into Home Assistant" });
     expect(popInButton).toBeVisible();
-    expect(popInButton.querySelector("svg")).toHaveAttribute("fill", "currentColor");
-    expect(popInButton.querySelectorAll("svg path")).toHaveLength(2);
+    expect(popInButton.querySelector("svg")).toHaveClass("lucide-square-arrow-down-left");
+    expect(popInButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     const popOutGear = popupUi.getByRole("button", { name: "Options" });
     expect(popOutGear.querySelector("svg")).toHaveAttribute("viewBox", "0 0 24 24");
     expect(popOutGear.querySelector("svg path")?.getAttribute("d")).toBe(inAppGearPath);

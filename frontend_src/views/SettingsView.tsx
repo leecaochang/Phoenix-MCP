@@ -14,7 +14,7 @@ import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import { WipeConfirmModal } from "../components/WipeConfirmModal";
 import { DocsHelpLink } from "../components/common";
-import { Loading } from "../index";
+import { Loading } from "../components/common";
 import { JS_BUILD } from "../version";
 import { LANGUAGES, LANGUAGE_AUTO, t } from "../i18n";
 import { tRich } from "../i18n/rich";

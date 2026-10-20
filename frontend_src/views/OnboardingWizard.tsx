@@ -11,7 +11,7 @@ import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import { buildTestPrompt, firstGreenTarget } from "../wizard_helpers";
 import { patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
-import { ErrorMsg } from "../index";
+import { ErrorMsg } from "../components/common";
 import { localeNumber, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 

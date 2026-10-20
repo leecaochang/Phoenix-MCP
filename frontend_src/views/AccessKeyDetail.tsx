@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import PHOENIX_ICON from "../../custom_components/phoenix_mcp/brand/icon.png";
 import { api } from "../api";
-import { Loading, ErrorMsg } from "../index";
+import { Loading, ErrorMsg } from "../components/common";
 import { formatDateTime, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";

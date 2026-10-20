@@ -5,6 +5,7 @@ import { api } from "../api";
 import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EsphomeAvailability } from "./CapabilityMatrix";
 import { t } from "../i18n";
+import { Icon } from "../ui/Icon";
 
 // Patch mode: applies the persona to an existing access key (Access key detail).
 // Select mode: no access key yet (onboarding wizard); reports the chosen persona to
@@ -83,9 +84,7 @@ export function PersonaPicker(props: Props) {
               <div className="persona-card-label">
                 {t(p.labelKey)}
                 {p.key === "home_companion" && (
-                  <svg className="persona-card-marker" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                    <path d="m12 2.5 2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.52l-5.88 3.09 1.12-6.55L2.48 9.42l6.58-.96Z" />
-                  </svg>
+                  <Icon name="star" className="persona-card-marker" filled />
                 )}
               </div>
               <div className="persona-card-desc">{t(p.descriptionKey)}</div>

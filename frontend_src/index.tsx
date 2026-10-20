@@ -32,18 +32,17 @@ import {
   localeNumber,
   t,
 } from "./i18n";
-import { Loading, ErrorMsg, RefreshIcon, DOCS_BASE_URL } from "./components/common";
+import { DOCS_BASE_URL } from "./components/common";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
+import { ensurePhoenixFont } from "./ui/fonts";
+import { applyThemeClass, resolveThemeClass } from "./ui/theme";
+import { Icon } from "./ui/Icon";
 
 type Tab = "accessKeys" | "approvals" | "changes" | "mesa" | "audit" | "conversations" | "settings";
 type Theme = "light" | "dark" | "auto";
 
 export { HIGH_RISK_DOMAINS } from "./utils";
 
-// Re-exported for the many views that import these from "../index". The
-// definitions live in components/common so reusing them outside the panel does
-// not pull the whole app into a bundle.
-export { Loading, ErrorMsg, RefreshIcon };
 
 type View =
   | { name: "list" }
@@ -551,11 +550,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
           rel="noopener noreferrer"
         >
           {t("shell.documentation")}
-          <svg className="phx-tab-extlink" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>
+          <Icon name="externalLink" size={11} className="phx-tab-extlink" />
         </a>
 
         <div className="phx-tab-spacer" />
@@ -683,6 +678,7 @@ class PhoenixPanelElement extends HTMLElement {
       this._theme = saved;
     }
     this._applyThemeClass();
+    ensurePhoenixFont(this.ownerDocument);
 
     const shadow = this.attachShadow({ mode: "open" });
 
@@ -732,21 +728,8 @@ class PhoenixPanelElement extends HTMLElement {
   }
 
   private _applyThemeClass() {
-    this.classList.remove("phx-theme-light", "phx-theme-dark");
-    if (this._theme === "light") {
-      this.classList.add("phx-theme-light");
-    } else if (this._theme === "dark") {
-      this.classList.add("phx-theme-dark");
-    } else {
-      // Auto: follow HA's dark mode preference when available
-      const hassThemes = (this._hass as { themes?: { darkMode?: boolean } } | null)?.themes;
-      if (hassThemes?.darkMode === true) {
-        this.classList.add("phx-theme-dark");
-      } else if (hassThemes?.darkMode === false) {
-        this.classList.add("phx-theme-light");
-      }
-      // If darkMode is undefined, no class - CSS prefers-color-scheme handles it
-    }
+    const darkMode = (this._hass as { themes?: { darkMode?: boolean } } | null)?.themes?.darkMode;
+    applyThemeClass(this, resolveThemeClass(darkMode, this._theme));
   }
 
   private _setLanguage(pref: string) {

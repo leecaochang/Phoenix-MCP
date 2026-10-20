@@ -19,6 +19,7 @@ import { MesaIdentity } from "../components/MesaIdentity";
 import { Loading, ErrorMsg, RefreshIcon, ExportIcon, ImportIcon } from "../components/common";
 import { compareStrings, localeNumber, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { Icon } from "../ui/Icon";
 
 // Maps an HA domain to the canonical tag namespace roots that describe an ENTITY
 // of that domain, used to surface "Suggested" tags. Intent namespaces
@@ -1202,7 +1203,7 @@ function MesaNotice({ findings, tone, label, children }: {
     <div className={`banner banner-${tone} mesa-notice`}>
       <div className="mesa-notice-content">{children}</div>
       <button type="button" className="btn btn-ghost btn-sm btn-icon mesa-notice-dismiss" onClick={dismiss} aria-label={label} title={label}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        <Icon name="close" size={16} />
       </button>
     </div>
   );

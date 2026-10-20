@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
-import { mdiClose, mdiPaperclip } from "@mdi/js";
 import {
   ATTACHMENT_MAX_COUNT, AttachmentError, imageFiles, prepareAttachment, withoutSentImages,
   type ChatAttachment,
@@ -35,6 +34,9 @@ import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLang
 import { tRich } from "../i18n/rich";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import { ensurePhoenixFont } from "../ui/fonts";
+import { Icon } from "../ui/Icon";
+import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
 // optional: restored session entries may lack it, and the timestamp display
@@ -502,22 +504,9 @@ const POPUP_PANEL_CSS = PANEL_CSS
   .replace(/:host\(([^)]*)\)/g, ":root$1")
   .replaceAll(":host", ":root");
 
-function resolvePopupTheme(hass: unknown): "phx-theme-dark" | "phx-theme-light" | null {
-  const typedHass = hass as AgentCliHass | null | undefined;
-  let saved: string | null = null;
-  try { saved = localStorage.getItem("phx-theme"); } catch { /* storage blocked */ }
-  if (saved === "light") return "phx-theme-light";
-  if (saved === "dark") return "phx-theme-dark";
-  if (typedHass?.themes?.darkMode === true) return "phx-theme-dark";
-  if (typedHass?.themes?.darkMode === false) return "phx-theme-light";
-  return null;
-}
-
 function applyPopupTheme(popup: Window, hass: unknown): void {
-  const root = popup.document.documentElement;
-  root.classList.remove("phx-theme-dark", "phx-theme-light");
-  const theme = resolvePopupTheme(hass);
-  if (theme) root.classList.add(theme);
+  const darkMode = (hass as AgentCliHass | null | undefined)?.themes?.darkMode;
+  applyThemeClass(popup.document.documentElement, resolveThemeClass(darkMode));
 }
 
 const RESIZE_MIN_W = 320, RESIZE_MIN_H = 280;
@@ -1817,6 +1806,7 @@ export function AgentCliWindow({
       #${POPUP_MOUNT_ID} { position: relative; }
     `;
     doc.head.replaceChildren(base, viewport, styleEl);
+    ensurePhoenixFont(doc);
     doc.title = agentChatTitle;
     doc.documentElement.lang = agentChatLanguage;
     const mount = doc.createElement("div");
@@ -1882,14 +1872,9 @@ export function AgentCliWindow({
               onClick={poppedOut ? popIn : popOut}
             >
               {poppedOut ? (
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                  <path d="M19 19H5V5H12V3H5C3.89 3 3 3.9 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z" />
-                  <path d="M8 16V10L10.59 12.59L19.59 3.59L21 5L12 14L14 16H8Z" />
-                </svg>
+                <Icon name="popIn" />
               ) : (
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                  <path d="M14 3V5H17.59L7.76 14.83L9.17 16.24L19 6.41V10H21V3M19 19H5V5H12V3H5C3.89 3 3 3.9 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z" />
-                </svg>
+                <Icon name="popOut" />
               )}
             </button>
           )}
@@ -1897,24 +1882,22 @@ export function AgentCliWindow({
             <button className="agentcli-icon-btn agentcli-gear-btn" title={t("agentchat.options")} aria-label={t("agentchat.options")}
                     aria-expanded={gearOpen}
                     onClick={() => setGearOpen((v) => !v)}>
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-              </svg>
+              <Icon name="settings" size={18} />
             </button>
           )}
           {!poppedOut && mode !== "min" && (
             <button className="agentcli-icon-btn" title={t("agentchat.minimize")} aria-label={t("agentchat.minimize")}
-                    onClick={minimize}>&minus;</button>
+                    onClick={minimize}><Icon name="minimize" /></button>
           )}
           {!poppedOut && mode !== "max" && (
             <button className="agentcli-icon-btn" title={t("agentchat.maximize")} aria-label={t("agentchat.maximize")}
-                    onClick={maximize}>□</button>
+                    onClick={maximize}><Icon name="maximize" /></button>
           )}
           {!poppedOut && mode !== "normal" && (
             <button className="agentcli-icon-btn" title={t("agentchat.restore")} aria-label={t("agentchat.restore")}
-                    onClick={restore}>&#10064;</button>
+                    onClick={restore}><Icon name="restore" /></button>
           )}
-          <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}>&times;</button>
+          <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}><Icon name="close" /></button>
         </div>
       </div>}
 
@@ -2043,7 +2026,7 @@ export function AgentCliWindow({
                                 setAttachError("");
                                 setAttachments((current) => current.filter((item) => item.id !== attachment.id));
                               }}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiClose} /></svg>
+                        <Icon name="close" size={14} />
                       </button>
                     </li>
                   ))}
@@ -2071,7 +2054,7 @@ export function AgentCliWindow({
                 else fileInputRef.current?.click();
               }}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiPaperclip} /></svg>
+              <Icon name="attach" size={18} />
             </button>
             {/* Stays editable while a turn runs so the next message can be drafted;
                 send() and runTurn() refuse a second turn until this one ends. */}
@@ -2236,16 +2219,7 @@ function CopyResponseButton({ text }: { text: string }) {
       title={label}
       onClick={(event) => { event.stopPropagation(); void copy(); }}
     >
-      {copied ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M5 12.5 9.5 17 19 7" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="8" y="8" width="12" height="12" rx="2" />
-          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-        </svg>
-      )}
+      <Icon name={copied ? "check" : "copy"} size={14} />
     </button>
   );
 }
