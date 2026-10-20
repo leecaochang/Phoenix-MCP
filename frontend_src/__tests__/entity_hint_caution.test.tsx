@@ -48,7 +48,7 @@ describe("entity hint editor caution", () => {
   it("tells the administrator hints reach agents and links the caution to the input", async () => {
     render(<EntityTree accessKeyId="access-key-1" permissions={GRANTED} onPermissionsChange={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Expand light" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add hint" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add Hint" }));
 
     const dialog = await screen.findByRole("dialog");
     const caution = within(dialog).getByText(

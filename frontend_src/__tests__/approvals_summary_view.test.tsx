@@ -101,7 +101,7 @@ describe("approval Summary modal", () => {
     fireEvent.click(view.getByRole("button", { name: "Reject" }));
     const input = await view.findByLabelText("Optional reason");
     expect(document.activeElement).toBe(input);
-    expect(view.queryByRole("button", { name: "Approve and execute" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Approve and Execute" })).toBeNull();
     expect(view.getByRole("button", { name: "Cancel" })).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Reject" }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledWith("appr_summary", {}));
@@ -116,7 +116,7 @@ describe("approval Summary modal", () => {
     try {
       const view = await open();
       if (action === "approve") {
-        fireEvent.click(view.getByRole("button", { name: "Approve and execute" }));
+        fireEvent.click(view.getByRole("button", { name: "Approve and Execute" }));
       } else {
         fireEvent.click(view.getByRole("button", { name: "Reject" }));
         fireEvent.click(await view.findByRole("button", { name: "Reject" }));
@@ -129,8 +129,8 @@ describe("approval Summary modal", () => {
   });
 
   it.each([
-    ["Summary", "Approve and execute", "Approving..."],
-    ["Details", "Approve and execute", "Approving..."],
+    ["Summary", "Approve and Execute", "Approving..."],
+    ["Details", "Approve and Execute", "Approving..."],
   ] as const)("keeps the %s approval button label and geometry stable while busy", async (viewName, label, busyLabel) => {
     let finish!: (value: ApprovalRecord) => void;
     vi.mocked(api.approveApproval).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
@@ -211,7 +211,7 @@ describe("approval Summary modal", () => {
     const resolved = record({ status, rejected_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });
     const view = await open(resolved, "history");
     expect(await view.findByText(expected)).toBeTruthy();
-    expect(view.queryByText("Raw args")).toBeNull();
+    expect(view.queryByText("Raw Args")).toBeNull();
   });
 
   it.each(["pending", "history"] as const)("uses arrows to scan the visible %s list", async (tab) => {

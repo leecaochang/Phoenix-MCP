@@ -120,16 +120,16 @@ describe("VoiceAgentSettings", () => {
   it("opens the setup modal when enabling with no pipeline yet", async () => {
     renderCard(settings());
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
-    expect(screen.getByText("Set up the Phoenix MCP voice assistant")).toBeTruthy();
+    expect(screen.getByText("Set Up the Phoenix MCP Voice Assistant")).toBeTruthy();
   });
 
   it("shows a setup button when fully configured and creates a preferred pipeline by default", async () => {
     renderCard(settings(FULL));
-    const setupBtn = screen.getByRole("button", { name: "Set up Phoenix MCP assistant" });
+    const setupBtn = screen.getByRole("button", { name: "Set Up Phoenix MCP Assistant" });
     expect((setupBtn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(setupBtn);
-    // Modal open; preferred defaults on; "Set up automatically" enabled.
-    const autoBtn = screen.getByRole("button", { name: "Set up automatically" });
+    // Modal open; preferred defaults on; "Set Up Automatically" enabled.
+    const autoBtn = screen.getByRole("button", { name: "Set Up Automatically" });
     expect((autoBtn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(autoBtn);
     await waitFor(() => expect(createVoiceAgentPipeline).toHaveBeenCalledWith(true));
@@ -137,21 +137,21 @@ describe("VoiceAgentSettings", () => {
 
   it("disables the setup button until fully configured", () => {
     renderCard(settings({ voice_agent_enabled: true }));  // enabled but no access key/provider/model
-    expect((screen.getByRole("button", { name: "Set up Phoenix MCP assistant" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Set Up Phoenix MCP Assistant" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows a remove button and deletes the pipeline after confirming", async () => {
     renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Remove Phoenix MCP assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Phoenix MCP Assistant" }));
     // Confirm modal appears; deletion happens only after confirming.
     expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Remove assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Assistant" }));
     await waitFor(() => expect(deleteVoiceAgentPipeline).toHaveBeenCalled());
   });
 
   it("hides the one-click setup when the HA seam is unsupported", () => {
     renderCard(settings({ ...FULL, voice_agent_pipeline_supported: false }));
-    expect(screen.queryByRole("button", { name: "Set up Phoenix MCP assistant" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set Up Phoenix MCP Assistant" })).toBeNull();
   });
 
   it("confirms before disabling when a pipeline exists", () => {
@@ -159,7 +159,7 @@ describe("VoiceAgentSettings", () => {
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));  // toggle off
     expect(onChange).not.toHaveBeenCalledWith("voice_agent_enabled", false);
     expect(screen.getByText("Disable the Phoenix MCP voice agent?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Disable and remove assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable and Remove Assistant" }));
     expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", false);
   });
 
@@ -180,9 +180,9 @@ describe("VoiceAgentSettings layout", () => {
     listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-access-key" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [] });
     const { container } = render(<VoiceAgentSettings settings={settings(FULL)} onChange={vi.fn()} saving={false} />);
-    await screen.findByText("Routing statistics");
+    await screen.findByText("Routing Statistics");
     const stats = container.querySelector("details") as HTMLElement;
-    expect(stats.textContent).toContain("Routing statistics");
+    expect(stats.textContent).toContain("Routing Statistics");
     expect((stats.closest(".card") as HTMLElement).lastElementChild).toBe(stats);
   });
 });

@@ -112,7 +112,7 @@ describe("AiTaskSettings", () => {
 
   it("shows a Set-up-default button when the entity exists and is not yet the default", async () => {
     renderCard(settings());
-    const btn = await screen.findByRole("button", { name: "Make default" });
+    const btn = await screen.findByRole("button", { name: "Make Default" });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -121,10 +121,10 @@ describe("AiTaskSettings", () => {
       prefStatus({ gen_data_entity_id: "ai_task.claude_ai_task", gen_data_name: "Claude AI Task" }),
     );
     renderCard(settings());
-    fireEvent.click(await screen.findByRole("button", { name: "Make default" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Make Default" }));
     // Overwrite warning names the current default.
     expect(screen.getByText(/Claude AI Task/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Set as default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set as Default" }));
     await waitFor(() => expect(setAiTaskPreferred).toHaveBeenCalled());
   });
 
@@ -133,7 +133,7 @@ describe("AiTaskSettings", () => {
       prefStatus({ is_preferred: true, gen_data_entity_id: "ai_task.phoenix_mcp_ai_task" }),
     );
     renderCard(settings());
-    fireEvent.click(await screen.findByRole("button", { name: "Remove default" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Default" }));
     await waitFor(() => expect(clearAiTaskPreferred).toHaveBeenCalled());
   });
 
@@ -141,12 +141,12 @@ describe("AiTaskSettings", () => {
     getAiTaskPreferred.mockResolvedValue(prefStatus({ supported: false, entity_id: null }));
     renderCard(settings());
     await waitFor(() => expect(getAiTaskPreferred).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "Make default" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Make Default" })).toBeNull();
   });
 
   it("pops the default-setup modal on first enable", async () => {
     renderCard(settings());
-    await screen.findByRole("button", { name: "Make default" });  // pref loaded
+    await screen.findByRole("button", { name: "Make Default" });  // pref loaded
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP AI Task"));
     expect(screen.getByText("Make Phoenix MCP the default AI Task?")).toBeTruthy();
   });
@@ -154,11 +154,11 @@ describe("AiTaskSettings", () => {
   it("confirms before disabling when Phoenix MCP is the current default", async () => {
     getAiTaskPreferred.mockResolvedValue(prefStatus({ is_preferred: true, gen_data_entity_id: "ai_task.phoenix_mcp_ai_task" }));
     const { onChange } = renderCard(settings({ ai_task_enabled: true }));
-    await screen.findByRole("button", { name: "Remove default" });  // pref loaded + preferred
+    await screen.findByRole("button", { name: "Remove Default" });  // pref loaded + preferred
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP AI Task"));  // toggle off
     expect(onChange).not.toHaveBeenCalledWith("ai_task_enabled", false);
     expect(screen.getByText("Disable the Phoenix MCP AI Task?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Disable and clear default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable and Clear Default" }));
     expect(onChange).toHaveBeenCalledWith("ai_task_enabled", false);
   });
 

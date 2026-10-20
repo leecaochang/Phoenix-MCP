@@ -47,7 +47,7 @@ describe("ApprovalsView pending pagination", () => {
     await findByText("First pending");
 
     expect(api.listApprovals).toHaveBeenCalledWith({ status: "pending", limit: 50, offset: 0 });
-    expect(queryByText("Load more")).toBeTruthy();
+    expect(queryByText("Load More")).toBeTruthy();
   });
 
   it("Load more appends the next page at the accumulated offset", async () => {
@@ -59,11 +59,11 @@ describe("ApprovalsView pending pagination", () => {
     const { findByText, getByText, queryByText } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
     await findByText("First pending");
 
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByText("Second pending");
 
     expect(api.listApprovals).toHaveBeenLastCalledWith({ status: "pending", limit: 50, offset: 1 });
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
   });
 
   it("closes an open detail modal when its approval is resolved elsewhere", async () => {
@@ -127,13 +127,13 @@ it("refreshes every loaded pending page on the polling callback", async () => {
   }));
   const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
   await view.findByText("Pending 0");
-  fireEvent.click(view.getByText("Load more"));
+  fireEvent.click(view.getByText("Load More"));
   await view.findByText("Pending 99");
   const poll = timer.mock.calls.find(([, delay]) => delay === 10_000)![0] as () => Promise<void>;
   const { act } = await import("@testing-library/react");
   await act(async () => { await poll(); });
   expect(view.getByText("Pending 99")).toBeInTheDocument();
-  expect(view.queryByText("Load more")).toBeNull();
+  expect(view.queryByText("Load More")).toBeNull();
   view.unmount();
   timer.mockRestore();
 });

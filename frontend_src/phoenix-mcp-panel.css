@@ -239,8 +239,7 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+
   transition: color 0.15s, border-color 0.15s, background 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
@@ -316,8 +315,7 @@
   font-weight: 700;
   margin: 0 0 16px 0;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -348,8 +346,7 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+
   margin: 4px 2px 8px;
 }
 
@@ -371,8 +368,7 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+
   text-align: left;
 }
 .collapsible-header:hover { color: var(--phx-text); }
@@ -488,8 +484,7 @@
   border-radius: 20px;
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+
   white-space: nowrap;
 }
 .badge-blue   { background: var(--phx-info-bg);    color: var(--phx-info); }
@@ -508,8 +503,7 @@
   padding: 10px 12px;
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+
   color: var(--phx-text-2);
   border-bottom: 2px solid var(--phx-border);
   white-space: nowrap;
@@ -1062,7 +1056,7 @@ select.input {
 .tree-badge-ghost   { background: var(--phx-warning-bg); color: var(--phx-warning); }
 .tree-stale-devices { border-top: 1px solid var(--phx-border); margin-block-start: 14px; padding-block-start: 12px; }
 .tree-stale-title {
-  color: var(--phx-text-2); text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--phx-text-2);
   margin: 0 6px 4px; font-size: 11px; font-weight: 700;
 }
 .tree-stale-note { color: var(--phx-text-2); margin: 0 6px 8px; font-size: 12px; }
@@ -1111,7 +1105,7 @@ select.input {
    Section header
    ============================================================ */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--phx-text-2); }
+.section-title { font-size: 11px; font-weight: 700; color: var(--phx-text-2); }
 
 /* ============================================================
    Access key display (rotated modal)
@@ -1134,7 +1128,7 @@ select.input {
 .outcome-invalid_request { color: var(--phx-text-2); font-weight: 500; }
 .outcome-pending_approval { color: var(--phx-warning); font-weight: 600; }
 
-.outcome-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.outcome-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
 .outcome-badge.outcome-allowed       { background: var(--phx-success-bg); }
 .outcome-badge.outcome-denied        { background: var(--phx-error-bg); }
 .outcome-badge.outcome-not_found     { background: var(--phx-grey-tint); }
@@ -1153,7 +1147,7 @@ select.input {
 .perm-summary-table thead,
 .perm-summary-table tbody { display: block; width: 100%; }
 .perm-summary-table tr { display: grid; grid-template-columns: 86px minmax(0, 3fr) minmax(0, 2fr) 80px; width: 100%; }
-.perm-summary-th { min-width: 0; cursor: pointer; user-select: none; color: var(--phx-text-2); white-space: nowrap; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 8px; border-bottom: 2px solid var(--phx-border); text-align: left; }
+.perm-summary-th { min-width: 0; cursor: pointer; user-select: none; color: var(--phx-text-2); white-space: nowrap; font-size: 11px; font-weight: 700; padding: 6px 8px; border-bottom: 2px solid var(--phx-border); text-align: left; }
 .perm-summary-th.active { color: var(--phx-accent); }
 .perm-summary-arrow { font-size: 9px; opacity: 0.35; }
 .perm-summary-arrow.active { opacity: 1; }
@@ -1404,7 +1398,7 @@ select.input {
 .mesa-suggest-toggle {
   display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
   background: none; border: none; cursor: pointer; padding: 4px 0;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 11px; font-weight: 700;
   color: var(--phx-text-2); text-align: left;
 }
 .mesa-suggest-toggle:hover { color: var(--phx-text); }
@@ -1467,8 +1461,7 @@ select.input {
   font-size: 11px;
   font-weight: 700;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+
   white-space: nowrap;
 }
 .access-key-meta-value { font-size: 13px; color: var(--phx-text); }
@@ -1592,7 +1585,7 @@ select.input {
 .cap-tier-group { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }
 .cap-tier-header {
   background: var(--phx-surface-2); padding: 6px 12px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px;
   font-weight: 600; color: var(--phx-text-2);
   border-bottom: 1px solid var(--phx-border);
 }
@@ -2246,7 +2239,6 @@ hui-card { display: block; min-width: 0; }
   min-width: 18px; height: 18px; padding: 0 5px; flex: 0 0 auto;
   border: 1px solid var(--phx-border); border-radius: 9px; background: var(--phx-surface);
   color: var(--phx-text-2); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer;
-  text-transform: uppercase; letter-spacing: 0.04em;
 }
 .mesa-link:hover { border-color: var(--phx-accent); color: var(--phx-accent); background: var(--phx-accent-lt); }
 .mesa-link-exists { border-color: var(--phx-accent); color: var(--phx-accent); }
@@ -2514,7 +2506,7 @@ hui-card { display: block; min-width: 0; }
 }
 .agentcli-control { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .agentcli-control > span {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--phx-text-2);
+  font-size: 10px; color: var(--phx-text-2);
 }
 .agentcli-control select.agentcli-select { width: 100%; min-width: 0; }
 
@@ -2920,7 +2912,7 @@ hui-card { display: block; min-width: 0; }
 .energy-preview { display: flex; flex-direction: column; gap: 16px; }
 .energy-preview-section { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .energy-preview-heading {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600;
   color: var(--phx-text-2); margin-bottom: 4px;
 }
 .energy-preview-empty { color: var(--phx-text-2); font-style: italic; font-size: 13px; }

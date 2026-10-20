@@ -93,7 +93,7 @@ describe("a new entity profile seeded after the user started editing", () => {
     await waitFor(() => expect(select("mesa-cm").value).toBe("prohibited"));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Keep editing" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Keep Editing" })).toBeVisible();
   });
 
   it("still seeds when another picker list arrives during the read", async () => {

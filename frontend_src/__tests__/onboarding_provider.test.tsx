@@ -45,8 +45,8 @@ describe("onboarding provider picker", () => {
     renderProviderStep();
     const picker = await screen.findByLabelText("Provider type") as HTMLSelectElement;
     expect(picker.value).toBe("");
-    expect(picker.options[0].textContent).toBe("Add new provider…");
-    expect(screen.queryByRole("button", { name: "Add new provider…" })).toBeNull();
+    expect(picker.options[0].textContent).toBe("Add New Provider…");
+    expect(screen.queryByRole("button", { name: "Add New Provider…" })).toBeNull();
 
     fireEvent.change(picker, { target: { value: "zai" } });
     expect(await screen.findByLabelText("Z.ai plan")).toBeTruthy();

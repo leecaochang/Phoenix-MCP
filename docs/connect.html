@@ -83,11 +83,11 @@
 
           <div class="step"><div class="step-body">
             <h3>Create an access key</h3>
-            <p>In the Phoenix MCP panel, open the <strong>Access keys</strong> tab and click <strong>Create access key</strong>. Give it a name like <code>claude-code</code> and create it.</p>
+            <p>In the Phoenix MCP panel, open the <strong>Access Keys</strong> tab and click <strong>Create Access Key</strong>. Give it a name like <code>claude-code</code> and create it.</p>
 
             <figure class="screenshot">
-              <img src="assets/create-access-key.png" style="width: 70%; margin: 0 auto;" alt="The Create access key dialog with the name claude-code entered" loading="lazy" />
-              <figcaption>The Create access key dialog.</figcaption>
+              <img src="assets/create-access-key.png" style="width: 70%; margin: 0 auto;" alt="The Create Access Key dialog with the name claude-code entered" loading="lazy" />
+              <figcaption>The Create Access Key dialog.</figcaption>
             </figure>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
@@ -121,7 +121,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Adding more access keys as separate profiles</h3>
-            <p>Because each access key gets its own server name, you can keep several configured in one client at once, one entry per access key, all pointing at the same Phoenix MCP URL with a different access key each. To add another, create a second access key in the panel, and on the screen shown after it is created choose <strong>Connect an external agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
+            <p>Because each access key gets its own server name, you can keep several configured in one client at once, one entry per access key, all pointing at the same Phoenix MCP URL with a different access key each. To add another, create a second access key in the panel, and on the screen shown after it is created choose <strong>Connect an External Agent</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
               <div class="callout-body"><p class="callout-title">Save each access key's command when you first see it</p><p>Phoenix MCP stores only a hash of an access key's value, so the panel cannot show an access key's config again after you close its creation (or rotation) dialog. If you lose it, rotate the access key to get a fresh value and command.</p></div>
@@ -191,7 +191,7 @@ bearer_token_env_var = "PHOENIX_ACCESS_KEY_HOME"</code></pre>
         <p>For persistent CLI setup, use the matching profile's <code>cordis.patch.yml</code>. The shared <code>~/.dsh/cordis.patch.yml</code> applies to every profile, including Desktop; use it only if you want the same connection in every profile. See the <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md" target="_blank" rel="noopener">desktop reference</a>, <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md" target="_blank" rel="noopener">MCP client reference</a>, and <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/mcp-memory.md" target="_blank" rel="noopener">profile patch instructions</a>.</p>
 
         <h3 id="other-clients">Other clients</h3>
-        <p>The panel's Other MCP client tab supplies an example for clients accepting <code>mcpServers</code> JSON. Client configuration formats are not standardized by MCP. Follow your client's guide and preserve the Phoenix URL and bearer header.</p>
+        <p>The panel's Other MCP Client tab supplies an example for clients accepting <code>mcpServers</code> JSON. Client configuration formats are not standardized by MCP. Follow your client's guide and preserve the Phoenix URL and bearer header.</p>
 
         <details class="advanced">
           <summary>Install the optional agent skill</summary>
@@ -264,7 +264,7 @@ Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions,
         <ol>
           <li>In <strong>Settings > Voice Agent</strong> (the Phoenix MCP panel), enable it and pick an access key, a provider account, and a model.</li>
           <li>Choose its <strong>Conversation style</strong> and <strong>Detail</strong>. Optionally enable <strong>Home-focused</strong>, a focus preference rather than a security control. The next request uses any changed setting immediately.</li>
-          <li>Let Phoenix MCP set it up for you: on the first enable it offers to create an Assist assistant pointed at Phoenix MCP (and, if you leave the option on, make it your preferred assistant). Or use <strong>Set up Phoenix MCP assistant</strong> in that card any time.</li>
+          <li>Let Phoenix MCP set it up for you: on the first enable it offers to create an Assist assistant pointed at Phoenix MCP (and, if you leave the option on, make it your preferred assistant). Or use <strong>Set Up Phoenix MCP Assistant</strong> in that card any time.</li>
           <li>Prefer to do it by hand? In <strong>Settings > Voice assistants</strong>, set your assistant's conversation agent to <strong>Phoenix MCP</strong>.</li>
         </ol>
         <p>Optional <a href="operations.html#command-routing">command routing</a> can handle supported Voice commands locally or through a separate decision account before using your conversational provider. It defaults to Off. Routing follows the Assist conversation language and installed Assist language catalog; supported sentences and model accuracy vary by language. Keep Home Assistant's <strong>Prefer handling commands locally</strong> disabled so commands reach Phoenix and its permission checks.</p>
@@ -287,7 +287,7 @@ Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions,
         <ol>
           <li>In <strong>Settings > AI Task</strong> (the Phoenix MCP panel), enable it and pick an access key, an <a href="agentcli.html">Agent Chat</a> provider account, and a model. The <strong>Phoenix MCP AI Task</strong> entity appears once all four are set, and disappears again if you disable it or clear one of them.</li>
           <li>Choose a <strong>Conversation style</strong> and <strong>Detail</strong> for free-text results. Structured tasks omit both preferences and follow their output schema exactly.</li>
-          <li>Optionally click <strong>Make default</strong> in the AI Task setup section to make Phoenix MCP your default entity for Data generation tasks, so an <code>ai_task.generate_data</code> action that does not name an entity runs through Phoenix MCP. Home Assistant keeps a single default, so the panel confirms before replacing an existing one.</li>
+          <li>Optionally click <strong>Make Default</strong> in the AI Task setup section to make Phoenix MCP your default entity for Data generation tasks, so an <code>ai_task.generate_data</code> action that does not name an entity runs through Phoenix MCP. Home Assistant keeps a single default, so the panel confirms before replacing an existing one.</li>
           <li>Point an AI Task action at the <strong>Phoenix MCP AI Task</strong> entity by <code>entity_id</code>, or leave the entity unset to use your default.</li>
         </ol>
         <p>Here is an example script which asks Phoenix MCP to summarize the home and shows the answer as a notification. Because the task runs Phoenix MCP's scoped tool loop, the model looks up the lights itself, within the access key's scope, before it writes the sentence:</p>

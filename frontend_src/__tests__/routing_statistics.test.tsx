@@ -5,7 +5,7 @@ vi.mock("../api", () => ({ api: { getRoutingStatistics: (...args: unknown[]) => 
 import { RoutingStatistics } from "../components/RoutingStatistics";
 const empty = { since: "2026-09-25T00:00:00Z", outcomes: { local: 0, decision: 0, provider: 0, pending: 0, failed: 0, cancelled: 0 }, provider_turns: 0, provider_usage: { requests: 0, reports: 0, input_tokens: 0, output_tokens: 0 }, decision_usage: { requests: 0, reports: 0, input_tokens: 0, output_tokens: 0 } };
 beforeEach(() => { get.mockReset(); reset.mockReset(); });
-function expand() { const details = screen.getByText("Routing statistics").parentElement!; details.setAttribute("open", ""); fireEvent(details, new Event("toggle")); }
+function expand() { const details = screen.getByText("Routing Statistics").parentElement!; details.setAttribute("open", ""); fireEvent(details, new Event("toggle")); }
 it("loads only on expansion and never presents missing usage as zero", async () => {
   get.mockResolvedValue({ chat: { ...empty, outcomes: { ...empty.outcomes, local: 1, failed: 1 }, provider_usage: { requests: 1, reports: 0, input_tokens: 0, output_tokens: 0 } } });
   render(<RoutingStatistics surface="chat" />);
@@ -19,9 +19,9 @@ it("requires confirmation and resets only the selected surface", async () => {
   get.mockResolvedValue({ voice: empty }); reset.mockResolvedValue({ voice: empty });
   render(<RoutingStatistics surface="voice" />); expand();
   await screen.findByText("No requests recorded yet.");
-  fireEvent.click(screen.getByRole("button", { name: "Reset statistics" }));
+  fireEvent.click(screen.getByRole("button", { name: "Reset Statistics" }));
   expect(reset).not.toHaveBeenCalled();
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reset statistics" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reset Statistics" }));
   await waitFor(() => expect(reset).toHaveBeenCalledExactlyOnceWith("voice"));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });

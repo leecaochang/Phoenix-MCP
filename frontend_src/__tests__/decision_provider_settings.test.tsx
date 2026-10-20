@@ -44,7 +44,7 @@ it("saves an hourly request limit and rejects empty or fractional drafts", async
   const props = { settings: { ...settings, decision_provider_id: "decision", decision_provider_default_id: "decision", decision_request_budget: 12 }, onChange: change, saving: false };
   const view = render(<DecisionProviderSettings {...props} />);
   await screen.findByText("TypeSafe / JEV");
-  fireEvent.click(screen.getByText("Connection settings"));
+  fireEvent.click(screen.getByText("Connection Settings"));
   const input = screen.getByLabelText("Decision requests per hour (0 = unlimited)");
   for (const value of ["", "1.5", "-1", "100001"]) {
     fireEvent.change(input, { target: { value } });
@@ -218,7 +218,7 @@ it("keeps connection timing optional and rejects invalid values", async () => {
   await screen.findByText("TypeSafe / JEV");
   const timeout = screen.getByLabelText("Decision timeout (ms)");
   expect(timeout).not.toBeVisible();
-  fireEvent.click(screen.getByText("Connection settings"));
+  fireEvent.click(screen.getByText("Connection Settings"));
   expect(timeout).toBeVisible();
   fireEvent.change(timeout, { target: { value: "12000" } });
   fireEvent.blur(timeout);

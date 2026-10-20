@@ -57,10 +57,10 @@ it("combines template inspection notices and leaves automation details collapsed
   expect(screen.getAllByText("This is advisory only; no action is required.")).toHaveLength(2);
   expect(screen.queryByText(recommendation)).toBeNull();
   expect(screen.queryByText("Warning:")).toBeNull();
-  const details = screen.getByText("View automations").closest("details")!;
+  const details = screen.getByText("View Automations").closest("details")!;
   expect(details).not.toHaveAttribute("open");
   expect(within(details).getAllByRole("listitem", { hidden: true })).toHaveLength(23);
-  fireEvent.click(screen.getByText("View automations"));
+  fireEvent.click(screen.getByText("View Automations"));
   expect(details).toHaveAttribute("open");
   expect(screen.getByText("template_automation_0")).toBeVisible();
   expect(container.querySelectorAll("code:empty")).toHaveLength(0);
@@ -103,11 +103,11 @@ it("does not downgrade unknown configuration warnings or inspection errors", asy
     role: "condition", severity: "warning", recommendation: knownReason,
   }] });
   render(<MesaView />);
-  expect(await screen.findByText("MESA validation findings: 3")).toBeVisible();
+  expect(await screen.findByText("MESA Validation Findings: 3")).toBeVisible();
   expect(screen.getAllByText(knownReason)).toHaveLength(2);
   expect(screen.getAllByText("Warning:")).toHaveLength(2);
   expect(screen.getByText("Error:")).toBeVisible();
-  expect(screen.queryByText("View automations")).toBeNull();
+  expect(screen.queryByText("View Automations")).toBeNull();
   expect(screen.queryByText("This is advisory only; no action is required.")).toBeNull();
 });
 
@@ -167,14 +167,14 @@ it("dismisses inspection and validation cards independently and resurfaces chang
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [inspection, validation] });
   const first = render(<MesaView />);
   fireEvent.click(await screen.findByRole("button", { name: "Dismiss inspection notice permanently" }));
-  expect(screen.queryByText("View automations")).toBeNull();
+  expect(screen.queryByText("View Automations")).toBeNull();
   expect(screen.getByText(validation.recommendation)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Dismiss validation notice permanently" }));
   first.unmount();
   const second = render(<MesaView />);
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
   expect(screen.queryByText(validation.recommendation)).toBeNull();
-  expect(screen.queryByText("View automations")).toBeNull();
+  expect(screen.queryByText("View Automations")).toBeNull();
   second.unmount();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [{ ...validation, severity: "error" }] });
   render(<MesaView />);
@@ -232,9 +232,9 @@ it("resolves automation configuration IDs and renders friendly names in advisory
     entity_id: "fan.office", declared_value: "none", automation_id: "1740000000000", role: "trigger", severity: "error", recommendation: "Review declaration.",
   }, { ...inspection, automation_id: "missing_automation", recommendation: "Unknown finding." }] });
   const { container } = render(<MesaView />);
-  await screen.findByText("View automations");
-  fireEvent.click(screen.getByText("View automations"));
-  const details = screen.getByText("View automations").closest("details")!;
+  await screen.findByText("View Automations");
+  fireEvent.click(screen.getByText("View Automations"));
+  const details = screen.getByText("View Automations").closest("details")!;
   expect(within(details).getByText(hostileName).tagName).toBe("STRONG");
   expect(within(details).getByText("1740000000000").tagName).toBe("CODE");
   const row = screen.getByText("Review declaration.").closest("li")!;

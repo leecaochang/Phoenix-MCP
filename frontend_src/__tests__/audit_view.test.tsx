@@ -46,7 +46,7 @@ describe("AuditView", () => {
       method: undefined, resource: undefined, ip: undefined,
       limit: 100, offset: 0,
     });
-    expect(queryByText("Load more")).toBeTruthy();
+    expect(queryByText("Load More")).toBeTruthy();
   });
 
   it("Load more appends the next page at the accumulated offset", async () => {
@@ -57,12 +57,12 @@ describe("AuditView", () => {
     const { findByText, getByText, queryByText } = render(<AuditView accessKeys={[]} />);
     await findByText("first");
 
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByText("second");
 
     expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 1, limit: 100 }));
     // Both pages of a two-total feed are now shown, so Load more disappears.
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
   });
 
   it("changing a dropdown filter reloads from offset 0 with the filter applied", async () => {
@@ -175,10 +175,10 @@ describe("AuditView", () => {
       .mockRejectedValueOnce(new Error("Server error"));
     const { findByText, findByRole, getByText } = render(<AuditView accessKeys={[]} />);
     await findByText("create_automation");
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByRole("alert");
     expect(getByText("create_automation")).toBeTruthy();
-    expect(getByText("Load more")).toBeTruthy();
+    expect(getByText("Load More")).toBeTruthy();
   });
 
   it("offers no Load more while a filter change is loading its first page", async () => {
@@ -187,11 +187,11 @@ describe("AuditView", () => {
       .mockResolvedValueOnce({ entries: [entry({ outcome: "allowed" })], total: 5 })
       .mockReturnValueOnce(next.promise);
     const { findByText, queryByText, getByLabelText } = render(<AuditView accessKeys={[]} />);
-    await findByText("Load more");
+    await findByText("Load More");
     fireEvent.change(getByLabelText("Filter by outcome"), { target: { value: "denied" } });
     await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(2));
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
     next.resolve({ entries: [entry({ request_id: "r9", outcome: "denied" })], total: 1 });
-    await waitFor(() => expect(queryByText("Load more")).toBeNull());
+    await waitFor(() => expect(queryByText("Load More")).toBeNull());
   });
 });

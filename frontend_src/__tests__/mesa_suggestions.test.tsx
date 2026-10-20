@@ -86,7 +86,7 @@ describe("MesaSuggestions", () => {
       <MesaSuggestions {...baseProps} suggestions={[]} dismissedCount={3} onRestoreAll={onRestoreAll} />,
     );
     expect(getByText("3 dismissed")).toBeTruthy();
-    fireEvent.click(getByText("Restore all"));
+    fireEvent.click(getByText("Restore All"));
     expect(onRestoreAll).toHaveBeenCalled();
     expect(getByText("No open suggestions.")).toBeTruthy();
   });

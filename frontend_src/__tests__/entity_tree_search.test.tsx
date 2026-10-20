@@ -129,7 +129,7 @@ describe("permission tree search and device cleanup", () => {
     };
     const { onPermissionsChange } = renderTree(permissions);
 
-    expect(await screen.findByText("Unmatched device permissions")).toBeInTheDocument();
+    expect(await screen.findByText("Unmatched Device Permissions")).toBeInTheDocument();
     expect(screen.getByText(GHOST_DEVICE_ID)).toBeInTheDocument();
     const selector = screen.getByRole("group", { name: `Permission for device ${GHOST_DEVICE_ID}` });
     const clearButton = within(selector).getByRole("button", {

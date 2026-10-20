@@ -97,7 +97,7 @@ describe("deep-link batch hint", () => {
       [record("a"), record("b"), record("c")], "a",
     );
     try {
-      fireEvent.click(await findByText("Review all"));
+      fireEvent.click(await findByText("Review All"));
       await waitFor(() => expect(queryByRole("dialog")).toBeNull());
       expect(closed).toHaveBeenCalledOnce();
       expect((closed.mock.calls[0][0] as CustomEvent).detail)
@@ -148,7 +148,7 @@ describe("deep-link batch hint", () => {
       [record("a"), record("b"), record("c")], "a",
     );
     await findByText("2 other approvals are waiting for review.");
-    fireEvent.click(await findByText("Review all"));
+    fireEvent.click(await findByText("Review All"));
     await waitFor(() => expect(queryByText(/waiting for review/)).toBeNull());
     fireEvent.click((await findAllByText("Edit a"))[0]);
     await findByRole("dialog");

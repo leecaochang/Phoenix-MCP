@@ -23,9 +23,9 @@ it("stays quiet with nothing to review", async () => {
 
 it("requires explicit checking and never repeats an action", async () => {
   const view = render(<AttentionPanel />);
-  fireEvent.click(await view.findByText("Needs attention"));
+  fireEvent.click(await view.findByText("Needs Attention"));
   expect(view.getByText(/returned a result/)).toBeVisible();
-  const button = view.getByRole("button", { name: "Mark reviewed" });
+  const button = view.getByRole("button", { name: "Mark Reviewed" });
   expect(button).toBeDisabled();
   expect(api.reviewAttention).not.toHaveBeenCalled();
   fireEvent.click(view.getByRole("checkbox", { name: "I checked the action outcome" }));
@@ -38,9 +38,9 @@ it("requires explicit checking and never repeats an action", async () => {
 it("keeps a failed review visible with a clear retry path", async () => {
   vi.mocked(api.reviewAttention).mockRejectedValue(new Error("The review could not be saved."));
   const view = render(<AttentionPanel />);
-  fireEvent.click(await view.findByText("Needs attention"));
+  fireEvent.click(await view.findByText("Needs Attention"));
   fireEvent.click(view.getByRole("checkbox"));
-  fireEvent.click(view.getByRole("button", { name: "Mark reviewed" }));
+  fireEvent.click(view.getByRole("button", { name: "Mark Reviewed" }));
   expect(await view.findByRole("alert")).toHaveTextContent("The review could not be saved.");
   expect(view.getByText("Check a previous action")).toBeVisible();
 });
@@ -48,16 +48,16 @@ it("keeps a failed review visible with a clear retry path", async () => {
 it("shows infrastructure help without offering acknowledgement", async () => {
   vi.mocked(api.listAttention).mockResolvedValue({ items: [{ kind: "mesa", id: "mesa" }, { kind: "calendar_storage", id: "calendar_storage" }] });
   const view = render(<AttentionPanel />);
-  fireEvent.click(await view.findByText("Needs attention"));
+  fireEvent.click(await view.findByText("Needs Attention"));
   expect(view.getByText("MESA could not start")).toBeVisible();
   expect(view.queryByRole("checkbox")).toBeNull();
-  expect(view.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+  expect(view.queryByRole("button", { name: "Mark Reviewed" })).toBeNull();
 });
 
 it("does not mistake a failed load for a healthy state", async () => {
   vi.mocked(api.listAttention).mockRejectedValueOnce(new Error("network"));
   const view = render(<AttentionPanel />);
-  fireEvent.click(await view.findByText("Needs attention"));
+  fireEvent.click(await view.findByText("Needs Attention"));
   expect(view.getByText(/Could not load/)).toBeVisible();
   expect(view.queryByText("Nothing needs attention.")).toBeNull();
   fireEvent.click(view.getByRole("button", { name: "Refresh" }));
@@ -68,12 +68,12 @@ it("discards stale polls after review and unmounted responses", async () => {
   let resolvePoll!: (response: { items: AttentionItem[] }) => void;
   const poll = new Promise<{ items: AttentionItem[] }>(resolve => { resolvePoll = resolve; });
   const view = render(<AttentionPanel />);
-  fireEvent.click(await view.findByText("Needs attention"));
+  fireEvent.click(await view.findByText("Needs Attention"));
   vi.mocked(api.listAttention).mockReturnValueOnce(poll);
   fireEvent.click(view.getByRole("button", { name: "Refresh" }));
   fireEvent.click(view.getByRole("checkbox"));
   vi.mocked(api.listAttention).mockResolvedValue({ items: [] });
-  fireEvent.click(view.getByRole("button", { name: "Mark reviewed" }));
+  fireEvent.click(view.getByRole("button", { name: "Mark Reviewed" }));
   await waitFor(() => expect(view.getByText("Nothing needs attention.")).toBeVisible());
   await act(async () => { resolvePoll({ items: [item] }); });
   expect(view.queryByText("Check a previous action")).toBeNull();
@@ -86,5 +86,5 @@ it("opens a deep link directly and preserves escaped request metadata", async ()
   const view = render(<AttentionPanel />);
   expect(await view.findByText(/<script>unsafe<\/script>/)).toBeVisible();
   expect(view.container.querySelector("script")).toBeNull();
-  expect(view.getByRole("button", { name: /Needs attention/ })).toHaveAttribute("aria-expanded", "true");
+  expect(view.getByRole("button", { name: /Needs Attention/ })).toHaveAttribute("aria-expanded", "true");
 });

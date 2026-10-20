@@ -75,7 +75,7 @@ describe("batch approve", () => {
     const boxes = document.querySelectorAll<HTMLInputElement>(".approval-card-check");
     fireEvent.click(boxes[2]);
     fireEvent.click(boxes[0]);
-    fireEvent.click(getByRole("button", { name: "Approve 2 selected" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
     await waitFor(() => expect(api.batchApproveApprovals).toHaveBeenCalled());
     expect(vi.mocked(api.batchApproveApprovals).mock.calls[0][0]).toEqual(["a", "c"]);
   });
@@ -83,7 +83,7 @@ describe("batch approve", () => {
   it("select-all ticks every selectable row", async () => {
     const { getByRole, findByRole } = await renderPending([record("a"), record("b")]);
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
-    expect(await findByRole("button", { name: "Approve 2 selected" })).toBeTruthy();
+    expect(await findByRole("button", { name: "Approve 2 Selected" })).toBeTruthy();
   });
 
   it("will not tick an approval that is already executing", async () => {
@@ -119,7 +119,7 @@ describe("batch approve", () => {
       [record("a"), record("b")],
     );
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
-    fireEvent.click(getByRole("button", { name: "Approve 2 selected" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
     expect(await findByText("Approved 2.")).toBeTruthy();
 
     // A new approval arrives on the next poll.
@@ -143,7 +143,7 @@ describe("batch approve", () => {
       [record("a"), record("b"), record("c")],
     );
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
-    fireEvent.click(getByRole("button", { name: "Approve 3 selected" }));
+    fireEvent.click(getByRole("button", { name: "Approve 3 Selected" }));
 
     expect(await findByText("Approved 1.")).toBeTruthy();
     expect(await findByText(/Capability is now denied/)).toBeTruthy();
@@ -161,8 +161,8 @@ describe("batch approve", () => {
       [record("a"), record("b"), record("c")],
     );
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
-    fireEvent.click(getByRole("button", { name: "Approve 3 selected" }));
+    fireEvent.click(getByRole("button", { name: "Approve 3 Selected" }));
     // One click retries exactly the remainder once the cause is dealt with.
-    expect(await findByRole("button", { name: "Approve 1 selected" })).toBeTruthy();
+    expect(await findByRole("button", { name: "Approve 1 Selected" })).toBeTruthy();
   });
 });

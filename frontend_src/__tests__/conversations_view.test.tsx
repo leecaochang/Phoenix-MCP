@@ -60,8 +60,8 @@ describe("ConversationsView", () => {
     vi.mocked(api.getConversations).mockImplementation(async () => list([image]));
     vi.mocked(api.getConversation).mockResolvedValue({ ...detail, ...image, prompt: [{ attachment: true, type: "image", omitted: "media" }] });
     const view = render(<ConversationsView />);
-    fireEvent.click((await view.findByText("Image or file prompt")).closest("summary")!);
-    await waitFor(() => expect(view.getAllByText("Image or file prompt")).toHaveLength(2));
+    fireEvent.click((await view.findByText("Image or File Prompt")).closest("summary")!);
+    await waitFor(() => expect(view.getAllByText("Image or File Prompt")).toHaveLength(2));
     expect(view.queryByText(/did not receive a usable prompt/)).toBeNull();
   });
 
@@ -80,9 +80,9 @@ describe("ConversationsView", () => {
     const title = await view.findByText("Tool exchange; prompt unavailable");
     fireEvent.click(title.closest("summary")!);
     await view.findByText("Prompt");
-    fireEvent.click(view.getByText("Clear conversation history"));
+    fireEvent.click(view.getByText("Clear Conversation History"));
     expect(api.clearConversations).not.toHaveBeenCalled();
-    fireEvent.click(view.getAllByText("Clear conversation history")[1]);
+    fireEvent.click(view.getAllByText("Clear Conversation History")[1]);
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
     await view.findByText("No conversations to show");
     expect(view.queryByText("Prompt")).toBeNull();
@@ -201,7 +201,7 @@ it("combines a delegated operation with routing and pairs its result without hid
   expect(view.getByText("Sent to LLM provider: example").closest(".conversation-route-inline")).toBeTruthy();
   expect(view.container.querySelectorAll(".conversation-detail > section > .conversation-timeline > li")).toHaveLength(1);
   expect(view.getByText("Target ambiguous; not executed.")).toBeVisible();
-  expect(view.getAllByText("Tool result")).toHaveLength(2);
+  expect(view.getAllByText("Tool Result")).toHaveLength(2);
 });
 
 
@@ -234,7 +234,7 @@ it("shows copyable tool invocations and explains provider purpose, output and ch
   expect(view.getByText("Sent tool results and conversation context to the model for the next step.")).toBeTruthy();
   expect(view.getByText("Returned text: 25 characters. Proposed tool calls: 1. Tool execution is recorded separately.")).toBeTruthy();
   expect(view.getByText("The conversation could not safely be shared for decision review.")).toBeTruthy();
-  expect(view.getAllByText("Text checked")).toHaveLength(2);
+  expect(view.getAllByText("Text Checked")).toHaveLength(2);
   expect(view.getAllByText("Model request completed")).toHaveLength(2);
   expect(view.getAllByText("turn on the lamp")).toHaveLength(2);
 });

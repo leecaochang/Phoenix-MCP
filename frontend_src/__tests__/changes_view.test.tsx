@@ -59,11 +59,11 @@ describe("ChangesView", () => {
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
     expect(view.queryByText("Alpha lamp")).toBeNull();
     expect(view.getByText("Zebra lamp")).toBeVisible();
-    expect(view.getByText("Load more")).toBeVisible();
+    expect(view.getByText("Load More")).toBeVisible();
     fireEvent.change(view.getByLabelText("Action"), { target: { value: "edit" } });
     expect(view.queryByText("Zebra lamp")).toBeNull();
     expect(view.getByText("No loaded changes match these filters.")).toBeVisible();
-    expect(view.getByText("Load more")).toBeVisible();
+    expect(view.getByText("Load More")).toBeVisible();
   });
 
   it("loads the first page and shows Load more only while more rows remain", async () => {
@@ -77,7 +77,7 @@ describe("ChangesView", () => {
     await findByText("First change");
 
     expect(api.listVersions).toHaveBeenCalledWith({ limit: 100, offset: 0 });
-    expect(queryByText("Load more")).toBeTruthy();
+    expect(queryByText("Load More")).toBeTruthy();
   });
 
   it("Load more appends the next page at the accumulated offset", async () => {
@@ -94,11 +94,11 @@ describe("ChangesView", () => {
     const { findByText, getByText, queryByText } = render(<ChangesView hass={null} />);
     await findByText("First change");
 
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByText("Second change");
 
     expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 100, offset: 1 });
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
   });
 
   it("a manual refresh reloads from offset 0, replacing the loaded feed", async () => {
@@ -141,15 +141,15 @@ describe("ChangesView", () => {
     const view = render(<ChangesView hass={null} />);
     fireEvent.click((await view.findByText("My automation")).closest("button")!);
     await waitFor(() => expect(api.getVersion).toHaveBeenCalledWith("v1"));
-    fireEvent.click((await view.findAllByText("Restore this configuration"))[0]);
+    fireEvent.click((await view.findAllByText("Restore This Configuration"))[0]);
     fireEvent.click(view.container.querySelector<HTMLButtonElement>(".change-restore-actions .btn-primary")!);
 
     await waitFor(() => expect(api.restoreVersion).toHaveBeenCalledWith("v1", "before"));
     await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(3));
-    expect(view.getByText("Back to changes")).toBeTruthy();
+    expect(view.getByText("Back to Changes")).toBeTruthy();
 
     refreshed.resolve({ resource_type: null, resource_id: null, versions: [rollback, original], total: 2 });
-    await waitFor(() => expect(view.queryByText("Back to changes")).toBeNull());
+    await waitFor(() => expect(view.queryByText("Back to Changes")).toBeNull());
     expect(await within(view.getByRole("table")).findByText("Rollback")).toBeTruthy();
     expect(api.listVersions).toHaveBeenCalledTimes(3);
   });

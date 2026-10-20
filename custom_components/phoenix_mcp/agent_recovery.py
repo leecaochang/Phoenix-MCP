@@ -133,7 +133,7 @@ class AgentRecovery:
     async def begin(self, access_key_id: str, tool: str, rid: str) -> None:
         async with self._lock:
             if self.blocks(access_key_id) or len(self._records) >= MAX_RECORDS:
-                raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs attention before retrying.")
+                raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs Attention before retrying.")
             tool = _journal_tool_name(tool)
             self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
@@ -318,11 +318,11 @@ async def dispatch_agent_tool(
                   and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
             else:
-                raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.")
+                raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs Attention before retrying.")
         return response
     except Exception:
         if write:
-            raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.") from None
+            raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs Attention before retrying.") from None
         raise
     finally:
         if write:

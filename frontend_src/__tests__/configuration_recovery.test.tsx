@@ -42,7 +42,7 @@ it.each(["approve", "reject"] as const)("resolves recovery through the existing 
   expect(dialog.getByText("saved content")).toBeTruthy();
   expect(dialog.queryByText("Verify")).toBeNull();
   if (action === "approve") {
-    fireEvent.click(dialog.getByRole("button", { name: "Approve and execute" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Approve and Execute" }));
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith(recovery.id));
   } else {
     fireEvent.click(dialog.getByRole("button", { name: "Reject" }));

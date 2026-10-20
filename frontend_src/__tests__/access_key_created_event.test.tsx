@@ -75,7 +75,7 @@ describe("access key creation announces phx-access-keys-changed", () => {
     const input = screen.getByPlaceholderText("my_access_key");
     expect(input).toHaveValue("my_access_key");
     expect(screen.queryByDisplayValue("test_access_key")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Create access key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Access Key" }));
     await waitFor(() => expect(createAccessKey).toHaveBeenCalledWith({
       name: "my_access_key", expires_at: undefined, pass_through: false,
     }));

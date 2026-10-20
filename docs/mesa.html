@@ -48,7 +48,7 @@
         </ul>
 
         <h2>Where MESA runs</h2>
-        <p>Every supported service-call path resolves and flattens its primary target to explicit entity IDs, applies the access key's capability gates, and only then hands the entity list to MESA. Service fields that can name additional entity, device, or area targets are refused until Phoenix can model them safely. MESA never sees an entity Phoenix MCP has already denied; it has the final say on what survives. Explicitly selecting Off makes MESA allow all. If a configured MESA runtime fails to initialize, Phoenix keeps reads and admin recovery available, shows the problem under Needs attention in the Phoenix panel, and refuses protected state-changing operations until the integration is reloaded successfully.</p>
+        <p>Every supported service-call path resolves and flattens its primary target to explicit entity IDs, applies the access key's capability gates, and only then hands the entity list to MESA. Service fields that can name additional entity, device, or area targets are refused until Phoenix can model them safely. MESA never sees an entity Phoenix MCP has already denied; it has the final say on what survives. Explicitly selecting Off makes MESA allow all. If a configured MESA runtime fails to initialize, Phoenix keeps reads and admin recovery available, shows the problem under Needs Attention in the Phoenix panel, and refuses protected state-changing operations until the integration is reloaded successfully.</p>
         <p>MESA governs <strong>writes</strong>. Reads are scoped by the permission tree, not by MESA, so a read-only or confirm entity is still readable if the access key can read it.</p>
 
         <h2>An entity's control mode</h2>
@@ -116,7 +116,7 @@
         </figure>
 
         <h2 id="suggestions">Suggested profiles</h2>
-        <p>Profiles only protect what you thought to describe. The <strong>Suggested profiles</strong> section at the top of the MESA tab closes the gap between what you profiled and what deserves one: Phoenix MCP scans your deployment and lists entities that look under-protected, each with a plain-English reason. Two kinds of finding:</p>
+        <p>Profiles only protect what you thought to describe. The <strong>Suggested Profiles</strong> section at the top of the MESA tab closes the gap between what you profiled and what deserves one: Phoenix MCP scans your deployment and lists entities that look under-protected, each with a plain-English reason. Two kinds of finding:</p>
         <dl class="kv">
           <div class="kv-row"><dt>Blast radius</dt><dd>An automation, script, or scene with no profile of its own whose actions reach risky devices (or fan out very widely). The suggestion targets the automation itself, because that is the only place a gate works: an automation's actions run natively inside Home Assistant and are <a href="permissions.html#indirect-control-risk">never re-gated per entity</a>, so a profile on the lock does not stop an agent from triggering the automation that unlocks it. A confirm profile on the automation gates the agent's trigger.</dd></div>
           <div class="kv-row"><dt>Unprotected risky device</dt><dd>A lock, alarm panel, garage-class cover, valve, siren, water heater, or firmware-update entity with no MESA coverage at any level. When five or more in one domain are uncovered, Phoenix MCP suggests a single domain-level profile instead of a wall of rows.</dd></div>
@@ -124,8 +124,8 @@
         <p>Each row offers <strong>Apply</strong> (create the profile with the suggested mode in one click; the reason is preserved on the profile as its <code>control_reason</code>), <strong>Review</strong> (open the editor pre-set to the suggested mode, to adjust before saving), and <strong>Dismiss</strong> (persisted, restorable). Locks and alarm panels suggest <code>prohibited</code>, matching the built-in baseline, so applying is never a loosening under enforced mode; everything else suggests <code>confirm</code>. Nothing is ever applied automatically, and domains your deployment defaults already restrict are not suggested.</p>
 
         <figure class="screenshot">
-          <img src="assets/mesa-suggested-profiles.png" alt="The Suggested profiles section listing automations with their blast radius and the Apply, Review and Dismiss actions" loading="lazy" />
-          <figcaption>Suggested profiles: each row shows why it was flagged and offers Apply, Review or Dismiss.</figcaption>
+          <img src="assets/mesa-suggested-profiles.png" alt="The Suggested Profiles section listing automations with their blast radius and the Apply, Review and Dismiss actions" loading="lazy" />
+          <figcaption>Suggested Profiles: each row shows why it was flagged and offers Apply, Review or Dismiss.</figcaption>
         </figure>
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.4" fill="currentColor"/></svg>

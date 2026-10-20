@@ -202,9 +202,9 @@ describe("AgentCliSettings", () => {
     renderCard();
     const picker = await screen.findByLabelText("Provider type") as HTMLSelectElement;
     expect(picker.value).toBe("");
-    expect(picker.options[0].textContent).toBe("Add new provider…");
+    expect(picker.options[0].textContent).toBe("Add New Provider…");
     expect(picker.options[0].disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Add new provider…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add New Provider…" })).toBeNull();
   });
 
   it("resets the picker on failed validation while retaining the form", async () => {
@@ -270,7 +270,7 @@ describe("AgentCliSettings", () => {
     renderCard();
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
     fireEvent.click(screen.getByLabelText(/^Remove /));
-    await waitFor(() => expect(screen.getByText(/Remove provider/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Remove Provider/i)).toBeInTheDocument());
     expect(deleteAgentCliProvider).not.toHaveBeenCalled();
     const removeButtons = screen.getAllByText("Remove");
     fireEvent.click(removeButtons[removeButtons.length - 1]);
@@ -282,12 +282,12 @@ describe("AgentCliSettings", () => {
     renderCard();
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
     fireEvent.click(screen.getByLabelText(/^Remove /));
-    await waitFor(() => expect(screen.getByText(/Remove provider/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Remove Provider/i)).toBeInTheDocument());
     const removeButtons = screen.getAllByText("Remove");
     fireEvent.click(removeButtons[removeButtons.length - 1]);
     // The error is shown and the dialog stays up (not silently closed as success).
     await waitFor(() => expect(screen.getByText("server unreachable")).toBeInTheDocument());
-    expect(screen.getByText(/Remove provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/Remove Provider/i)).toBeInTheDocument();
   });
 
   it("supports adding a second account of an existing kind (Ollama URL field)", async () => {
@@ -397,7 +397,7 @@ describe("Agent Chat card layout", () => {
     const { container } = renderCard();
     await screen.findByLabelText("Check providers for new models");
     const stats = container.querySelector("details.routing-stats, details");
-    expect(stats?.textContent).toContain("Routing statistics");
+    expect(stats?.textContent).toContain("Routing Statistics");
     const chat = stats!.closest(".card") as HTMLElement;
     // Nothing from the Agent Chat card follows the disclosure.
     expect(chat.lastElementChild).toBe(stats);
@@ -734,7 +734,7 @@ describe("AgentCliSettings capability probe", () => {
   it("reports the levels it established and how many calls it took", async () => {
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
     expect(await screen.findByText(/Thinking levels accepted: Low, High, Max/)).toBeTruthy();
     expect(screen.getByText(/7 requests/)).toBeTruthy();
@@ -748,7 +748,7 @@ describe("AgentCliSettings capability probe", () => {
     });
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/does not validate the options/)).toBeTruthy();
   });
 
@@ -764,7 +764,7 @@ describe("AgentCliSettings capability probe", () => {
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
     expect(await screen.findByText(/test image and reads the answer/)).toBeTruthy();
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(finding)).toBeTruthy();
   });
 
@@ -775,7 +775,7 @@ describe("AgentCliSettings capability probe", () => {
     });
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/3 requests/)).toBeTruthy();
     expect(screen.queryByText(/Image check/)).toBeNull();
   });
@@ -798,7 +798,7 @@ describe("AgentCliSettings capability probe", () => {
     });
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/no levels to check/)).toBeTruthy();
     expect(screen.queryByText(/does not validate the options/)).toBeNull();
   });
@@ -815,7 +815,7 @@ describe("AgentCliSettings capability probe", () => {
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
     // Rendered an outcome rather than crashing, and the card is still usable.
     expect(await screen.findByText(/Checked with 2 requests/)).toBeTruthy();
@@ -837,7 +837,7 @@ describe("AgentCliSettings capability probe", () => {
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
     expect(await screen.findByText("Connection failed.")).toBeTruthy();
     // Still mounted and still offering the action.
@@ -962,7 +962,7 @@ describe("AgentCliSettings probe could not run", () => {
     });
     renderCard();
     fireEvent.click(await screen.findByLabelText(/^Check options/));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/declined every one/)).toBeTruthy();
     expect(screen.queryByText(/no levels to check/)).toBeNull();
   });
@@ -1071,7 +1071,7 @@ describe("AgentCliSettings announces capability changes", () => {
     window.addEventListener("phx-agentcli-providers-changed", seen);
     renderCard();
     fireEvent.click(await screen.findByLabelText(/^Check options/));
-    fireEvent.click(await screen.findByText("Check now"));
+    fireEvent.click(await screen.findByText("Check Now"));
     // Without this the chat window keeps its old accounts, so a Thinking control
     // the check just established never appears and the check looks broken.
     await waitFor(() => expect(seen).toHaveBeenCalled());

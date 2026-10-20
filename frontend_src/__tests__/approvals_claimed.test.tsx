@@ -97,7 +97,7 @@ describe("an approval claimed for execution", () => {
     );
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    const approve = await findByRole("button", { name: "Approve and execute" });
+    const approve = await findByRole("button", { name: "Approve and Execute" });
     expect(approve).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(approve);
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith("appr_1"));

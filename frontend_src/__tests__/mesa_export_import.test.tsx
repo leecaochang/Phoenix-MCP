@@ -103,11 +103,11 @@ describe("ImportModal", () => {
 
     fireEvent.click(getByLabelText(/Replace existing profiles/i));
     expect(getByText(/Profiles with matching keys will be replaced/)).toBeInTheDocument();
-    const confirm = getByText("Import and replace") as HTMLButtonElement;
+    const confirm = getByText("Import and Replace") as HTMLButtonElement;
     expect(confirm.className).toContain("btn-danger");
 
     fireEvent.click(confirm);
-    await findByText("Import complete");
+    await findByText("Import Complete");
     expect(api.importMesaProfiles).toHaveBeenCalledWith(archive, "overwrite");
   });
 
@@ -122,7 +122,7 @@ describe("ImportModal", () => {
     await findByText(/Archive contains/);
 
     fireEvent.click(getByText("Import"));
-    await findByText("Import complete");
+    await findByText("Import Complete");
     expect(api.importMesaProfiles).toHaveBeenCalledWith(archive, "skip");
     expect(getByText(/1 profile added, 0 replaced, 1 skipped/)).toBeInTheDocument();
     expect(getByText(/failed validation/)).toBeInTheDocument();
