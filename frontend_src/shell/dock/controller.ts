@@ -1,12 +1,15 @@
 /**
  * One workspace's window state: its Dockview instance, folded windows, and
- * where closed or floated windows came from, so they can return there.
+ * where closed or floated windows came from, so they can return there. Every
+ * change that adds, removes, folds or moves a docked window keeps the other
+ * windows' heights; the workspace's canvas grows or shrinks instead.
  */
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
-import { FoldStore, foldWindow, reapplyCollapsed, toggleFold, unfoldWindow, type FoldSnapshot } from "./fold";
-import { largestGridGroup, moveWindow, slotOf, type Direction, type Side, type Slot } from "./geometry";
+import { FoldStore, foldWindow, reapplyCollapsed, toggleFold, type FoldSnapshot } from "./fold";
+import { largestGridGroup, moveWindow, rowOf, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
+import type { Heights, WorkspaceCanvas } from "./scroll";
 
 /** What a workspace saves: Dockview's own layout plus Phoenix's per-window state. */
 export interface WorkspaceLayout {
@@ -14,6 +17,8 @@ export interface WorkspaceLayout {
   folds: FoldSnapshot;
   /** Closed windows, each with the place to reopen it. */
   closed: Record<string, Slot | null>;
+  /** Each docked window's intended height; the workspace scrolls when they need more than the screen. */
+  heights?: Record<string, number>;
 }
 
 const EMPTY: ReadonlySet<string> = new Set();
@@ -22,6 +27,10 @@ const DIRECTION_OF: Record<Side, "left" | "right" | "above" | "below"> = { left:
 
 /** Height a shell-managed window opens at, so it does not take half the workspace. */
 const TRANSIENT_HEIGHT = 240;
+/** Height a reopened window gets when its earlier height is unknown. */
+const REOPEN_HEIGHT = 360;
+
+const validHeight = (h: unknown): number | undefined => (typeof h === "number" && Number.isFinite(h) && h > 0 && h < 100000 ? h : undefined);
 
 /** Size given to a window floated from the grid: its own size within these bounds. */
 const FLOAT_BOUNDS = { minWidth: 360, maxWidth: 640, minHeight: 260, maxHeight: 480, left: 80, top: 64 };
@@ -39,6 +48,8 @@ export interface WorkspaceExtras {
   folded?: readonly string[];
   /** Windows shown only while a setting allows, with where each appears when it does. */
   conditional?: Readonly<Record<string, Slot>>;
+  /** Comfortable heights the default arrangement gives windows; the workspace scrolls when they need it. */
+  heights?: Readonly<Record<string, number>>;
 }
 
 export class WorkspaceController {
@@ -50,6 +61,10 @@ export class WorkspaceController {
   activeWindow: string | null = null;
   /** Whether a conditional window is allowed now: true, false, or null while unknown. */
   availability: (id: string) => boolean | null = () => true;
+  /** The scrolling canvas the windows are laid out on; absent until the workspace is drawn. */
+  canvas: WorkspaceCanvas | null = null;
+  /** Whether a window is maximized over the visible area by this workspace. */
+  private maximizedHere = false;
   private floatedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
   private listeners = new Set<() => void>();
@@ -83,6 +98,23 @@ export class WorkspaceController {
     this.api?.addPanel({ id, component: id, title: this.titleOf(id), position });
   };
 
+  /**
+   * Run a change to the docked windows, then lay them out at their intended
+   * heights (plus any `extra` ones), so the page grows or shrinks instead of
+   * squeezing a neighbour.
+   */
+  private keepHeights(change: () => void, extra: Heights = {}): void {
+    const canvas = this.canvas;
+    if (!canvas) {
+      change();
+      return;
+    }
+    canvas.capture();
+    change();
+    canvas.prune();
+    canvas.apply(extra);
+  }
+
   /** Load a saved layout, or the default arrangement when it is missing or unusable. */
   load(saved: WorkspaceLayout | undefined): void {
     const api = this.api;
@@ -92,9 +124,15 @@ export class WorkspaceController {
     this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !(dock && id in dock.panels)));
     if (dock) {
       try {
+        if (this.canvas) {
+          this.canvas.intended = Object.fromEntries(Object.entries(saved?.heights ?? {})
+            .filter(([id, h]) => known.has(id) && validHeight(h) !== undefined));
+          this.canvas.setCanvas(0);
+        }
         api.fromJSON(dock, { reuseExistingPanels: true });
         this.folds.restore(saved?.folds, (id) => !!api.getPanel(id));
         reapplyCollapsed(api, this.folds);
+        this.canvas?.apply();
         this.retitle();
         this.syncAvailable();
         this.changed();
@@ -115,16 +153,23 @@ export class WorkspaceController {
     this.folds.restore(undefined, () => false);
     this.closed.clear();
     this.floatedFrom.clear();
+    this.maximizedHere = false;
+    if (this.canvas) {
+      this.canvas.intended = {};
+      this.canvas.setCanvas(0);
+    }
     this.arrange(api, this.add);
+    this.canvas?.apply({ ...this.extras.heights });
     for (const id of this.extras.folded ?? []) this.foldById(id);
-    for (const id of keep) this.add(id, { direction: "above" });
+    for (const id of keep) this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: TRANSIENT_HEIGHT });
     this.syncAvailable();
     this.changed();
   }
 
   private foldById(id: string): void {
-    const group = this.api?.getPanel(id)?.group;
-    if (this.api && group) foldWindow(this.api, this.folds, group);
+    const api = this.api;
+    const group = api?.getPanel(id)?.group;
+    if (api && group) this.keepHeights(() => foldWindow(api, this.folds, group));
   }
 
   /**
@@ -144,12 +189,14 @@ export class WorkspaceController {
         if (this.folds.isFolded(id)) this.folds.setFolded(id, false);
         this.folds.setCollapsed(id, undefined);
         this.floatedFrom.delete(id);
-        panel.api.close();
+        this.keepHeights(() => panel.api.close());
         changed = true;
       } else if (allowed && !panel && !this.closed.has(id)) {
         const anchor = api.getPanel(home.neighbor);
-        if (anchor && anchor.group.api.location.type === "grid") this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[home.side] });
-        else this.add(id, { direction: "below" });
+        this.keepHeights(() => {
+          if (anchor && anchor.group.api.location.type === "grid") this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[home.side] });
+          else this.add(id, { direction: "below" });
+        }, { [id]: this.extras.heights?.[id] ?? REOPEN_HEIGHT });
         if (this.extras.folded?.includes(id)) this.foldById(id);
         changed = true;
       }
@@ -164,7 +211,8 @@ export class WorkspaceController {
     const saved = new Set(this.windows.filter((id) => !this.transient.has(id)));
     const dock = sanitizeLayout(api.toJSON(), saved);
     if (!dock) return null;
-    return { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed) };
+    const heights = this.canvas ? { ...this.canvas.intended } : undefined;
+    return { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}) };
   }
 
   /** Record which window has focus; the toolbar's tools follow it. */
@@ -199,12 +247,39 @@ export class WorkspaceController {
     for (const panel of this.api?.panels ?? []) panel.api.setTitle(this.titleOf(panel.id));
   }
 
+  /** Make a docked window taller or shorter from the keyboard, moving the windows below it. */
+  resizeHeight(group: DockviewGroupPanel, delta: number): void {
+    const api = this.api;
+    if (!api || group.api.location.type !== "grid") return;
+    const canvas = this.canvas;
+    if (!canvas) {
+      group.api.setSize({ height: group.height + delta });
+      return;
+    }
+    canvas.capture();
+    const targets: Heights = {};
+    for (const g of rowOf(api, group)) {
+      const id = g.activePanel?.id;
+      if (id) targets[id] = Math.round(g.height) + delta;
+    }
+    canvas.apply(targets);
+  }
+
   move(group: DockviewGroupPanel, dir: Direction): boolean {
-    return !!this.api && moveWindow(this.api, group, dir);
+    const api = this.api;
+    if (!api) return false;
+    let moved = false;
+    this.keepHeights(() => { moved = moveWindow(api, group, dir); });
+    return moved;
   }
 
   toggleFold(group: DockviewGroupPanel): void {
-    if (this.api) toggleFold(this.api, this.folds, group);
+    const api = this.api;
+    const id = group.activePanel?.id;
+    if (!api || !id) return;
+    // Folding gives the window's height back to the page; unfolding takes its own height again.
+    const restore = this.folds.collapsedHeight(id) === undefined ? undefined : this.canvas?.intended[id] ?? this.folds.collapsedHeight(id);
+    this.keepHeights(() => toggleFold(api, this.folds, group), restore ? { [id]: restore } : {});
   }
 
   close(group: DockviewGroupPanel): void {
@@ -212,11 +287,15 @@ export class WorkspaceController {
     const panel = group.activePanel;
     if (!api || !panel) return;
     if (!this.transient.has(panel.id)) {
-      this.closed.set(panel.id, group.api.location.type === "grid" ? slotOf(api, group) : this.floatedFrom.get(panel.id) ?? null);
+      const docked = group.api.location.type === "grid";
+      const slot = docked ? slotOf(api, group) : this.floatedFrom.get(panel.id) ?? null;
+      const height = docked ? (this.canvas?.intended[panel.id] ?? this.folds.collapsedHeight(panel.id) ?? Math.round(group.height)) : slot?.height;
+      this.closed.set(panel.id, slot ? { ...slot, ...(height ? { height } : {}) } : null);
     }
     this.floatedFrom.delete(panel.id);
     if (this.folds.isFolded(panel.id)) this.folds.setFolded(panel.id, false);
-    panel.api.close();
+    this.folds.setCollapsed(panel.id, undefined);
+    this.keepHeights(() => panel.api.close());
     if (this.transient.has(panel.id)) this.onTransientClose?.(panel.id);
     this.changed();
   }
@@ -232,12 +311,14 @@ export class WorkspaceController {
     const slot = this.closed.get(id) ?? null;
     this.closed.delete(id);
     const anchor = slot ? api.getPanel(slot.neighbor) : undefined;
-    if (anchor && anchor.group.api.location.type === "grid") {
-      this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] });
-    } else {
-      // No remembered neighbour: full width along the bottom of the workspace.
-      this.add(id, { direction: "below" });
-    }
+    this.keepHeights(() => {
+      if (anchor && anchor.group.api.location.type === "grid") {
+        this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] });
+      } else {
+        // No remembered neighbour: full width along the bottom of the workspace.
+        this.add(id, { direction: "below" });
+      }
+    }, { [id]: validHeight(slot?.height) ?? this.extras.heights?.[id] ?? REOPEN_HEIGHT });
     this.changed();
   }
 
@@ -247,20 +328,21 @@ export class WorkspaceController {
     if (!api || !this.windows.includes(id)) return;
     if (!api.getPanel(id)) this.reopen(id);
     const group = api.getPanel(id)?.group;
-    if (group && this.folds.isFolded(id)) unfoldWindow(api, this.folds, group);
+    if (group && this.folds.isFolded(id)) this.toggleFold(group);
   }
 
   float(group: DockviewGroupPanel): void {
     const api = this.api;
     const panel = group.activePanel;
     if (!api || !panel || group.api.location.type !== "grid") return;
-    this.floatedFrom.set(panel.id, slotOf(api, group));
+    const slot = slotOf(api, group);
+    this.floatedFrom.set(panel.id, slot ? { ...slot, height: this.canvas?.intended[panel.id] ?? Math.round(group.height) } : null);
     const b = FLOAT_BOUNDS;
-    api.addFloatingGroup(group, {
-      position: { left: b.left, top: b.top },
-      width: Math.min(b.maxWidth, Math.max(b.minWidth, group.width)),
-      height: Math.min(b.maxHeight, Math.max(b.minHeight, group.height)),
-    });
+    // Floating windows sit on the canvas, so open this one where the workspace is scrolled to.
+    const top = (this.canvas?.host.scrollTop ?? 0) + b.top;
+    const width = Math.min(b.maxWidth, Math.max(b.minWidth, group.width));
+    const height = Math.min(b.maxHeight, Math.max(b.minHeight, group.height));
+    this.keepHeights(() => api.addFloatingGroup(group, { position: { left: b.left, top }, width, height }));
     this.changed();
   }
 
@@ -272,12 +354,14 @@ export class WorkspaceController {
     const slot = this.floatedFrom.get(panel.id) ?? null;
     this.floatedFrom.delete(panel.id);
     const anchor = slot ? api.getPanel(slot.neighbor)?.group : undefined;
-    if (anchor && anchor.api.location.type === "grid") {
-      group.api.moveTo({ group: anchor, position: slot!.side });
-    } else {
-      const target = largestGridGroup(api, group);
-      if (target) group.api.moveTo({ group: target, position: "right" });
-    }
+    this.keepHeights(() => {
+      if (anchor && anchor.api.location.type === "grid") {
+        group.api.moveTo({ group: anchor, position: slot!.side });
+      } else {
+        const target = largestGridGroup(api, group);
+        if (target) group.api.moveTo({ group: target, position: "right" });
+      }
+    }, { [panel.id]: validHeight(slot?.height) ?? REOPEN_HEIGHT });
     this.changed();
   }
 
@@ -285,11 +369,54 @@ export class WorkspaceController {
   showTransient(id: string): void {
     const api = this.api;
     if (!api || api.getPanel(id)) return;
-    this.add(id, { direction: "above" });
-    api.getPanel(id)?.group.api.setSize({ height: Math.min(TRANSIENT_HEIGHT, Math.max(api.height / 3, 140)) });
+    const height = Math.min(TRANSIENT_HEIGHT, Math.max((this.canvas?.visibleHeight() || api.height) / 3, 140));
+    if (this.canvas) {
+      this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: height });
+    } else {
+      this.add(id, { direction: "above" });
+      api.getPanel(id)?.group.api.setSize({ height });
+    }
   }
 
   hideTransient(id: string): void {
-    this.api?.getPanel(id)?.api.close();
+    const panel = this.api?.getPanel(id);
+    if (panel) this.keepHeights(() => panel.api.close());
+  }
+
+  /** Maximize a window over the visible part of the workspace, remembering the canvas to return to. */
+  maximize(group: DockviewGroupPanel): void {
+    const api = this.api;
+    if (!api || group.api.isMaximized()) return;
+    this.canvas?.capture();
+    this.maximizedHere = true;
+    group.api.maximize();
+    if (this.canvas) {
+      this.canvas.setCanvas(0);
+      this.canvas.host.scrollTop = 0;
+    }
+  }
+
+  restoreMaximized(group?: DockviewGroupPanel): void {
+    if (group) group.api.exitMaximized();
+    else this.api?.exitMaximizedGroup();
+  }
+
+  /** After Dockview leaves maximized mode, however that happened, return to the remembered canvas. */
+  maximizedChanged(): void {
+    const api = this.api;
+    if (!api || api.hasMaximizedGroup() || !this.maximizedHere) return;
+    this.maximizedHere = false;
+    this.canvas?.apply();
+  }
+
+  /** Before a window starts moving, record every docked window's height. */
+  dragStarted(): void {
+    this.canvas?.capture();
+  }
+  /** After a drop, lay every docked window out at its intended height again. */
+  layoutSettled(): void {
+    if (!this.canvas || this.api?.hasMaximizedGroup()) return;
+    this.canvas.prune();
+    this.canvas.apply();
   }
 }

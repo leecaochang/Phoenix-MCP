@@ -66,6 +66,8 @@ export interface WorkspaceDef {
   folded?: WindowId[];
   /** Windows shown only while a setting allows, with where each appears when it does. */
   conditional?: Partial<Record<WindowId, Slot>>;
+  /** Comfortable starting heights; the workspace scrolls when the windows need more than the screen. */
+  heights?: Partial<Record<WindowId, number>>;
 }
 
 /** Whether a conditional window is allowed by the current settings; null while they load. */
@@ -82,8 +84,8 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
     icon: "accessKeys",
     windows: ["accessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
     // The key list across the top; the selected key's windows below it, editing on the
-    // left and the Permissions tree on the right. Specialized and informational windows
-    // start folded, as accepted for Access Keys.
+    // left and the Permissions tree on the right, at the heights below. Specialized and
+    // informational windows start folded, as accepted for Access Keys.
     arrange: (api, add) => {
       add("accessKeys");
       add("persona", { direction: "below" });
@@ -91,13 +93,12 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
       add("capabilities", { referencePanel: "persona", direction: "below" });
       add("keySettings", { referencePanel: "capabilities", direction: "below" });
       add("permissionSummary", { referencePanel: "permissions", direction: "below" });
-      const listHeight = Math.round(Math.min(Math.max(api.height * 0.38, 200), 360));
-      size(api, "accessKeys", { height: listHeight });
       size(api, "persona", { width: Math.round(api.width * 0.45) });
-      size(api, "persona", { height: Math.round((api.height - listHeight) * 0.45) });
     },
     folded: ["keySettings", "presets", "permissionSummary"],
     conditional: { presets: { neighbor: "keySettings", side: "bottom" } },
+    // Comfortable heights; the workspace scrolls when the screen is shorter than they need.
+    heights: { accessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
   },
   approvals: { labelKey: "shell.tabApprovals", icon: "approvals", windows: ["approvals", "attention"], arrange: (_, add) => add("approvals") },
   changes: { labelKey: "shell.tabChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
@@ -149,9 +150,9 @@ function AccessKeysContent() {
   // Setting up an agent needs room: the key list window fills the workspace until the wizard ends.
   useEffect(() => {
     const panel = controller?.api?.getPanel("accessKeys");
-    if (!wizard || !panel || panel.group.api.location.type !== "grid") return;
-    panel.api.maximize();
-    return () => { if (panel.api.isMaximized()) panel.api.exitMaximized(); };
+    if (!wizard || !controller || !panel || panel.group.api.location.type !== "grid") return;
+    controller.maximize(panel.group);
+    return () => { if (panel.api.isMaximized()) controller.restoreMaximized(panel.group); };
   }, [wizard, controller]);
   return (
     <ErrorBoundary key={view.name}>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, type FunctionComponent, type MouseEvent as 
 import { DockviewReact, type DockviewOptions, type DockviewReadyEvent, type IDockviewPanelProps, type IWatermarkPanelProps } from "dockview-react";
 import { dimWhileDragging, edgeResolver, floatingMouseMove, refuseTabDrops } from "./drop";
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "./fold";
+import { WorkspaceCanvas, pushDownResizing, scrollWhileDragging } from "./scroll";
 import { ControllerContext, TitleTab, WindowControls, WindowGhost, windowMenuEntries } from "./TitleBar";
 import { t } from "../../i18n";
 import { useContextMenu, type MenuEntry } from "../../ui/Menu";
@@ -26,6 +27,8 @@ export const DOCK_OPTIONS = {
   defaultRenderer: "always",
   // Pointer-driven drag and drop: the same in every browser, with Phoenix's own window outline.
   dndStrategy: "pointer",
+  // The workspace sizes Dockview itself, on a canvas that may be taller than the screen.
+  disableAutoResizing: true,
   dropOverlayModel: () => ({ size: { type: "pixels", value: DROP_LINE } }),
   dndEdges: { activationSize: { type: "pixels", value: 10 }, size: { type: "pixels", value: DROP_LINE } },
   theme: { name: "phoenix", className: "phx-dock", dndPanelOverlay: "group", dndOverlayMounting: "absolute" },
@@ -62,7 +65,27 @@ export function WorkspaceDock({ controller, components, watermark, saved, visibl
       group.api.setConstraints({ minimumWidth: MIN_WINDOW_WIDTH, minimumHeight: MIN_WINDOW_HEIGHT });
     });
     const guards = [refuseTabDrops(api), dimWhileDragging(api)];
+    const el = host.current;
+    // The workspace scrolls: windows keep their heights and the canvas grows to hold them.
+    const canvas = el ? new WorkspaceCanvas(api, el, (id) => controller.folds.collapsedHeight(id) !== undefined) : null;
+    controller.canvas = canvas;
     controller.load(saved);
+    const stopPushDown = canvas ? pushDownResizing(api, canvas, () => onChange.current()) : () => {};
+    const stopDragScroll = el ? scrollWhileDragging(api, el) : () => {};
+    const refit = el && canvas && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => canvas.refit()) : null;
+    if (el) refit?.observe(el);
+    const maximized = api.onDidMaximizedGroupChange(() => controller.maximizedChanged());
+    // A window dropped somewhere else keeps its height, and so does every other window.
+    const settleAfterDrop = () => {
+      controller.dragStarted();
+      const done = () => {
+        for (const type of ["pointerup", "pointercancel", "dragend"]) window.removeEventListener(type, done, true);
+        requestAnimationFrame(() => controller.layoutSettled());
+      };
+      for (const type of ["pointerup", "pointercancel", "dragend"]) window.addEventListener(type, done, true);
+    };
+    const dragGroup = api.onWillDragGroup(settleAfterDrop);
+    const dragPanel = api.onWillDragPanel(settleAfterDrop);
     // The toolbar's tools follow the focused window.
     const focus = api.onDidActiveGroupChange((group) => controller.setActiveWindow(group?.activePanel?.id ?? null));
     controller.setActiveWindow(api.activeGroup?.activePanel?.id ?? null);
@@ -71,6 +94,7 @@ export function WorkspaceDock({ controller, components, watermark, saved, visibl
     const stopMove = host.current ? floatingMouseMove(api, host.current) : () => {};
     disposers.current = [
       () => constrain.dispose(), () => layout.dispose(), () => focus.dispose(), folds, stopMove, ...guards.map((g) => () => g.dispose()),
+      stopPushDown, stopDragScroll, () => refit?.disconnect(), () => maximized.dispose(), () => dragGroup.dispose(), () => dragPanel.dispose(),
     ];
   };
 
@@ -78,6 +102,7 @@ export function WorkspaceDock({ controller, components, watermark, saved, visibl
     for (const dispose of disposers.current) dispose();
     disposers.current = [];
     controller.api = null;
+    controller.canvas = null;
   }, [controller]);
 
   // Right-click on a title bar opens that window's menu; on empty workspace space, the workspace

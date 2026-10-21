@@ -68,6 +68,8 @@ export function moveWindow(api: DockviewApi, group: DockviewGroupPanel, dir: Dir
 export interface Slot {
   neighbor: string;
   side: Side;
+  /** The window's height when it was docked, so it can come back at that height. */
+  height?: number;
 }
 
 /** Remember a window's place before it is closed or floated, by its first neighbour found. */

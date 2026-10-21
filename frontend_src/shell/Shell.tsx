@@ -75,7 +75,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional });
+      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights });
       controllers.set(id, controller);
     }
     return controller;

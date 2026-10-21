@@ -86,7 +86,7 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
     const maximized = group.api.isMaximized();
     entries.push("separator",
       { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), onSelect: () => controller.toggleFold(group) });
-    if (!floating) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? group.api.exitMaximized() : group.api.maximize()) });
+    if (!floating) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? controller.restoreMaximized(group) : controller.maximize(group)) });
     entries.push({ id: "close", label: t("common.close"), onSelect: () => controller.close(group) });
   }
   return entries;
@@ -120,8 +120,8 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
     const g: DockviewGroupPanel = group;
     if (e.key === "ArrowRight") g.api.setSize({ width: g.width + RESIZE_STEP });
     else if (e.key === "ArrowLeft") g.api.setSize({ width: g.width - RESIZE_STEP });
-    else if (e.key === "ArrowDown") g.api.setSize({ height: g.height + RESIZE_STEP });
-    else if (e.key === "ArrowUp") g.api.setSize({ height: g.height - RESIZE_STEP });
+    else if (e.key === "ArrowDown") controller.resizeHeight(g, RESIZE_STEP);
+    else if (e.key === "ArrowUp") controller.resizeHeight(g, -RESIZE_STEP);
     else if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") { setResizing(false); return e.key !== "Tab"; }
     else return false;
     e.preventDefault();
@@ -156,7 +156,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
           </button>
           <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
             title={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
-            onClick={() => (maximized ? group.api.exitMaximized() : group.api.maximize())}>
+            onClick={() => (maximized ? controller.restoreMaximized(group) : controller.maximize(group))}>
             <Icon name={maximized ? "restore" : "maximize"} size={14} />
           </button>
         </>

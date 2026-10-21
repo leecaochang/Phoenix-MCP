@@ -23,14 +23,22 @@
   font-family: var(--phx-font);
 }
 
+/* The workspace scrolls vertically; Dockview lays windows out on a canvas of the height the shell sets. */
 .phx-workspace {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .phx-workspace[hidden] { display: none; }
-/* Dockview sizes itself to 100% of its wrapper; pin the wrapper so that resolves inside nested flex layouts. */
-.phx-workspace > div { position: absolute; inset: 0; }
+/* Dockview sizes itself to its wrapper; pin the wrapper so that resolves inside nested flex layouts.
+   DockviewReact sets an inline height of 100%, so the canvas height must override it. */
+.phx-workspace > div { position: absolute; top: 0; left: 0; right: 0; height: var(--phx-canvas-height, 100%) !important; }
+/* A scrolling canvas leaves room for the scrollbar beside the windows. */
+.phx-workspace.phx-scrolls { scrollbar-gutter: stable; }
+.phx-workspace.phx-resizing, .phx-workspace.phx-resizing * { cursor: ns-resize !important; user-select: none; }
 
 .phx-dock .dv-groupview {
   border: 1px solid var(--phx-border);
