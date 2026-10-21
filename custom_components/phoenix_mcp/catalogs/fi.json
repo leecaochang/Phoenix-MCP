@@ -2382,6 +2382,26 @@
       "waitingForAgent": "Odotetaan, että agenttisi muodostaa yhteyden...",
       "working": "Käsitellään...",
       "yourDevice": "laitettasi"
+    },
+    "workspace": {
+      "logs": "Lokit",
+      "windowMenu": "Ikkunan valikko",
+      "moveLeft": "Siirrä vasemmalle",
+      "moveRight": "Siirrä oikealle",
+      "moveUp": "Siirrä ylöspäin",
+      "moveDown": "Siirrä alaspäin",
+      "resizeKeyboard": "Muuta kokoa näppäimistöllä",
+      "resizeHint": "Nuolinäppäimet muuttavat kokoa. Lopeta painamalla Esc.",
+      "floatWindow": "Irrota ikkuna",
+      "floatWindowAria": "Irrota ikkuna",
+      "dockWindow": "Kiinnitä ikkuna",
+      "dockWindowAria": "Kiinnitä ikkuna",
+      "fold": "Taita",
+      "unfold": "Levitä",
+      "options": "Työtilan asetukset",
+      "restoreOriginal": "Palauta alkuperäinen asettelu",
+      "reopen": "Avaa {window} uudelleen",
+      "empty": "Tässä työtilassa ei ole avoimia ikkunoita."
     }
   },
   "voice": {

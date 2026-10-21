@@ -2377,6 +2377,26 @@
       "continue": "Marcar como revisada",
       "noReplay": "Esto no repite ni deshace la acción. Otras acciones pueden seguir pendientes de revisión.",
       "saveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión."
+    },
+    "workspace": {
+      "logs": "Registros",
+      "windowMenu": "Menú de la ventana",
+      "moveLeft": "Mover a la izquierda",
+      "moveRight": "Mover a la derecha",
+      "moveUp": "Mover hacia arriba",
+      "moveDown": "Mover hacia abajo",
+      "resizeKeyboard": "Cambiar el tamaño con el teclado",
+      "resizeHint": "Las teclas de flecha cambian el tamaño. Pulse Esc para terminar.",
+      "floatWindow": "Desacoplar la ventana",
+      "floatWindowAria": "Desacoplar la ventana",
+      "dockWindow": "Acoplar la ventana",
+      "dockWindowAria": "Acoplar la ventana",
+      "fold": "Plegar",
+      "unfold": "Desplegar",
+      "options": "Opciones del espacio de trabajo",
+      "restoreOriginal": "Restaurar el diseño original",
+      "reopen": "Volver a abrir {window}",
+      "empty": "No hay ventanas abiertas en este espacio de trabajo."
     }
   },
   "notification": {

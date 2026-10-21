@@ -12,3 +12,13 @@ primeTranslations(en.panel);
 import { beforeEach } from "vitest";
 import { setAgentCliOwner } from "../utils/agentcli_state";
 beforeEach(() => setAgentCliOwner("test-admin"));
+
+// jsdom has no ResizeObserver; Dockview and the workspace shell observe sizes.
+// Nothing resizes in jsdom, so an observer that never fires is accurate.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

@@ -2377,6 +2377,26 @@
       "continue": "标记为已核对",
       "noReplay": "这不会重复或撤销此操作。其他操作可能仍需核对。",
       "saveFailed": "无法保存核对结果。此操作仍需核对。"
+    },
+    "workspace": {
+      "logs": "日志",
+      "windowMenu": "窗口菜单",
+      "moveLeft": "左移",
+      "moveRight": "右移",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "resizeKeyboard": "使用键盘调整大小",
+      "resizeHint": "按方向键调整大小，按 Esc 结束。",
+      "floatWindow": "使窗口浮动",
+      "floatWindowAria": "使窗口浮动",
+      "dockWindow": "停靠窗口",
+      "dockWindowAria": "停靠窗口",
+      "fold": "折叠",
+      "unfold": "取消折叠",
+      "options": "工作区选项",
+      "restoreOriginal": "还原原始布局",
+      "reopen": "重新打开{window}",
+      "empty": "此工作区中没有打开的窗口。"
     }
   },
   "notification": {

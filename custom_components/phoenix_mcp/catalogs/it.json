@@ -2377,6 +2377,26 @@
       "continue": "Segna come verificata",
       "noReplay": "Questo non ripete né annulla l’azione. Altre azioni potrebbero ancora richiedere una verifica.",
       "saveFailed": "Impossibile salvare la verifica. L’azione richiede ancora una verifica."
+    },
+    "workspace": {
+      "logs": "Registri",
+      "windowMenu": "Menu della finestra",
+      "moveLeft": "Sposta a sinistra",
+      "moveRight": "Sposta a destra",
+      "moveUp": "Sposta sopra",
+      "moveDown": "Sposta sotto",
+      "resizeKeyboard": "Ridimensiona con la tastiera",
+      "resizeHint": "I tasti freccia ridimensionano. Premi Esc per terminare.",
+      "floatWindow": "Sgancia la finestra",
+      "floatWindowAria": "Sgancia la finestra",
+      "dockWindow": "Aggancia la finestra",
+      "dockWindowAria": "Aggancia la finestra",
+      "fold": "Piega",
+      "unfold": "Dispiega",
+      "options": "Opzioni dell'area di lavoro",
+      "restoreOriginal": "Ripristina il layout originale",
+      "reopen": "Riapri {window}",
+      "empty": "Nessuna finestra è aperta in quest'area di lavoro."
     }
   },
   "notification": {

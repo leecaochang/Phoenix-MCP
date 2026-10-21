@@ -534,6 +534,26 @@
       "approvalsTabAria": "Approvals ({count} pending)",
       "renderFailed": "This view could not be displayed. Refresh to try again, or choose another section."
     },
+    "workspace": {
+      "logs": "Logs",
+      "windowMenu": "Window menu",
+      "moveLeft": "Move Left",
+      "moveRight": "Move Right",
+      "moveUp": "Move Up",
+      "moveDown": "Move Down",
+      "resizeKeyboard": "Resize with Keyboard",
+      "resizeHint": "Arrow keys resize. Esc to finish.",
+      "floatWindow": "Float Window",
+      "floatWindowAria": "Float window",
+      "dockWindow": "Dock Window",
+      "dockWindowAria": "Dock window",
+      "fold": "Fold",
+      "unfold": "Unfold",
+      "options": "Workspace options",
+      "restoreOriginal": "Restore Original Layout",
+      "reopen": "Reopen {window}",
+      "empty": "No windows are open in this workspace."
+    },
     "perms": {
       "addHint": "Add Hint",
       "colId": "ID",

@@ -2382,6 +2382,26 @@
       "waitingForAgent": "Väntar på att din agent ska ansluta...",
       "working": "Arbetar...",
       "yourDevice": "din enhet"
+    },
+    "workspace": {
+      "logs": "Loggar",
+      "windowMenu": "Fönstermeny",
+      "moveLeft": "Flytta åt vänster",
+      "moveRight": "Flytta åt höger",
+      "moveUp": "Flytta uppåt",
+      "moveDown": "Flytta nedåt",
+      "resizeKeyboard": "Ändra storlek med tangentbordet",
+      "resizeHint": "Piltangenterna ändrar storleken. Tryck på Esc för att avsluta.",
+      "floatWindow": "Gör fönstret flytande",
+      "floatWindowAria": "Gör fönstret flytande",
+      "dockWindow": "Docka fönstret",
+      "dockWindowAria": "Docka fönstret",
+      "fold": "Vik ihop",
+      "unfold": "Vik ut",
+      "options": "Alternativ för arbetsytan",
+      "restoreOriginal": "Återställ ursprunglig layout",
+      "reopen": "Öppna {window} igen",
+      "empty": "Inga fönster är öppna på den här arbetsytan."
     }
   },
   "voice": {

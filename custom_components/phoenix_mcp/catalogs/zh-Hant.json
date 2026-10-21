@@ -2382,6 +2382,26 @@
       "continue": "標記為已核對",
       "noReplay": "這不會重複或復原此操作。其他操作可能仍需核對。",
       "saveFailed": "無法儲存核對結果。此操作仍需核對。"
+    },
+    "workspace": {
+      "logs": "日誌",
+      "windowMenu": "視窗選單",
+      "moveLeft": "向左移動",
+      "moveRight": "向右移動",
+      "moveUp": "向上移動",
+      "moveDown": "向下移動",
+      "resizeKeyboard": "使用鍵盤調整大小",
+      "resizeHint": "按方向鍵調整大小，按 Esc 結束。",
+      "floatWindow": "使視窗浮動",
+      "floatWindowAria": "使視窗浮動",
+      "dockWindow": "停駐視窗",
+      "dockWindowAria": "停駐視窗",
+      "fold": "摺疊",
+      "unfold": "取消摺疊",
+      "options": "工作區選項",
+      "restoreOriginal": "還原原始佈局",
+      "reopen": "重新開啟{window}",
+      "empty": "此工作區中沒有開啟的視窗。"
     }
   },
   "voice": {

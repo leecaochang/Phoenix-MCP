@@ -8,6 +8,8 @@ import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils
 // shell is covered separately, with react-dom/client stubbed.
 
 vi.mock("../phoenix-mcp-panel.css?inline", () => ({ default: "" }));
+vi.mock("../shell/dock/dock.css?inline", () => ({ default: "" }));
+vi.mock("dockview-react/dist/styles/dockview.css?inline", () => ({ default: "" }));
 
 const { apiMock } = vi.hoisted(() => {
   const CAPS = [
@@ -89,33 +91,59 @@ describe("phoenix-mcp-panel full app shell", () => {
   it("renders the pending-approval count badge from listApprovals", async () => {
     const el = mountPanel();
     await waitFor(() => {
-      const badge = el.shadowRoot!.querySelector(".phx-tab-badge");
+      const badge = el.shadowRoot!.querySelector(".phx-toolbar-badge");
       expect(badge?.textContent).toBe("3");
     });
+    const approvals = [...el.shadowRoot!.querySelectorAll(".phx-toolbar-button")].find((b) => b.textContent?.startsWith("Approvals"));
+    expect(approvals).toHaveAttribute("aria-label", "Approvals (3 pending)");
   });
 
-  it("keeps the narrow header and wrapped tabs in one top bar", async () => {
+  it("puts Home Assistant's menu button in the toolbar on narrow screens", async () => {
     const el = mountPanel();
     act(() => { el.narrow = true; });
     await waitFor(() => {
-      const topbar = el.shadowRoot!.querySelector(".phx-topbar");
-      expect(topbar?.children[0]).toHaveClass("phx-header");
-      expect(topbar?.children[1]).toHaveClass("phx-tabs");
+      const toolbar = el.shadowRoot!.querySelector(".phx-toolbar");
+      expect(toolbar?.firstElementChild?.tagName).toBe("HA-MENU-BUTTON");
     });
   });
 
-  it("deep-links to the Approvals tab from the #approvals hash", async () => {
+  it("opens the Access Keys workspace with its window by default", async () => {
+    const el = mountPanel();
+    await waitFor(() => {
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-button.is-current")?.textContent).toBe("Access Keys");
+      expect(el.shadowRoot!.querySelector('[data-phx-window="accessKeys"]')).toBeTruthy();
+    });
+  });
+
+  it("resumes the workspace saved for this user, and maps the old Logs tabs onto Logs", async () => {
+    localStorage.setItem("phx-tab", "conversations");
+    const el = mountPanel();
+    await waitFor(() => {
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-button.is-current")?.textContent).toBe("Logs");
+    });
+  });
+
+  it("switches workspaces from the toolbar and keeps the previous one mounted", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(el.shadowRoot!.querySelector('[data-phx-window="accessKeys"]')).toBeTruthy());
+    const logs = [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".phx-toolbar-button")].find((b) => b.textContent === "Logs")!;
+    act(() => { logs.click(); });
+    await waitFor(() => {
+      expect(el.shadowRoot!.querySelector('[data-phx-window="auditLog"]')).toBeTruthy();
+      expect(el.shadowRoot!.querySelector('[data-phx-window="conversationLog"]')).toBeTruthy();
+    });
+    // The Access Keys workspace is hidden, not unmounted, so its drafts survive.
+    expect(el.shadowRoot!.querySelector('[data-workspace="accessKeys"]')).toHaveAttribute("hidden");
+    expect(el.shadowRoot!.querySelector('[data-phx-window="accessKeys"]')).toBeTruthy();
+  });
+
+  it("deep-links to the Approvals workspace from the #approvals hash", async () => {
     window.location.hash = "#approvals";
     const el = mountPanel();
     await waitFor(() => {
-      // The content panel id tracks the active tab; the hash handler selects it.
-      expect(el.shadowRoot!.querySelector("#phx-tabpanel-approvals")).toBeTruthy();
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-button.is-current")?.textContent).toMatch(/^Approvals/);
+      expect(el.shadowRoot!.querySelector('[data-phx-window="approvals"]')).toBeTruthy();
     });
-    // Tabs must not reference panel ids that are not mounted (only the active
-    // panel exists), so none of them carries aria-controls.
-    for (const tab of el.shadowRoot!.querySelectorAll("[role='tab']")) {
-      expect(tab.hasAttribute("aria-controls")).toBe(false);
-    }
   });
 
   it("keeps legacy approval hash links opening their specific record", async () => {

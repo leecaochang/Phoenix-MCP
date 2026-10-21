@@ -13,6 +13,8 @@ import path from "node:path";
 
 const CSS = fs.readFileSync(
   path.join(__dirname, "..", "phoenix-mcp-panel.css"), "utf8");
+const DOCK_CSS = fs.readFileSync(
+  path.join(__dirname, "..", "shell", "dock", "dock.css"), "utf8");
 
 /** Strip @media / @supports bodies: a class restated inside one is a responsive
  *  override, which is the normal way to write them and not a collision. */
@@ -66,6 +68,11 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/\.phx-topbar::before\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*100%;[^}]*height:\s*var\(--phx-topbar-safe-top\);[^}]*background:\s*var\(--phx-surface\);/s);
     expect(CSS).not.toMatch(/\.phx-topbar\s*\{[^}]*padding-top:/s);
     expect(CSS).not.toMatch(/\.phx-tabs\s*\{[^}]*position:\s*sticky;/s);
+  });
+
+  it("keeps the workspace toolbar clear of the companion app's status bar", () => {
+    expect(CSS).toMatch(/\.phx-toolbar\s*\{[^}]*--phx-toolbar-safe-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\);[^}]*padding:\s*calc\(6px \+ var\(--phx-toolbar-safe-top\)\)/s);
+    expect(CSS).toMatch(/\.phx-env-mobile \.phx-toolbar\s*\{[^}]*padding:\s*calc\(4px \+ var\(--phx-toolbar-safe-top\)\)/s);
   });
 
   it("contains chat transcript overscroll inside the floating window", () => {
@@ -140,7 +147,8 @@ describe("panel stylesheet", () => {
 
   it("never defines the same class in two separate blocks", () => {
     const seen = new Map<string, number>();
-    for (const cls of definedClasses(CSS)) seen.set(cls, (seen.get(cls) ?? 0) + 1);
+    // The panel and window stylesheets share one shadow root, so they are checked together.
+    for (const cls of definedClasses(CSS + "\n" + DOCK_CSS)) seen.set(cls, (seen.get(cls) ?? 0) + 1);
     const duplicated = [...seen.entries()].filter(([, n]) => n > 1).map(([c]) => c).sort();
     expect(duplicated).toEqual([]);
   });

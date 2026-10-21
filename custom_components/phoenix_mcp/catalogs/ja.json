@@ -2377,6 +2377,26 @@
       "continue": "確認済みにする",
       "noReplay": "操作を繰り返したり取り消したりはしません。他の操作は引き続き確認が必要な場合があります。",
       "saveFailed": "確認結果を保存できませんでした。操作の確認が引き続き必要です。"
+    },
+    "workspace": {
+      "logs": "ログ",
+      "windowMenu": "ウィンドウメニュー",
+      "moveLeft": "左に移動",
+      "moveRight": "右に移動",
+      "moveUp": "上に移動",
+      "moveDown": "下に移動",
+      "resizeKeyboard": "キーボードでサイズを変更",
+      "resizeHint": "矢印キーでサイズを変更します。Esc キーで終了します。",
+      "floatWindow": "ウィンドウをフローティング表示",
+      "floatWindowAria": "ウィンドウをフローティング表示",
+      "dockWindow": "ウィンドウをドッキング",
+      "dockWindowAria": "ウィンドウをドッキング",
+      "fold": "ウィンドウをたたむ",
+      "unfold": "ウィンドウを広げる",
+      "options": "ワークスペースのオプション",
+      "restoreOriginal": "元のレイアウトを復元",
+      "reopen": "{window} を再び開く",
+      "empty": "このワークスペースで開いているウィンドウはありません。"
     }
   },
   "notification": {

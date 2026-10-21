@@ -10,6 +10,7 @@ import { YamlView, toYaml } from "../components/YamlView";
 import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils";
 import { clearReasonDraft, getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
 import { localizedApprovalReason } from "../utils/approval_reason";
+import { useWindowVisible } from "../shell/visibility";
 import { friendlyApprovalSummary, rememberApprovalView, storedApprovalView, type ApprovalView } from "../utils/approval_summary";
 import { useLatestRequest } from "../utils/latest_request";
 import { matchesListSearch } from "../utils/list_search";
@@ -298,13 +299,14 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
     else loadHistory(0);
   }, [tab, histFilter, loadPending, loadHistory]);
 
-  // Poll while the pending tab is open (fallback; the event signal below makes
-  // the common case instant).
+  // Poll while the pending tab is open and its window can be seen (fallback; the
+  // event signal below makes the common case instant).
+  const windowVisible = useWindowVisible();
   useEffect(() => {
-    if (tab !== "pending") return;
+    if (tab !== "pending" || !windowVisible) return;
     const id = setInterval(loadPending, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [tab, loadPending]);
+  }, [tab, loadPending, windowVisible]);
 
   // Instant refresh: the parent bumps refreshSignal on each HA approval event
   // (requested/resolved). Reload the current tab the moment it changes, so the

@@ -2489,6 +2489,26 @@
       "continue": "Oznacz jako sprawdzone",
       "noReplay": "To nie powtarza ani nie cofa działania. Inne działania mogą nadal wymagać sprawdzenia.",
       "saveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia."
+    },
+    "workspace": {
+      "logs": "Dzienniki",
+      "windowMenu": "Menu okna",
+      "moveLeft": "Przesuń w lewo",
+      "moveRight": "Przesuń w prawo",
+      "moveUp": "Przesuń w górę",
+      "moveDown": "Przesuń w dół",
+      "resizeKeyboard": "Zmień rozmiar za pomocą klawiatury",
+      "resizeHint": "Klawisze strzałek zmieniają rozmiar. Naciśnij Esc, aby zakończyć.",
+      "floatWindow": "Odłącz okno",
+      "floatWindowAria": "Odłącz okno",
+      "dockWindow": "Zadokuj okno",
+      "dockWindowAria": "Zadokuj okno",
+      "fold": "Złóż",
+      "unfold": "Rozłóż",
+      "options": "Opcje obszaru roboczego",
+      "restoreOriginal": "Przywróć pierwotny układ",
+      "reopen": "Otwórz ponownie: {window}",
+      "empty": "W tym obszarze roboczym nie ma otwartych okien."
     }
   }
 }

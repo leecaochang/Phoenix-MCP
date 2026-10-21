@@ -2382,6 +2382,26 @@
       "continue": "확인 완료로 표시",
       "noReplay": "작업을 반복하거나 취소하지 않습니다. 다른 작업은 여전히 확인이 필요할 수 있습니다.",
       "saveFailed": "확인 결과를 저장하지 못했습니다. 작업을 계속 확인해야 합니다."
+    },
+    "workspace": {
+      "logs": "로그",
+      "windowMenu": "창 메뉴",
+      "moveLeft": "왼쪽으로 이동",
+      "moveRight": "오른쪽으로 이동",
+      "moveUp": "위로 이동",
+      "moveDown": "아래로 이동",
+      "resizeKeyboard": "키보드로 크기 조정",
+      "resizeHint": "화살표 키로 크기를 조정합니다. Esc 키를 누르면 종료됩니다.",
+      "floatWindow": "창 띄우기",
+      "floatWindowAria": "창 띄우기",
+      "dockWindow": "창 도킹",
+      "dockWindowAria": "창 도킹",
+      "fold": "창 접기",
+      "unfold": "창 펼치기",
+      "options": "작업 공간 옵션",
+      "restoreOriginal": "원래 레이아웃 복원",
+      "reopen": "{window} 다시 열기",
+      "empty": "이 작업 공간에 열려 있는 창이 없습니다."
     }
   },
   "voice": {

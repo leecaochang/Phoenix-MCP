@@ -2377,6 +2377,26 @@
       "continue": "Marquer comme vérifiée",
       "noReplay": "Cela ne répète ni n’annule l’action. D’autres actions peuvent encore nécessiter une vérification.",
       "saveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier."
+    },
+    "workspace": {
+      "logs": "Journaux",
+      "windowMenu": "Menu de la fenêtre",
+      "moveLeft": "Déplacer vers la gauche",
+      "moveRight": "Déplacer vers la droite",
+      "moveUp": "Déplacer vers le haut",
+      "moveDown": "Déplacer vers le bas",
+      "resizeKeyboard": "Redimensionner au clavier",
+      "resizeHint": "Les touches fléchées redimensionnent. Appuyez sur Échap pour terminer.",
+      "floatWindow": "Rendre la fenêtre flottante",
+      "floatWindowAria": "Rendre la fenêtre flottante",
+      "dockWindow": "Ancrer la fenêtre",
+      "dockWindowAria": "Ancrer la fenêtre",
+      "fold": "Replier",
+      "unfold": "Déplier",
+      "options": "Réglages de l’espace de travail",
+      "restoreOriginal": "Restaurer la disposition d’origine",
+      "reopen": "Rouvrir {window}",
+      "empty": "Aucune fenêtre n’est ouverte dans cet espace de travail."
     }
   },
   "notification": {

@@ -180,7 +180,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
 
         {/* Right column: Kill Switch, MESA, Experimental, Notifications, Logging, Info, Data Management */}
         <div>
-          <div className="card">
+          <div className="card" id="phx-kill-switch-card">
             <h3 className="card-header">
               {t("settings.killSwitchCard")}
               <DocsHelpLink path="security.html#kill-switch" label={t("settings.killSwitchCard")} />

@@ -1,0 +1,138 @@
+/* Workspace windows on Dockview: Dockview's variables mapped onto Phoenix tokens,
+   window chrome, and the drag look (window outline, edge line, dimmed source). */
+
+.phx-dock {
+  --dv-background-color: var(--phx-bg);
+  --dv-group-view-background-color: var(--phx-surface);
+  --dv-tabs-and-actions-container-background-color: var(--phx-surface);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--phx-surface);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--phx-surface);
+  --dv-activegroup-visiblepanel-tab-color: var(--phx-text);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--phx-text-2);
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--phx-border);
+  --dv-drag-over-background-color: var(--phx-focus);
+  --dv-drag-over-border: none;
+  --dv-drag-over-border-color: transparent;
+  --dv-active-sash-color: var(--phx-line-strong);
+  --dv-floating-box-shadow: var(--phx-shadow-lg);
+  --dv-icon-hover-background-color: var(--phx-hover);
+  background: var(--phx-bg);
+  font-family: var(--phx-font);
+}
+
+.phx-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.phx-workspace[hidden] { display: none; }
+/* Dockview sizes itself to 100% of its wrapper; pin the wrapper so that resolves inside nested flex layouts. */
+.phx-workspace > div { position: absolute; inset: 0; }
+
+.phx-dock .dv-groupview {
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
+  overflow: hidden;
+}
+.phx-dock .dv-groupview.dv-active-group { border-color: var(--phx-line-strong); }
+.phx-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--phx-border); }
+.phx-dock .dv-tab { padding: 0 8px 0 4px; }
+.phx-dock .dv-void-container { cursor: grab; }
+
+.phx-window-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--phx-text);
+}
+.phx-window-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 4px;
+}
+.phx-window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--phx-radius-sm);
+  background: transparent;
+  color: var(--phx-text-2);
+  cursor: pointer;
+}
+.phx-window-control:hover { background: var(--phx-hover); color: var(--phx-text); }
+.phx-window-control.is-active { background: var(--phx-accent-lt); color: var(--phx-text); }
+.phx-window-resize-hint { padding: 0 6px; font-size: 12px; color: var(--phx-text-2); white-space: nowrap; }
+
+.phx-window-body { box-sizing: border-box; height: 100%; overflow: auto; padding: 0 16px 16px; }
+.phx-window-body[hidden] { display: none; }
+
+/* Drag look: a thin line marks where the window will dock and slides between edges. */
+.phx-dock .dv-drop-target,
+.phx-dock .dv-drop-target-container { --dv-transition-duration: 120ms; }
+.phx-dock .dv-drop-target-selection,
+.phx-dock .dv-drop-target-anchor {
+  border-radius: 2px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--phx-focus) 35%, transparent);
+}
+.phx-dock .phx-window-dragging { opacity: 0.45; transition: opacity 120ms ease-out; }
+
+/* The outline that follows the pointer. A drag that starts on the title text
+   uses Dockview's copy of the tab, which carries every computed style inline. */
+.phx-window-ghost,
+.dv-tab-ghost-drag {
+  box-sizing: border-box !important;
+  width: 260px !important;
+  height: 160px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  background: var(--phx-surface) !important;
+  border: 1px solid var(--phx-line-strong) !important;
+  border-radius: var(--phx-radius) !important;
+  box-shadow: var(--phx-shadow-lg) !important;
+  overflow: hidden !important;
+  font: 500 13px var(--phx-font) !important;
+  color: var(--phx-text) !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+}
+.phx-window-ghost { position: relative; top: -27px; }
+.dv-tab-ghost-drag {
+  top: -27px !important;
+  left: 0 !important;
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+.phx-window-ghost-title,
+.dv-tab-ghost-drag .phx-window-title {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--phx-border);
+}
+.dv-tab-ghost-drag .phx-window-control { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .phx-dock .dv-drop-target,
+  .phx-dock .dv-drop-target-container { --dv-transition-duration: 0ms; }
+  .phx-dock .phx-window-dragging { transition: none; }
+}

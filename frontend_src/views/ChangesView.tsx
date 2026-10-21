@@ -10,6 +10,7 @@ import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedTo
 import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
 import { formatDateTime } from "../utils";
 import { useLatestRequest } from "../utils/latest_request";
+import { useWindowVisible } from "../shell/visibility";
 import { matchesListSearch } from "../utils/list_search";
 import { compareStrings, hasMessage, t } from "../i18n";
 import { tRich } from "../i18n/rich";
@@ -217,12 +218,13 @@ export function ChangesView({ hass }: { hass: unknown }) {
   }, [hass, loadFeed]);
 
   // Poll as a fallback while the feed is the active view (covers a dropped event
-  // or a reconnect). Paused while viewing a detail.
+  // or a reconnect). Paused while viewing a detail or while its window is hidden.
+  const windowVisible = useWindowVisible();
   useEffect(() => {
-    if (selected) return;
+    if (selected || !windowVisible) return;
     const id = setInterval(() => loadFeed(0, true), FEED_POLL_MS);
     return () => clearInterval(id);
-  }, [selected, loadFeed]);
+  }, [selected, loadFeed, windowVisible]);
 
   const shown = useMemo(() => {
     const value = (v: VersionSummary, key: ChangeSort): string => {

@@ -2377,6 +2377,26 @@
       "continue": "Als geprüft markieren",
       "noReplay": "Die Aktion wird weder wiederholt noch rückgängig gemacht. Andere Aktionen müssen möglicherweise noch geprüft werden.",
       "saveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden."
+    },
+    "workspace": {
+      "logs": "Protokolle",
+      "windowMenu": "Fenstermenü",
+      "moveLeft": "Nach links verschieben",
+      "moveRight": "Nach rechts verschieben",
+      "moveUp": "Nach oben verschieben",
+      "moveDown": "Nach unten verschieben",
+      "resizeKeyboard": "Größe mit der Tastatur ändern",
+      "resizeHint": "Die Pfeiltasten ändern die Größe. Mit Esc beenden.",
+      "floatWindow": "Fenster lösen",
+      "floatWindowAria": "Fenster lösen",
+      "dockWindow": "Fenster andocken",
+      "dockWindowAria": "Fenster andocken",
+      "fold": "Zusammenfalten",
+      "unfold": "Auffalten",
+      "options": "Arbeitsbereich-Optionen",
+      "restoreOriginal": "Ursprüngliches Layout wiederherstellen",
+      "reopen": "{window} erneut öffnen",
+      "empty": "In diesem Arbeitsbereich sind keine Fenster geöffnet."
     }
   },
   "notification": {

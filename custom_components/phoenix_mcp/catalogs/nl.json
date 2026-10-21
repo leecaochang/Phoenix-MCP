@@ -2455,6 +2455,26 @@
       "continue": "Markeren als gecontroleerd",
       "noReplay": "Dit herhaalt de actie niet en maakt deze niet ongedaan. Andere acties moeten mogelijk nog worden gecontroleerd.",
       "saveFailed": "De controle kon niet worden opgeslagen. De actie moet nog worden gecontroleerd."
+    },
+    "workspace": {
+      "logs": "Logboeken",
+      "windowMenu": "Venstermenu",
+      "moveLeft": "Verplaats naar links",
+      "moveRight": "Verplaats naar rechts",
+      "moveUp": "Verplaats omhoog",
+      "moveDown": "Verplaats omlaag",
+      "resizeKeyboard": "Formaat wijzigen met het toetsenbord",
+      "resizeHint": "De pijltoetsen wijzigen het formaat. Druk op Esc om te stoppen.",
+      "floatWindow": "Venster loskoppelen",
+      "floatWindowAria": "Venster loskoppelen",
+      "dockWindow": "Venster vastkoppelen",
+      "dockWindowAria": "Venster vastkoppelen",
+      "fold": "Opvouwen",
+      "unfold": "Openvouwen",
+      "options": "Werkruimte-opties",
+      "restoreOriginal": "Oorspronkelijke indeling herstellen",
+      "reopen": "{window} opnieuw openen",
+      "empty": "Er zijn geen vensters geopend in deze werkruimte."
     }
   }
 }

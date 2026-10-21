@@ -2382,6 +2382,26 @@
       "waitingForAgent": "Venter på at agenten din skal koble til...",
       "working": "Arbeider...",
       "yourDevice": "enheten din"
+    },
+    "workspace": {
+      "logs": "Logger",
+      "windowMenu": "Vindusmeny",
+      "moveLeft": "Flytt til venstre",
+      "moveRight": "Flytt til høyre",
+      "moveUp": "Flytt opp",
+      "moveDown": "Flytt ned",
+      "resizeKeyboard": "Endre størrelse med tastaturet",
+      "resizeHint": "Piltastene endrer størrelsen. Trykk Esc for å avslutte.",
+      "floatWindow": "Gjør vinduet flytende",
+      "floatWindowAria": "Gjør vinduet flytende",
+      "dockWindow": "Fest vinduet",
+      "dockWindowAria": "Fest vinduet",
+      "fold": "Rull opp",
+      "unfold": "Rull ned",
+      "options": "Alternativer for arbeidsområdet",
+      "restoreOriginal": "Gjenopprett opprinnelig oppsett",
+      "reopen": "Åpne {window} igjen",
+      "empty": "Ingen vinduer er åpne i dette arbeidsområdet."
     }
   },
   "voice": {

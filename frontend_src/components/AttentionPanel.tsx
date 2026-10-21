@@ -8,19 +8,27 @@ import { Icon } from "../ui/Icon";
 const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
 const HELP = { mesa: "attention.mesaHelp", calendar_storage: "attention.calendar_storageHelp" };
 
-/** Quiet, persistent review of uncertain actions, without dispatching them again. */
-export function AttentionPanel() {
+export interface AttentionState {
+  items: AttentionItem[];
+  error: string | null;
+  reviewError: string | null;
+  busy: string | null;
+  checked: ReadonlySet<string>;
+  setItemChecked: (key: string, selected: boolean) => void;
+  load: () => Promise<void>;
+  review: (item: AttentionItem) => Promise<void>;
+}
+
+/** Items needing review, polled every 15 s and on window focus; a review never dispatches the action again. */
+export function useAttention(): AttentionState {
   const [items, setItems] = useState<AttentionItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
-  const [open, setOpen] = useState(() => window.location.hash === "#attention");
   const generation = useRef(0);
   const alive = useRef(true);
   const reviewing = useRef(false);
-  const section = useRef<HTMLElement>(null);
-  const bodyId = useId();
   const load = useCallback(async () => {
     if (reviewing.current) return;
     const current = ++generation.current;
@@ -38,25 +46,15 @@ export function AttentionPanel() {
     alive.current = true;
     void load();
     const timer = window.setInterval(() => { void load(); }, 15000);
-    const show = () => {
-      if (window.location.hash !== "#attention") return;
-      setOpen(true);
-      void load();
-      section.current?.scrollIntoView?.({ block: "nearest" });
-    };
-    window.addEventListener("hashchange", show);
-    window.addEventListener("location-changed", show);
     window.addEventListener("focus", load);
     return () => {
       alive.current = false;
       window.clearInterval(timer);
-      window.removeEventListener("hashchange", show);
-      window.removeEventListener("location-changed", show);
       window.removeEventListener("focus", load);
     };
   }, [load]);
 
-  async function review(item: AttentionItem) {
+  const review = useCallback(async (item: AttentionItem) => {
     const key = `${item.kind}:${item.id}`;
     if (reviewing.current || !checked.has(key) || (item.kind !== "agent" && item.kind !== "calendar")) return;
     reviewing.current = true;
@@ -74,7 +72,68 @@ export function AttentionPanel() {
       reviewing.current = false;
       if (alive.current) { setBusy(null); void load(); }
     }
-  }
+  }, [checked, load]);
+
+  const setItemChecked = useCallback((key: string, selected: boolean) => {
+    setChecked(previous => { const next = new Set(previous); if (selected) next.add(key); else next.delete(key); return next; });
+  }, []);
+
+  return { items, error, reviewError, busy, checked, setItemChecked, load, review };
+}
+
+/** The review list: refresh, each item, and its check-then-continue control. */
+export function AttentionList({ state }: { state: AttentionState }) {
+  const { items, error, reviewError, busy, checked, setItemChecked, load, review } = state;
+  return <>
+    <div className="phx-attention-refresh">
+      <p>{error || (items.length ? t("attention.intro") : t("attention.empty"))}</p>
+      <button className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => { void load(); }}>{t("common.refresh")}</button>
+    </div>
+    {reviewError && <p role="alert">{reviewError}</p>}
+    {items.map(item => {
+      const key = `${item.kind}:${item.id}`;
+      const reviewable = item.kind === "agent" || item.kind === "calendar";
+      return <article className="phx-attention-item" key={key}>
+        <h3>{t(TITLES[item.kind])}</h3>
+        {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
+        <p>{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
+        {reviewable && <>
+          <details className="phx-attention-details"><summary>{t("attention.details")}</summary>
+            <code>{item.tool}{item.entity_id && ` / ${item.entity_id}`}<br />{item.id}</code>
+          </details>
+          <div className="phx-attention-actions">
+            <label><input type="checkbox" checked={checked.has(key)} disabled={busy !== null} onChange={e => setItemChecked(key, e.target.checked)} />{t("attention.checked")}</label>
+            <BusyButton className="btn btn-outline btn-sm" busy={busy === key} disabled={!checked.has(key) || (busy !== null && busy !== key)} onClick={() => { void review(item); }}>{t("attention.continue")}</BusyButton>
+          </div>
+          <p className="phx-attention-meta">{t("attention.noReplay")}</p>
+        </>}
+      </article>;
+    })}
+  </>;
+}
+
+/** Quiet, persistent review of uncertain actions, without dispatching them again. */
+export function AttentionPanel() {
+  const state = useAttention();
+  const { items, error, load } = state;
+  const [open, setOpen] = useState(() => window.location.hash === "#attention");
+  const section = useRef<HTMLElement>(null);
+  const bodyId = useId();
+
+  useEffect(() => {
+    const show = () => {
+      if (window.location.hash !== "#attention") return;
+      setOpen(true);
+      void load();
+      section.current?.scrollIntoView?.({ block: "nearest" });
+    };
+    window.addEventListener("hashchange", show);
+    window.addEventListener("location-changed", show);
+    return () => {
+      window.removeEventListener("hashchange", show);
+      window.removeEventListener("location-changed", show);
+    };
+  }, [load]);
 
   if (!items.length && !error && !open) return null;
   return <section className="phx-attention" ref={section} aria-label={t("attention.title")}>
@@ -83,33 +142,7 @@ export function AttentionPanel() {
       <Icon name="expand" size={16} className="phx-attention-chevron" />
     </button>
     <div className="phx-attention-body" id={bodyId} hidden={!open}>
-      <div className="phx-attention-refresh">
-        <p>{error || (items.length ? t("attention.intro") : t("attention.empty"))}</p>
-        <button className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => { void load(); }}>{t("common.refresh")}</button>
-      </div>
-      {reviewError && <p role="alert">{reviewError}</p>}
-      {items.map(item => {
-        const key = `${item.kind}:${item.id}`;
-        const reviewable = item.kind === "agent" || item.kind === "calendar";
-        return <article className="phx-attention-item" key={key}>
-          <h3>{t(TITLES[item.kind])}</h3>
-          {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
-          <p>{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
-          {reviewable && <>
-            <details className="phx-attention-details"><summary>{t("attention.details")}</summary>
-              <code>{item.tool}{item.entity_id && ` / ${item.entity_id}`}<br />{item.id}</code>
-            </details>
-            <div className="phx-attention-actions">
-              <label><input type="checkbox" checked={checked.has(key)} disabled={busy !== null} onChange={e => {
-                const selected = e.target.checked;
-                setChecked(previous => { const next = new Set(previous); if (selected) next.add(key); else next.delete(key); return next; });
-              }} />{t("attention.checked")}</label>
-              <BusyButton className="btn btn-outline btn-sm" busy={busy === key} disabled={!checked.has(key) || (busy !== null && busy !== key)} onClick={() => { void review(item); }}>{t("attention.continue")}</BusyButton>
-            </div>
-            <p className="phx-attention-meta">{t("attention.noReplay")}</p>
-          </>}
-        </article>;
-      })}
+      <AttentionList state={state} />
     </div>
   </section>;
 }

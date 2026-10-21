@@ -7,6 +7,7 @@ import { RefreshIcon } from "../components/common";
 import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
 import { Icon, type IconName } from "../ui/Icon";
+import { useWindowVisible } from "../shell/visibility";
 
 const LABEL_KEYS: Record<string, Record<string, string>> = {
   "source": {
@@ -387,9 +388,12 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
     } catch { if (own === generation.current) setError(t("conversations.loadFailed")); }
     finally { if (own === generation.current) setLoading(false); }
   }, [limit, debouncedSearch, source, outcome, days]);
+  const windowVisible = useWindowVisible();
+  const windowVisibleRef = useRef(windowVisible);
+  windowVisibleRef.current = windowVisible;
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { if (!document.hidden) void load(true); }, 5000);
+    const timer = window.setInterval(() => { if (!document.hidden && windowVisibleRef.current) void load(true); }, 5000);
     const invalidate = () => { generation.current++; };
     return () => { clearInterval(timer); invalidate(); };
   }, [load]);
