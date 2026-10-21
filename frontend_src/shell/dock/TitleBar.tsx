@@ -51,6 +51,46 @@ export function TitleTab(props: IDockviewPanelHeaderProps) {
 const MOVES: Array<[Direction, string]> = [
   ["left", "workspace.moveLeft"], ["right", "workspace.moveRight"], ["up", "workspace.moveUp"], ["down", "workspace.moveDown"],
 ];
+
+/** A move, float or dock re-parents the window: afterwards give focus back to its menu button. */
+function refocusWindowMenu(controller: WorkspaceController, windowId: string) {
+  requestAnimationFrame(() => {
+    const target = controller.api?.getPanel(windowId)?.group.element.querySelector<HTMLElement>("[data-phx-window-menu]");
+    if (target && target !== document.activeElement) target.focus();
+  });
+}
+
+/**
+ * The window's moves and Float or Dock, built when a menu opens so availability
+ * reflects the current layout. `onResize` adds Resize with Keyboard; `full` adds
+ * Fold, Maximize and Close for the right-click menu on a title bar.
+ */
+export function windowMenuEntries(controller: WorkspaceController, group: DockviewGroupPanel, opts: { onResize?: () => void; full?: boolean } = {}): MenuEntry[] {
+  const windowId = group.activePanel?.id;
+  if (!windowId) return [];
+  const floating = group.api.location.type === "floating";
+  const then = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
+  const entries: MenuEntry[] = MOVES.map(([dir, key]) => ({
+    id: `move-${dir}`,
+    label: t(key),
+    disabled: floating || !controller.api || !neighbor(controller.api, group, dir),
+    onSelect: then(() => controller.move(group, dir)),
+  }));
+  entries.push("separator");
+  if (opts.onResize) entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: opts.onResize });
+  entries.push(floating
+    ? { id: "dock", label: t("workspace.dockWindow"), onSelect: then(() => controller.dock(group)) }
+    : { id: "float", label: t("workspace.floatWindow"), onSelect: then(() => controller.float(group)) });
+  if (opts.full) {
+    const folded = controller.folds.isFolded(windowId);
+    const maximized = group.api.isMaximized();
+    entries.push("separator",
+      { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), onSelect: () => controller.toggleFold(group) });
+    if (!floating) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? group.api.exitMaximized() : group.api.maximize()) });
+    entries.push({ id: "close", label: t("common.close"), onSelect: () => controller.close(group) });
+  }
+  return entries;
+}
 const RESIZE_STEP = 24;
 
 /** Window controls: the window menu, Float or Dock, Maximize or Restore, Close. */
@@ -72,30 +112,8 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
 
   if (!panel) return null;
   const windowId = panel.id;
-
-  // A move, float or dock re-parents the window: give focus back to its menu button.
-  const thenRefocus = (action: () => void) => () => {
-    action();
-    requestAnimationFrame(() => {
-      const target = controller.api?.getPanel(windowId)?.group.element.querySelector<HTMLElement>("[data-phx-window-menu]");
-      if (target && target !== document.activeElement) target.focus();
-    });
-  };
-
-  // Built when the menu opens: a drag or another window's move may have changed the neighbours.
-  const items = (): MenuEntry[] => [
-    ...MOVES.map(([dir, key]) => ({
-      id: `move-${dir}`,
-      label: t(key),
-      disabled: floating || !controller.api || !neighbor(controller.api, group, dir),
-      onSelect: thenRefocus(() => controller.move(group, dir)),
-    })),
-    "separator",
-    { id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: () => { setResizing(true); menuButton.current?.focus(); } },
-    floating
-      ? { id: "dock", label: t("workspace.dockWindow"), onSelect: thenRefocus(() => controller.dock(group)) }
-      : { id: "float", label: t("workspace.floatWindow"), onSelect: thenRefocus(() => controller.float(group)) },
-  ];
+  const thenRefocus = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
+  const items = () => windowMenuEntries(controller, group, { onResize: () => { setResizing(true); menuButton.current?.focus(); } });
 
   const resizeKeys = (e: KeyboardEvent<HTMLButtonElement>): boolean => {
     if (!resizing) return false;

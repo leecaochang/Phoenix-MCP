@@ -2396,7 +2396,26 @@
       "options": "ワークスペースのオプション",
       "restoreOriginal": "元のレイアウトを復元",
       "reopen": "{window} を再び開く",
-      "empty": "このワークスペースで開いているウィンドウはありません。"
+      "empty": "このワークスペースで開いているウィンドウはありません。",
+      "moveToolbar": "ツールバーを移動",
+      "toolbarMenu": "ツールバー",
+      "iconsOnly": "アイコンのみ",
+      "iconsAndText": "アイコンとテキスト",
+      "dockTop": "上にドッキング",
+      "dockBottom": "下にドッキング",
+      "dockLeft": "左にドッキング",
+      "dockRight": "右にドッキング",
+      "floatToolbar": "ツールバーをフローティング表示",
+      "collapseToolbar": "ツールバーを折りたたむ",
+      "expandToolbar": "ツールバーを展開",
+      "showTools": "ツールを表示",
+      "hideTools": "ツールを非表示",
+      "tools": "ワークスペースのツール",
+      "refreshWindow": "{window} を更新",
+      "logDetails": "ログの詳細",
+      "logDetailsEmpty": "ログでエントリを選択すると、詳細が表示されます。",
+      "previousRecord": "前のエントリ",
+      "nextRecord": "次のエントリ"
     }
   },
   "notification": {

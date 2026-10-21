@@ -2396,7 +2396,26 @@
       "options": "Opzioni dell'area di lavoro",
       "restoreOriginal": "Ripristina il layout originale",
       "reopen": "Riapri {window}",
-      "empty": "Nessuna finestra è aperta in quest'area di lavoro."
+      "empty": "Nessuna finestra è aperta in quest'area di lavoro.",
+      "moveToolbar": "Sposta la barra degli strumenti",
+      "toolbarMenu": "Barra degli strumenti",
+      "iconsOnly": "Solo icone",
+      "iconsAndText": "Icone e testo",
+      "dockTop": "Aggancia in alto",
+      "dockBottom": "Aggancia in basso",
+      "dockLeft": "Aggancia a sinistra",
+      "dockRight": "Aggancia a destra",
+      "floatToolbar": "Sgancia la barra degli strumenti",
+      "collapseToolbar": "Comprimi la barra degli strumenti",
+      "expandToolbar": "Espandi la barra degli strumenti",
+      "showTools": "Mostra strumenti",
+      "hideTools": "Nascondi strumenti",
+      "tools": "Strumenti dell'area di lavoro",
+      "refreshWindow": "Aggiorna {window}",
+      "logDetails": "Dettagli del registro",
+      "logDetailsEmpty": "Seleziona una voce in un registro per visualizzarne i dettagli.",
+      "previousRecord": "Voce precedente",
+      "nextRecord": "Voce successiva"
     }
   },
   "notification": {

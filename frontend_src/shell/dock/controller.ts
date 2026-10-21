@@ -4,7 +4,7 @@
  */
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
-import { FoldStore, reapplyCollapsed, toggleFold, type FoldSnapshot } from "./fold";
+import { FoldStore, reapplyCollapsed, toggleFold, unfoldWindow, type FoldSnapshot } from "./fold";
 import { largestGridGroup, moveWindow, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
 
@@ -34,6 +34,8 @@ export class WorkspaceController {
   readonly folds = new FoldStore();
   /** Called when the user closes a shell-managed window. */
   onTransientClose: ((id: string) => void) | null = null;
+  /** The window that last had focus in this workspace. */
+  activeWindow: string | null = null;
   private floatedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
   private listeners = new Set<() => void>();
@@ -111,6 +113,33 @@ export class WorkspaceController {
     return { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed) };
   }
 
+  /** Record which window has focus; the toolbar's tools follow it. */
+  setActiveWindow(id: string | null): void {
+    if (id === this.activeWindow) return;
+    this.activeWindow = id;
+    this.changed();
+  }
+
+  /** Open windows in reading order: the grid left to right and top to bottom, then floating windows. */
+  windowOrder(): string[] {
+    const api = this.api;
+    if (!api) return [];
+    const out: string[] = [];
+    const walk = (node: unknown): void => {
+      const n = node as { type?: string; data?: unknown };
+      if (n?.type === "leaf") out.push(...((n.data as { views?: string[] })?.views ?? []));
+      else if (n?.type === "branch" && Array.isArray(n.data)) n.data.forEach(walk);
+    };
+    try {
+      const json = api.toJSON();
+      walk(json.grid.root);
+      for (const f of json.floatingGroups ?? []) out.push(...(f.data?.views ?? []));
+    } catch {
+      return api.panels.map((p) => p.id);
+    }
+    return out;
+  }
+
   /** Re-read every title, after a language change. */
   retitle(): void {
     for (const panel of this.api?.panels ?? []) panel.api.setTitle(this.titleOf(panel.id));
@@ -152,10 +181,19 @@ export class WorkspaceController {
     if (anchor && anchor.group.api.location.type === "grid") {
       this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] });
     } else {
-      const largest = largestGridGroup(api);
-      this.add(id, largest ? { referenceGroup: largest, direction: "right" } : undefined);
+      // No remembered neighbour: full width along the bottom of the workspace.
+      this.add(id, { direction: "below" });
     }
     this.changed();
+  }
+
+  /** Make a window visible: reopen it if closed, unfold it if folded. */
+  ensureOpen(id: string): void {
+    const api = this.api;
+    if (!api || !this.windows.includes(id)) return;
+    if (!api.getPanel(id)) this.reopen(id);
+    const group = api.getPanel(id)?.group;
+    if (group && this.folds.isFolded(id)) unfoldWindow(api, this.folds, group);
   }
 
   float(group: DockviewGroupPanel): void {

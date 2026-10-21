@@ -2401,7 +2401,26 @@
       "options": "작업 공간 옵션",
       "restoreOriginal": "원래 레이아웃 복원",
       "reopen": "{window} 다시 열기",
-      "empty": "이 작업 공간에 열려 있는 창이 없습니다."
+      "empty": "이 작업 공간에 열려 있는 창이 없습니다.",
+      "moveToolbar": "도구 모음 이동",
+      "toolbarMenu": "도구 모음",
+      "iconsOnly": "아이콘만",
+      "iconsAndText": "아이콘 및 텍스트",
+      "dockTop": "위쪽에 도킹",
+      "dockBottom": "아래쪽에 도킹",
+      "dockLeft": "왼쪽에 도킹",
+      "dockRight": "오른쪽에 도킹",
+      "floatToolbar": "도구 모음 띄우기",
+      "collapseToolbar": "도구 모음 접기",
+      "expandToolbar": "도구 모음 펼치기",
+      "showTools": "도구 표시",
+      "hideTools": "도구 숨기기",
+      "tools": "작업 공간 도구",
+      "refreshWindow": "{window} 새로 고침",
+      "logDetails": "로그 세부 정보",
+      "logDetailsEmpty": "로그에서 항목을 선택하면 세부 정보가 표시됩니다.",
+      "previousRecord": "이전 항목",
+      "nextRecord": "다음 항목"
     }
   },
   "voice": {

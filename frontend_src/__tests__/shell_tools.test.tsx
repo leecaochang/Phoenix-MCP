@@ -1,0 +1,201 @@
+/**
+ * Shell services shared by windows: the toolbar's tool registry, the Logs
+ * selection that fills Log Details, the saved toolbar placement, and the
+ * right-click menus on panel chrome.
+ */
+
+import { describe, it, expect, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ToolRegistry, ToolRegistryContext, WindowPlaceContext, useToolbarTools, type ToolGroup } from "../shell/tools";
+import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
+import { DEFAULT_TOOLBAR, readToolbar } from "../shell/storage";
+import { AuditTable } from "../components/AuditTable";
+import { ContextMenuHost, useContextMenu, type MenuEntry } from "../ui/Menu";
+import type { AuditEntry } from "../types";
+
+const group = (id: string, toolLabel: string, onSelect = vi.fn()): ToolGroup => ({
+  id, label: id, tools: [{ id: "refresh", label: toolLabel, icon: "refresh", onSelect }],
+});
+
+function entry(over: Partial<AuditEntry> = {}): AuditEntry {
+  return {
+    request_id: "r1",
+    timestamp: "2026-01-01T00:00:00Z",
+    access_key_id: "t1",
+    access_key_name: "kitchen",
+    method: "tools/call",
+    resource: "get_state",
+    outcome: "allowed",
+    client_ip: "127.0.0.1",
+    pass_through: false,
+    ...over,
+  };
+}
+
+describe("toolbar tool registry", () => {
+  it("lists each open window's tools in reading order and skips windows with none", () => {
+    const registry = new ToolRegistry();
+    registry.set({ workspace: "logs", window: "conversationLog" }, [group("conversation", "Refresh Conversation Log")]);
+    registry.set({ workspace: "logs", window: "auditLog" }, [group("audit", "Refresh Audit Log")]);
+    registry.set({ workspace: "logs", window: "logDetails" }, [{ id: "details", label: "details", tools: [] }]);
+    registry.set({ workspace: "settings", window: "settings" }, [group("settings", "Elsewhere")]);
+    const order = (ids: string[]) => registry.groupsFor("logs", ids).map((g) => g.id);
+    expect(order(["auditLog", "conversationLog", "logDetails"])).toEqual(["audit", "conversation"]);
+    expect(order(["conversationLog", "auditLog"])).toEqual(["conversation", "audit"]);
+    // A closed window is left out of the order, so its tools disappear with it.
+    expect(order(["auditLog"])).toEqual(["audit"]);
+  });
+
+  it("redraws only when a label or state changes, but always runs the newest handler", () => {
+    const registry = new ToolRegistry();
+    const listener = vi.fn();
+    registry.subscribe(listener);
+    const place = { workspace: "logs", window: "auditLog" };
+    const first = vi.fn();
+    const second = vi.fn();
+    registry.set(place, [group("audit", "Refresh")]);
+    registry.set(place, [group("audit", "Refresh", first)]);
+    registry.set(place, [group("audit", "Refresh", second)]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    registry.latest("logs", "audit", "refresh")?.onSelect?.();
+    expect(second).toHaveBeenCalledOnce();
+    expect(first).not.toHaveBeenCalled();
+    registry.set(place, [{ ...group("audit", "Refresh"), tools: [{ id: "refresh", label: "Refresh", icon: "refresh", disabled: true }] }]);
+    expect(listener).toHaveBeenCalledTimes(2);
+    registry.set(place, null);
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(registry.latest("logs", "audit", "refresh")).toBeUndefined();
+  });
+
+  it("offers tools only inside a shell window and withdraws them when the view goes away", () => {
+    const registry = new ToolRegistry();
+    const seen: boolean[] = [];
+    function View() {
+      seen.push(useToolbarTools([group("audit", "Refresh Audit Log")]));
+      return null;
+    }
+    render(<View />);
+    expect(seen[seen.length - 1]).toBe(false);
+    const { unmount } = render(
+      <ToolRegistryContext.Provider value={registry}>
+        <WindowPlaceContext.Provider value={{ workspace: "logs", window: "auditLog" }}>
+          <View />
+        </WindowPlaceContext.Provider>
+      </ToolRegistryContext.Provider>,
+    );
+    expect(seen[seen.length - 1]).toBe(true);
+    expect(registry.groupsFor("logs", ["auditLog"]).map((g) => g.id)).toEqual(["audit"]);
+    unmount();
+    expect(registry.groupsFor("logs", ["auditLog"])).toEqual([]);
+  });
+});
+
+describe("Log Details", () => {
+  const entries = [entry({ request_id: "a" }), entry({ request_id: "b" }), entry({ request_id: "c" })];
+  const nameOf = (e: AuditEntry) => e.access_key_name;
+
+  it("brings Log Details into view on a selection, but not while stepping through records", () => {
+    const selection = new LogSelection();
+    const reveal = vi.fn();
+    selection.onSelect = reveal;
+    selection.set({ entry: entries[0], ordered: entries, nameOf });
+    expect(reveal).toHaveBeenCalledOnce();
+    selection.step(1);
+    expect(selection.get()?.entry.request_id).toBe("b");
+    selection.step(1);
+    selection.step(1);
+    expect(selection.get()?.entry.request_id).toBe("c");
+    selection.step(-1);
+    expect(selection.get()?.entry.request_id).toBe("b");
+    expect(reveal).toHaveBeenCalledOnce();
+  });
+
+  it("selecting a row fills Log Details instead of opening a dialog, and marks the row", () => {
+    const selection = new LogSelection();
+    function Logs() {
+      return (
+        <LogSelectionContext.Provider value={selection}>
+          <AuditTable entries={entries} loading={false} accessKeyNames={{}}
+            onSelect={(e, ordered) => selection.set({ entry: e, ordered, nameOf })} selectedKey={selection.selectedKey()} />
+          <LogDetailsContent />
+        </LogSelectionContext.Provider>
+      );
+    }
+    const { rerender } = render(<Logs />);
+    expect(screen.getByText("Select a record in a log to see its details.")).toBeInTheDocument();
+    const rows = screen.getAllByRole("row").slice(1);
+    fireEvent.click(rows[1]);
+    rerender(<Logs />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Audit Entry" })).toBeInTheDocument();
+    expect(screen.getAllByRole("row").slice(1)[1]).toHaveClass("is-selected");
+    expect(screen.getAllByRole("row").slice(1)[1]).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Previous Record" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next Record" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next Record" }));
+    expect(screen.getByRole("button", { name: "Next Record" })).toBeDisabled();
+  });
+
+  it("keeps the dialog when the log is drawn on its own", () => {
+    render(<AuditTable entries={entries} loading={false} accessKeyNames={{}} />);
+    fireEvent.click(screen.getAllByRole("row")[1]);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("saved toolbar placement", () => {
+  it("keeps valid values and replaces anything else with the defaults", () => {
+    expect(readToolbar(undefined)).toEqual(DEFAULT_TOOLBAR);
+    expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" }))
+      .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" });
+    expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge" })).toEqual(DEFAULT_TOOLBAR);
+  });
+});
+
+describe("right-click menus", () => {
+  function Chrome({ entries }: { entries: MenuEntry[] }) {
+    const show = useContextMenu();
+    return <button type="button" onContextMenu={(e) => show?.(e, "Toolbar menu", entries)}>Toolbar</button>;
+  }
+
+  it("opens at the pointer instead of the browser's menu and marks the current choice", () => {
+    const pick = vi.fn();
+    render(
+      <ContextMenuHost>
+        <Chrome entries={[
+          { id: "icons", label: "Icons Only", checked: true, onSelect: vi.fn() },
+          { id: "text", label: "Icons and Text", checked: false, onSelect: pick },
+        ]} />
+      </ContextMenuHost>,
+    );
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 });
+    act(() => { screen.getByRole("button", { name: "Toolbar" }).dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    const menu = screen.getByRole("menu", { name: "Toolbar menu" });
+    expect(menu.style.top).toBe("80px");
+    expect(screen.getByRole("menuitemradio", { name: /Icons Only/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemradio", { name: /Icons and Text/ })).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Icons and Text/ }));
+    expect(pick).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens from the keyboard's menu key on the first item and returns focus on Escape", () => {
+    render(<ContextMenuHost><Chrome entries={[{ id: "a", label: "Dock at Left", onSelect: vi.fn() }]} /></ContextMenuHost>);
+    const button = screen.getByRole("button", { name: "Toolbar" });
+    button.focus();
+    fireEvent.contextMenu(button, { clientX: 0, clientY: 0 });
+    expect(document.activeElement).toHaveTextContent("Dock at Left");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("leaves the browser's menu alone when there is nothing to offer", () => {
+    render(<ContextMenuHost><Chrome entries={[]} /></ContextMenuHost>);
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+    act(() => { screen.getByRole("button", { name: "Toolbar" }).dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});

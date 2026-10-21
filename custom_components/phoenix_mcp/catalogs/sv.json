@@ -2401,7 +2401,26 @@
       "options": "Alternativ för arbetsytan",
       "restoreOriginal": "Återställ ursprunglig layout",
       "reopen": "Öppna {window} igen",
-      "empty": "Inga fönster är öppna på den här arbetsytan."
+      "empty": "Inga fönster är öppna på den här arbetsytan.",
+      "moveToolbar": "Flytta verktygsfältet",
+      "toolbarMenu": "Verktygsfält",
+      "iconsOnly": "Endast ikoner",
+      "iconsAndText": "Ikoner och text",
+      "dockTop": "Docka överst",
+      "dockBottom": "Docka nederst",
+      "dockLeft": "Docka till vänster",
+      "dockRight": "Docka till höger",
+      "floatToolbar": "Gör verktygsfältet flytande",
+      "collapseToolbar": "Fäll ihop verktygsfältet",
+      "expandToolbar": "Expandera verktygsfältet",
+      "showTools": "Visa verktyg",
+      "hideTools": "Dölj verktyg",
+      "tools": "Verktyg för arbetsytan",
+      "refreshWindow": "Uppdatera {window}",
+      "logDetails": "Loggdetaljer",
+      "logDetailsEmpty": "Välj en post i en logg för att se detaljerna.",
+      "previousRecord": "Föregående post",
+      "nextRecord": "Nästa post"
     }
   },
   "voice": {

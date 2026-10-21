@@ -17,11 +17,41 @@ export const SHELL_SCHEMA = 1;
 /** Upper bound for one record; a larger arrangement is not saved. */
 export const MAX_RECORD_BYTES = 256 * 1024;
 
+export type ToolbarDock = "top" | "bottom" | "left" | "right" | "floating";
+export interface ToolbarState {
+  dock: ToolbarDock;
+  /** Position while floating, from the shell's top-left corner. */
+  x: number;
+  y: number;
+  collapsed: boolean;
+  /** Whether the second row of workspace tools is shown. */
+  toolsShown: boolean;
+  mode: "icons" | "icon-text";
+}
+/** Docked at the top, icons only, tools shown: the accepted starting point. */
+export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icons" };
+
 export interface ShellRecord {
   schema: number;
   savedAt: number;
   lastWorkspace?: WorkspaceId;
+  toolbar?: ToolbarState;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
+}
+
+/** A saved toolbar state, with anything unreadable replaced by the default. */
+export function readToolbar(raw: unknown): ToolbarState {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof ToolbarState, unknown>>;
+  const d = DEFAULT_TOOLBAR;
+  const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 10000 ? v : fallback);
+  return {
+    dock: ["top", "bottom", "left", "right", "floating"].includes(r.dock as string) ? r.dock as ToolbarDock : d.dock,
+    x: num(r.x, d.x),
+    y: num(r.y, d.y),
+    collapsed: typeof r.collapsed === "boolean" ? r.collapsed : d.collapsed,
+    toolsShown: typeof r.toolsShown === "boolean" ? r.toolsShown : d.toolsShown,
+    mode: r.mode === "icon-text" || r.mode === "icons" ? r.mode : d.mode,
+  };
 }
 
 const isWorkspace = (v: unknown): v is WorkspaceId => (WORKSPACE_IDS as readonly unknown[]).includes(v);
@@ -60,6 +90,7 @@ export function readRecord(userId: string | null, env: Env): ShellRecord | null 
       schema: SHELL_SCHEMA,
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
       lastWorkspace: isWorkspace(parsed.lastWorkspace) ? parsed.lastWorkspace : undefined,
+      toolbar: parsed.toolbar === undefined ? undefined : readToolbar(parsed.toolbar),
       workspaces,
     };
   } catch {

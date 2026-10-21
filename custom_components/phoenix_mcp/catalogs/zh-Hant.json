@@ -2401,7 +2401,26 @@
       "options": "工作區選項",
       "restoreOriginal": "還原原始佈局",
       "reopen": "重新開啟{window}",
-      "empty": "此工作區中沒有開啟的視窗。"
+      "empty": "此工作區中沒有開啟的視窗。",
+      "moveToolbar": "移動工具列",
+      "toolbarMenu": "工具列",
+      "iconsOnly": "僅圖示",
+      "iconsAndText": "圖示和文字",
+      "dockTop": "停駐在頂端",
+      "dockBottom": "停駐在底端",
+      "dockLeft": "停駐在左側",
+      "dockRight": "停駐在右側",
+      "floatToolbar": "使工具列浮動",
+      "collapseToolbar": "收起工具列",
+      "expandToolbar": "展開工具列",
+      "showTools": "顯示工具",
+      "hideTools": "隱藏工具",
+      "tools": "工作區工具",
+      "refreshWindow": "重新整理{window}",
+      "logDetails": "日誌詳細資料",
+      "logDetailsEmpty": "在日誌中選擇一個條目以檢視詳細資料。",
+      "previousRecord": "上一個條目",
+      "nextRecord": "下一個條目"
     }
   },
   "voice": {

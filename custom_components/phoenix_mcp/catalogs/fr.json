@@ -2396,7 +2396,26 @@
       "options": "Réglages de l’espace de travail",
       "restoreOriginal": "Restaurer la disposition d’origine",
       "reopen": "Rouvrir {window}",
-      "empty": "Aucune fenêtre n’est ouverte dans cet espace de travail."
+      "empty": "Aucune fenêtre n’est ouverte dans cet espace de travail.",
+      "moveToolbar": "Déplacer la barre d’outils",
+      "toolbarMenu": "Barre d’outils",
+      "iconsOnly": "Icônes seules",
+      "iconsAndText": "Icônes et texte",
+      "dockTop": "Ancrer en haut",
+      "dockBottom": "Ancrer en bas",
+      "dockLeft": "Ancrer à gauche",
+      "dockRight": "Ancrer à droite",
+      "floatToolbar": "Rendre la barre d’outils flottante",
+      "collapseToolbar": "Réduire la barre d’outils",
+      "expandToolbar": "Développer la barre d’outils",
+      "showTools": "Afficher les outils",
+      "hideTools": "Masquer les outils",
+      "tools": "Outils de l’espace de travail",
+      "refreshWindow": "Actualiser {window}",
+      "logDetails": "Détails du journal",
+      "logDetailsEmpty": "Sélectionnez une entrée dans un journal pour en voir les détails.",
+      "previousRecord": "Entrée précédente",
+      "nextRecord": "Entrée suivante"
     }
   },
   "notification": {

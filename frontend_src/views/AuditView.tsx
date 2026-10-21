@@ -7,6 +7,8 @@ import { RefreshIcon } from "../components/common";
 import { t } from "../i18n";
 import { auditSourceFilterValue } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
+import { useLogSelection } from "../shell/logDetails";
+import { useToolbarTools } from "../shell/tools";
 
 interface Props {
   accessKeys: AccessKeyRecord[];
@@ -99,6 +101,14 @@ export function AuditView({ accessKeys }: Props) {
   // (Re)load from the top whenever a filter changes.
   useEffect(() => { load(0); }, [load]);
 
+  // In the workspace shell, a selected entry opens in Log Details and Refresh moves to the toolbar.
+  const logSelection = useLogSelection();
+  const onToolbar = useToolbarTools([{
+    id: "auditLog",
+    label: t("shell.tabAudit"),
+    tools: [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), icon: "refresh", onSelect: () => { void load(0); } }],
+  }]);
+
   return (
     <div className="view-root">
       <div className="card">
@@ -166,14 +176,16 @@ export function AuditView({ accessKeys }: Props) {
               value={ipFilter}
               onChange={(e) => setIpFilter(e.target.value)}
             />
-            <button
-              className="btn btn-ghost btn-sm btn-icon"
-              onClick={() => load(0)}
-              title={t("common.refresh")}
-              aria-label={t("audit.refreshAria")}
-            >
-              <RefreshIcon />
-            </button>
+            {!onToolbar && (
+              <button
+                className="btn btn-ghost btn-sm btn-icon"
+                onClick={() => load(0)}
+                title={t("common.refresh")}
+                aria-label={t("audit.refreshAria")}
+              >
+                <RefreshIcon />
+              </button>
+            )}
           </div>
         </div>
 
@@ -183,6 +195,10 @@ export function AuditView({ accessKeys }: Props) {
             entries={entries}
             loading={loading}
             accessKeyNames={accessKeyNames}
+            onSelect={logSelection
+              ? (entry, ordered) => logSelection.set({ entry, ordered, nameOf: (e) => accessKeyNames[e.access_key_id] ?? e.access_key_name })
+              : undefined}
+            selectedKey={logSelection?.selectedKey()}
           />
         )}
         {/* Not while a first page is loading: a later page fetched for the new

@@ -13,9 +13,16 @@ interface Props {
   // current name. The stored entry.access_key_name is the fallback for access keys no
   // longer active (archived/revoked) and for admin actions.
   accessKeyNames?: Record<string, string>;
+  /**
+   * Show a selected entry elsewhere (the Log Details window) instead of in a
+   * dialog. Receives the entries in their displayed order, for stepping through.
+   */
+  onSelect?: (entry: AuditEntry, ordered: AuditEntry[]) => void;
+  /** The entry shown elsewhere, highlighted in the table. */
+  selectedKey?: string | null;
 }
 
-function auditEntryKey(entry: AuditEntry): string {
+export function auditEntryKey(entry: AuditEntry): string {
   // One approval request intentionally emits approved plus executed/failed
   // lifecycle rows under the same request id. Timestamp and method distinguish
   // those rows for React identity and keyboard detail navigation.
@@ -88,27 +95,15 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, onNavigateNext }: {
-  entry: AuditEntry;
-  accessKeyName: string;
-  onClose: () => void;
-  onNavigatePrevious?: () => void;
-  onNavigateNext?: () => void;
-}) {
+/** One audit entry's recorded fields and payload, shared by the dialog and the Log Details window. */
+export function AuditEntryDetail({ entry, accessKeyName }: { entry: AuditEntry; accessKeyName: string }) {
   // Render the recorded payload as YAML in HA's code editor (via YamlView);
   // if it is not valid JSON, show the raw string verbatim.
   const prettyPayload = entry.payload
     ? (() => { try { return toYaml(JSON.parse(entry.payload) as Record<string, unknown>); } catch { return entry.payload; } })()
     : null;
   return (
-    <Modal
-      titleId="audit-detail-title"
-      onClose={onClose}
-      onNavigatePrevious={onNavigatePrevious}
-      onNavigateNext={onNavigateNext}
-      recordNavigation
-    >
-      <h3 className="modal-title audit-section-title" id="audit-detail-title">{t("audit.detailTitle")}</h3>
+    <>
       <DetailRow label={t("audit.rowTime")} value={formatTs(entry.timestamp)} />
       <DetailRow
         label={t("audit.rowAccessKey")}
@@ -133,6 +128,27 @@ function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, o
           <YamlView value={prettyPayload} />
         </div>
       )}
+    </>
+  );
+}
+
+function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, onNavigateNext }: {
+  entry: AuditEntry;
+  accessKeyName: string;
+  onClose: () => void;
+  onNavigatePrevious?: () => void;
+  onNavigateNext?: () => void;
+}) {
+  return (
+    <Modal
+      titleId="audit-detail-title"
+      onClose={onClose}
+      onNavigatePrevious={onNavigatePrevious}
+      onNavigateNext={onNavigateNext}
+      recordNavigation
+    >
+      <h3 className="modal-title audit-section-title" id="audit-detail-title">{t("audit.detailTitle")}</h3>
+      <AuditEntryDetail entry={entry} accessKeyName={accessKeyName} />
       <div className="modal-actions">
         <button className="btn btn-text" onClick={onClose}>{t("common.close")}</button>
       </div>
@@ -140,7 +156,7 @@ function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, o
   );
 }
 
-export function AuditTable({ entries, loading, accessKeyNames }: Props) {
+export function AuditTable({ entries, loading, accessKeyNames, onSelect, selectedKey }: Props) {
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -181,6 +197,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
   const selectedIndex = selected
     ? sorted.findIndex((entry) => auditEntryKey(entry) === auditEntryKey(selected))
     : -1;
+  const choose = (entry: AuditEntry) => (onSelect ? onSelect(entry, sorted) : setSelected(entry));
 
   function th(label: string, key: SortKey) {
     return (
@@ -224,8 +241,9 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
           {sorted.map((entry) => (
             <tr
               key={auditEntryKey(entry)}
-              className={`clickable${entry.pass_through ? " pass-through-row" : ""}`}
-              onClick={() => setSelected(entry)}
+              className={`clickable${entry.pass_through ? " pass-through-row" : ""}${selectedKey === auditEntryKey(entry) ? " is-selected" : ""}`}
+              aria-selected={onSelect ? selectedKey === auditEntryKey(entry) : undefined}
+              onClick={() => choose(entry)}
             >
               <td>
                 <span className={`outcome-badge ${OUTCOME_CLASS[entry.outcome]}`}>
@@ -246,7 +264,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
                 <button
                   type="button"
                   className="row-open row-link-btn"
-                  onClick={(e) => { e.stopPropagation(); setSelected(entry); }}
+                  onClick={(e) => { e.stopPropagation(); choose(entry); }}
                   aria-label={t("audit.openEntryAria", { outcome: outcomeLabel(entry), name: displayName(entry) })}
                 >
                   {formatAccessKeyNameShort(displayName(entry))}

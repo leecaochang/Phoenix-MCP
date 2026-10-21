@@ -8,13 +8,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { AgentCliWindow } from "../components/AgentCliWindow";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { t } from "../i18n";
-import { MenuRootContext } from "../ui/Menu";
+import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
-import { readRecord, writeRecord, WORKSPACE_IDS, type Env, type ShellRecord, type WorkspaceId } from "./storage";
-import { Toolbar } from "./Toolbar";
+import { DEFAULT_TOOLBAR, readRecord, writeRecord, WORKSPACE_IDS, type Env, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
+import { Toolbar, workspaceMenu } from "./Toolbar";
+import { ToolRegistry, ToolRegistryContext } from "./tools";
+import { LogSelection, LogSelectionContext } from "./logDetails";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, windowTitle } from "./workspaces";
 
 /** Below this panel width the phone stack is used; the gap between the two bounds stops flicker. */
@@ -44,6 +46,18 @@ function useEnvironment(root: React.RefObject<HTMLElement | null>): Env {
   return env;
 }
 
+/** The workspace area; a right-click on its margin, outside any window, opens the workspace menu. */
+function WorkspaceArea({ menu, children }: { menu: (() => MenuEntry[]) | null; children: React.ReactNode }) {
+  const show = useContextMenu();
+  return (
+    <main className="phx-workspaces" onContextMenu={(e) => {
+      if (menu && e.target === e.currentTarget) show?.(e, t("workspace.options"), menu());
+    }}>
+      {children}
+    </main>
+  );
+}
+
 export function Shell() {
   const d = usePanelData();
   const root = useRef<HTMLDivElement | null>(null);
@@ -66,6 +80,20 @@ export function Shell() {
     return controller;
   }, [controllers]);
 
+  const registry = useMemo(() => new ToolRegistry(), []);
+  // Selecting a log record shows it in Log Details, opening or unfolding that window first.
+  const logSelection = useMemo(() => new LogSelection(), []);
+  logSelection.onSelect = () => {
+    if (env === "desktop") controllerFor("logs").ensureOpen("logDetails");
+    requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="logDetails"]')?.scrollIntoView?.({ block: "nearest" }));
+  };
+
+  // Toolbar placement, display mode and collapsed state, remembered with the arrangement.
+  const [toolbar, setToolbar] = useState<ToolbarState>(() => record?.toolbar ?? DEFAULT_TOOLBAR);
+  useEffect(() => { setToolbar(record?.toolbar ?? DEFAULT_TOOLBAR); }, [record]);
+  const toolbarRef = useRef(toolbar);
+  toolbarRef.current = toolbar;
+
   // Workspaces are created on first visit and kept, so their windows keep drafts and scroll.
   const [visited, setVisited] = useState<ReadonlySet<WorkspaceId>>(() => new Set([d.workspace]));
   useEffect(() => {
@@ -86,13 +114,14 @@ export function Shell() {
       if (layout) record.workspaces[id] = layout;
     }
     record.lastWorkspace = workspaceRef.current;
+    record.toolbar = toolbarRef.current;
     writeRecord(userId, env, record);
   }, [controllers, env, record, userId]);
   const scheduleSave = useCallback(() => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flush, SAVE_DELAY_MS);
   }, [flush]);
-  useEffect(() => { scheduleSave(); }, [d.workspace, scheduleSave]);
+  useEffect(() => { scheduleSave(); }, [d.workspace, toolbar, scheduleSave]);
   useEffect(() => {
     const onHide = () => { if (document.visibilityState === "hidden") flush(); };
     document.addEventListener("visibilitychange", onHide);
@@ -127,12 +156,17 @@ export function Shell() {
 
   const s = d.settings;
   const active = d.workspace;
+  const dock = env === "mobile" ? "top" : toolbar.dock;
   return (
     <MenuRootContext.Provider value={rootEl}>
-      <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`}>
+    <ContextMenuHost>
+    <ToolRegistryContext.Provider value={registry}>
+    <LogSelectionContext.Provider value={logSelection}>
+      <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
-        <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env} />
-        <main className="phx-workspaces">
+        <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
+          state={toolbar} onChange={setToolbar} />
+        <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active)) : null}>
           {env === "desktop"
             ? WORKSPACE_IDS.filter((id) => visited.has(id)).map((id) => (
               <WorkspaceVisibleContext.Provider key={`${userId}:${id}`} value={id === active}>
@@ -143,11 +177,12 @@ export function Shell() {
                   saved={record?.workspaces[id]}
                   visible={id === active}
                   onLayoutChange={scheduleSave}
+                  workspaceMenu={() => workspaceMenu(controllerFor(id))}
                 />
               </WorkspaceVisibleContext.Provider>
             ))
             : <PhoneStack workspace={active} showAttention={showAttention} />}
-        </main>
+        </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
             inject module owns the window then), nor while the kill switch is on.
@@ -167,6 +202,9 @@ export function Shell() {
           </ErrorBoundary>
         )}
       </div>
+    </LogSelectionContext.Provider>
+    </ToolRegistryContext.Provider>
+    </ContextMenuHost>
     </MenuRootContext.Provider>
   );
 }

@@ -3,11 +3,13 @@
 import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  ArrowDownLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck,
-  CirclePause, Clock, Code, Columns2, Copy, Download, Ellipsis, ExternalLink, FilePenLine, GitBranch, History,
-  Info, KeyRound, LayoutDashboard, ListChecks, Maximize2, MessagesSquare, Minimize2, Minus, OctagonAlert,
-  PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, RotateCw, Rows2, ScrollText, SearchCheck, Settings,
-  Shield, SquareArrowDownLeft, SquareArrowOutUpRight, Star, Trash2, TriangleAlert, Upload, X,
+  Archive, ArrowDownLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
+  ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
+  Download, Ellipsis, ExternalLink, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound,
+  LayoutDashboard, ListChecks, Maximize2, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
+  PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
+  Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, Star, Trash2, TriangleAlert, Upload,
+  WandSparkles, X,
 } from "lucide-react";
 
 // Named imports only, so each bundle carries just the glyphs it draws. Names
@@ -60,6 +62,17 @@ const ICONS = {
   documentation: BookOpen,
   workspaceOptions: LayoutDashboard,
   killSwitch: OctagonAlert,
+  grip: GripVertical,
+  showTools: ChevronsDown,
+  hideTools: ChevronsUp,
+  collapseToolbar: ChevronsLeft,
+  expandToolbar: ChevronsRight,
+  setupAgent: WandSparkles,
+  archive: Archive,
+  add: Plus,
+  logDetails: PanelBottom,
+  previous: ChevronUp,
+  next: ChevronDown,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

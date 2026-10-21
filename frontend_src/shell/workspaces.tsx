@@ -3,7 +3,7 @@
  * the windows: each keeps its own behavior, data loading and safety checks.
  */
 
-import { createContext, useContext, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -22,6 +22,8 @@ import { ControllerContext } from "./dock/TitleBar";
 import { usePanelData } from "./PanelData";
 import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
+import { WindowPlaceContext } from "./tools";
+import { LogDetailsContent } from "./logDetails";
 
 export const WINDOW_TITLE_KEYS = {
   accessKeys: "shell.tabAccessKeys",
@@ -30,6 +32,7 @@ export const WINDOW_TITLE_KEYS = {
   mesa: "shell.tabMesa",
   auditLog: "shell.tabAudit",
   conversationLog: "conversations.title",
+  logDetails: "workspace.logDetails",
   settings: "shell.tabSettings",
   attention: "attention.title",
 } as const;
@@ -58,9 +61,14 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
   logs: {
     labelKey: "workspace.logs",
     icon: "logs",
-    windows: ["auditLog", "conversationLog", "attention"],
-    // The two logs side by side with equal space, as accepted for the Logs workspace.
-    arrange: (_, add) => { add("auditLog"); add("conversationLog", { referencePanel: "auditLog", direction: "right" }); },
+    windows: ["auditLog", "conversationLog", "logDetails", "attention"],
+    // The two logs side by side with equal space, Log Details across the bottom, as accepted for Logs.
+    arrange: (api, add) => {
+      add("auditLog");
+      add("conversationLog", { referencePanel: "auditLog", direction: "right" });
+      add("logDetails", { direction: "below" });
+      api.getPanel("logDetails")?.group.api.setSize({ height: Math.round(api.height * 0.4) });
+    },
   },
   settings: { labelKey: "shell.tabSettings", icon: "settings", windows: ["settings", "attention"], arrange: (_, add) => add("settings") },
 };
@@ -74,13 +82,16 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   const workspaceVisible = useContext(WorkspaceVisibleContext);
   useSyncExternalStore(controller?.folds.subscribe ?? (() => () => {}), controller?.folds.getVersion ?? (() => 0));
   const folded = controller?.folds.isFolded(id) ?? false;
+  const place = useMemo(() => (controller ? { workspace: controller.id, window: id } : null), [controller, id]);
   return (
+    <WindowPlaceContext.Provider value={place}>
     <WindowVisibleContext.Provider value={workspaceVisible && !folded}>
       <div className="phx-window-body" data-phx-window={id} hidden={folded}>
         <h2 className="sr-only">{windowTitle(id)}</h2>
         <ErrorBoundary>{children}</ErrorBoundary>
       </div>
     </WindowVisibleContext.Provider>
+    </WindowPlaceContext.Provider>
   );
 }
 
@@ -151,6 +162,8 @@ function SettingsContent() {
   );
 }
 
+function LogDetailsWindowContent() { return <LogDetailsContent />; }
+
 function AttentionContent() {
   return <div className="phx-attention phx-attention-window"><AttentionList state={usePanelData().attention} /></div>;
 }
@@ -163,6 +176,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   auditLog: AuditLogContent,
   conversationLog: ConversationLogContent,
   settings: SettingsContent,
+  logDetails: LogDetailsWindowContent,
   attention: AttentionContent,
 };
 

@@ -102,7 +102,7 @@ describe("phoenix-mcp-panel full app shell", () => {
     const el = mountPanel();
     act(() => { el.narrow = true; });
     await waitFor(() => {
-      const toolbar = el.shadowRoot!.querySelector(".phx-toolbar");
+      const toolbar = el.shadowRoot!.querySelector(".phx-toolbar-main");
       expect(toolbar?.firstElementChild?.tagName).toBe("HA-MENU-BUTTON");
     });
   });

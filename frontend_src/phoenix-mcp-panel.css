@@ -241,29 +241,60 @@
 /* ============================================================
    Workspace toolbar
    ============================================================ */
+/* The shell lays out around the toolbar: docked to an edge, or floating over the workspace. */
+.phx-shell[data-toolbar] { position: relative; }
+.phx-shell[data-toolbar="bottom"] { flex-direction: column-reverse; }
+.phx-shell[data-toolbar="left"] { flex-direction: row; }
+.phx-shell[data-toolbar="right"] { flex-direction: row-reverse; }
+
 .phx-toolbar {
-  position: sticky;
-  top: 0;
+  /* The companion app's status-bar inset (HA's inherited property) pads a top toolbar clear of it. */
+  --phx-toolbar-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   z-index: var(--phx-z-tabbar);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
+  flex-direction: column;
+  gap: 6px;
   flex-shrink: 0;
-  /* Workspaces scroll inside the shell, so the toolbar never scrolls away; the
-     companion app's status-bar inset (HA's inherited property) pads it clear. */
-  --phx-toolbar-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-  padding: calc(6px + var(--phx-toolbar-safe-top)) 8px 6px;
-  background: var(--phx-surface);
-  border-bottom: 1px solid var(--phx-border);
+  margin: 8px 8px 0;
+  padding: 6px;
+  background: var(--phx-raised);
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
 }
+.phx-toolbar[data-dock="top"] { margin-top: calc(8px + var(--phx-toolbar-safe-top)); }
+.phx-toolbar[data-dock="bottom"] { margin: 0 8px 8px; }
+.phx-toolbar[data-dock="left"] { margin: 8px 0 8px 8px; flex-direction: row; align-items: flex-start; }
+.phx-toolbar[data-dock="right"] { margin: 8px 8px 8px 0; flex-direction: row-reverse; align-items: flex-start; }
+.phx-toolbar[data-dock="floating"] {
+  position: absolute;
+  margin: 0;
+  max-width: calc(100% - 16px);
+  background: color-mix(in srgb, var(--phx-raised) 90%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--phx-shadow-lg);
+}
+.phx-toolbar-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.phx-toolbar[data-dock="left"] .phx-toolbar-main,
+.phx-toolbar[data-dock="right"] .phx-toolbar-main { flex-direction: column; flex-wrap: nowrap; }
+.phx-toolbar-nav,
 .phx-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.phx-toolbar-spacer { flex: 1; }
-.phx-toolbar-button {
+.phx-toolbar[data-dock="left"] .phx-toolbar-nav,
+.phx-toolbar[data-dock="right"] .phx-toolbar-nav,
+.phx-toolbar[data-dock="left"] .phx-toolbar-group,
+.phx-toolbar[data-dock="right"] .phx-toolbar-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar-nav + .phx-toolbar-group { margin-inline-start: auto; }
+.phx-toolbar[data-dock="left"] .phx-toolbar-nav + .phx-toolbar-group,
+.phx-toolbar[data-dock="right"] .phx-toolbar-nav + .phx-toolbar-group { margin: 6px 0 0; }
+
+.phx-toolbar-button,
+.phx-toolbar-handle {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  height: 32px;
+  min-width: 36px;
+  height: 36px;
   padding: 0 10px;
   border: 1px solid var(--phx-border);
   border-radius: var(--phx-radius-sm);
@@ -275,13 +306,17 @@
   cursor: pointer;
 }
 .phx-toolbar-button:hover { background: var(--phx-hover); }
+.phx-toolbar-button:disabled { opacity: 0.45; cursor: default; }
 .phx-toolbar-button.is-current {
   background: var(--phx-accent);
   border-color: var(--phx-accent);
   color: var(--phx-accent-fg);
 }
-.phx-toolbar-button.is-active { background: var(--phx-accent-lt); }
-.phx-toolbar-icon-only { width: 32px; padding: 0; justify-content: center; }
+.phx-toolbar-button.is-active,
+.phx-toolbar-button[aria-pressed="true"] { background: var(--phx-accent-lt); }
+.phx-toolbar-button.is-danger { color: var(--phx-error); }
+.phx-toolbar-handle { min-width: 24px; width: 24px; padding: 0; border-color: transparent; background: transparent; color: var(--phx-text-2); cursor: grab; }
+.phx-toolbar-plain { border-color: transparent; background: transparent; color: var(--phx-text-2); }
 .phx-toolbar-badge {
   display: inline-flex;
   align-items: center;
@@ -299,10 +334,10 @@
 .phx-toolbar-warning { border-color: var(--phx-error); background: var(--phx-error-bg); color: var(--phx-error); }
 .phx-toolbar-warning:hover { background: var(--phx-error-bg); }
 .phx-toolbar-external { opacity: 0.7; }
-/* Phone width: icons only, labels kept for assistive technology, so the toolbar fits one row. */
-.phx-env-mobile .phx-toolbar { gap: 4px; padding: calc(4px + var(--phx-toolbar-safe-top)) 6px 4px; }
-.phx-env-mobile .phx-toolbar-button { padding: 0; width: 40px; height: 40px; justify-content: center; position: relative; }
-.phx-env-mobile .phx-toolbar-label {
+
+/* Icons only: labels stay available to assistive technology and as tooltips. */
+.phx-toolbar[data-mode="icons"] .phx-toolbar-button { width: 36px; padding: 0; }
+.phx-toolbar[data-mode="icons"] .phx-toolbar-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -310,8 +345,29 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.phx-env-mobile .phx-toolbar-external { display: none; }
-.phx-env-mobile .phx-toolbar-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; font-size: 10px; }
+.phx-toolbar[data-mode="icons"] .phx-toolbar-external { display: none; }
+.phx-toolbar[data-mode="icons"] .phx-toolbar-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; font-size: 10px; }
+
+/* The second row: tools for the visible workspace, grouped with separator bars. */
+.phx-toolbar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--phx-border);
+}
+.phx-toolbar[data-dock="left"] .phx-toolbar-tools,
+.phx-toolbar[data-dock="right"] .phx-toolbar-tools { flex-direction: column; align-items: stretch; padding: 0 0 0 6px; border-top: none; border-left: 1px solid var(--phx-border); }
+.phx-toolbar[data-dock="right"] .phx-toolbar-tools { padding: 0 6px 0 0; border-left: none; border-right: 1px solid var(--phx-border); }
+.phx-tool-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.phx-tool-group + .phx-tool-group { padding-inline-start: 6px; border-inline-start: 1px solid var(--phx-border); }
+.phx-toolbar[data-dock="left"] .phx-tool-group,
+.phx-toolbar[data-dock="right"] .phx-tool-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar[data-dock="left"] .phx-tool-group + .phx-tool-group,
+.phx-toolbar[data-dock="right"] .phx-tool-group + .phx-tool-group { padding: 6px 0 0; border-inline-start: none; border-top: 1px solid var(--phx-border); }
+
+.phx-env-mobile .phx-toolbar { margin: calc(4px + var(--phx-toolbar-safe-top)) 4px 0; padding: 4px; }
 
 /* ============================================================
    Workspaces
@@ -377,13 +433,23 @@
   font: 400 13px var(--phx-font);
 }
 .phx-menu:focus { outline: none; }
-.phx-menu-item { padding: 6px 10px; border-radius: var(--phx-radius-xs); cursor: default; }
+.phx-menu-item { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: var(--phx-radius-xs); cursor: default; }
 .phx-menu-item:hover,
 .phx-menu-item:focus { background: var(--phx-hover); outline: none; }
 .phx-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--phx-focus); }
 .phx-menu-item[aria-disabled="true"] { color: var(--phx-text-2); opacity: 0.55; }
 .phx-menu-item[aria-disabled="true"]:hover { background: transparent; }
 .phx-menu-separator { height: 1px; margin: 4px 6px; background: var(--phx-border); }
+.phx-menu-check { display: inline-flex; justify-content: center; width: 16px; flex: none; }
+
+/* Log Details: the record selected in a log. */
+.phx-log-details { padding-top: 8px; }
+.phx-log-details-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.phx-log-details-bar .audit-section-title { margin: 0; }
+.phx-log-details-nav { display: flex; gap: 4px; }
+.phx-log-details-nav .phx-toolbar-button { width: 32px; height: 32px; min-width: 32px; padding: 0; }
+.phx-log-details-empty { margin: 16px 0; color: var(--phx-text-2); }
+.audit-table tr.is-selected > td { background: var(--phx-accent-lt); }
 @media (pointer: coarse) {
   .phx-menu-item { padding: 12px 12px; }
   .phx-toolbar-button { height: 40px; }
@@ -3137,6 +3203,16 @@ hui-card { display: block; min-width: 0; }
 .conversation-list { border-top: 1px solid var(--phx-border); }
 .conversation-entry:nth-child(even) > summary { background: var(--phx-surface-2); }
 .conversation-entry + .conversation-entry { border-top: 1px solid var(--phx-border); }
+/* An expanded conversation is framed, so where it ends and the next record begins is unmistakable. */
+.conversation-entry[open] {
+  margin: 10px 0;
+  border: 1px solid var(--phx-line-strong);
+  border-radius: var(--phx-radius-sm);
+  background: var(--phx-surface);
+}
+.conversation-entry[open] > summary { background: var(--phx-surface-2); border-bottom: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm) var(--phx-radius-sm) 0 0; }
+.conversation-entry[open] + .conversation-entry { border-top: none; }
+.conversation-clear-confirm { margin-bottom: 12px; }
 .conversation-entry > summary { padding: 10px 12px; cursor: pointer; display: flex; gap: 12px; align-items: baseline; }
 .conversation-entry > summary::before { content: ""; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid currentColor; flex: 0 0 0; }
 .conversation-entry[open] > summary::before { transform: rotate(90deg); }

@@ -2508,7 +2508,26 @@
       "options": "Opcje obszaru roboczego",
       "restoreOriginal": "Przywróć pierwotny układ",
       "reopen": "Otwórz ponownie: {window}",
-      "empty": "W tym obszarze roboczym nie ma otwartych okien."
+      "empty": "W tym obszarze roboczym nie ma otwartych okien.",
+      "moveToolbar": "Przenieś pasek narzędzi",
+      "toolbarMenu": "Pasek narzędzi",
+      "iconsOnly": "Tylko ikony",
+      "iconsAndText": "Ikony i tekst",
+      "dockTop": "Zadokuj u góry",
+      "dockBottom": "Zadokuj na dole",
+      "dockLeft": "Zadokuj po lewej",
+      "dockRight": "Zadokuj po prawej",
+      "floatToolbar": "Odłącz pasek narzędzi",
+      "collapseToolbar": "Zwiń pasek narzędzi",
+      "expandToolbar": "Rozwiń pasek narzędzi",
+      "showTools": "Pokaż narzędzia",
+      "hideTools": "Ukryj narzędzia",
+      "tools": "Narzędzia obszaru roboczego",
+      "refreshWindow": "Odśwież: {window}",
+      "logDetails": "Szczegóły dziennika",
+      "logDetailsEmpty": "Wybierz wpis w dzienniku, aby zobaczyć jego szczegóły.",
+      "previousRecord": "Poprzedni wpis",
+      "nextRecord": "Następny wpis"
     }
   }
 }

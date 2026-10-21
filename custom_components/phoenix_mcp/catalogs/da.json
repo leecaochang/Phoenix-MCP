@@ -2401,7 +2401,26 @@
       "options": "Indstillinger for arbejdsområde",
       "restoreOriginal": "Gendan oprindeligt layout",
       "reopen": "Genåbn {window}",
-      "empty": "Der er ingen åbne vinduer i dette arbejdsområde."
+      "empty": "Der er ingen åbne vinduer i dette arbejdsområde.",
+      "moveToolbar": "Flyt værktøjslinjen",
+      "toolbarMenu": "Værktøjslinje",
+      "iconsOnly": "Kun ikoner",
+      "iconsAndText": "Ikoner og tekst",
+      "dockTop": "Fastgør øverst",
+      "dockBottom": "Fastgør nederst",
+      "dockLeft": "Fastgør til venstre",
+      "dockRight": "Fastgør til højre",
+      "floatToolbar": "Gør værktøjslinjen flydende",
+      "collapseToolbar": "Fold værktøjslinjen sammen",
+      "expandToolbar": "Udfold værktøjslinjen",
+      "showTools": "Vis værktøjer",
+      "hideTools": "Skjul værktøjer",
+      "tools": "Værktøjer til arbejdsområde",
+      "refreshWindow": "Opdatér {window}",
+      "logDetails": "Logdetaljer",
+      "logDetailsEmpty": "Vælg en post i en log for at se detaljerne.",
+      "previousRecord": "Forrige post",
+      "nextRecord": "Næste post"
     }
   },
   "voice": {

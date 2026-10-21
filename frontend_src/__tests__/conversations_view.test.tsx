@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, act } from "@testing-library/react";
 import { ConversationsView } from "../views/ConversationsView";
+import { ToolRegistry, ToolRegistryContext, WindowPlaceContext } from "../shell/tools";
 import { api } from "../api";
 import { validApiResponse } from "../api_response";
 import type { AccessKeyRecord, ConversationEntry, ConversationListResponse, ConversationSummary } from "../types";
@@ -86,6 +87,28 @@ describe("ConversationsView", () => {
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
     await view.findByText("No conversations to show");
     expect(view.queryByText("Prompt")).toBeNull();
+  });
+
+  it("offers Clear on the toolbar inside the shell and still asks before deleting", async () => {
+    const registry = new ToolRegistry();
+    const view = render(
+      <ToolRegistryContext.Provider value={registry}>
+        <WindowPlaceContext.Provider value={{ workspace: "logs", window: "conversationLog" }}>
+          <ConversationsView />
+        </WindowPlaceContext.Provider>
+      </ToolRegistryContext.Provider>,
+    );
+    await view.findByText("Tool exchange; prompt unavailable");
+    expect(view.queryByText("Clear Conversation History")).toBeNull();
+    const clear = registry.latest("logs", "conversationLog", "clear");
+    expect(clear).toMatchObject({ label: "Clear Conversation History", tone: "danger", disabled: false });
+    act(() => clear!.onSelect!());
+    expect(api.clearConversations).not.toHaveBeenCalled();
+    const banner = view.container.querySelector(".conversation-clear-confirm")!;
+    expect(banner.compareDocumentPosition(view.container.querySelector(".conversation-entry")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(view.getByText("Clear Conversation History"));
+    await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
+    await waitFor(() => expect(registry.latest("logs", "conversationLog", "clear")?.disabled).toBe(true));
   });
 
   it("keeps expanded entries through a refresh and reports recoverable errors", async () => {

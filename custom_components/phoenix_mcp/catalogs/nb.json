@@ -2401,7 +2401,26 @@
       "options": "Alternativer for arbeidsområdet",
       "restoreOriginal": "Gjenopprett opprinnelig oppsett",
       "reopen": "Åpne {window} igjen",
-      "empty": "Ingen vinduer er åpne i dette arbeidsområdet."
+      "empty": "Ingen vinduer er åpne i dette arbeidsområdet.",
+      "moveToolbar": "Flytt verktøylinjen",
+      "toolbarMenu": "Verktøylinje",
+      "iconsOnly": "Bare ikoner",
+      "iconsAndText": "Ikoner og tekst",
+      "dockTop": "Fest øverst",
+      "dockBottom": "Fest nederst",
+      "dockLeft": "Fest til venstre",
+      "dockRight": "Fest til høyre",
+      "floatToolbar": "Gjør verktøylinjen flytende",
+      "collapseToolbar": "Fold inn verktøylinjen",
+      "expandToolbar": "Fold ut verktøylinjen",
+      "showTools": "Vis verktøy",
+      "hideTools": "Skjul verktøy",
+      "tools": "Verktøy for arbeidsområdet",
+      "refreshWindow": "Oppdater {window}",
+      "logDetails": "Loggdetaljer",
+      "logDetailsEmpty": "Velg en oppføring i en logg for å se detaljene.",
+      "previousRecord": "Forrige oppføring",
+      "nextRecord": "Neste oppføring"
     }
   },
   "voice": {

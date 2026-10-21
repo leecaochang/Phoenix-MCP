@@ -2396,7 +2396,26 @@
       "options": "Arbeitsbereich-Optionen",
       "restoreOriginal": "Ursprüngliches Layout wiederherstellen",
       "reopen": "{window} erneut öffnen",
-      "empty": "In diesem Arbeitsbereich sind keine Fenster geöffnet."
+      "empty": "In diesem Arbeitsbereich sind keine Fenster geöffnet.",
+      "moveToolbar": "Symbolleiste verschieben",
+      "toolbarMenu": "Symbolleiste",
+      "iconsOnly": "Nur Symbole",
+      "iconsAndText": "Symbole und Text",
+      "dockTop": "Oben andocken",
+      "dockBottom": "Unten andocken",
+      "dockLeft": "Links andocken",
+      "dockRight": "Rechts andocken",
+      "floatToolbar": "Symbolleiste lösen",
+      "collapseToolbar": "Symbolleiste einklappen",
+      "expandToolbar": "Symbolleiste ausklappen",
+      "showTools": "Werkzeuge anzeigen",
+      "hideTools": "Werkzeuge ausblenden",
+      "tools": "Arbeitsbereich-Werkzeuge",
+      "refreshWindow": "{window} aktualisieren",
+      "logDetails": "Protokolldetails",
+      "logDetailsEmpty": "Wählen Sie einen Eintrag in einem Protokoll aus, um die Details anzuzeigen.",
+      "previousRecord": "Vorheriger Eintrag",
+      "nextRecord": "Nächster Eintrag"
     }
   },
   "notification": {

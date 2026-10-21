@@ -8,6 +8,7 @@ import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
 import { Icon, type IconName } from "../ui/Icon";
 import { useWindowVisible } from "../shell/visibility";
+import { useToolbarTools } from "../shell/tools";
 
 const LABEL_KEYS: Record<string, Record<string, string>> = {
   "source": {
@@ -398,6 +399,20 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
     return () => { clearInterval(timer); invalidate(); };
   }, [load]);
   const resetPage = () => setLimit(25);
+  // In the workspace shell, Refresh and Clear Conversation History move to the toolbar.
+  const onToolbar = useToolbarTools([{
+    id: "conversationLog",
+    label: t("conversations.title"),
+    tools: [
+      { id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), icon: "refresh", onSelect: () => { void load(); } },
+      { id: "clear", label: t("conversations.clear"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
+    ],
+  }]);
+  const confirmBanner = confirmClear && <div className="banner banner-warning conversation-clear-confirm" role="alert">
+    <p>{t("conversations.clearConfirm")}</p>
+    <BusyButton className="btn btn-danger" busy={clearing} onClick={() => void clear()}>{t("conversations.clear")}</BusyButton>{" "}
+    <BusyButton className="btn btn-ghost" busy={clearing} onClick={() => setConfirmClear(false)}>{t("common.cancel")}</BusyButton>
+  </div>;
   async function clear() {
     clearingRef.current = true; ++generation.current; setClearing(true);
     try {
@@ -409,6 +424,7 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
     {!enabled && <p className="banner">{t("conversations.disabledHelp")}</p>}
     {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
+    {onToolbar && confirmBanner}
     <div className="card">
     <div className="filter-row conversation-toolbar">
       <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
@@ -424,7 +440,7 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
       <select className="input input-auto" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
         <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>
       </select>
-      <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>
+      {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
     </div>
     <div className="conversation-list" aria-busy={loading}>
       {!entries.length && !loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
@@ -446,13 +462,9 @@ export function ConversationsView({ accessKeys = [] }: { accessKeys?: AccessKeyR
     <div className="conversation-footer">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
       {entries.length < total && <BusyButton busy={loading} className="btn btn-ghost" onClick={() => setLimit(n => n + 25)}>{t("common.loadMore")}</BusyButton>}
-      <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>
+      {!onToolbar && <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>}
     </div>
     </div>
-    {confirmClear && <div className="banner banner-warning">
-      <p>{t("conversations.clearConfirm")}</p>
-      <BusyButton className="btn btn-danger" busy={clearing} onClick={() => void clear()}>{t("conversations.clear")}</BusyButton>{" "}
-      <BusyButton className="btn btn-ghost" busy={clearing} onClick={() => setConfirmClear(false)}>{t("common.cancel")}</BusyButton>
-    </div>}
+    {!onToolbar && confirmBanner}
   </div>;
 }

@@ -2474,7 +2474,26 @@
       "options": "Werkruimte-opties",
       "restoreOriginal": "Oorspronkelijke indeling herstellen",
       "reopen": "{window} opnieuw openen",
-      "empty": "Er zijn geen vensters geopend in deze werkruimte."
+      "empty": "Er zijn geen vensters geopend in deze werkruimte.",
+      "moveToolbar": "Werkbalk verplaatsen",
+      "toolbarMenu": "Werkbalk",
+      "iconsOnly": "Alleen pictogrammen",
+      "iconsAndText": "Pictogrammen en tekst",
+      "dockTop": "Bovenaan vastkoppelen",
+      "dockBottom": "Onderaan vastkoppelen",
+      "dockLeft": "Links vastkoppelen",
+      "dockRight": "Rechts vastkoppelen",
+      "floatToolbar": "Werkbalk loskoppelen",
+      "collapseToolbar": "Werkbalk samenvouwen",
+      "expandToolbar": "Werkbalk uitvouwen",
+      "showTools": "Hulpmiddelen weergeven",
+      "hideTools": "Hulpmiddelen verbergen",
+      "tools": "Werkruimtehulpmiddelen",
+      "refreshWindow": "{window} opnieuw laden",
+      "logDetails": "Logboekdetails",
+      "logDetailsEmpty": "Selecteer een item in een logboek om de details te bekijken.",
+      "previousRecord": "Vorig item",
+      "nextRecord": "Volgend item"
     }
   }
 }

@@ -2401,7 +2401,26 @@
       "options": "Työtilan asetukset",
       "restoreOriginal": "Palauta alkuperäinen asettelu",
       "reopen": "Avaa {window} uudelleen",
-      "empty": "Tässä työtilassa ei ole avoimia ikkunoita."
+      "empty": "Tässä työtilassa ei ole avoimia ikkunoita.",
+      "moveToolbar": "Siirrä työkaluriviä",
+      "toolbarMenu": "Työkalurivi",
+      "iconsOnly": "Vain kuvakkeet",
+      "iconsAndText": "Kuvakkeet ja teksti",
+      "dockTop": "Kiinnitä ylös",
+      "dockBottom": "Kiinnitä alas",
+      "dockLeft": "Kiinnitä vasemmalle",
+      "dockRight": "Kiinnitä oikealle",
+      "floatToolbar": "Irrota työkalurivi",
+      "collapseToolbar": "Tiivistä työkalurivi",
+      "expandToolbar": "Laajenna työkalurivi",
+      "showTools": "Näytä työkalut",
+      "hideTools": "Piilota työkalut",
+      "tools": "Työtilan työkalut",
+      "refreshWindow": "Päivitä {window}",
+      "logDetails": "Lokin tiedot",
+      "logDetailsEmpty": "Valitse lokista kirjaus nähdäksesi sen tiedot.",
+      "previousRecord": "Edellinen kirjaus",
+      "nextRecord": "Seuraava kirjaus"
     }
   },
   "voice": {

@@ -2396,7 +2396,26 @@
       "options": "Opciones del espacio de trabajo",
       "restoreOriginal": "Restaurar el diseño original",
       "reopen": "Volver a abrir {window}",
-      "empty": "No hay ventanas abiertas en este espacio de trabajo."
+      "empty": "No hay ventanas abiertas en este espacio de trabajo.",
+      "moveToolbar": "Mover la barra de herramientas",
+      "toolbarMenu": "Barra de herramientas",
+      "iconsOnly": "Solo iconos",
+      "iconsAndText": "Iconos y texto",
+      "dockTop": "Acoplar arriba",
+      "dockBottom": "Acoplar abajo",
+      "dockLeft": "Acoplar a la izquierda",
+      "dockRight": "Acoplar a la derecha",
+      "floatToolbar": "Desacoplar la barra de herramientas",
+      "collapseToolbar": "Contraer la barra de herramientas",
+      "expandToolbar": "Expandir la barra de herramientas",
+      "showTools": "Mostrar herramientas",
+      "hideTools": "Ocultar herramientas",
+      "tools": "Herramientas del espacio de trabajo",
+      "refreshWindow": "Actualizar {window}",
+      "logDetails": "Detalles del registro",
+      "logDetailsEmpty": "Seleccione una entrada de un registro para ver sus detalles.",
+      "previousRecord": "Entrada anterior",
+      "nextRecord": "Entrada siguiente"
     }
   },
   "notification": {
