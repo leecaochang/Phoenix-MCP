@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
 import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
@@ -6,6 +6,8 @@ import { api } from "../api";
 import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import { compareStrings, localeDateTime, t } from "../i18n";
+import { useToolbarTools, type ToolGroup } from "../shell/tools";
+import { EditableAccessKeyName } from "./AccessKeyDetail";
 
 const MAX_ACTIVE_ACCESS_KEYS_WARNING = 50;
 
@@ -41,9 +43,22 @@ interface Props {
   onOpenCreate: () => void;
   onCloseCreate: () => void;
   onOpenSettings: () => void;
+  /** The key whose windows are shown below the list. */
+  selectedId?: string | null;
+  /** The key whose name is being edited in place, from Key Actions. */
+  renamingId?: string | null;
+  onRenamed?: (updated: AccessKeyRecord) => void;
+  onRenameEnd?: () => void;
+  /** Tools for the selected key, offered on the toolbar after the list's own. */
+  selectedKeyTools?: ToolGroup | null;
+  /** Notices about the selected key, shown above the list. */
+  notices?: ReactNode;
 }
 
-export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings }: Props) {
+export function AccessKeyListView({
+  accessKeys, loading, error, onRefresh, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings,
+  selectedId = null, renamingId = null, onRenamed, onRenameEnd, selectedKeyTools = null, notices = null,
+}: Props) {
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [archived, setArchived] = useState<ArchivedAccessKeyRecord[] | null>(null);
@@ -101,6 +116,21 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
       : va < vb ? -1 : va > vb ? 1 : 0;
     return sortDir === "asc" ? comparison : -comparison;
   });
+
+  // In the workspace shell the list's buttons and the selected key's actions sit on the toolbar.
+  const onToolbar = useToolbarTools([
+    {
+      id: "accessKeys",
+      label: t("shell.tabAccessKeys"),
+      tools: [
+        { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
+        { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived((v) => !v) },
+        { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", onSelect: onOpenCreate },
+        { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAccessKeys") }), icon: "refresh", onSelect: onRefresh },
+      ],
+    },
+    ...(selectedKeyTools ? [selectedKeyTools] : []),
+  ]);
 
   function handleCreated(record: AccessKeyRecord) {
     onRefresh();
@@ -160,6 +190,8 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
         </div>
       )}
 
+      {notices}
+
       <div className="card">
         <div className="filter-row">
           <input
@@ -169,6 +201,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
+          {!onToolbar && <>
           <div className="filter-row-right">
             <button
               className="btn btn-ghost btn-sm"
@@ -200,6 +233,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
           >
             <RefreshIcon />
           </button>
+          </>}
         </div>
 
         {loading ? (
@@ -230,13 +264,18 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
               {sorted.map((tok) => {
                 const status = accessKeyStatus(tok);
                 const statusClass = status === "Active" ? "badge-green" : status === "Expired" ? "badge-grey" : "badge-red";
+                const selected = tok.id === selectedId;
                 return (
                   <tr
                     key={tok.id}
-                    className={`clickable${tok.pass_through ? " pass-through-row" : ""}`}
+                    className={`clickable${tok.pass_through ? " pass-through-row" : ""}${selected ? " is-selected" : ""}`}
+                    aria-selected={onToolbar ? selected : undefined}
                     onClick={() => onOpenDetail(tok.id)}
                   >
                     <td className="access-key-name">
+                      {tok.id === renamingId && onRenamed ? (
+                        <EditableAccessKeyName accessKey={tok} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} />
+                      ) : (<>
                       {/* The row's own onClick (above) makes the whole row
                           clickable for the mouse; this button keeps it
                           keyboard- and screen-reader-accessible (tab to it,
@@ -251,6 +290,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
                       >
                         {tok.name}
                       </button>
+                      </>)}
                     </td>
                     <td>
                       {tok.pass_through

@@ -7,10 +7,11 @@ import { Icon } from "../ui/Icon";
 import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
-import { ATTENTION_WINDOW, WINDOW_CONTENT, WORKSPACES, windowTitle, type WindowId } from "./workspaces";
+import type { GlobalSettings } from "../types";
+import { ATTENTION_WINDOW, WINDOW_CONTENT, WORKSPACES, windowAvailable, windowTitle, type WindowId } from "./workspaces";
 
 function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }) {
-  const [folded, setFolded] = useState(false);
+  const [folded, setFolded] = useState(() => WORKSPACES[workspace].folded?.includes(id) ?? false);
   const place = useMemo(() => ({ workspace, window: id }), [workspace, id]);
   const titleId = useId();
   const Content = WINDOW_CONTENT[id];
@@ -39,8 +40,9 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention }: { workspace: WorkspaceId; showAttention: boolean }) {
-  const windows = WORKSPACES[workspace].windows.filter((id) => id !== ATTENTION_WINDOW || showAttention);
+export function PhoneStack({ workspace, showAttention, settings }: { workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null }) {
+  const def = WORKSPACES[workspace];
+  const windows = def.windows.filter((id) => (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings) === true));
   // Needs Attention leads the stack when it is shown.
   windows.sort((a, b) => Number(b === ATTENTION_WINDOW) - Number(a === ATTENTION_WINDOW));
   return (

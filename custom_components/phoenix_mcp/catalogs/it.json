@@ -910,7 +910,6 @@
       "loadTreeFailed": "Impossibile caricare l'albero delle entità.",
       "missingBadge": "Mancante",
       "missingTitle": "Questa entità non esiste più in Home Assistant.",
-      "noMesaProfile": "Nessun profilo MESA, creane uno",
       "permFor": "Autorizzazione per {name}",
       "permForDevice": "Autorizzazione per il dispositivo {name}",
       "permForDomain": "Autorizzazione per il dominio {name}",
@@ -925,13 +924,8 @@
       "selRed": "Deny: nega (sostituisce tutti i figli)",
       "selSelected": "{title}, selezionato",
       "selYellow": "Read: sola lettura",
-      "simEntityAria": "ID entità da simulare",
-      "simEntityPlaceholder": "entity_id (ad es. light.kitchen)",
-      "simFailed": "Simulazione non riuscita.",
-      "simResult": "Risultato: ",
       "simulateEntityTitle": "Simula le autorizzazioni per {id}",
       "simulateTitle": "Simula le autorizzazioni di {type} per {id}",
-      "simulating": "Simulazione in corso...",
       "stateDeny": "NEGA",
       "stateInherit": "EREDITA",
       "stateNoAccess": "NESSUN ACCESSO",
@@ -950,7 +944,6 @@
       "unmatchedDeviceName": "Dispositivo non presente nell'albero corrente",
       "unmatchedDevicesNote": "Queste autorizzazioni esplicite si riferiscono a ID dispositivo non presenti nell'albero delle entità corrente. Imposta N per rimuovere un'autorizzazione obsoleta.",
       "unmatchedDevicesTitle": "Autorizzazioni dei dispositivi non abbinati",
-      "viewMesaProfile": "Visualizza il profilo MESA",
       "hintCaution": "Questo suggerimento viene inviato agli agenti e ai loro provider di modelli. Non inserire mai password o codici."
     },
     "personas": {
@@ -1697,11 +1690,8 @@
       "renderFailed": "Impossibile visualizzare questa vista. Aggiorna per riprovare o scegli un’altra sezione."
     },
     "accessKeys": {
-      "advanced": "Avanzate",
       "announceAllHelp": "Mostra ogni strumento di Phoenix MCP, inclusi gli strumenti che questa chiave di accesso non può usare. Lascia disattivato per ridurre l'uso del modello ed evitare chiamate non riuscite. Abilita solo per la risoluzione dei problemi.",
       "announceAllLabel": "Annuncia sempre tutti gli strumenti",
-      "announceSummaryAll": "Tutti gli strumenti annunciati",
-      "announceSummaryScoped": "Limitato alle capacità",
       "archivedDeleteFailed": "Eliminazione non riuscita.",
       "archivedEmpty": "Nessuna chiave di accesso archiviata.",
       "archivedTitle": "Chiavi di accesso archiviate",
@@ -1709,7 +1699,6 @@
       "assistExposureLabel": "Limita alle entità esposte ad Assist",
       "back": "Indietro",
       "cancel": "Annulla",
-      "capsSummary": "{persona} · {allow} consenti / {confirm} conferma / {deny} nega",
       "cardCapabilities": "Capacità",
       "cardPersona": "Persona",
       "cardPresets": "Preset",
@@ -1753,8 +1742,6 @@
       "editAria": "Modifica chiave di accesso {name}",
       "empty": "Non ci sono ancora chiavi di accesso. Creane una per iniziare.",
       "emptyFiltered": "Nessuna chiave di accesso corrisponde al filtro.",
-      "emulatorPassThrough": "Le chiavi di accesso pass-through ignorano l'albero delle autorizzazioni, quindi ogni entità non Phoenix si risolve in scrittura. Nessuna simulazione necessaria.",
-      "emulatorTitle": "Emulatore delle autorizzazioni effettive",
       "enablePtBody": "<strong>Il pass-through concede a questa chiave di accesso un accesso esteso a entità e servizi.</strong> Le modifiche di configurazione, le azioni di sistema, le capacità ad alto rischio, l'accesso ai registri di sistema, le regole MESA, la blocklist di Phoenix MCP e la rimozione degli attributi sensibili si applicano comunque.",
       "enablePtCheck": "Comprendo che questa chiave di accesso avrà un accesso esteso a Home Assistant",
       "enablePtFailed": "Impossibile abilitare il pass-through.",
@@ -1833,8 +1820,6 @@
       "presetSwitchSaveInto": "Le tue modifiche non salvate verranno prima salvate in <strong>{name}</strong>:",
       "presetSwitchTitle": "Passa al preset: {name}",
       "presetSwitchTo": "Passa a",
-      "presetsSummaryModified": "{name} (modificato)",
-      "presetsSummarySaved": "{count} salvati",
       "ptConvertBody": "Passando alla modalità limitata, l'albero delle autorizzazioni salvato viene applicato immediatamente. Se non contiene autorizzazioni, questa chiave di accesso perderà l'accesso alle entità finché non le aggiungi.",
       "ptConvertFailed": "Impossibile convertire la chiave di accesso.",
       "ptHeaderBanner": "<strong>Questa è una chiave di accesso pass-through.</strong> Ha un accesso esteso alle entità e ai servizi di Home Assistant. Le capacità protette, le regole MESA, la rimozione degli attributi sensibili e il blocco del dominio Phoenix MCP restano attivi.",
@@ -1845,8 +1830,6 @@
       "rateLimitingDisabled": "Il limite di frequenza è disattivato per questa chiave di accesso.",
       "rateRequestsLabel": "Richieste al minuto (0 = disattivato)",
       "rateSaveFailed": "Salvataggio non riuscito.",
-      "rateSummary": "{requests}/min · raffica {burst}",
-      "rateSummaryNone": "Nessun limite",
       "rateValuesError": "I valori devono essere numeri interi non negativi.",
       "rawAccessKeyNote": "<strong>Questa chiave di accesso non verrà più mostrata.</strong> Copialo ora prima di chiudere.",
       "reconnectBanner": "<strong>Ricollega il tuo agente.</strong> Gli strumenti disponibili per questa chiave di accesso sono cambiati.",
@@ -1891,12 +1874,7 @@
       "notesHelp": "Indicazioni per ogni agente che usa questa chiave di accesso, ad esempio come si chiamano stanze e dispositivi, chi la usa o dove si trova la documentazione della casa. Phoenix MCP aggiunge le note alle istruzioni di ogni agente e nasconde gli ID delle entità fuori dall'ambito di questa chiave di accesso.",
       "notesLabel": "Note per gli agenti",
       "notesPlaceholder": "Esempio: La camera degli ospiti si chiama studio. Chiedi prima di modificare qualcosa nella cameretta.",
-      "notesSummaryNone": "Nessuna",
-      "notesTooLong": "Le note devono contenere al massimo {max} caratteri.",
-      "notesSummaryChars": {
-        "one": "{count} carattere",
-        "other": "{count} caratteri"
-      }
+      "notesTooLong": "Le note devono contenere al massimo {max} caratteri."
     },
     "common": {
       "after": "Dopo",
@@ -2415,7 +2393,13 @@
       "logDetails": "Dettagli del registro",
       "logDetailsEmpty": "Seleziona una voce in un registro per visualizzarne i dettagli.",
       "previousRecord": "Voce precedente",
-      "nextRecord": "Voce successiva"
+      "nextRecord": "Voce successiva",
+      "keySettings": "Impostazioni della chiave",
+      "keyActions": "Azioni della chiave",
+      "rename": "Rinomina",
+      "selectAccessKey": "Seleziona una chiave di accesso per visualizzarne le impostazioni.",
+      "clearAllPermissions": "Cancella tutte le autorizzazioni",
+      "summaryPassThrough": "Le chiavi di accesso pass-through non usano l'albero delle autorizzazioni, quindi non ci sono regole da riepilogare."
     }
   },
   "notification": {

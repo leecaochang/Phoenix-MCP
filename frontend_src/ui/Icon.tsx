@@ -5,10 +5,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   Archive, ArrowDownLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
-  Download, Ellipsis, ExternalLink, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound,
+  Download, Ellipsis, ExternalLink, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, ListChecks, Maximize2, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
-  Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, Star, Trash2, TriangleAlert, Upload,
+  Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
 } from "lucide-react";
 
@@ -73,6 +73,8 @@ const ICONS = {
   logDetails: PanelBottom,
   previous: ChevronUp,
   next: ChevronDown,
+  keyActions: KeySquare,
+  selectBy: SquareDashedMousePointer,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -33,7 +33,7 @@
         <dl class="kv">
           <div class="kv-row"><dt>Default</dt><dd>60 requests per minute, with a burst of 10 per second.</dd></div>
           <div class="kv-row"><dt>Disable</dt><dd>Set <code>rate_limit_requests</code> to <code>0</code> for that access key.</dd></div>
-          <div class="kv-row"><dt>Pass-through</dt><dd>Uses the same limits. Edit them on the access key detail page after creation.</dd></div>
+          <div class="kv-row"><dt>Pass-through</dt><dd>Uses the same limits. Edit them in the access key's Key Settings after creation.</dd></div>
           <div class="kv-row"><dt>JSON-RPC batch</dt><dd>Each call spends one request. Phoenix rejects the full batch with HTTP 429 before anything runs when it would exceed the limit.</dd></div>
           <div class="kv-row"><dt>In-process AI</dt><dd>Agent Chat, Assist, Voice Agent, and AI Task use the steps-before-check-in limit instead. Their tool calls remain audited and counted.</dd></div>
         </dl>
@@ -138,7 +138,7 @@ X-RateLimit-Reset: 1712345678</code></pre>
           <summary>Configure advanced access key behavior</summary>
           <div class="advanced-content">
         <h2 id="advanced-access-key-options">Advanced access key options</h2>
-        <p>Three per-access-key options sit outside the capability matrix, in the panel's <strong>Tool Announcement</strong> card on the access key detail page (and settable through <a href="admin-api.html#access-keys">PATCH</a>).</p>
+        <p>Three per-access-key options sit outside the capability matrix, in the <strong>Tool Announcement</strong> section of the access key's Key Settings (and settable through <a href="admin-api.html#access-keys">PATCH</a>).</p>
         <dl class="kv">
           <div class="kv-row"><dt>Always announce all tools</dt><dd>Off by default: an access key's <code>tools/list</code> advertises only the tools its capabilities unlock and hides the rest. Turn it on to advertise the full tool list regardless of gating. Calls are still gated, so this changes what a client sees, not what it can do. A stale-catalog warning asks external clients to refresh their tools without ending the conversation. Phoenix-owned surfaces load their tools from current settings each turn. Capability grants do not interrupt a waiting tool; a restrictive permission edit can withhold an affected result, which is reported as a tool refusal so the conversation can continue. Revocation and uncertain write outcomes retain their separate safeguards.</dd></div>
           <div class="kv-row"><dt>Inline approval wait</dt><dd>Off by default. A confirm-gated call returns <code>pending_approval</code> as soon as the approval is queued, so a run of writes reaches the Approvals queue in seconds and you clear them individually or as a batch; the agent asks for the outcome when it needs one. Choosing a duration instead makes the call hold the response open until you decide, which suits a client that never asks, at the cost of the next approval not being created until the previous call stops waiting. <strong>This affects external MCP clients only.</strong> Agent Chat, the Assist bridge, the voice agent and AI Task ignore it: they queue immediately and wait their own way, so testing the setting in Agent Chat will show no difference.</dd></div>

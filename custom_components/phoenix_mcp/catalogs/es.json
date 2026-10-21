@@ -224,7 +224,6 @@
       "loadTreeFailed": "No se pudo cargar el árbol de entidades.",
       "missingBadge": "Ausente",
       "missingTitle": "Esta entidad ya no existe en Home Assistant.",
-      "noMesaProfile": "Sin perfil MESA: crear uno",
       "permFor": "Permiso para {name}",
       "permForDevice": "Permiso para el dispositivo {name}",
       "permForDomain": "Permiso para el dominio {name}",
@@ -239,13 +238,8 @@
       "selRed": "Deny: Denegar (anula todos los elementos secundarios)",
       "selSelected": "{title}, seleccionado",
       "selYellow": "Read: Solo lectura",
-      "simEntityAria": "ID de entidad a simular",
-      "simEntityPlaceholder": "entity_id (p. ej. light.kitchen)",
-      "simFailed": "No se pudo simular.",
-      "simResult": "Resultado: ",
       "simulateEntityTitle": "Simular permisos para {id}",
       "simulateTitle": "Simular permisos de {type} para {id}",
-      "simulating": "Simulando...",
       "stateDeny": "DENEGAR",
       "stateInherit": "HEREDAR",
       "stateNoAccess": "SIN ACCESO",
@@ -264,7 +258,6 @@
       "unmatchedDeviceName": "Dispositivo no presente en el árbol actual",
       "unmatchedDevicesNote": "Estos permisos explícitos hacen referencia a IDs de dispositivo que no están en el árbol de entidades actual. Establezca N para eliminar un permiso obsoleto.",
       "unmatchedDevicesTitle": "Permisos de dispositivo sin coincidencia",
-      "viewMesaProfile": "Ver perfil MESA",
       "hintCaution": "Se envía a los agentes y a sus proveedores de modelos. No incluya nunca contraseñas ni códigos."
     },
     "changes": {
@@ -1037,11 +1030,8 @@
       "attachmentsVisionUnsupported": "Este modelo no acepta imágenes."
     },
     "accessKeys": {
-      "advanced": "Avanzado",
       "announceAllHelp": "Muestre todas las herramientas de Phoenix MCP, incluidas las que esta clave de acceso no puede usar. Déjelo desactivado para reducir el uso del modelo y evitar llamadas fallidas. Actívelo solo para solucionar problemas.",
       "announceAllLabel": "Anunciar siempre todas las herramientas",
-      "announceSummaryAll": "Todas las herramientas anunciadas",
-      "announceSummaryScoped": "Limitado a las capacidades",
       "archivedDeleteFailed": "Error al eliminar.",
       "archivedEmpty": "No hay claves de acceso archivadas.",
       "archivedTitle": "Claves de acceso archivadas",
@@ -1049,7 +1039,6 @@
       "assistExposureLabel": "Limitar a entidades expuestas a Assist",
       "back": "Atrás",
       "cancel": "Cancelar",
-      "capsSummary": "{persona} · {allow} permitir / {confirm} confirmar / {deny} denegar",
       "cardCapabilities": "Capacidades",
       "cardPersona": "Persona",
       "cardPresets": "Preajustes",
@@ -1093,8 +1082,6 @@
       "editAria": "Editar clave de acceso {name}",
       "empty": "Aún no hay claves de acceso. Cree una para empezar.",
       "emptyFiltered": "Ninguna clave de acceso coincide con el filtro.",
-      "emulatorPassThrough": "Las claves de acceso de paso directo omiten el árbol de permisos, por lo que cada entidad que no sea de Phoenix se resuelve con acceso de escritura. No se necesita simulación.",
-      "emulatorTitle": "Emulador de permisos efectivos",
       "enablePtBody": "<strong>El paso directo otorga a esta clave de acceso un acceso amplio a entidades y servicios.</strong> Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo, el acceso al registro del sistema, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
       "enablePtCheck": "Entiendo que esta clave de acceso tendrá un acceso amplio a Home Assistant",
       "enablePtFailed": "No se pudo habilitar el paso directo.",
@@ -1173,8 +1160,6 @@
       "presetSwitchSaveInto": "Sus cambios sin guardar se guardarán primero en <strong>{name}</strong>:",
       "presetSwitchTitle": "Cambiar al preajuste: {name}",
       "presetSwitchTo": "Cambiar a",
-      "presetsSummaryModified": "{name} (modificado)",
-      "presetsSummarySaved": "{count} guardados",
       "ptConvertBody": "Cambiar al modo con ámbito aplica el árbol de permisos guardado de inmediato. Si no tiene concesiones, esta clave de acceso perderá el acceso a las entidades hasta que las añada.",
       "ptConvertFailed": "No se pudo convertir la clave de acceso.",
       "ptHeaderBanner": "<strong>Esta es una clave de acceso de paso directo.</strong> Tiene un acceso amplio a las entidades y los servicios de Home Assistant. Las capacidades protegidas, las reglas de MESA, la eliminación de atributos sensibles y el bloqueo del dominio de Phoenix MCP permanecen activos.",
@@ -1185,8 +1170,6 @@
       "rateLimitingDisabled": "El límite de velocidad está deshabilitado para esta clave de acceso.",
       "rateRequestsLabel": "Solicitudes por minuto (0 = deshabilitado)",
       "rateSaveFailed": "Error al guardar.",
-      "rateSummary": "{requests}/min · ráfaga {burst}",
-      "rateSummaryNone": "Sin límite",
       "rateValuesError": "Los valores deben ser números enteros no negativos.",
       "rawAccessKeyNote": "<strong>Esta clave de acceso no se mostrará de nuevo.</strong> Cópielo ahora antes de cerrar.",
       "reconnectBanner": "<strong>Vuelva a conectar su agente.</strong> Las herramientas disponibles de esta clave de acceso han cambiado.",
@@ -1231,12 +1214,7 @@
       "notesHelp": "Indicaciones para todos los agentes que usan esta clave de acceso, como el nombre de las habitaciones y los dispositivos, quién la usa o dónde se guarda la documentación del hogar. Phoenix MCP añade las notas a las instrucciones de cada agente y oculta los ID de entidad fuera del ámbito de esta clave de acceso.",
       "notesLabel": "Notas para los agentes",
       "notesPlaceholder": "Ejemplo: La habitación de invitados se llama el estudio. Pregunte antes de cambiar algo en el cuarto del bebé.",
-      "notesSummaryNone": "Ninguna",
-      "notesTooLong": "Las notas deben tener {max} caracteres o menos.",
-      "notesSummaryChars": {
-        "one": "{count} carácter",
-        "other": "{count} caracteres"
-      }
+      "notesTooLong": "Las notas deben tener {max} caracteres o menos."
     },
     "mesa": {
       "addAreaProfile": "Añadir perfil de área",
@@ -2415,7 +2393,13 @@
       "logDetails": "Detalles del registro",
       "logDetailsEmpty": "Seleccione una entrada de un registro para ver sus detalles.",
       "previousRecord": "Entrada anterior",
-      "nextRecord": "Entrada siguiente"
+      "nextRecord": "Entrada siguiente",
+      "keySettings": "Configuración de la clave",
+      "keyActions": "Acciones de la clave",
+      "rename": "Renombrar",
+      "selectAccessKey": "Seleccione una clave de acceso para ver su configuración.",
+      "clearAllPermissions": "Borrar todos los permisos",
+      "summaryPassThrough": "Las claves de acceso de paso directo no usan el árbol de permisos, por lo que no hay reglas que resumir."
     }
   },
   "notification": {

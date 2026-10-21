@@ -17,7 +17,8 @@ import { DEFAULT_TOOLBAR, readRecord, writeRecord, WORKSPACE_IDS, type Env, type
 import { Toolbar, workspaceMenu } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
-import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, windowTitle } from "./workspaces";
+import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, windowAvailable, windowTitle } from "./workspaces";
+import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
 
 /** Below this panel width the phone stack is used; the gap between the two bounds stops flicker. */
 const PHONE_BELOW = 680;
@@ -74,7 +75,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, TRANSIENT);
+      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional });
       controllers.set(id, controller);
     }
     return controller;
@@ -87,6 +88,11 @@ export function Shell() {
     if (env === "desktop") controllerFor("logs").ensureOpen("logDetails");
     requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="logDetails"]')?.scrollIntoView?.({ block: "nearest" }));
   };
+
+  // A jump to a permission (from Permission Summary) brings the Permissions tree into view.
+  const revealPermissions = useCallback(() => {
+    if (env === "desktop") controllerFor("accessKeys").ensureOpen("permissions");
+  }, [env, controllerFor]);
 
   // Toolbar placement, display mode and collapsed state, remembered with the arrangement.
   const [toolbar, setToolbar] = useState<ToolbarState>(() => record?.toolbar ?? DEFAULT_TOOLBAR);
@@ -146,8 +152,12 @@ export function Shell() {
   const showAttention = (attentionCount > 0 || d.attentionRequested) && (dismissedAt === null || attentionCount > dismissedAt);
   useEffect(() => { if (attentionCount === 0) setDismissedAt(null); }, [attentionCount]);
   const dismissAttention = d.dismissAttentionRequest;
+  const settings = d.settings;
   useEffect(() => {
     for (const [id, controller] of controllers) {
+      // Presets appears only while its setting is on.
+      controller.availability = (w) => windowAvailable(w, settings);
+      controller.syncAvailable();
       controller.onTransientClose = () => { setDismissedAt(attentionCount); dismissAttention(); };
       if (env === "desktop" && id === d.workspace && showAttention) controller.showTransient(ATTENTION_WINDOW);
       else controller.hideTransient(ATTENTION_WINDOW);
@@ -162,6 +172,15 @@ export function Shell() {
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
     <LogSelectionContext.Provider value={logSelection}>
+    <AccessKeyDetailProvider
+      accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
+      onDeselect={d.goBack}
+      onRefresh={d.refreshAccessKeys}
+      onReveal={revealPermissions}
+      presetsEnabled={s?.access_key_presets_enabled ?? false}
+      esphomeIntegration={s ? !!s.esphome_integration : null}
+      esphomeBuilder={s ? !!s.esphome_builder : null}
+    >
       <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
@@ -181,7 +200,7 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} />}
+            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} />}
         </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
@@ -202,6 +221,7 @@ export function Shell() {
           </ErrorBoundary>
         )}
       </div>
+    </AccessKeyDetailProvider>
     </LogSelectionContext.Provider>
     </ToolRegistryContext.Provider>
     </ContextMenuHost>

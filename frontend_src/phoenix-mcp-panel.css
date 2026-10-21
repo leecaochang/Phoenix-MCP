@@ -448,8 +448,16 @@
 .phx-log-details-bar .audit-section-title { margin: 0; }
 .phx-log-details-nav { display: flex; gap: 4px; }
 .phx-log-details-nav .phx-toolbar-button { width: 32px; height: 32px; min-width: 32px; padding: 0; }
-.phx-log-details-empty { margin: 16px 0; color: var(--phx-text-2); }
-.audit-table tr.is-selected > td { background: var(--phx-accent-lt); }
+.phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
+.audit-table tr.is-selected > td,
+.access-key-table tr.is-selected > td { background: var(--phx-accent-lt); }
+
+/* Access Keys: the selected key's windows below the key list. */
+.phx-window-pad { padding-top: 12px; }
+.phx-window-pad > .tree-header-actions { margin-bottom: 12px; }
+.phx-section-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.phx-key-settings-section + .phx-key-settings-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--phx-border); }
+.access-key-table .access-key-name-input { border-color: var(--phx-field-border); }
 @media (pointer: coarse) {
   .phx-menu-item { padding: 12px 12px; }
   .phx-toolbar-button { height: 40px; }

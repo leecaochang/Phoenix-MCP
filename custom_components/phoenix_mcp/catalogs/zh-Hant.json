@@ -1367,7 +1367,6 @@
       "loadTreeFailed": "載入實體樹失敗。",
       "missingBadge": "已失效",
       "missingTitle": "此實體在 Home Assistant 中已不存在。",
-      "noMesaProfile": "尚無 MESA 策略，點選建立",
       "permFor": "{name} 的權限",
       "permForDevice": "裝置 {name} 的權限",
       "permForDomain": "域 {name} 的權限",
@@ -1382,13 +1381,8 @@
       "selRed": "Deny：拒絕（覆蓋所有下級）",
       "selSelected": "{title}，已選中",
       "selYellow": "Read：唯讀",
-      "simEntityAria": "要模擬的實體 ID",
-      "simEntityPlaceholder": "entity_id（例如 light.kitchen）",
-      "simFailed": "模擬失敗。",
-      "simResult": "結果：",
       "simulateEntityTitle": "模擬 {id} 的權限",
       "simulateTitle": "模擬 {type} {id} 的權限",
-      "simulating": "模擬中…",
       "stateDeny": "拒絕",
       "stateInherit": "繼承",
       "stateNoAccess": "無存取權限",
@@ -1407,7 +1401,6 @@
       "unmatchedDeviceName": "裝置不在目前實體樹中",
       "unmatchedDevicesNote": "這些顯式授權引用了目前實體樹中沒有的裝置 ID。選擇 N 可移除失效授權。",
       "unmatchedDevicesTitle": "未匹配的裝置權限",
-      "viewMesaProfile": "檢視 MESA 策略",
       "hintCaution": "提示會傳送給智慧體及其模型提供者。切勿在此填寫密碼。"
     },
     "personas": {
@@ -1811,11 +1804,8 @@
       "renderFailed": "無法顯示此檢視。請重新整理再試，或選擇其他區段。"
     },
     "accessKeys": {
-      "advanced": "高階",
       "announceAllHelp": "向模型宣告所有 Phoenix MCP 工具，包括此存取金鑰無法使用的工具。保持關閉可減少模型用量並避免呼叫失敗。僅在排查問題時啟用。",
       "announceAllLabel": "始終宣告全部工具",
-      "announceSummaryAll": "已宣告全部工具",
-      "announceSummaryScoped": "按能力範圍宣告",
       "archivedDeleteFailed": "刪除失敗。",
       "archivedEmpty": "沒有已歸檔的存取金鑰。",
       "archivedTitle": "已歸檔的存取金鑰",
@@ -1823,7 +1813,6 @@
       "assistExposureLabel": "僅限 Assist 已公開的實體",
       "back": "返回",
       "cancel": "取消",
-      "capsSummary": "{persona} · {allow} 允許 / {confirm} 確認 / {deny} 拒絕",
       "cardCapabilities": "能力",
       "cardPersona": "角色",
       "cardPresets": "預設",
@@ -1867,8 +1856,6 @@
       "editAria": "編輯存取金鑰 {name}",
       "empty": "尚無存取金鑰。建立一個即可開始。",
       "emptyFiltered": "沒有符合篩選條件的存取金鑰。",
-      "emulatorPassThrough": "直通存取金鑰會繞過權限樹，因此每個非 Phoenix 實體都會解析為寫入權限。無需模擬。",
-      "emulatorTitle": "生效權限模擬器",
       "enablePtBody": "<strong>直通模式會賦予此存取金鑰廣泛的實體和服務存取權限。</strong>設定變更、系統操作、高風險能力、系統日誌存取、MESA 規則、Phoenix MCP 遮蔽列表以及敏感屬性移除仍然適用。",
       "enablePtCheck": "我瞭解此存取金鑰將擁有廣泛的 Home Assistant 存取權限",
       "enablePtFailed": "啟用直通模式失敗。",
@@ -1947,8 +1934,6 @@
       "presetSwitchSaveInto": "您未儲存的更改將先儲存到 <strong>{name}</strong>：",
       "presetSwitchTitle": "切換到預設：{name}",
       "presetSwitchTo": "切換到",
-      "presetsSummaryModified": "{name}（已修改）",
-      "presetsSummarySaved": "已儲存 {count} 個",
       "ptConvertBody": "切換到限定範圍模式會立即套用已儲存的權限樹。如果其中沒有任何授權，此存取金鑰將失去實體存取權限，直到您新增授權為止。",
       "ptConvertFailed": "轉換存取金鑰失敗。",
       "ptHeaderBanner": "<strong>這是一個直通存取金鑰。</strong>它對 Home Assistant 的實體和服務擁有廣泛的存取權限。受保護的能力、MESA 規則、敏感屬性移除以及 Phoenix MCP 域遮蔽仍然有效。",
@@ -1959,8 +1944,6 @@
       "rateLimitingDisabled": "此存取金鑰已停用速率限制。",
       "rateRequestsLabel": "每分鐘請求數（0 表示停用）",
       "rateSaveFailed": "儲存失敗。",
-      "rateSummary": "{requests}/分鐘 · 突發 {burst}",
-      "rateSummaryNone": "無限制",
       "rateValuesError": "取值必須為非負整數。",
       "rawAccessKeyNote": "<strong>此存取金鑰不會再次顯示。</strong>請在關閉前複製。",
       "reconnectBanner": "<strong>請重新連線您的智慧體。</strong>此存取金鑰可用的工具已發生變化。",
@@ -2005,12 +1988,7 @@
       "notesHelp": "為使用此存取金鑰的每個智慧體提供指引，例如房間和裝置的叫法、由誰使用，或家庭文件的存放位置。Phoenix MCP 會將備註加入每個智慧體的指令中，並隱藏此存取金鑰範圍之外的實體 ID。",
       "notesLabel": "給智慧體的備註",
       "notesPlaceholder": "範例：客房稱為書房。變更兒童房中的任何裝置前請先詢問。",
-      "notesSummaryNone": "無",
-      "notesTooLong": "備註不能超過 {max} 個字元。",
-      "notesSummaryChars": {
-        "one": "{count} 個字元",
-        "other": "{count} 個字元"
-      }
+      "notesTooLong": "備註不能超過 {max} 個字元。"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",
@@ -2420,7 +2398,13 @@
       "logDetails": "日誌詳細資料",
       "logDetailsEmpty": "在日誌中選擇一個條目以檢視詳細資料。",
       "previousRecord": "上一個條目",
-      "nextRecord": "下一個條目"
+      "nextRecord": "下一個條目",
+      "keySettings": "金鑰設定",
+      "keyActions": "金鑰操作",
+      "rename": "重新命名",
+      "selectAccessKey": "選擇一個存取金鑰以檢視其設定。",
+      "clearAllPermissions": "清除所有權限",
+      "summaryPassThrough": "直通存取金鑰不使用權限樹，因此沒有可彙總的規則。"
     }
   },
   "voice": {

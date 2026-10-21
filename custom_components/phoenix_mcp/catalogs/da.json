@@ -10,11 +10,8 @@
       "accessKeyNameAria": "Navn på adgangsnøgle (kan redigeres)",
       "accessKeyRenameTitle": "Omdøb denne adgangsnøgle; gemmes, når du klikker væk",
       "accessKeyRotatedTitle": "Adgangsnøgle roteret: {name}",
-      "advanced": "Avanceret",
       "announceAllHelp": "Vis alle Phoenix MCP-værktøjer, også værktøjer som denne adgangsnøgle ikke kan bruge. Lad den være slået fra for at mindske modelforbruget og undgå mislykkede kald. Slå kun til ved fejlfinding.",
       "announceAllLabel": "Annoncér altid alle værktøjer",
-      "announceSummaryAll": "Alle værktøjer annonceres",
-      "announceSummaryScoped": "Afgrænset til funktioner",
       "archivedDeleteFailed": "Sletning mislykkedes.",
       "archivedEmpty": "Ingen arkiverede adgangsnøgler.",
       "archivedTitle": "Arkiverede adgangsnøgler",
@@ -22,7 +19,6 @@
       "assistExposureLabel": "Begræns til Assist-eksponerede entiteter",
       "back": "Tilbage",
       "cancel": "Annullér",
-      "capsSummary": "{persona} · {allow} tillad / {confirm} bekræft / {deny} nægt",
       "cardCapabilities": "Funktioner",
       "cardPersona": "Persona",
       "cardPresets": "Forudindstillinger",
@@ -66,8 +62,6 @@
       "editAria": "Redigér adgangsnøgle {name}",
       "empty": "Ingen adgangsnøgler endnu. Opret en for at komme i gang.",
       "emptyFiltered": "Ingen adgangsnøgler matcher filteret.",
-      "emulatorPassThrough": "Adgangsnøgler med pass-through omgår tilladelsestræet, så enhver entitet uden for Phoenix vurderes til skrivetilladelse. Ingen simulering nødvendig.",
-      "emulatorTitle": "Effektiv tilladelsesemulator",
       "enablePtBody": "<strong>Pass-through giver denne adgangsnøgle bred adgang til entiteter og tjenester.</strong> Konfigurationsændringer, systemhandlinger, højrisikofunktioner, adgang til systemloggen, MESA-regler, bloklisten i Phoenix MCP og fjernelse af følsomme attributter gælder stadig.",
       "enablePtCheck": "Jeg forstår, at denne adgangsnøgle får bred adgang til Home Assistant",
       "enablePtFailed": "Kunne ikke aktivere pass-through.",
@@ -146,8 +140,6 @@
       "presetSwitchSaveInto": "Dine ikke-gemte ændringer gemmes først i <strong>{name}</strong>:",
       "presetSwitchTitle": "Skift til forudindstilling: {name}",
       "presetSwitchTo": "Skift til",
-      "presetsSummaryModified": "{name} (ændret)",
-      "presetsSummarySaved": "{count} gemt",
       "ptConvertBody": "Skift til afgrænset tilstand anvender det gemte tilladelsestræ med det samme. Hvis det ikke indeholder nogen tildelinger, mister denne adgangsnøgle adgangen til entiteter, indtil du tilføjer dem.",
       "ptConvertFailed": "Kunne ikke konvertere adgangsnøglen.",
       "ptHeaderBanner": "<strong>Dette er en pass-through-adgangsnøgle.</strong> Den har bred adgang til Home Assistant-entiteter og -tjenester. Beskyttede funktioner, MESA-regler, fjernelse af følsomme attributter og Phoenix MCP-domæneblokeringen forbliver aktive.",
@@ -158,8 +150,6 @@
       "rateLimitingDisabled": "Hastighedsbegrænsning er deaktiveret for denne adgangsnøgle.",
       "rateRequestsLabel": "Anmodninger pr. minut (0 = deaktiveret)",
       "rateSaveFailed": "Kunne ikke gemme.",
-      "rateSummary": "{requests}/min · spidsbelastning {burst}",
-      "rateSummaryNone": "Ingen grænse",
       "rateValuesError": "Værdierne skal være ikke-negative heltal.",
       "rawAccessKeyNote": "<strong>Denne adgangsnøgle vises ikke igen.</strong> Kopiér den nu, før du lukker.",
       "reconnectBanner": "<strong>Genopret forbindelsen til din agent.</strong> Denne adgangsnøgles tilgængelige værktøjer er ændret.",
@@ -200,12 +190,7 @@
       "notesHelp": "Vejledning til alle agenter, der bruger denne adgangsnøgle, fx hvad rum og enheder hedder, hvem der bruger den, eller hvor husstandens dokumentation ligger. Phoenix MCP tilføjer noterne til hver agents instruktioner og skjuler entitets-id'er uden for denne adgangsnøgles omfang.",
       "notesLabel": "Noter til agenter",
       "notesPlaceholder": "Eksempel: Gæsteværelset kaldes hobbyrummet. Spørg, før der ændres noget i børneværelset.",
-      "notesSummaryNone": "Ingen",
-      "notesTooLong": "Noter må højst indeholde {max} tegn.",
-      "notesSummaryChars": {
-        "one": "{count} tegn",
-        "other": "{count} tegn"
-      }
+      "notesTooLong": "Noter må højst indeholde {max} tegn."
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} skal være en streng med et adgangsnøgle-ID eller null.",
@@ -1764,7 +1749,6 @@
       "loadTreeFailed": "Kunne ikke indlæse entitetstræet.",
       "missingBadge": "Mangler",
       "missingTitle": "Denne entitet findes ikke længere i Home Assistant.",
-      "noMesaProfile": "Ingen MESA-profil - opret en",
       "permFor": "Tilladelse for {name}",
       "permForDevice": "Tilladelse for enheden {name}",
       "permForDomain": "Tilladelse for domænet {name}",
@@ -1779,13 +1763,8 @@
       "selRed": "Deny: Nægt (tilsidesætter alle underordnede)",
       "selSelected": "{title}, valgt",
       "selYellow": "Read: Skrivebeskyttet",
-      "simEntityAria": "Entitets-ID, der skal simuleres",
-      "simEntityPlaceholder": "entity_id (for eksempel light.kitchen)",
-      "simFailed": "Simulering mislykkedes.",
-      "simResult": "Resultat: ",
       "simulateEntityTitle": "Simulér tilladelser for {id}",
       "simulateTitle": "Simulér {type}-tilladelser for {id}",
-      "simulating": "Simulerer...",
       "stateDeny": "NÆGT",
       "stateInherit": "NEDARV",
       "stateNoAccess": "INGEN ADGANG",
@@ -1804,7 +1783,6 @@
       "unmatchedDeviceName": "Enhed findes ikke i det aktuelle træ",
       "unmatchedDevicesNote": "Disse eksplicitte tildelinger henviser til enheds-ID'er, der ikke findes i det aktuelle entitetstræ. Angiv N for at fjerne en forældet tildeling.",
       "unmatchedDevicesTitle": "Ikke matchede enhedstilladelser",
-      "viewMesaProfile": "Vis MESA-profil",
       "hintCaution": "Sendes til agenter og deres modeludbydere. Medtag aldrig adgangskoder eller koder."
     },
     "personas": {
@@ -2420,7 +2398,13 @@
       "logDetails": "Logdetaljer",
       "logDetailsEmpty": "Vælg en post i en log for at se detaljerne.",
       "previousRecord": "Forrige post",
-      "nextRecord": "Næste post"
+      "nextRecord": "Næste post",
+      "keySettings": "Nøgleindstillinger",
+      "keyActions": "Nøglehandlinger",
+      "rename": "Omdøb",
+      "selectAccessKey": "Vælg en adgangsnøgle for at se dens indstillinger.",
+      "clearAllPermissions": "Ryd alle tilladelser",
+      "summaryPassThrough": "Adgangsnøgler med pass-through bruger ikke tilladelsestræet, så der er ingen regler at opsummere."
     }
   },
   "voice": {

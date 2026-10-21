@@ -314,11 +314,8 @@
       }
     },
     "accessKeys": {
-      "advanced": "Avancé",
       "announceAllHelp": "Afficher chaque outil Phoenix MCP, y compris les outils que cette clé d’accès ne peut pas utiliser. Laissez désactivé pour réduire l'utilisation du modèle et éviter les appels échoués. Activez uniquement pour le dépannage.",
       "announceAllLabel": "Toujours annoncer tous les outils",
-      "announceSummaryAll": "Tous les outils annoncés",
-      "announceSummaryScoped": "Limité aux capacités",
       "archivedDeleteFailed": "Échec de la suppression.",
       "archivedEmpty": "Aucune clé d’accès archivée.",
       "archivedTitle": "Clés d’accès archivées",
@@ -326,7 +323,6 @@
       "assistExposureLabel": "Limiter aux entités exposées à Assist",
       "back": "Retour",
       "cancel": "Annuler",
-      "capsSummary": "{persona} · {allow} autoriser / {confirm} confirmer / {deny} refuser",
       "cardCapabilities": "Capacités",
       "cardPersona": "Personnalité",
       "cardPresets": "Préréglages",
@@ -370,8 +366,6 @@
       "editAria": "Modifier la clé d’accès {name}",
       "empty": "Aucune clé d’accès pour l'instant. Créez-en une pour commencer.",
       "emptyFiltered": "Aucune clé d’accès ne correspond au filtre.",
-      "emulatorPassThrough": "Les clés d’accès en transmission directe contournent l'arbre des autorisations, chaque entité non Phoenix se résout donc en écriture. Aucune simulation nécessaire.",
-      "emulatorTitle": "Émulateur d'autorisation effective",
       "enablePtBody": "<strong>La transmission directe donne à cette clé d’accès un large accès aux entités et aux services.</strong> Les modifications de configuration, les actions système, les capacités à risque élevé, l'accès au journal système, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
       "enablePtCheck": "Je comprends que cette clé d’accès disposera d'un large accès à Home Assistant",
       "enablePtFailed": "Échec de l'activation de la transmission directe.",
@@ -450,8 +444,6 @@
       "presetSwitchSaveInto": "Vos modifications non enregistrées seront d'abord enregistrées dans <strong>{name}</strong> :",
       "presetSwitchTitle": "Changer pour le préréglage : {name}",
       "presetSwitchTo": "Changer pour",
-      "presetsSummaryModified": "{name} (modifié)",
-      "presetsSummarySaved": "{count} enregistrés",
       "ptConvertBody": "Le passage en mode limité applique immédiatement l'arbre des autorisations enregistré. S'il n'a aucune autorisation, cette clé d’accès perdra l'accès aux entités jusqu'à ce que vous en ajoutiez.",
       "ptConvertFailed": "Échec de la conversion de la clé d’accès.",
       "ptHeaderBanner": "<strong>Ceci est une clé d’accès en transmission directe.</strong> Elle a un large accès aux entités et aux services de Home Assistant. Les capacités protégées, les règles MESA, la suppression des attributs sensibles et le blocage du domaine Phoenix MCP restent actifs.",
@@ -462,8 +454,6 @@
       "rateLimitingDisabled": "La limite de débit est désactivée pour cette clé d’accès.",
       "rateRequestsLabel": "Requêtes par minute (0 = désactivé)",
       "rateSaveFailed": "Échec de l'enregistrement.",
-      "rateSummary": "{requests}/min · rafale {burst}",
-      "rateSummaryNone": "Aucune limite",
       "rateValuesError": "Les valeurs doivent être des entiers non négatifs.",
       "rawAccessKeyNote": "<strong>Cette clé d’accès ne sera plus affichée.</strong> Copiez-le maintenant avant de fermer.",
       "reconnectBanner": "<strong>Reconnectez votre agent.</strong> Les outils disponibles de cette clé d’accès ont changé.",
@@ -508,12 +498,7 @@
       "notesHelp": "Indications pour chaque agent qui utilise cette clé d’accès, par exemple le nom des pièces et des appareils, qui l’utilise ou l’emplacement de la documentation du domicile. Phoenix MCP ajoute les notes aux instructions de chaque agent et masque les ID d'entité situés hors du périmètre de cette clé d’accès.",
       "notesLabel": "Notes pour les agents",
       "notesPlaceholder": "Exemple : La chambre d’amis s’appelle le bureau. Demandez avant de modifier quoi que ce soit dans la chambre du bébé.",
-      "notesSummaryNone": "Aucune",
-      "notesTooLong": "Les notes doivent contenir {max} caractères ou moins.",
-      "notesSummaryChars": {
-        "one": "{count} caractère",
-        "other": "{count} caractères"
-      }
+      "notesTooLong": "Les notes doivent contenir {max} caractères ou moins."
     },
     "shell": {
       "tabAccessKeys": "Clés d’accès",
@@ -560,7 +545,6 @@
       "loadTreeFailed": "Échec du chargement de l'arbre des entités.",
       "missingBadge": "Manquant",
       "missingTitle": "Cette entité n'existe plus dans Home Assistant.",
-      "noMesaProfile": "Aucun profil MESA - en créer un",
       "permFor": "Autorisation pour {name}",
       "permForDevice": "Autorisation pour l'appareil {name}",
       "permForDomain": "Autorisation pour le domaine {name}",
@@ -575,13 +559,8 @@
       "selRed": "Deny: Refuser (remplace tous les enfants)",
       "selSelected": "{title}, sélectionné",
       "selYellow": "Read: Lecture seule",
-      "simEntityAria": "ID d'entité à simuler",
-      "simEntityPlaceholder": "entity_id (par ex. light.kitchen)",
-      "simFailed": "Échec de la simulation.",
-      "simResult": "Résultat : ",
       "simulateEntityTitle": "Simuler les autorisations pour {id}",
       "simulateTitle": "Simuler les autorisations de type {type} pour {id}",
-      "simulating": "Simulation...",
       "stateDeny": "REFUSER",
       "stateInherit": "HÉRITER",
       "stateNoAccess": "AUCUN ACCÈS",
@@ -600,7 +579,6 @@
       "unmatchedDeviceName": "Appareil absent de l'arbre actuel",
       "unmatchedDevicesNote": "Ces autorisations explicites font référence à des ID d'appareil absents de l'arbre des entités actuel. Appuyez sur N pour supprimer une autorisation obsolète.",
       "unmatchedDevicesTitle": "Autorisations d'appareil non associées",
-      "viewMesaProfile": "Voir le profil MESA",
       "hintCaution": "Cette indication est envoyée aux agents et à leurs fournisseurs de modèle. N’y mettez jamais de mots de passe ni de codes."
     },
     "changes": {
@@ -2415,7 +2393,13 @@
       "logDetails": "Détails du journal",
       "logDetailsEmpty": "Sélectionnez une entrée dans un journal pour en voir les détails.",
       "previousRecord": "Entrée précédente",
-      "nextRecord": "Entrée suivante"
+      "nextRecord": "Entrée suivante",
+      "keySettings": "Paramètres de la clé",
+      "keyActions": "Actions de la clé",
+      "rename": "Renommer",
+      "selectAccessKey": "Sélectionnez une clé d’accès pour en voir les paramètres.",
+      "clearAllPermissions": "Effacer toutes les autorisations",
+      "summaryPassThrough": "Les clés d’accès en transmission directe n’utilisent pas l’arbre des autorisations ; il n’y a donc aucune règle à résumer."
     }
   },
   "notification": {

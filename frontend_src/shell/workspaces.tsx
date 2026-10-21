@@ -3,12 +3,15 @@
  * the windows: each keeps its own behavior, data loading and safety checks.
  */
 
-import { createContext, useContext, useMemo, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { AccessKeyListView } from "../views/AccessKeyList";
-import { AccessKeyDetailView } from "../views/AccessKeyDetail";
+import {
+  AccessKeyNotices, CapabilitiesWindow, KeySettingsWindow, PermissionSummaryWindow, PermissionsWindow, PersonaWindow, PresetsWindow,
+  useAccessKeyDetail, useKeyActionsTool,
+} from "../views/AccessKeyDetail";
 import { ApprovalsView } from "../views/ApprovalsView";
 import { AuditView } from "../views/AuditView";
 import { ChangesView } from "../views/ChangesView";
@@ -20,6 +23,8 @@ import { t } from "../i18n";
 import type { IconName } from "../ui/Icon";
 import { ControllerContext } from "./dock/TitleBar";
 import { usePanelData } from "./PanelData";
+import type { GlobalSettings } from "../types";
+import type { Slot } from "./dock/geometry";
 import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
@@ -27,6 +32,12 @@ import { LogDetailsContent } from "./logDetails";
 
 export const WINDOW_TITLE_KEYS = {
   accessKeys: "shell.tabAccessKeys",
+  persona: "accessKeys.cardPersona",
+  capabilities: "accessKeys.cardCapabilities",
+  permissions: "accessKeys.permissionsTree",
+  permissionSummary: "accessKeys.permissionSummary",
+  keySettings: "workspace.keySettings",
+  presets: "accessKeys.cardPresets",
   approvals: "shell.tabApprovals",
   changes: "shell.tabChanges",
   mesa: "shell.tabMesa",
@@ -51,10 +62,43 @@ export interface WorkspaceDef {
   icon: IconName;
   windows: WindowId[];
   arrange: (api: DockviewApi, add: Add) => void;
+  /** Windows that start folded into their title bars. */
+  folded?: WindowId[];
+  /** Windows shown only while a setting allows, with where each appears when it does. */
+  conditional?: Partial<Record<WindowId, Slot>>;
 }
 
+/** Whether a conditional window is allowed by the current settings; null while they load. */
+export function windowAvailable(id: string, settings: GlobalSettings | null): boolean | null {
+  if (id !== "presets") return true;
+  return settings ? !!settings.access_key_presets_enabled : null;
+}
+
+const size = (api: DockviewApi, id: string, dims: { width?: number; height?: number }) => api.getPanel(id)?.group.api.setSize(dims);
+
 export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
-  accessKeys: { labelKey: "shell.tabAccessKeys", icon: "accessKeys", windows: ["accessKeys", "attention"], arrange: (_, add) => add("accessKeys") },
+  accessKeys: {
+    labelKey: "shell.tabAccessKeys",
+    icon: "accessKeys",
+    windows: ["accessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
+    // The key list across the top; the selected key's windows below it, editing on the
+    // left and the Permissions tree on the right. Specialized and informational windows
+    // start folded, as accepted for Access Keys.
+    arrange: (api, add) => {
+      add("accessKeys");
+      add("persona", { direction: "below" });
+      add("permissions", { referencePanel: "persona", direction: "right" });
+      add("capabilities", { referencePanel: "persona", direction: "below" });
+      add("keySettings", { referencePanel: "capabilities", direction: "below" });
+      add("permissionSummary", { referencePanel: "permissions", direction: "below" });
+      const listHeight = Math.round(Math.min(Math.max(api.height * 0.38, 200), 360));
+      size(api, "accessKeys", { height: listHeight });
+      size(api, "persona", { width: Math.round(api.width * 0.45) });
+      size(api, "persona", { height: Math.round((api.height - listHeight) * 0.45) });
+    },
+    folded: ["keySettings", "presets", "permissionSummary"],
+    conditional: { presets: { neighbor: "keySettings", side: "bottom" } },
+  },
   approvals: { labelKey: "shell.tabApprovals", icon: "approvals", windows: ["approvals", "attention"], arrange: (_, add) => add("approvals") },
   changes: { labelKey: "shell.tabChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
   mesa: { labelKey: "shell.tabMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
@@ -98,9 +142,20 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
 function AccessKeysContent() {
   const d = usePanelData();
   const view = d.accessKeyView;
+  const detail = useAccessKeyDetail();
+  const keyActions = useKeyActionsTool();
+  const controller = useContext(ControllerContext);
+  const wizard = view.name === "wizard";
+  // Setting up an agent needs room: the key list window fills the workspace until the wizard ends.
+  useEffect(() => {
+    const panel = controller?.api?.getPanel("accessKeys");
+    if (!wizard || !panel || panel.group.api.location.type !== "grid") return;
+    panel.api.maximize();
+    return () => { if (panel.api.isMaximized()) panel.api.exitMaximized(); };
+  }, [wizard, controller]);
   return (
-    <ErrorBoundary key={`${view.name}:${view.name === "detail" ? view.accessKeyId : ""}`}>
-      {view.name === "list" && (
+    <ErrorBoundary key={view.name}>
+      {wizard ? <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} /> : (
         <AccessKeyListView
           accessKeys={d.accessKeys}
           loading={d.loadingAccessKeys}
@@ -112,16 +167,12 @@ function AccessKeysContent() {
           onOpenCreate={() => d.setShowCreate(true)}
           onCloseCreate={() => d.setShowCreate(false)}
           onOpenSettings={d.goToSettings}
-        />
-      )}
-      {view.name === "wizard" && <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} />}
-      {view.name === "detail" && (
-        <AccessKeyDetailView
-          accessKeyId={view.accessKeyId}
-          onBack={d.goBack}
-          onRefresh={d.refreshAccessKeys}
-          presetsEnabled={d.settings?.access_key_presets_enabled ?? false}
-          esphome={d.settings ? { integration: !!d.settings.esphome_integration, builder: !!d.settings.esphome_builder } : null}
+          selectedId={view.name === "detail" ? view.accessKeyId : null}
+          renamingId={detail?.renaming ? detail.accessKeyId : null}
+          onRenamed={(updated) => { detail?.applyUpdate(updated); d.refreshAccessKeys(); }}
+          onRenameEnd={() => detail?.setRenaming(false)}
+          selectedKeyTools={keyActions}
+          notices={<AccessKeyNotices />}
         />
       )}
     </ErrorBoundary>
@@ -170,6 +221,12 @@ function AttentionContent() {
 
 export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   accessKeys: AccessKeysContent,
+  persona: PersonaWindow,
+  capabilities: CapabilitiesWindow,
+  permissions: PermissionsWindow,
+  permissionSummary: PermissionSummaryWindow,
+  keySettings: KeySettingsWindow,
+  presets: PresetsWindow,
   approvals: ApprovalsContent,
   changes: ChangesContent,
   mesa: MesaContent,

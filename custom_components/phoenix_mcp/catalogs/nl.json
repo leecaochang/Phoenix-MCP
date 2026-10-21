@@ -552,7 +552,6 @@
       "loadTreeFailed": "Entiteitenboom laden is mislukt.",
       "missingBadge": "Ontbreekt",
       "missingTitle": "Deze entiteit bestaat niet meer in Home Assistant.",
-      "noMesaProfile": "Geen MESA-profiel - maak er een aan",
       "permFor": "Machtiging voor {name}",
       "permForDevice": "Machtiging voor apparaat {name}",
       "permForDomain": "Machtiging voor domein {name}",
@@ -567,13 +566,8 @@
       "selRed": "Deny: Weigeren (overschrijft alle onderliggende niveaus)",
       "selSelected": "{title}, geselecteerd",
       "selYellow": "Read: Alleen-lezen",
-      "simEntityAria": "Te simuleren entiteits-ID",
-      "simEntityPlaceholder": "entity_id (bv. light.kitchen)",
-      "simFailed": "Simulatie mislukt.",
-      "simResult": "Resultaat: ",
       "simulateEntityTitle": "Machtigingen simuleren voor {id}",
       "simulateTitle": "{type}-machtigingen voor {id} simuleren",
-      "simulating": "Simuleren...",
       "stateDeny": "WEIGEREN",
       "stateInherit": "OVERNEMEN",
       "stateNoAccess": "GEEN TOEGANG",
@@ -592,7 +586,6 @@
       "unmatchedDeviceName": "Apparaat niet in huidige boom",
       "unmatchedDevicesNote": "Deze expliciete toekenningen verwijzen naar apparaat-ID's die niet in de huidige entiteitenboom staan. Zet N om een verouderde toekenning te verwijderen.",
       "unmatchedDevicesTitle": "Niet-gekoppelde apparaatmachtigingen",
-      "viewMesaProfile": "MESA-profiel bekijken",
       "hintCaution": "Wordt verzonden naar agents en hun modelproviders. Zet hier nooit wachtwoorden of codes in."
     },
     "diff": {
@@ -1206,11 +1199,8 @@
       "skillHarnessHint": "Installeer de handleiding in ~/.dsh/skills/phoenix/SKILL.md. Gebruik bij een eigen DSH_HOME de skills-map daarbinnen."
     },
     "accessKeys": {
-      "advanced": "Geavanceerd",
       "announceAllHelp": "Elke Phoenix MCP-tool weergeven, inclusief tools die deze toegangssleutel niet kan gebruiken. Laat dit uit staan om modelverbruik te verminderen en mislukte aanroepen te voorkomen. Alleen inschakelen voor probleemoplossing.",
       "announceAllLabel": "Altijd alle tools aankondigen",
-      "announceSummaryAll": "Alle tools aangekondigd",
-      "announceSummaryScoped": "Afgebakend tot mogelijkheden",
       "archivedDeleteFailed": "Verwijderen mislukt.",
       "archivedEmpty": "Geen gearchiveerde toegangssleutels.",
       "archivedTitle": "Gearchiveerde toegangssleutels",
@@ -1218,7 +1208,6 @@
       "assistExposureLabel": "Beperken tot aan Assist blootgestelde entiteiten",
       "back": "Terug",
       "cancel": "Annuleren",
-      "capsSummary": "{persona} · {allow} toestaan / {confirm} bevestigen / {deny} weigeren",
       "cardCapabilities": "Mogelijkheden",
       "cardPersona": "Persona",
       "cardPresets": "Voorinstellingen",
@@ -1262,8 +1251,6 @@
       "editAria": "Toegangssleutel {name} bewerken",
       "empty": "Nog geen toegangssleutels. Maak er een aan om te beginnen.",
       "emptyFiltered": "Geen toegangssleutels komen overeen met het filter.",
-      "emulatorPassThrough": "Pass-through-toegangssleutels omzeilen de machtigingsboom, dus elke niet-Phoenix-entiteit wordt opgelost naar schrijven. Geen simulatie nodig.",
-      "emulatorTitle": "Effectieve-machtigingsemulator",
       "enablePtBody": "<strong>Pass-through geeft deze toegangssleutel brede entiteits- en servicetoegang.</strong> Configuratiewijzigingen, systeemacties, risicovolle mogelijkheden, systeemlogboektoegang, MESA-regels, de Phoenix MCP-blokkeerlijst en het verwijderen van gevoelige attributen blijven van toepassing.",
       "enablePtCheck": "Ik begrijp dat deze toegangssleutel brede toegang tot Home Assistant zal hebben",
       "enablePtFailed": "Pass-through inschakelen is mislukt.",
@@ -1342,8 +1329,6 @@
       "presetSwitchSaveInto": "Je niet-opgeslagen wijzigingen worden eerst opgeslagen in <strong>{name}</strong>:",
       "presetSwitchTitle": "Schakelen naar voorinstelling: {name}",
       "presetSwitchTo": "Schakelen naar",
-      "presetsSummaryModified": "{name} (gewijzigd)",
-      "presetsSummarySaved": "{count} opgeslagen",
       "ptConvertBody": "Schakelen naar afgebakende modus past de opgeslagen machtigingsboom direct toe. Als deze geen toekenningen bevat, verliest deze toegangssleutel entiteitstoegang totdat je ze toevoegt.",
       "ptConvertFailed": "Toegangssleutel omzetten is mislukt.",
       "ptHeaderBanner": "<strong>Dit is een pass-through-toegangssleutel.</strong> Deze heeft brede toegang tot Home Assistant-entiteiten en -services. Beschermde mogelijkheden, MESA-regels, het verwijderen van gevoelige attributen en de Phoenix MCP-domeinblokkering blijven actief.",
@@ -1354,8 +1339,6 @@
       "rateLimitingDisabled": "Snelheidsbeperking is uitgeschakeld voor deze toegangssleutel.",
       "rateRequestsLabel": "Verzoeken per minuut (0 = uitgeschakeld)",
       "rateSaveFailed": "Opslaan mislukt.",
-      "rateSummary": "{requests}/min · burst {burst}",
-      "rateSummaryNone": "Geen limiet",
       "rateValuesError": "Waarden moeten niet-negatieve gehele getallen zijn.",
       "rawAccessKeyNote": "<strong>Deze toegangssleutel wordt niet opnieuw weergegeven.</strong> Kopieer deze nu voordat je sluit.",
       "reconnectBanner": "<strong>Verbind je agent opnieuw.</strong> De beschikbare tools van deze toegangssleutel zijn gewijzigd.",
@@ -1400,12 +1383,7 @@
       "notesHelp": "Richtlijnen voor elke agent die deze toegangssleutel gebruikt, zoals hoe ruimtes en apparaten heten, wie de sleutel gebruikt of waar de documentatie van het huishouden staat. Phoenix MCP voegt de notities toe aan de instructies van elke agent en verbergt entiteits-ID's buiten het bereik van deze toegangssleutel.",
       "notesLabel": "Notities voor agents",
       "notesPlaceholder": "Voorbeeld: De logeerkamer heet de werkkamer. Vraag het eerst voordat je iets in de babykamer wijzigt.",
-      "notesSummaryNone": "Geen",
-      "notesTooLong": "Notities mogen maximaal {max} tekens bevatten.",
-      "notesSummaryChars": {
-        "one": "{count} teken",
-        "other": "{count} tekens"
-      }
+      "notesTooLong": "Notities mogen maximaal {max} tekens bevatten."
     },
     "mesa": {
       "addAreaProfile": "Ruimteprofiel toevoegen",
@@ -2493,7 +2471,13 @@
       "logDetails": "Logboekdetails",
       "logDetailsEmpty": "Selecteer een item in een logboek om de details te bekijken.",
       "previousRecord": "Vorig item",
-      "nextRecord": "Volgend item"
+      "nextRecord": "Volgend item",
+      "keySettings": "Sleutelinstellingen",
+      "keyActions": "Sleutelacties",
+      "rename": "Hernoemen",
+      "selectAccessKey": "Selecteer een toegangssleutel om de instellingen te bekijken.",
+      "clearAllPermissions": "Alle machtigingen wissen",
+      "summaryPassThrough": "Pass-through-toegangssleutels gebruiken de machtigingsboom niet, dus er zijn geen regels om samen te vatten."
     }
   }
 }

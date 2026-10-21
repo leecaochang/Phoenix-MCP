@@ -10,11 +10,8 @@
       "accessKeyNameAria": "Käyttöavaimen nimi (muokattavissa)",
       "accessKeyRenameTitle": "Nimeä tämä käyttöavain uudelleen; tallennetaan, kun napsautat muualle",
       "accessKeyRotatedTitle": "Käyttöavain kierrätetty: {name}",
-      "advanced": "Lisäasetukset",
       "announceAllHelp": "Näytä kaikki Phoenix MCP -työkalut, myös ne, joita tämä käyttöavain ei voi käyttää. Pidä pois päältä vähentääksesi mallin käyttöä ja välttääksesi epäonnistuneet kutsut. Ota käyttöön vain vianmääritystä varten.",
       "announceAllLabel": "Ilmoita aina kaikki työkalut",
-      "announceSummaryAll": "Kaikki työkalut ilmoitettu",
-      "announceSummaryScoped": "Rajattu ominaisuuksiin",
       "archivedDeleteFailed": "Poisto epäonnistui.",
       "archivedEmpty": "Ei arkistoituja käyttöavaimia.",
       "archivedTitle": "Arkistoidut käyttöavaimet",
@@ -22,7 +19,6 @@
       "assistExposureLabel": "Rajoita Assistille näkyviin entiteetteihin",
       "back": "Takaisin",
       "cancel": "Peruuta",
-      "capsSummary": "{persona} · {allow} salli / {confirm} vahvista / {deny} kiellä",
       "cardCapabilities": "Ominaisuudet",
       "cardPersona": "Persona",
       "cardPresets": "Esiasetukset",
@@ -66,8 +62,6 @@
       "editAria": "Muokkaa käyttöavainta {name}",
       "empty": "Ei vielä käyttöavaimia. Aloita luomalla yksi.",
       "emptyFiltered": "Mikään käyttöavain ei vastaa suodatinta.",
-      "emulatorPassThrough": "Läpivientikäyttöavaimet ohittavat käyttöoikeuspuun, joten jokainen Phoenixiin kuulumaton entiteetti tulkitaan kirjoitusoikeudeksi. Simulointia ei tarvita.",
-      "emulatorTitle": "Voimassa olevien käyttöoikeuksien emulaattori",
       "enablePtBody": "<strong>Läpivienti antaa tälle käyttöavaimelle laajat oikeudet entiteetteihin ja palveluihin.</strong> Kokoonpanomuutokset, järjestelmätoiminnot, korkean riskin ominaisuudet, järjestelmälokin käyttö, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
       "enablePtCheck": "Ymmärrän, että tällä käyttöavaimella on laajat oikeudet Home Assistant -järjestelmään",
       "enablePtFailed": "Läpiviennin käyttöönotto epäonnistui.",
@@ -146,8 +140,6 @@
       "presetSwitchSaveInto": "Tallentamattomat muutoksesi tallennetaan ensin esiasetukseen <strong>{name}</strong>:",
       "presetSwitchTitle": "Vaihda esiasetukseen: {name}",
       "presetSwitchTo": "Vaihda tähän",
-      "presetsSummaryModified": "{name} (muokattu)",
-      "presetsSummarySaved": "Tallennettuja: {count}",
       "ptConvertBody": "Rajattuun tilaan siirtyminen ottaa tallennetun käyttöoikeuspuun käyttöön välittömästi. Jos siinä ei ole myönnettyjä käyttöoikeuksia, tämä käyttöavain menettää entiteettien käytön, kunnes lisäät niitä.",
       "ptConvertFailed": "Käyttöavaimen muuntaminen epäonnistui.",
       "ptHeaderBanner": "<strong>Tämä on läpivientikäyttöavain.</strong> Sillä on laaja pääsy Home Assistant -entiteetteihin ja -palveluihin. Suojatut ominaisuudet, MESA-säännöt, arkaluontoisten attribuuttien poisto ja Phoenix MCP -verkkotunnuksen esto pysyvät voimassa.",
@@ -158,8 +150,6 @@
       "rateLimitingDisabled": "Pyyntörajoitus on poistettu käytöstä tällä käyttöavaimella.",
       "rateRequestsLabel": "Pyyntöjä minuutissa (0 = poistettu käytöstä)",
       "rateSaveFailed": "Tallennus epäonnistui.",
-      "rateSummary": "{requests}/min · purske {burst}",
-      "rateSummaryNone": "Ei rajoitusta",
       "rateValuesError": "Arvojen on oltava ei-negatiivisia kokonaislukuja.",
       "rawAccessKeyNote": "<strong>Tätä käyttöavainta ei näytetä enää uudelleen.</strong> Kopioi se nyt ennen sulkemista.",
       "reconnectBanner": "<strong>Yhdistä agenttisi uudelleen.</strong> Tämän käyttöavaimen käytettävissä olevat työkalut ovat muuttuneet.",
@@ -200,12 +190,7 @@
       "notesHelp": "Ohjeita kaikille agenteille, jotka käyttävät tätä käyttöavainta, esimerkiksi mitä huoneita ja laitteita kutsutaan miksikin, kuka avainta käyttää tai missä kodin dokumentaatio on. Phoenix MCP lisää muistiinpanot jokaisen agentin ohjeisiin ja piilottaa entiteettien tunnukset, jotka ovat tämän käyttöavaimen rajauksen ulkopuolella.",
       "notesLabel": "Muistiinpanot agenteille",
       "notesPlaceholder": "Esimerkki: Vierashuonetta kutsutaan työhuoneeksi. Kysy ennen kuin muutat mitään lastenhuoneessa.",
-      "notesSummaryNone": "Ei mitään",
-      "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä.",
-      "notesSummaryChars": {
-        "one": "{count} merkki",
-        "other": "{count} merkkiä"
-      }
+      "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä."
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} on oltava käyttöavaimen tunnus merkkijonona tai null.",
@@ -1764,7 +1749,6 @@
       "loadTreeFailed": "Entiteettipuun lataus epäonnistui.",
       "missingBadge": "Puuttuu",
       "missingTitle": "Tätä entiteettiä ei enää ole Home Assistantissa.",
-      "noMesaProfile": "Ei MESA-profiilia - luo sellainen",
       "permFor": "Käyttöoikeus kohteelle {name}",
       "permForDevice": "Käyttöoikeus laitteelle {name}",
       "permForDomain": "Käyttöoikeus verkkotunnukselle {name}",
@@ -1779,13 +1763,8 @@
       "selRed": "Deny: ohittaa kaikki alatason kohteet",
       "selSelected": "{title}, valittu",
       "selYellow": "Read: vain luku",
-      "simEntityAria": "Simuloitavan entiteetin tunnus",
-      "simEntityPlaceholder": "entity_id (esim. light.kitchen)",
-      "simFailed": "Simulointi epäonnistui.",
-      "simResult": "Tulos: ",
       "simulateEntityTitle": "Simuloi käyttöoikeudet kohteelle {id}",
       "simulateTitle": "Simuloi {type}-käyttöoikeudet kohteelle {id}",
-      "simulating": "Simuloidaan...",
       "stateDeny": "KIELLÄ",
       "stateInherit": "PERI",
       "stateNoAccess": "EI PÄÄSYÄ",
@@ -1804,7 +1783,6 @@
       "unmatchedDeviceName": "Laite ei ole nykyisessä puussa",
       "unmatchedDevicesNote": "Nämä erilliset käyttöoikeudet viittaavat laitetunnuksiin, joita ei ole nykyisessä entiteettipuussa. Poista vanhentunut käyttöoikeus valitsemalla N.",
       "unmatchedDevicesTitle": "Laitteiden käyttöoikeudet, joilla ei ole vastaavuutta",
-      "viewMesaProfile": "Näytä MESA-profiili",
       "hintCaution": "Lähetetään agenteille ja niiden mallipalveluntarjoajille. Älä koskaan kirjoita salasanoja tai koodeja."
     },
     "personas": {
@@ -2420,7 +2398,13 @@
       "logDetails": "Lokin tiedot",
       "logDetailsEmpty": "Valitse lokista kirjaus nähdäksesi sen tiedot.",
       "previousRecord": "Edellinen kirjaus",
-      "nextRecord": "Seuraava kirjaus"
+      "nextRecord": "Seuraava kirjaus",
+      "keySettings": "Avaimen asetukset",
+      "keyActions": "Avaimen toiminnot",
+      "rename": "Nimeä uudelleen",
+      "selectAccessKey": "Valitse käyttöavain nähdäksesi sen asetukset.",
+      "clearAllPermissions": "Tyhjennä kaikki käyttöoikeudet",
+      "summaryPassThrough": "Läpivientikäyttöavaimet eivät käytä käyttöoikeuspuuta, joten tiivistettäviä sääntöjä ei ole."
     }
   },
   "voice": {

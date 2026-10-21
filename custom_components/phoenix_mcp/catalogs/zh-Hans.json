@@ -819,7 +819,6 @@
       "loadTreeFailed": "加载实体树失败。",
       "missingBadge": "已失效",
       "missingTitle": "此实体在 Home Assistant 中已不存在。",
-      "noMesaProfile": "尚无 MESA 策略，点击创建",
       "permFor": "{name} 的权限",
       "permForDevice": "设备 {name} 的权限",
       "permForDomain": "域 {name} 的权限",
@@ -833,10 +832,6 @@
       "selRed": "Deny：拒绝（覆盖所有下级）",
       "selSelected": "{title}，已选中",
       "selYellow": "Read：只读",
-      "simEntityAria": "要模拟的实体 ID",
-      "simEntityPlaceholder": "entity_id（例如 light.kitchen）",
-      "simFailed": "模拟失败。",
-      "simResult": "结果：",
       "simulateEntityTitle": "模拟 {id} 的权限",
       "simulateTitle": "模拟 {type} {id} 的权限",
       "treeAria": "实体权限",
@@ -848,8 +843,6 @@
       "unmatchedDeviceName": "设备不在当前实体树中",
       "unmatchedDevicesNote": "这些显式授权引用了当前实体树中没有的设备 ID。选择 N 可移除失效授权。",
       "unmatchedDevicesTitle": "未匹配的设备权限",
-      "viewMesaProfile": "查看 MESA 策略",
-      "simulating": "模拟中…",
       "deviceless": "无设备实体",
       "summaryEmpty": "尚未配置任何显式权限，默认拒绝全部访问。",
       "reload": "重载",
@@ -1101,11 +1094,8 @@
       "energyWater": "水"
     },
     "accessKeys": {
-      "advanced": "高级",
       "announceAllHelp": "向模型声明所有 Phoenix MCP 工具，包括此访问密钥无法使用的工具。保持关闭可减少模型用量并避免调用失败。仅在排查问题时启用。",
       "announceAllLabel": "始终声明全部工具",
-      "announceSummaryAll": "已声明全部工具",
-      "announceSummaryScoped": "按能力范围声明",
       "archivedDeleteFailed": "删除失败。",
       "archivedEmpty": "没有已归档的访问密钥。",
       "archivedTitle": "已归档的访问密钥",
@@ -1113,7 +1103,6 @@
       "assistExposureLabel": "仅限 Assist 已公开的实体",
       "back": "返回",
       "cancel": "取消",
-      "capsSummary": "{persona} · {allow} 允许 / {confirm} 确认 / {deny} 拒绝",
       "cardCapabilities": "能力",
       "cardPersona": "角色",
       "cardPresets": "预设",
@@ -1157,8 +1146,6 @@
       "editAria": "编辑访问密钥 {name}",
       "empty": "尚无访问密钥。创建一个即可开始。",
       "emptyFiltered": "没有符合筛选条件的访问密钥。",
-      "emulatorPassThrough": "直通访问密钥会绕过权限树，因此每个非 Phoenix 实体都会解析为写入权限。无需模拟。",
-      "emulatorTitle": "生效权限模拟器",
       "enablePtBody": "<strong>直通模式会赋予此访问密钥广泛的实体和服务访问权限。</strong>配置变更、系统操作、高风险能力、系统日志访问、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
       "enablePtCheck": "我了解此访问密钥将拥有广泛的 Home Assistant 访问权限",
       "enablePtFailed": "启用直通模式失败。",
@@ -1236,8 +1223,6 @@
       "presetSwitchSaveInto": "您未保存的更改将先保存到 <strong>{name}</strong>：",
       "presetSwitchTitle": "切换到预设：{name}",
       "presetSwitchTo": "切换到",
-      "presetsSummaryModified": "{name}（已修改）",
-      "presetsSummarySaved": "已保存 {count} 个",
       "ptConvertBody": "切换到限定范围模式会立即应用已保存的权限树。如果其中没有任何授权，此访问密钥将失去实体访问权限，直到您添加授权为止。",
       "ptConvertFailed": "转换访问密钥失败。",
       "ptHeaderBanner": "<strong>这是一个直通访问密钥。</strong>它对 Home Assistant 的实体和服务拥有广泛的访问权限。受保护的能力、MESA 规则、敏感属性移除以及 Phoenix MCP 域屏蔽仍然有效。",
@@ -1248,8 +1233,6 @@
       "rateLimitingDisabled": "此访问密钥已禁用速率限制。",
       "rateRequestsLabel": "每分钟请求数（0 表示禁用）",
       "rateSaveFailed": "保存失败。",
-      "rateSummary": "{requests}/分钟 · 突发 {burst}",
-      "rateSummaryNone": "无限制",
       "rateValuesError": "取值必须为非负整数。",
       "rawAccessKeyNote": "<strong>此访问密钥不会再次显示。</strong>请在关闭前复制。",
       "reconnectBanner": "<strong>请重新连接您的智能体。</strong>此访问密钥可用的工具已发生变化。",
@@ -1295,12 +1278,7 @@
       "notesHelp": "为使用此访问密钥的每个智能体提供指引，例如房间和设备的叫法、由谁使用，或家庭文档的存放位置。Phoenix MCP 会将备注添加到每个智能体的指令中，并隐藏此访问密钥范围之外的实体 ID。",
       "notesLabel": "给智能体的备注",
       "notesPlaceholder": "示例：客房称为书房。更改儿童房中的任何设备前请先询问。",
-      "notesSummaryNone": "无",
-      "notesTooLong": "备注不能超过 {max} 个字符。",
-      "notesSummaryChars": {
-        "one": "{count} 个字符",
-        "other": "{count} 个字符"
-      }
+      "notesTooLong": "备注不能超过 {max} 个字符。"
     },
     "settings": {
       "addProviderFirst": "请先在“智能体对话”中添加提供商账户。",
@@ -2415,7 +2393,13 @@
       "logDetails": "日志详情",
       "logDetailsEmpty": "在日志中选择一个条目以查看详情。",
       "previousRecord": "上一个条目",
-      "nextRecord": "下一个条目"
+      "nextRecord": "下一个条目",
+      "keySettings": "密钥设置",
+      "keyActions": "密钥操作",
+      "rename": "重命名",
+      "selectAccessKey": "选择一个访问密钥以查看其设置。",
+      "clearAllPermissions": "清除所有权限",
+      "summaryPassThrough": "直通访问密钥不使用权限树，因此没有可汇总的规则。"
     }
   },
   "notification": {

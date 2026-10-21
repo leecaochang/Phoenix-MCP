@@ -358,7 +358,6 @@
       "loadTreeFailed": "エンティティツリーを読み込めませんでした。",
       "missingBadge": "見つかりません",
       "missingTitle": "このエンティティは Home Assistant に存在しなくなりました。",
-      "noMesaProfile": "MESA プロファイルがありません。作成してください",
       "permFor": "{name} の権限",
       "permForDevice": "デバイス {name} の権限",
       "permForDomain": "ドメイン {name} の権限",
@@ -373,13 +372,8 @@
       "selRed": "Deny: 拒否（すべての子より優先）",
       "selSelected": "{title}、選択済み",
       "selYellow": "Read: 読み取り専用",
-      "simEntityAria": "シミュレーションするエンティティ ID",
-      "simEntityPlaceholder": "entity_id（例: light.kitchen）",
-      "simFailed": "シミュレーションに失敗しました。",
-      "simResult": "結果: ",
       "simulateEntityTitle": "{id} の権限をシミュレーション",
       "simulateTitle": "{id} の {type} 権限をシミュレーション",
-      "simulating": "シミュレーション中...",
       "stateDeny": "拒否",
       "stateInherit": "継承",
       "stateNoAccess": "アクセス不可",
@@ -398,7 +392,6 @@
       "unmatchedDeviceName": "現在のツリーにないデバイス",
       "unmatchedDevicesNote": "これらの明示的な権限は、現在のエンティティツリーにないデバイス ID を参照しています。古い権限を削除するには N を設定してください。",
       "unmatchedDevicesTitle": "一致しないデバイス権限",
-      "viewMesaProfile": "MESA プロファイルを表示",
       "hintCaution": "ヒントはエージェントとそのモデルプロバイダーに送信されます。パスワードやコードは絶対に入力しないでください。"
     },
     "changes": {
@@ -520,11 +513,8 @@
       "mesaProfile": "MESA プロファイル"
     },
     "accessKeys": {
-      "advanced": "詳細設定",
       "announceAllHelp": "このアクセスキーが使用できないものも含め、すべての Phoenix MCP ツールを表示します。モデルの使用量と失敗する呼び出しを減らすにはオフのままにしてください。トラブルシューティング時だけ有効にしてください。",
       "announceAllLabel": "常にすべてのツールを通知",
-      "announceSummaryAll": "すべてのツールを通知",
-      "announceSummaryScoped": "機能に応じて制限",
       "archivedDeleteFailed": "削除できませんでした。",
       "archivedEmpty": "アーカイブ済みのアクセスキーはありません。",
       "archivedTitle": "アーカイブ済みアクセスキー",
@@ -532,7 +522,6 @@
       "assistExposureLabel": "Assist に公開されたエンティティに制限",
       "back": "戻る",
       "cancel": "キャンセル",
-      "capsSummary": "{persona} · 許可 {allow} / 確認 {confirm} / 拒否 {deny}",
       "cardCapabilities": "機能",
       "cardPersona": "ペルソナ",
       "cardPresets": "プリセット",
@@ -576,8 +565,6 @@
       "editAria": "アクセスキー {name} を編集",
       "empty": "アクセスキーはまだありません。作成して開始してください。",
       "emptyFiltered": "フィルターに一致するアクセスキーはありません。",
-      "emulatorPassThrough": "パススルーアクセスキーは権限ツリーを迂回するため、Phoenix 以外のすべてのエンティティは書き込みとして解決されます。シミュレーションは不要です。",
-      "emulatorTitle": "有効な権限のエミュレーター",
       "enablePtBody": "<strong>パススルーにすると、このアクセスキーにはエンティティとサービスへの幅広いアクセス権が付与されます。</strong>設定変更、システムアクション、高リスク機能、システムログアクセス、MESA ルール、Phoenix MCP ブロックリスト、機密属性の削除は引き続き適用されます。",
       "enablePtCheck": "このアクセスキーが Home Assistant に幅広くアクセスできるようになることを理解しました",
       "enablePtFailed": "パススルーを有効にできませんでした。",
@@ -656,8 +643,6 @@
       "presetSwitchSaveInto": "未保存の変更は先に <strong>{name}</strong> に保存されます:",
       "presetSwitchTitle": "プリセットに切り替え: {name}",
       "presetSwitchTo": "切り替え先",
-      "presetsSummaryModified": "{name}（変更あり）",
-      "presetsSummarySaved": "{count} 件保存済み",
       "ptConvertBody": "スコープ付きモードに切り替えると、保存済みの権限ツリーがすぐに適用されます。許可がない場合、新しい権限を追加するまでこのアクセスキーはエンティティにアクセスできません。",
       "ptConvertFailed": "アクセスキーを変換できませんでした。",
       "ptHeaderBanner": "<strong>これはパススルーアクセスキーです。</strong>Home Assistant のエンティティとサービスに幅広くアクセスできます。保護対象の機能、MESA ルール、機密属性の削除、Phoenix MCP ドメインのブロックは有効なままです。",
@@ -668,8 +653,6 @@
       "rateLimitingDisabled": "このアクセスキーではレート制限が無効です。",
       "rateRequestsLabel": "一分あたりのリクエスト数（0 = 無効）",
       "rateSaveFailed": "保存できませんでした。",
-      "rateSummary": "{requests}/分 · バースト {burst}",
-      "rateSummaryNone": "制限なし",
       "rateValuesError": "値に負の整数は指定できません。",
       "rawAccessKeyNote": "<strong>このアクセスキーは再表示されません。</strong>閉じる前に今すぐコピーしてください。",
       "reconnectBanner": "<strong>エージェントを再接続してください。</strong>このアクセスキーで利用できるツールが変更されました。",
@@ -714,12 +697,7 @@
       "notesHelp": "このアクセスキーを使うすべてのエージェントへの案内です。部屋やデバイスの呼び方、誰が使うか、家庭のドキュメントの保存場所などを記入します。Phoenix MCP はメモを各エージェントの指示に追加し、このアクセスキーのスコープ外のエンティティ ID を隠します。",
       "notesLabel": "エージェント向けメモ",
       "notesPlaceholder": "例: 客間は「書斎」と呼びます。子ども部屋のものを変更する前に確認してください。",
-      "notesSummaryNone": "なし",
-      "notesTooLong": "メモは {max} 文字以内にしてください。",
-      "notesSummaryChars": {
-        "one": "{count} 文字",
-        "other": "{count} 文字"
-      }
+      "notesTooLong": "メモは {max} 文字以内にしてください。"
     },
     "wizard": {
       "accessSub": "<code>light</code> グループを展開し、動作を確認できるライトを選びます。読み取りと書き込みを許可するには <strong>W</strong> を選択してください。デバイス全体を許可するか、展開して一つのエンティティを選べます。権限は後から追加できます。",
@@ -2415,7 +2393,13 @@
       "logDetails": "ログの詳細",
       "logDetailsEmpty": "ログでエントリを選択すると、詳細が表示されます。",
       "previousRecord": "前のエントリ",
-      "nextRecord": "次のエントリ"
+      "nextRecord": "次のエントリ",
+      "keySettings": "キーの設定",
+      "keyActions": "キーの操作",
+      "rename": "名前を変更",
+      "selectAccessKey": "アクセスキーを選択すると、その設定が表示されます。",
+      "clearAllPermissions": "すべての権限をクリア",
+      "summaryPassThrough": "パススルーアクセスキーは権限ツリーを使用しないため、要約するルールはありません。"
     }
   },
   "notification": {

@@ -10,11 +10,8 @@
       "accessKeyNameAria": "Åtkomstnyckelns namn (redigerbart)",
       "accessKeyRenameTitle": "Byt namn på denna åtkomstnyckel; sparas när du klickar utanför",
       "accessKeyRotatedTitle": "Åtkomstnyckel roterad: {name}",
-      "advanced": "Avancerat",
       "announceAllHelp": "Visa alla Phoenix MCP-verktyg, inklusive verktyg som denna åtkomstnyckel inte kan använda. Låt vara avstängt för att minska modellanvändningen och undvika misslyckade anrop. Aktivera endast för felsökning.",
       "announceAllLabel": "Annonsera alltid alla verktyg",
-      "announceSummaryAll": "Alla verktyg annonseras",
-      "announceSummaryScoped": "Avgränsat till funktioner",
       "archivedDeleteFailed": "Raderingen misslyckades.",
       "archivedEmpty": "Inga arkiverade åtkomstnycklar.",
       "archivedTitle": "Arkiverade åtkomstnycklar",
@@ -22,7 +19,6 @@
       "assistExposureLabel": "Begränsa till Assist-exponerade entiteter",
       "back": "Tillbaka",
       "cancel": "Avbryt",
-      "capsSummary": "{persona} · {allow} tillåt / {confirm} bekräfta / {deny} neka",
       "cardCapabilities": "Funktioner",
       "cardPersona": "Persona",
       "cardPresets": "Förinställningar",
@@ -66,8 +62,6 @@
       "editAria": "Redigera åtkomstnyckeln {name}",
       "empty": "Inga åtkomstnycklar ännu. Skapa en för att komma igång.",
       "emptyFiltered": "Inga åtkomstnycklar matchar filtret.",
-      "emulatorPassThrough": "Pass-through-åtkomstnycklar kringgår behörighetsträdet, så varje entitet som inte är en Phoenix-entitet får skrivbehörighet. Ingen simulering behövs.",
-      "emulatorTitle": "Emulator för gällande behörighet",
       "enablePtBody": "<strong>Pass-through ger denna åtkomstnyckel bred åtkomst till entiteter och tjänster.</strong> Konfigurationsändringar, systemåtgärder, högriskfunktioner, åtkomst till systemloggen, MESA-regler, Phoenix MCP-blocklistan och borttagning av känsliga attribut gäller fortfarande.",
       "enablePtCheck": "Jag förstår att denna åtkomstnyckel kommer att ha bred åtkomst till Home Assistant",
       "enablePtFailed": "Det gick inte att aktivera pass-through.",
@@ -146,8 +140,6 @@
       "presetSwitchSaveInto": "Dina osparade ändringar sparas först i <strong>{name}</strong>:",
       "presetSwitchTitle": "Byt till förinställning: {name}",
       "presetSwitchTo": "Byt till",
-      "presetsSummaryModified": "{name} (ändrad)",
-      "presetsSummarySaved": "{count} sparade",
       "ptConvertBody": "Om du byter till avgränsat läge tillämpas det sparade behörighetsträdet direkt. Om det inte har några beviljanden förlorar åtkomstnyckeln sin entitetsåtkomst tills du lägger till dem.",
       "ptConvertFailed": "Det gick inte att konvertera åtkomstnyckeln.",
       "ptHeaderBanner": "<strong>Det här är en pass-through-åtkomstnyckel.</strong> Den har bred åtkomst till Home Assistant-entiteter och tjänster. Skyddade funktioner, MESA-regler, borttagning av känsliga attribut och Phoenix MCP-domänblocket är fortfarande aktiva.",
@@ -158,8 +150,6 @@
       "rateLimitingDisabled": "Hastighetsbegränsning är inaktiverad för den här åtkomstnyckeln.",
       "rateRequestsLabel": "Begäranden per minut (0 = inaktiverat)",
       "rateSaveFailed": "Det gick inte att spara.",
-      "rateSummary": "{requests}/min · burst {burst}",
-      "rateSummaryNone": "Ingen gräns",
       "rateValuesError": "Värdena måste vara icke-negativa heltal.",
       "rawAccessKeyNote": "<strong>Den här åtkomstnyckeln visas inte igen.</strong> Kopiera den nu innan du stänger.",
       "reconnectBanner": "<strong>Återanslut din agent.</strong> Den här åtkomstnyckelns tillgängliga verktyg har ändrats.",
@@ -200,12 +190,7 @@
       "notesHelp": "Vägledning för alla agenter som använder den här åtkomstnyckeln, till exempel vad rum och enheter heter, vem som använder den eller var hushållets dokumentation finns. Phoenix MCP lägger till anteckningarna i varje agents instruktioner och döljer entitets-ID:n utanför den här åtkomstnyckelns omfång.",
       "notesLabel": "Anteckningar för agenter",
       "notesPlaceholder": "Exempel: Gästrummet kallas arbetsrummet. Fråga innan du ändrar något i barnrummet.",
-      "notesSummaryNone": "Inga",
-      "notesTooLong": "Anteckningar får innehålla högst {max} tecken.",
-      "notesSummaryChars": {
-        "one": "{count} tecken",
-        "other": "{count} tecken"
-      }
+      "notesTooLong": "Anteckningar får innehålla högst {max} tecken."
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} måste vara en åtkomstnyckel-ID-sträng eller null.",
@@ -1764,7 +1749,6 @@
       "loadTreeFailed": "Det gick inte att läsa in entitetsträdet.",
       "missingBadge": "Saknas",
       "missingTitle": "Den här entiteten finns inte längre i Home Assistant.",
-      "noMesaProfile": "Ingen MESA-profil - skapa en",
       "permFor": "Behörighet för {name}",
       "permForDevice": "Behörighet för enheten {name}",
       "permForDomain": "Behörighet för domänen {name}",
@@ -1779,13 +1763,8 @@
       "selRed": "Deny: åsidosätter alla underordnade",
       "selSelected": "{title}, vald",
       "selYellow": "Read: skrivskyddad",
-      "simEntityAria": "Entitets-ID att simulera",
-      "simEntityPlaceholder": "entity_id (till exempel light.kitchen)",
-      "simFailed": "Simuleringen misslyckades.",
-      "simResult": "Resultat: ",
       "simulateEntityTitle": "Simulera behörigheter för {id}",
       "simulateTitle": "Simulera behörigheter av typen {type} för {id}",
-      "simulating": "Simulerar...",
       "stateDeny": "NEKA",
       "stateInherit": "ÄRV",
       "stateNoAccess": "INGEN ÅTKOMST",
@@ -1804,7 +1783,6 @@
       "unmatchedDeviceName": "Enhet som inte finns i det aktuella trädet",
       "unmatchedDevicesNote": "De här uttryckliga beviljandena avser enhets-ID:n som inte finns i det aktuella entitetsträdet. Ange N för att ta bort ett inaktuellt beviljande.",
       "unmatchedDevicesTitle": "Omatchade enhetsbehörigheter",
-      "viewMesaProfile": "Visa MESA-profil",
       "hintCaution": "Skickas till agenter och deras modellleverantörer. Skriv aldrig lösenord eller koder här."
     },
     "personas": {
@@ -2420,7 +2398,13 @@
       "logDetails": "Loggdetaljer",
       "logDetailsEmpty": "Välj en post i en logg för att se detaljerna.",
       "previousRecord": "Föregående post",
-      "nextRecord": "Nästa post"
+      "nextRecord": "Nästa post",
+      "keySettings": "Nyckelinställningar",
+      "keyActions": "Nyckelåtgärder",
+      "rename": "Byt namn",
+      "selectAccessKey": "Välj en åtkomstnyckel för att se dess inställningar.",
+      "clearAllPermissions": "Rensa alla behörigheter",
+      "summaryPassThrough": "Pass-through-åtkomstnycklar använder inte behörighetsträdet, så det finns inga regler att sammanfatta."
     }
   },
   "voice": {

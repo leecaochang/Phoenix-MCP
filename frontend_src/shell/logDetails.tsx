@@ -62,7 +62,7 @@ export function useLogSelection(): LogSelection | null {
 export function LogDetailsContent() {
   const selection = useLogSelection();
   const value = selection?.get() ?? null;
-  if (!selection || !value) return <p className="phx-log-details-empty">{t("workspace.logDetailsEmpty")}</p>;
+  if (!selection || !value) return <p className="phx-window-empty">{t("workspace.logDetailsEmpty")}</p>;
   const at = value.ordered.findIndex((e) => auditEntryKey(e) === auditEntryKey(value.entry));
   return (
     <div className="phx-log-details">

@@ -4,7 +4,7 @@
  */
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
-import { FoldStore, reapplyCollapsed, toggleFold, unfoldWindow, type FoldSnapshot } from "./fold";
+import { FoldStore, foldWindow, reapplyCollapsed, toggleFold, unfoldWindow, type FoldSnapshot } from "./fold";
 import { largestGridGroup, moveWindow, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
 
@@ -15,6 +15,8 @@ export interface WorkspaceLayout {
   /** Closed windows, each with the place to reopen it. */
   closed: Record<string, Slot | null>;
 }
+
+const EMPTY: ReadonlySet<string> = new Set();
 
 const DIRECTION_OF: Record<Side, "left" | "right" | "above" | "below"> = { left: "left", right: "right", top: "above", bottom: "below" };
 
@@ -29,6 +31,16 @@ export interface WindowSpec {
   title: string;
 }
 
+/** Optional parts of a workspace definition. */
+export interface WorkspaceExtras {
+  /** Windows added and removed by the shell (Needs Attention); never saved. */
+  transient?: ReadonlySet<string>;
+  /** Windows that start folded into their title bars. */
+  folded?: readonly string[];
+  /** Windows shown only while a setting allows, with where each appears when it does. */
+  conditional?: Readonly<Record<string, Slot>>;
+}
+
 export class WorkspaceController {
   api: DockviewApi | null = null;
   readonly folds = new FoldStore();
@@ -36,6 +48,8 @@ export class WorkspaceController {
   onTransientClose: ((id: string) => void) | null = null;
   /** The window that last had focus in this workspace. */
   activeWindow: string | null = null;
+  /** Whether a conditional window is allowed now: true, false, or null while unknown. */
+  availability: (id: string) => boolean | null = () => true;
   private floatedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
   private listeners = new Set<() => void>();
@@ -49,9 +63,11 @@ export class WorkspaceController {
     private readonly arrange: (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void,
     /** Current title for a window id. */
     private readonly titleOf: (id: string) => string,
-    /** Windows added and removed by the shell (Needs Attention); never saved. */
-    private readonly transient: ReadonlySet<string> = new Set(),
+    private readonly extras: WorkspaceExtras = {},
   ) {}
+
+  private get transient(): ReadonlySet<string> { return this.extras.transient ?? EMPTY; }
+  private get conditional(): Readonly<Record<string, Slot>> { return this.extras.conditional ?? {}; }
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -80,6 +96,7 @@ export class WorkspaceController {
         this.folds.restore(saved?.folds, (id) => !!api.getPanel(id));
         reapplyCollapsed(api, this.folds);
         this.retitle();
+        this.syncAvailable();
         this.changed();
         return;
       } catch {
@@ -99,8 +116,45 @@ export class WorkspaceController {
     this.closed.clear();
     this.floatedFrom.clear();
     this.arrange(api, this.add);
+    for (const id of this.extras.folded ?? []) this.foldById(id);
     for (const id of keep) this.add(id, { direction: "above" });
+    this.syncAvailable();
     this.changed();
+  }
+
+  private foldById(id: string): void {
+    const group = this.api?.getPanel(id)?.group;
+    if (this.api && group) foldWindow(this.api, this.folds, group);
+  }
+
+  /**
+   * Show or hide conditional windows to match `availability`. A window that is
+   * no longer allowed closes without being remembered as closed; one that becomes
+   * allowed opens in its place unless the user closed it.
+   */
+  syncAvailable(): void {
+    const api = this.api;
+    if (!api) return;
+    let changed = false;
+    for (const [id, home] of Object.entries(this.conditional)) {
+      const allowed = this.availability(id);
+      if (allowed === null) continue;
+      const panel = api.getPanel(id);
+      if (!allowed && panel) {
+        if (this.folds.isFolded(id)) this.folds.setFolded(id, false);
+        this.folds.setCollapsed(id, undefined);
+        this.floatedFrom.delete(id);
+        panel.api.close();
+        changed = true;
+      } else if (allowed && !panel && !this.closed.has(id)) {
+        const anchor = api.getPanel(home.neighbor);
+        if (anchor && anchor.group.api.location.type === "grid") this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[home.side] });
+        else this.add(id, { direction: "below" });
+        if (this.extras.folded?.includes(id)) this.foldById(id);
+        changed = true;
+      }
+    }
+    if (changed) this.changed();
   }
 
   /** The state to save. Transient windows are left out. */
@@ -169,12 +223,12 @@ export class WorkspaceController {
 
   /** Closed windows that can be reopened, in default order. */
   closedWindows(): string[] {
-    return this.windows.filter((id) => this.closed.has(id));
+    return this.windows.filter((id) => this.closed.has(id) && this.availability(id) !== false);
   }
 
   reopen(id: string): void {
     const api = this.api;
-    if (!api || api.getPanel(id) || !this.windows.includes(id)) return;
+    if (!api || api.getPanel(id) || !this.windows.includes(id) || this.availability(id) === false) return;
     const slot = this.closed.get(id) ?? null;
     this.closed.delete(id);
     const anchor = slot ? api.getPanel(slot.neighbor) : undefined;

@@ -1,11 +1,9 @@
 import { BusyInput, BusySelect } from "../components/BusyButton";
 import { BusyButton } from "../components/BusyButton";
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
-import PHOENIX_ICON from "../../custom_components/phoenix_mcp/brand/icon.png";
+import React, { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { AccessKeyRecord, EntityTree as EntityTreeData, PatchAccessKeyBody, PermissionTree } from "../types";
 import { api } from "../api";
 import { Loading, ErrorMsg } from "../components/common";
-import { formatDateTime, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";
 import { RawAccessKeyDisplay } from "../components/AccessKeyCreateModal";
@@ -13,19 +11,17 @@ import { ConnectInstructions } from "../components/ConnectInstructions";
 import { CapabilityMatrix, CAP_NAMES } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
 import { PersonaPicker } from "../components/PersonaPicker";
-import { AccessKeyNotes, notesLength } from "../components/AccessKeyNotes";
-import { PERSONAS } from "../personas";
+import { AccessKeyNotes } from "../components/AccessKeyNotes";
 import { RateLimitConfig } from "../components/RateLimitConfig";
-import { CollapsibleCard } from "../components/CollapsibleCard";
 import { PassThroughNotice } from "../components/PassThroughNotice";
 import { EntityTree } from "../components/EntityTree";
 import { PermissionSummary } from "../components/PermissionSummary";
-import { PermissionSimulator } from "../components/PermissionSimulator";
 import { SelectByPicker } from "../components/SelectByPicker";
-import { DocsHelpLink } from "../components/common";
 import { ProfileEditor } from "./MesaView";
-import { localeDateTime, t, tn } from "../i18n";
+import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { useToolbarTools, type ToolGroup } from "../shell/tools";
+import type { MenuEntry } from "../ui/Menu";
 
 // Whether an access key change alters which tools the MCP client is shown (tools/list),
 // which is the only kind of change that requires a connected agent to reconnect.
@@ -42,20 +38,6 @@ function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
 // The destructive actions on this page, each behind its own confirm modal.
 // Exactly one can be in flight at a time; see the `action` state below.
 type AccessKeyAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
-
-interface Props {
-  accessKeyId: string;
-  onBack: () => void;
-  onRefresh?: () => void;
-  // settings.access_key_presets_enabled, threaded from the panel shell; the Presets
-  // card renders only while the feature toggle is on.
-  presetsEnabled?: boolean;
-  // Which ESPHome surfaces exist on this system, threaded from the panel shell.
-  // Null while settings are still loading; the ESPHome controls simply show no
-  // note until it arrives.
-  esphome?: EsphomeAvailability | null;
-}
-
 
 interface ConfirmModalProps {
   title: string;
@@ -567,24 +549,31 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
   );
 }
 
-// Inline-editable access key name shown as the detail heading. Click to select/edit;
-// it auto-saves on blur (and on Enter), validating format client-side and letting
-// the server reject a name that clashes with another access key. Escape cancels.
+// Inline-editable access key name, shown in the key list while renaming. It saves
+// on blur (and on Enter), validating format client-side and letting the server
+// reject a name that clashes with another access key. Escape cancels.
 const ACCESS_KEY_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
 
-function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyRecord; onRenamed: (t: AccessKeyRecord) => void }) {
+export function EditableAccessKeyName({ accessKey, onRenamed, onDone }: {
+  accessKey: AccessKeyRecord;
+  onRenamed: (t: AccessKeyRecord) => void;
+  /** Called when editing ends: saved, unchanged, cancelled or refused. */
+  onDone?: () => void;
+}) {
   const [value, setValue] = useState(accessKey.name);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const input = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => { setValue(accessKey.name); setErr(null); }, [accessKey.name]);
+  useEffect(() => { input.current?.focus(); input.current?.select(); }, []);
 
   async function commit() {
     const next = value.trim();
-    if (next === accessKey.name) { setValue(accessKey.name); setErr(null); return; }
+    if (next === accessKey.name) { setValue(accessKey.name); setErr(null); onDone?.(); return; }
     if (!ACCESS_KEY_NAME_RE.test(next)) {
+      // Keep the field open with the refused name, so it can be corrected.
       setErr(t("accessKeys.nameRuleError"));
-      setValue(accessKey.name);
       return;
     }
     setSaving(true);
@@ -592,30 +581,31 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
     try {
       const updated = await api.patchAccessKey(accessKey.id, { name: next });
       onRenamed(updated);
+      onDone?.();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : t("accessKeys.renameFailed"));
-      setValue(accessKey.name);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <span className="access-key-name-edit">
+    <span className="access-key-name-edit" onClick={(e) => e.stopPropagation()}>
       <BusyInput
-        className="access-key-card-name access-key-name-input"
+        ref={input}
+        className="access-key-name-input"
         value={value}
         busy={saving}
         spellCheck={false}
         maxLength={32}
         aria-label={t("accessKeys.accessKeyNameAria")}
+        aria-invalid={!!err}
         title={t("accessKeys.accessKeyRenameTitle")}
         onChange={(e) => setValue(e.target.value)}
-        onFocus={(e) => e.target.select()}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-          else if (e.key === "Escape") { setValue(accessKey.name); setErr(null); (e.target as HTMLInputElement).blur(); }
+          if (e.key === "Enter") { e.preventDefault(); void commit(); }
+          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setValue(accessKey.name); setErr(null); onDone?.(); }
         }}
       />
       {err && <span className="access-key-name-error" role="alert">{err}</span>}
@@ -623,13 +613,91 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
   );
 }
 
-export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEnabled = false, esphome = null }: Props) {
+// ---------------------------------------------------------------------------
+// The selected access key, shared by the Access Keys workspace's windows. The
+// key list sits at the top; selecting a key fills Persona, Capabilities, the
+// Permissions tree, Permission Summary, Key Settings and Presets below it.
+// ---------------------------------------------------------------------------
+
+type Depth = "entity" | "device" | "domain";
+
+export interface AccessKeyDetail {
+  accessKeyId: string;
+  accessKey: AccessKeyRecord | null;
+  loading: boolean;
+  error: string | null;
+  presetsEnabled: boolean;
+  esphome: EsphomeAvailability | null;
+  /** Apply an edit, raising the reconnect reminder when the announced tools change. */
+  applyUpdate: (updated: AccessKeyRecord) => void;
+  /** Apply an edit that never changes the announced tools (notes, rate limits). */
+  setAccessKey: (updated: AccessKeyRecord) => void;
+  reconnectNeeded: boolean;
+  dismissReconnect: () => void;
+  openAction: (kind: AccessKeyAction) => void;
+  /** Whether the key list shows this key's name as an editable field. */
+  renaming: boolean;
+  setRenaming: (on: boolean) => void;
+  entityTree: EntityTreeData | null;
+  mesaProfileEntities: Set<string>;
+  mesaProfileDevices: Set<string>;
+  mesaProfileDomains: Set<string>;
+  openMesa: (key: string, scope?: LinkScope, label?: string) => void;
+  selectedEntityId: string;
+  selectedDepth: Depth;
+  revealNonce: number;
+  revealNode: (eid: string, depth?: Depth, opts?: { reveal?: boolean }) => void;
+  collapseTreeKey: number;
+  onPermissionsChange: (tree: PermissionTree) => void;
+  openSelectBy: () => void;
+}
+
+const AccessKeyDetailContext = createContext<AccessKeyDetail | null>(null);
+
+/** The selected access key's shared state, or null while none is selected. */
+export function useAccessKeyDetail(): AccessKeyDetail | null {
+  return useContext(AccessKeyDetailContext);
+}
+
+interface ProviderProps {
+  /** The selected access key, or null while none is selected. */
+  accessKeyId: string | null;
+  /** Clear the selection, after the key is revoked. */
+  onDeselect: () => void;
+  onRefresh?: () => void;
+  /** Bring the Permissions tree into view, after a jump from elsewhere. */
+  onReveal?: () => void;
+  // settings.access_key_presets_enabled; the Presets window shows only while it is on.
+  presetsEnabled?: boolean;
+  // Which ESPHome surfaces exist on this system; null while settings are loading,
+  // when the ESPHome controls simply show no note.
+  esphomeIntegration?: boolean | null;
+  esphomeBuilder?: boolean | null;
+}
+
+export function AccessKeyDetailProvider({ accessKeyId, children, ...rest }: ProviderProps & { children: ReactNode }) {
+  const [value, setValue] = useState<AccessKeyDetail | null>(null);
+  return (
+    <AccessKeyDetailContext.Provider value={accessKeyId && value?.accessKeyId === accessKeyId ? value : null}>
+      {children}
+      {accessKeyId && <SelectedAccessKey key={accessKeyId} accessKeyId={accessKeyId} {...rest} publish={setValue} />}
+    </AccessKeyDetailContext.Provider>
+  );
+}
+
+// Holds one access key's state and its confirmations. Keyed by the key's id, so
+// selecting another key starts from fresh state and late replies for the old one
+// are dropped. Memoized: it renders only when its own state changes, then
+// publishes the result to the windows.
+const SelectedAccessKey = memo(function SelectedAccessKey({
+  accessKeyId, onDeselect, onRefresh, onReveal, presetsEnabled = false, esphomeIntegration = null, esphomeBuilder = null, publish,
+}: Omit<ProviderProps, "accessKeyId"> & { accessKeyId: string; publish: (value: AccessKeyDetail | null) => void }) {
   const [accessKey, setAccessKey] = useState<AccessKeyRecord | null>(null);
   const [mesaProfileEntities, setMesaProfileEntities] = useState<Set<string>>(new Set());
   const [mesaProfileDevices, setMesaProfileDevices] = useState<Set<string>>(new Set());
   const [mesaProfileDomains, setMesaProfileDomains] = useState<Set<string>>(new Set());
-  // The entity whose MESA profile is being edited inline (overlaid on this tab),
-  // and the canonical tag vocabulary the editor needs.
+  // The entity whose MESA profile is being edited inline, and the canonical tag
+  // vocabulary the editor needs.
   const [mesaEdit, setMesaEdit] = useState<{ scope: LinkScope; key: string; label?: string; isNew: boolean } | null>(null);
   const [canonicalTags, setCanonicalTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -637,35 +705,36 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
   // One destructive action at a time, by construction: a single state makes
   // "two modals open at once" unrepresentable.
   const [action, setAction] = useState<{ kind: AccessKeyAction; busy: boolean } | null>(null);
-  const openAction = (kind: AccessKeyAction) => setAction({ kind, busy: false });
+  const openAction = useCallback((kind: AccessKeyAction) => setAction({ kind, busy: false }), []);
   const closeAction = () => setAction(null);
   const setActionBusy = (busy: boolean) => setAction((a) => (a ? { ...a, busy } : a));
   const isOpen = (kind: AccessKeyAction) => action?.kind === kind;
   const isBusy = (kind: AccessKeyAction) => action?.kind === kind && action.busy;
   const [rotatedRawAccessKey, setRotatedRawAccessKey] = useState<string | null>(null);
   const [showSelectByPicker, setShowSelectByPicker] = useState(false);
-  const [entityTree, setEntityTree] = useState<import("../types").EntityTree | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [entityTree, setEntityTree] = useState<EntityTreeData | null>(null);
   // Set when a change alters the announced tool list, to remind the operator to
   // reconnect the agent. Only surfaced when the access key has actually been used.
   const [reconnectNeeded, setReconnectNeeded] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState("");
-  const [selectedDepth, setSelectedDepth] = useState<"entity" | "device" | "domain">("entity");
+  const [selectedDepth, setSelectedDepth] = useState<Depth>("entity");
   // Bumped on every reveal request so clicking the same row re-triggers the
   // tree expand/scroll (selecting the same id/depth alone is a no-op in React).
   const [revealNonce, setRevealNonce] = useState(0);
-  // opts.reveal defaults true (click-to-jump from elsewhere on the page, e.g.
-  // the Permission Summary table, still scrolls/expands/flashes the target).
-  // Editing a permission directly in the tree passes reveal: false: the row
-  // is already on screen, so scrolling it to center only risks the page
-  // moving mid-click and the next click landing on a different row.
-  const revealNode = (eid: string, depth: "entity" | "device" | "domain" = "entity", opts?: { reveal?: boolean }) => {
+  // opts.reveal defaults true (a jump from elsewhere, e.g. the Permission Summary,
+  // still brings the tree into view and scrolls/expands/flashes the target).
+  // Editing a permission directly in the tree passes reveal: false: the row is
+  // already on screen, so scrolling it to center only risks the page moving
+  // mid-click and the next click landing on a different row.
+  const revealNode = useCallback((eid: string, depth: Depth = "entity", opts?: { reveal?: boolean }) => {
     setSelectedEntityId(eid);
     setSelectedDepth(depth);
     if (opts?.reveal !== false) {
       setRevealNonce((n) => n + 1);
+      onReveal?.();
     }
-  };
-  const [permissionsVersion, setPermissionsVersion] = useState(0);
+  }, [onReveal]);
   const [collapseTreeKey, setCollapseTreeKey] = useState(0);
 
   const load = useCallback(async () => {
@@ -686,20 +755,20 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
   // setAccessKey wrapper for the config editors (persona, capabilities, tool
   // announcement, pass-through). If the change alters the announced tool list and
   // the access key has been used by a client, raise the reconnect reminder.
-  const applyAccessKeyUpdate = useCallback((updated: AccessKeyRecord) => {
-    if (accessKey && updated.last_used_at && toolGatingChanged(accessKey, updated)) {
-      setReconnectNeeded(true);
-    }
-    setAccessKey(updated);
-  }, [accessKey]);
+  const applyUpdate = useCallback((updated: AccessKeyRecord) => {
+    setAccessKey((current) => {
+      if (current && updated.last_used_at && toolGatingChanged(current, updated)) setReconnectNeeded(true);
+      return updated;
+    });
+  }, []);
 
   useEffect(() => {
     api.getEntityTree().then(setEntityTree).catch(() => null);
   }, []);
 
-  // Which entities already have a MESA profile, so the cards can show
+  // Which entities already have a MESA profile, so the windows can show
   // "view" (MESA) vs "create" (+). Reloaded after the inline editor saves so a
-  // newly created profile flips its "+" to "MESA" without leaving the tab.
+  // newly created profile flips its "+" to "MESA" in place.
   const loadMesaProfiles = useCallback(() => {
     api.listMesaProfiles({ all: true })
       .then((r) => setMesaProfileEntities(new Set(r.profiles.map((p) => p.entity_id))))
@@ -720,10 +789,10 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
   // The canonical MESA tag vocabulary powers the inline editor's tag autocomplete.
   useEffect(() => { api.getMesaVocabulary().then((v) => setCanonicalTags(v.canonical_tags)).catch(() => null); }, []);
 
-  // Open the MESA profile editor as an overlay on this tab (no tab switch). isNew
-  // mirrors the +/MESA affordance that was clicked, which is driven by the same
-  // set, so the editor opens in the mode the operator just saw.
-  const openMesaInline = useCallback((key: string, scope: LinkScope = "entity", label?: string) => {
+  // Open the MESA profile editor over the workspace. isNew mirrors the +/MESA
+  // affordance that was clicked, which is driven by the same set, so the editor
+  // opens in the mode the operator just saw.
+  const openMesa = useCallback((key: string, scope: LinkScope = "entity", label?: string) => {
     const known = scope === "device" ? mesaProfileDevices
       : scope === "domain" ? mesaProfileDomains
       : mesaProfileEntities;
@@ -738,7 +807,7 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
       // from its own list and reselects/clears, instead of continuing to show
       // (and let the user submit against) an access key that no longer works.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
-      onBack();
+      onDeselect();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.revokeFailed"));
       closeAction();
@@ -765,7 +834,6 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
     try {
       const updatedTree = await api.setPermissions(accessKeyId, { domains: {}, devices: {}, entities: {} });
       setAccessKey((prev) => prev ? { ...prev, permissions: updatedTree } : prev);
-      setPermissionsVersion((v) => v + 1);
       setCollapseTreeKey((k) => k + 1);
       closeAction();
     } catch (e: unknown) {
@@ -781,7 +849,7 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
     try {
       const body: PatchAccessKeyBody = { pass_through: true, confirm_pass_through: true };
       const updated = await api.patchAccessKey(accessKeyId, body);
-      applyAccessKeyUpdate(updated);
+      applyUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.enablePtFailed"));
     } finally {
@@ -789,50 +857,49 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
     }
   }
 
-  if (loading) return <Loading />;
-  if (error && !accessKey) return <div><button className="btn btn-text" onClick={onBack}>{t("accessKeys.back")}</button><ErrorMsg msg={error} /></div>;
-  if (!accessKey) return null;
+  const onPermissionsChange = useCallback((tree: PermissionTree) => {
+    setAccessKey((current) => (current?.id === accessKeyId ? { ...current, permissions: tree } : current));
+  }, [accessKeyId]);
 
-  if (rotatedRawAccessKey) {
-    return <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} onClose={() => setRotatedRawAccessKey(null)} />;
-  }
+  const value = useMemo<AccessKeyDetail>(() => ({
+    accessKeyId,
+    accessKey,
+    loading,
+    error,
+    presetsEnabled,
+    esphome: esphomeIntegration === null || esphomeBuilder === null ? null : { integration: esphomeIntegration, builder: esphomeBuilder },
+    applyUpdate,
+    setAccessKey,
+    reconnectNeeded,
+    dismissReconnect: () => setReconnectNeeded(false),
+    openAction,
+    renaming,
+    setRenaming,
+    entityTree,
+    mesaProfileEntities,
+    mesaProfileDevices,
+    mesaProfileDomains,
+    openMesa,
+    selectedEntityId,
+    selectedDepth,
+    revealNonce,
+    revealNode,
+    collapseTreeKey,
+    onPermissionsChange,
+    openSelectBy: () => setShowSelectByPicker(true),
+  }), [accessKeyId, accessKey, loading, error, presetsEnabled, esphomeIntegration, esphomeBuilder, applyUpdate, reconnectNeeded, openAction,
+    renaming, entityTree, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, openMesa, selectedEntityId, selectedDepth, revealNonce,
+    revealNode, collapseTreeKey, onPermissionsChange]);
 
-  const status = accessKeyStatus(accessKey);
-  const statusClass = status === "Active" ? "badge-green" : status === "Expired" ? "badge-grey" : "badge-red";
-
-  // One-line summaries shown on the collapsed Advanced cards.
-  const personaDef = PERSONAS.find((p) => p.key === accessKey.persona);
-  const personaLabel = personaDef ? t(personaDef.labelKey) : t("personas.custom.label");
-  const capCounts = CAP_NAMES.reduce(
-    (acc, k) => { acc[accessKey[k]] = (acc[accessKey[k]] ?? 0) + 1; return acc; },
-    { allow: 0, confirm: 0, deny: 0 } as Record<string, number>,
-  );
-  const capsSummary = t("accessKeys.capsSummary", {
-    persona: personaLabel,
-    allow: capCounts.allow,
-    confirm: capCounts.confirm,
-    deny: capCounts.deny,
-  });
-  const notesSummary = accessKey.notes
-    ? tn("accessKeys.notesSummaryChars", notesLength(accessKey.notes))
-    : t("accessKeys.notesSummaryNone");
-  const announceSummary = accessKey.announce_all_tools
-    ? t("accessKeys.announceSummaryAll")
-    : t("accessKeys.announceSummaryScoped");
-  const rateSummary = accessKey.rate_limit_requests > 0
-    ? t("accessKeys.rateSummary", { requests: accessKey.rate_limit_requests, burst: accessKey.rate_limit_burst })
-    : t("accessKeys.rateSummaryNone");
-  const activePreset = accessKey.presets.find((p) => p.id === accessKey.active_preset_id) ?? null;
-  const presetsSummary = activePreset
-    ? (snapDiffLines(snapOfPreset(activePreset), snapOfAccessKey(accessKey)).length > 0
-      ? t("accessKeys.presetsSummaryModified", { name: activePreset.name })
-      : activePreset.name)
-    : t("accessKeys.presetsSummarySaved", { count: accessKey.presets.length });
+  useLayoutEffect(() => { publish(value); }, [publish, value]);
+  useLayoutEffect(() => () => publish(null), [publish]);
 
   return (
-    <div className="access-key-detail-wrap">
+    <>
+      {rotatedRawAccessKey && accessKey && (
+        <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} onClose={() => setRotatedRawAccessKey(null)} />
+      )}
 
-      {/* Modals */}
       {isOpen("rotate") && (
         <ConfirmModal
           title={t("accessKeys.rotateAccessKeyTitle")}
@@ -884,200 +951,6 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
         />
       )}
 
-      {/* Sticky top section */}
-      <div className="access-key-detail-sticky">
-        {error && <ErrorMsg msg={error} />}
-
-        {reconnectNeeded && (
-          <div className="banner banner-info reconnect-banner" role="status">
-            <span className="reconnect-banner-text">
-              {tRich("accessKeys.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
-            </span>
-            <button
-              className="reconnect-banner-dismiss"
-              onClick={() => setReconnectNeeded(false)}
-              aria-label={t("accessKeys.reconnectDismiss")}
-            >&times;</button>
-          </div>
-        )}
-
-        {accessKey.pass_through && (
-          <div className="pass-through-header-banner">
-            <p>
-              {tRich("accessKeys.ptHeaderBanner", { strong: (c) => <strong className="text-warning">{c}</strong> })}
-            </p>
-          </div>
-        )}
-
-        <div className="two-col">
-          {/* Left: Access key info card */}
-          <div className="card access-key-info-card">
-            <div className="access-key-card-header">
-              <div className="access-key-card-name-row">
-                <img src={PHOENIX_ICON} className="access-key-card-icon" alt="" />
-                <EditableAccessKeyName accessKey={accessKey} onRenamed={(u) => { applyAccessKeyUpdate(u); onRefresh?.(); }} />
-              </div>
-              <div className="access-key-card-badges">
-                <span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span>
-                {accessKey.pass_through
-                  ? <span className="badge badge-amber">{t("accessKeys.passThrough")}</span>
-                  : <span className="badge badge-blue">{t("accessKeys.scoped")}</span>}
-              </div>
-            </div>
-
-            <div className="access-key-card-body">
-              <div className="access-key-card-meta">
-                <div className="access-key-meta-table">
-                  <span className="stat-label">{t("accessKeys.colCreated")}</span>
-                  <span title={accessKey.created_at ? localeDateTime(accessKey.created_at) : undefined}>{formatDateTime(accessKey.created_at)}</span>
-                  <span className="stat-label">{t("accessKeys.colUpdated")}</span>
-                  <span title={accessKey.updated_at ? localeDateTime(accessKey.updated_at) : undefined}>{formatDateTime(accessKey.updated_at)}</span>
-                  <span className="stat-label">{t("accessKeys.colExpires")}</span>
-                  <span>{formatDateTime(accessKey.expires_at)}</span>
-                  <span className="stat-label">{t("accessKeys.colLastUsed")}</span>
-                  <span>{formatDateTime(accessKey.last_used_at)}</span>
-                </div>
-              </div>
-
-              <div className="access-key-card-actions">
-                <button className="btn btn-outline btn-sm access-key-action-btn" onClick={() => openAction("rotate")}>
-                  {t("accessKeys.rotate")}
-                </button>
-                {!accessKey.pass_through && (
-                  <button className="btn btn-warning btn-sm access-key-action-btn" onClick={() => openAction("passThrough")}>
-                    {t("accessKeys.enablePtLabel")}
-                  </button>
-                )}
-                <button className="btn btn-danger btn-sm access-key-action-btn" onClick={() => openAction("revoke")}>
-                  {t("accessKeys.revoke")}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Permission emulator */}
-          <div className="card epe-card">
-            <h3 className="card-header">
-              {t("accessKeys.emulatorTitle")}
-              <DocsHelpLink path="panel.html#emulator" label={t("accessKeys.emulatorTitle")} />
-            </h3>
-            {accessKey.pass_through ? (
-              <p style={{ fontSize: 13, color: "var(--phx-text-2)", margin: 0 }}>
-                {t("accessKeys.emulatorPassThrough")}
-              </p>
-            ) : (
-              <PermissionSimulator
-                accessKeyId={accessKeyId}
-                externalEntityId={selectedEntityId || undefined}
-                resolveDepth={selectedDepth}
-                triggerVersion={permissionsVersion}
-                mesaProfileEntities={mesaProfileEntities}
-                onOpenMesa={openMesaInline}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Scrollable body */}
-      <div className="access-key-detail-body">
-        <div className="two-col">
-          <div>
-            <CollapsibleCard title={t("accessKeys.cardPersona")} summary={personaLabel} defaultOpen persistKey="phx:fold:persona" docsPath="capabilities.html#personas">
-              <PersonaPicker accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
-            </CollapsibleCard>
-
-            {presetsEnabled && (
-              <CollapsibleCard title={t("accessKeys.cardPresets")} summary={presetsSummary} persistKey="phx:fold:presets" docsPath="panel.html#presets">
-                <PresetsCard accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
-              </CollapsibleCard>
-            )}
-
-            <CollapsibleCard title={t("accessKeys.cardNotes")} summary={notesSummary} persistKey="phx:fold:notes" docsPath="panel.html#notes">
-              <AccessKeyNotes accessKey={accessKey} onUpdate={setAccessKey} />
-            </CollapsibleCard>
-
-            <div className="advanced-section-label">{t("accessKeys.advanced")}</div>
-            <CollapsibleCard title={t("accessKeys.cardCapabilities")} summary={capsSummary} persistKey="phx:fold:capabilities" docsPath="capabilities.html#capability-flags">
-              <CapabilityMatrix accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
-            </CollapsibleCard>
-            <CollapsibleCard title={t("accessKeys.cardToolAnnouncement")} summary={announceSummary} persistKey="phx:fold:announce" docsPath="operations.html#advanced-access-key-options">
-              <ToolAnnouncementToggle accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
-            </CollapsibleCard>
-            <CollapsibleCard title={t("accessKeys.cardRateLimiting")} summary={rateSummary} persistKey="phx:fold:ratelimit" docsPath="operations.html#rate-limiting">
-              <RateLimitConfig accessKey={accessKey} onUpdate={setAccessKey} />
-            </CollapsibleCard>
-
-            {!accessKey.pass_through && (
-              <div className="card">
-                <h3 className="card-header">
-                  {t("accessKeys.permissionSummary")}
-                  <DocsHelpLink path="panel.html#summary" label={t("accessKeys.permissionSummary")} />
-                </h3>
-                <PermissionSummary
-                  permissions={accessKey.permissions}
-                  entityTree={entityTree}
-                  onEntityClick={revealNode}
-                  mesaProfileEntities={mesaProfileEntities}
-                  onOpenMesa={openMesaInline}
-                />
-              </div>
-            )}
-          </div>
-
-          <div>
-            {accessKey.pass_through ? (
-              <div className="card">
-                <h3 className="card-header">
-                  {t("accessKeys.permissionsTree")}
-                  <DocsHelpLink path="panel.html#permission-tree" label={t("accessKeys.permissionsTree")} />
-                </h3>
-                <PassThroughNotice accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
-              </div>
-            ) : (
-              <div className="card">
-                <div className="card-header card-header-stack">
-                  <h3 className="card-header-title">
-                    {t("accessKeys.permissionsTree")}
-                    <DocsHelpLink path="panel.html#permission-tree" label={t("accessKeys.permissionsTree")} />
-                  </h3>
-                  <div className="tree-header-actions">
-                    {entityTree && (
-                      <button className="btn btn-outline btn-sm" onClick={() => setShowSelectByPicker(true)}>
-                        {t("accessKeys.selectByAreaLabelIntegration")}
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => openAction("clearPerms")}
-                    >
-                      {t("accessKeys.clearAll")}
-                    </button>
-                  </div>
-                </div>
-                <EntityTree
-                  accessKeyId={accessKeyId}
-                  permissions={accessKey.permissions}
-                  onPermissionsChange={(tree) => {
-                    setAccessKey((current) => current?.id === accessKey.id ? { ...current, permissions: tree } : current);
-                    setPermissionsVersion((v) => v + 1);
-                  }}
-                  onEntityClick={revealNode}
-                  collapseKey={collapseTreeKey}
-                  revealEntity={selectedEntityId || undefined}
-                  revealDepth={selectedDepth}
-                  revealNonce={revealNonce}
-                  mesaProfileEntities={mesaProfileEntities}
-                  mesaProfileDevices={mesaProfileDevices}
-                  mesaProfileDomains={mesaProfileDomains}
-                  onOpenMesa={openMesaInline}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {showSelectByPicker && entityTree && (
         <SelectByPicker
           accessKeyId={accessKeyId}
@@ -1126,6 +999,184 @@ export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEna
           lockedKey
         />
       )}
+    </>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The windows. Each shows the selected key, or a prompt to select one.
+// ---------------------------------------------------------------------------
+
+/** The selected key once loaded; otherwise what to show instead. */
+function useLoadedKey(): { detail: AccessKeyDetail; accessKey: AccessKeyRecord } | { placeholder: ReactNode } {
+  const detail = useAccessKeyDetail();
+  if (!detail) return { placeholder: <p className="phx-window-empty">{t("workspace.selectAccessKey")}</p> };
+  if (detail.loading && !detail.accessKey) return { placeholder: <Loading /> };
+  if (!detail.accessKey) return { placeholder: <ErrorMsg msg={detail.error ?? t("accessKeys.loadFailed")} /> };
+  return { detail, accessKey: detail.accessKey };
+}
+
+/** Notices about the selected key, shown above the key list. */
+export function AccessKeyNotices() {
+  const detail = useAccessKeyDetail();
+  const accessKey = detail?.accessKey;
+  if (!detail || !accessKey) return null;
+  return (
+    <>
+      {detail.error && <ErrorMsg msg={detail.error} />}
+      {detail.reconnectNeeded && (
+        <div className="banner banner-info reconnect-banner" role="status">
+          <span className="reconnect-banner-text">
+            {tRich("accessKeys.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
+          </span>
+          <button
+            className="reconnect-banner-dismiss"
+            onClick={detail.dismissReconnect}
+            aria-label={t("accessKeys.reconnectDismiss")}
+          >&times;</button>
+        </div>
+      )}
+      {accessKey.pass_through && (
+        <div className="pass-through-header-banner">
+          <p>
+            {tRich("accessKeys.ptHeaderBanner", { strong: (c) => <strong className="text-warning">{c}</strong> })}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Key Actions for the selected key, offered on the toolbar with the key list's tools. */
+export function useKeyActionsTool(): ToolGroup | null {
+  const detail = useAccessKeyDetail();
+  const accessKey = detail?.accessKey;
+  if (!detail || !accessKey) return null;
+  const menu = (): MenuEntry[] => [
+    { id: "rename", label: t("workspace.rename"), onSelect: () => detail.setRenaming(true) },
+    { id: "rotate", label: t("accessKeys.rotate"), onSelect: () => detail.openAction("rotate") },
+    { id: "passThrough", label: t("accessKeys.enablePtLabel"), disabled: accessKey.pass_through, onSelect: () => detail.openAction("passThrough") },
+    "separator",
+    { id: "revoke", label: t("accessKeys.revoke"), onSelect: () => detail.openAction("revoke") },
+  ];
+  return { id: "selectedKey", label: accessKey.name, tools: [{ id: "keyActions", label: t("workspace.keyActions"), icon: "keyActions", menu }] };
+}
+
+export function PersonaWindow() {
+  const k = useLoadedKey();
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  return (
+    <div className="phx-window-pad">
+      <PersonaPicker accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} esphome={k.detail.esphome} />
+    </div>
+  );
+}
+
+export function CapabilitiesWindow() {
+  const k = useLoadedKey();
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  return (
+    <div className="phx-window-pad">
+      <CapabilityMatrix accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} esphome={k.detail.esphome} />
+    </div>
+  );
+}
+
+/** Notes, Tool Announcement and Rate Limiting: the key's specialized settings. */
+export function KeySettingsWindow() {
+  const k = useLoadedKey();
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  return (
+    <div className="phx-window-pad phx-key-settings">
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-notes">
+        <h3 id="phx-key-notes" className="phx-section-title">{t("accessKeys.cardNotes")}</h3>
+        <AccessKeyNotes accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
+      </section>
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-announce">
+        <h3 id="phx-key-announce" className="phx-section-title">{t("accessKeys.cardToolAnnouncement")}</h3>
+        <ToolAnnouncementToggle accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} />
+      </section>
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-rate">
+        <h3 id="phx-key-rate" className="phx-section-title">{t("accessKeys.cardRateLimiting")}</h3>
+        <RateLimitConfig accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
+      </section>
+    </div>
+  );
+}
+
+export function PresetsWindow() {
+  const k = useLoadedKey();
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  return (
+    <div className="phx-window-pad">
+      <PresetsCard accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} />
+    </div>
+  );
+}
+
+export function PermissionsWindow() {
+  const k = useLoadedKey();
+  const detail = "detail" in k ? k.detail : null;
+  const scoped = "accessKey" in k && !k.accessKey.pass_through;
+  // Select By and Clear All act on the tree, so they sit on the toolbar while it is shown.
+  const onToolbar = useToolbarTools(detail && scoped ? [{
+    id: "permissions",
+    label: t("accessKeys.permissionsTree"),
+    tools: [
+      { id: "selectBy", label: t("accessKeys.selectByAreaLabelIntegration"), icon: "selectBy", disabled: !detail.entityTree, onSelect: detail.openSelectBy },
+      { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "delete", tone: "danger", onSelect: () => detail.openAction("clearPerms") },
+    ],
+  }] : []);
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  const { accessKey } = k;
+  if (accessKey.pass_through) {
+    return <div className="phx-window-pad"><PassThroughNotice accessKey={accessKey} onUpdate={k.detail.applyUpdate} /></div>;
+  }
+  return (
+    <div className="phx-window-pad">
+      {!onToolbar && (
+        <div className="tree-header-actions">
+          {k.detail.entityTree && (
+            <button className="btn btn-outline btn-sm" onClick={k.detail.openSelectBy}>
+              {t("accessKeys.selectByAreaLabelIntegration")}
+            </button>
+          )}
+          <button className="btn btn-danger btn-sm" onClick={() => k.detail.openAction("clearPerms")}>
+            {t("accessKeys.clearAll")}
+          </button>
+        </div>
+      )}
+      <EntityTree
+        accessKeyId={accessKey.id}
+        permissions={accessKey.permissions}
+        onPermissionsChange={k.detail.onPermissionsChange}
+        onEntityClick={k.detail.revealNode}
+        collapseKey={k.detail.collapseTreeKey}
+        revealEntity={k.detail.selectedEntityId || undefined}
+        revealDepth={k.detail.selectedDepth}
+        revealNonce={k.detail.revealNonce}
+        mesaProfileEntities={k.detail.mesaProfileEntities}
+        mesaProfileDevices={k.detail.mesaProfileDevices}
+        mesaProfileDomains={k.detail.mesaProfileDomains}
+        onOpenMesa={k.detail.openMesa}
+      />
+    </div>
+  );
+}
+
+export function PermissionSummaryWindow() {
+  const k = useLoadedKey();
+  if ("placeholder" in k) return <>{k.placeholder}</>;
+  if (k.accessKey.pass_through) return <p className="phx-window-empty">{t("workspace.summaryPassThrough")}</p>;
+  return (
+    <div className="phx-window-pad">
+      <PermissionSummary
+        permissions={k.accessKey.permissions}
+        entityTree={k.detail.entityTree}
+        onEntityClick={k.detail.revealNode}
+        mesaProfileEntities={k.detail.mesaProfileEntities}
+        onOpenMesa={k.detail.openMesa}
+      />
     </div>
   );
 }

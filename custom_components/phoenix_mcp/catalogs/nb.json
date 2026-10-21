@@ -10,11 +10,8 @@
       "accessKeyNameAria": "Navn på tilgangsnøkkel (redigerbart)",
       "accessKeyRenameTitle": "Gi tilgangsnøkkelen nytt navn; lagres når du klikker utenfor",
       "accessKeyRotatedTitle": "Tilgangsnøkkel rotert: {name}",
-      "advanced": "Avansert",
       "announceAllHelp": "Vis alle Phoenix MCP-verktøy, også verktøy denne tilgangsnøkkelen ikke kan bruke. La stå av for å redusere modellbruk og unngå mislykkede kall. Aktiver bare for feilsøking.",
       "announceAllLabel": "Kunngjør alltid alle verktøy",
-      "announceSummaryAll": "Alle verktøy kunngjort",
-      "announceSummaryScoped": "Avgrenset til kapabiliteter",
       "archivedDeleteFailed": "Sletting mislyktes.",
       "archivedEmpty": "Ingen arkiverte tilgangsnøkler.",
       "archivedTitle": "Arkiverte tilgangsnøkler",
@@ -22,7 +19,6 @@
       "assistExposureLabel": "Begrens til Assist-eksponerte entiteter",
       "back": "Tilbake",
       "cancel": "Avbryt",
-      "capsSummary": "{persona} · {allow} tillat / {confirm} bekreft / {deny} nekt",
       "cardCapabilities": "Kapabiliteter",
       "cardPersona": "Persona",
       "cardPresets": "Forhåndsinnstillinger",
@@ -66,8 +62,6 @@
       "editAria": "Rediger tilgangsnøkkelen {name}",
       "empty": "Ingen tilgangsnøkler ennå. Opprett en for å komme i gang.",
       "emptyFiltered": "Ingen tilgangsnøkler samsvarer med filteret.",
-      "emulatorPassThrough": "Gjennomkoblede tilgangsnøkler omgår tillatelsestreet, så hver ikke-Phoenix-entitet løses til skrivetilgang. Ingen simulering nødvendig.",
-      "emulatorTitle": "Emulator for effektive tillatelser",
       "enablePtBody": "<strong>Gjennomkobling gir denne tilgangsnøkkelen bred tilgang til entiteter og tjenester.</strong> Konfigurasjonsendringer, systemhandlinger, høyrisikokapabiliteter, tilgang til systemloggen, MESA-regler, Phoenix MCP-blokkeringslisten og fjerning av sensitive attributter gjelder fortsatt.",
       "enablePtCheck": "Jeg forstår at denne tilgangsnøkkelen vil få bred tilgang til Home Assistant",
       "enablePtFailed": "Kunne ikke aktivere gjennomkobling.",
@@ -146,8 +140,6 @@
       "presetSwitchSaveInto": "Dine ulagrede endringer lagres først i <strong>{name}</strong>:",
       "presetSwitchTitle": "Bytt til forhåndsinnstilling: {name}",
       "presetSwitchTo": "Bytt til",
-      "presetsSummaryModified": "{name} (endret)",
-      "presetsSummarySaved": "{count} lagret",
       "ptConvertBody": "Bytte til avgrenset modus bruker det lagrede tillatelsestreet med en gang. Hvis det ikke har noen tildelinger, mister denne tilgangsnøkkelen entitetstilgangen til du legger dem til.",
       "ptConvertFailed": "Kunne ikke konvertere tilgangsnøkkelen.",
       "ptHeaderBanner": "<strong>Dette er en tilgangsnøkkel med gjennomkobling.</strong> Den har bred tilgang til Home Assistant-entiteter og -tjenester. Beskyttede kapabiliteter, MESA-regler, fjerning av sensitive attributter og domeneblokkeringen til Phoenix MCP er fortsatt aktive.",
@@ -158,8 +150,6 @@
       "rateLimitingDisabled": "Hastighetsbegrensning er deaktivert for denne tilgangsnøkkelen.",
       "rateRequestsLabel": "Forespørsler per minutt (0 = deaktivert)",
       "rateSaveFailed": "Lagringen mislyktes.",
-      "rateSummary": "{requests}/min · burst {burst}",
-      "rateSummaryNone": "Ingen grense",
       "rateValuesError": "Verdiene må være ikke-negative heltall.",
       "rawAccessKeyNote": "<strong>Denne tilgangsnøkkelen vises ikke igjen.</strong> Kopier den nå før du lukker.",
       "reconnectBanner": "<strong>Koble til agenten på nytt.</strong> De tilgjengelige verktøyene for denne tilgangsnøkkelen er endret.",
@@ -200,12 +190,7 @@
       "notesHelp": "Veiledning for alle agenter som bruker denne tilgangsnøkkelen, for eksempel hva rom og enheter heter, hvem som bruker den, eller hvor husstandens dokumentasjon ligger. Phoenix MCP legger notatene til i hver agents instruksjoner og skjuler entitets-ID-er utenfor omfanget til denne tilgangsnøkkelen.",
       "notesLabel": "Notater til agenter",
       "notesPlaceholder": "Eksempel: Gjesterommet kalles hobbyrommet. Spør før du endrer noe på barnerommet.",
-      "notesSummaryNone": "Ingen",
-      "notesTooLong": "Notater kan ha maksimalt {max} tegn.",
-      "notesSummaryChars": {
-        "one": "{count} tegn",
-        "other": "{count} tegn"
-      }
+      "notesTooLong": "Notater kan ha maksimalt {max} tegn."
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} må være en streng med en tilgangsnøkkel-ID eller null.",
@@ -1764,7 +1749,6 @@
       "loadTreeFailed": "Kunne ikke laste inn entitetstreet.",
       "missingBadge": "Mangler",
       "missingTitle": "Denne entiteten finnes ikke lenger i Home Assistant.",
-      "noMesaProfile": "Ingen MESA-profil - opprett en",
       "permFor": "Tillatelse for {name}",
       "permForDevice": "Tillatelse for enheten {name}",
       "permForDomain": "Tillatelse for domenet {name}",
@@ -1779,13 +1763,8 @@
       "selRed": "Deny: Nekt (overstyrer alle underordnede)",
       "selSelected": "{title}, valgt",
       "selYellow": "Read: Skrivebeskyttet",
-      "simEntityAria": "Entitets-ID som skal simuleres",
-      "simEntityPlaceholder": "entity_id (for eksempel light.kitchen)",
-      "simFailed": "Simuleringen mislyktes.",
-      "simResult": "Resultat: ",
       "simulateEntityTitle": "Simuler tillatelser for {id}",
       "simulateTitle": "Simuler {type}-tillatelser for {id}",
-      "simulating": "Simulerer...",
       "stateDeny": "NEKT",
       "stateInherit": "ARV",
       "stateNoAccess": "INGEN TILGANG",
@@ -1804,7 +1783,6 @@
       "unmatchedDeviceName": "Enhet som ikke finnes i gjeldende tre",
       "unmatchedDevicesNote": "Disse eksplisitte tildelingene viser til enhets-ID-er som ikke finnes i det gjeldende entitetstreet. Sett N for å fjerne en utdatert tildeling.",
       "unmatchedDevicesTitle": "Tillatelser for enheter uten samsvar",
-      "viewMesaProfile": "Vis MESA-profil",
       "hintCaution": "Sendes til agenter og modellleverandørene deres. Skriv aldri passord eller koder her."
     },
     "personas": {
@@ -2420,7 +2398,13 @@
       "logDetails": "Loggdetaljer",
       "logDetailsEmpty": "Velg en oppføring i en logg for å se detaljene.",
       "previousRecord": "Forrige oppføring",
-      "nextRecord": "Neste oppføring"
+      "nextRecord": "Neste oppføring",
+      "keySettings": "Nøkkelinnstillinger",
+      "keyActions": "Nøkkelhandlinger",
+      "rename": "Gi nytt navn",
+      "selectAccessKey": "Velg en tilgangsnøkkel for å se innstillingene.",
+      "clearAllPermissions": "Tøm alle tillatelser",
+      "summaryPassThrough": "Gjennomkoblede tilgangsnøkler bruker ikke tillatelsestreet, så det finnes ingen regler å oppsummere."
     }
   },
   "voice": {

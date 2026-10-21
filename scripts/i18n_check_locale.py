@@ -139,7 +139,6 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.adminError.expiresImmutable": ("expires_at",),
     "panel.adminError.badExpiresAt": ("expires_at",),
     "panel.adminError.nameRequired": ("name",),
-    "panel.perms.simEntityPlaceholder": ("entity_id", "light.kitchen"),
     "panel.accessKeys.namePlaceholder": ("my_access_key",),
     # ai_task.py hardcodes _attr_name = "Phoenix MCP AI Task"; the entity is not
     # localized, so a translated mention would name something the operator
@@ -408,7 +407,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     }),
     "nb": frozenset({
         # Bare templates and shared technical fragments with no prose to translate.
-        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Norwegian
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
         "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
@@ -492,7 +490,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
         "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
         "panel.accessKeys.secondsShort",           # "{n}s", the seconds unit is "s" in Dutch
         "panel.version.size.was",              # "{size} (was {before})", "was" is a cognate
         "panel.wizard.agentTablist",           # "Agent"
@@ -526,7 +523,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
         "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
@@ -575,7 +571,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.agentTablist",  # "Agent"
         "panel.wizard.stepPersona",  # "Persona"
         "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
-        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
@@ -606,7 +601,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
 WHITESPACE_EXEMPT = frozenset({
     "panel.common.listSeparator",   # ", " becomes the ideographic comma
     "panel.mesa.currentFilter",     # "Current filter: " becomes a full-width colon
-    "panel.perms.simResult",        # "Result: " likewise
     "panel.agentchat.approvalReason",  # leading " - " becomes a full-width comma
     # Appended after a sentence: English needs the separating space, Chinese
     # does not, because the preceding full stop is already full-width.

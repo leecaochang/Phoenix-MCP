@@ -560,7 +560,6 @@
       "loadTreeFailed": "Nie udało się wczytać drzewa encji.",
       "missingBadge": "Brakuje",
       "missingTitle": "Ta encja już nie istnieje w Home Assistant.",
-      "noMesaProfile": "Brak profilu MESA - utwórz jeden",
       "permFor": "Uprawnienie dla {name}",
       "permForDevice": "Uprawnienie dla urządzenia {name}",
       "permForDomain": "Uprawnienie dla domeny {name}",
@@ -575,13 +574,8 @@
       "selRed": "Deny: Odmów (nadpisuje wszystkie elementy podrzędne)",
       "selSelected": "{title}, wybrane",
       "selYellow": "Read: Tylko do odczytu",
-      "simEntityAria": "ID encji do symulacji",
-      "simEntityPlaceholder": "entity_id (np. light.kitchen)",
-      "simFailed": "Symulacja nie powiodła się.",
-      "simResult": "Wynik: ",
       "simulateEntityTitle": "Symuluj uprawnienia dla {id}",
       "simulateTitle": "Symuluj uprawnienia {type} dla {id}",
-      "simulating": "Symulowanie...",
       "stateDeny": "ODMÓW",
       "stateInherit": "DZIEDZICZ",
       "stateNoAccess": "BRAK DOSTĘPU",
@@ -600,7 +594,6 @@
       "unmatchedDeviceName": "Urządzenie nie znajduje się w bieżącym drzewie",
       "unmatchedDevicesNote": "Te jawne uprawnienia odwołują się do ID urządzeń, których nie ma w bieżącym drzewie encji. Ustaw N, aby usunąć nieaktualne uprawnienie.",
       "unmatchedDevicesTitle": "Niedopasowane uprawnienia urządzeń",
-      "viewMesaProfile": "Wyświetl profil MESA",
       "hintCaution": "Podpowiedź jest wysyłana do agentów i ich dostawców modeli. Nigdy nie wpisuj tu haseł ani kodów."
     },
     "diff": {
@@ -1218,11 +1211,8 @@
       "skillHarnessHint": "Zainstaluj przewodnik w ~/.dsh/skills/phoenix/SKILL.md. Przy własnym DSH_HOME użyj jego katalogu skills."
     },
     "accessKeys": {
-      "advanced": "Zaawansowane",
       "announceAllHelp": "Pokaż każde narzędzie Phoenix MCP, w tym narzędzia, których ten klucz dostępu nie może używać. Pozostaw wyłączone, aby zmniejszyć zużycie modelu i uniknąć nieudanych wywołań. Włączaj tylko do diagnozowania problemów.",
       "announceAllLabel": "Zawsze ogłaszaj wszystkie narzędzia",
-      "announceSummaryAll": "Ogłoszono wszystkie narzędzia",
-      "announceSummaryScoped": "Ograniczone do możliwości",
       "archivedDeleteFailed": "Usunięcie nie powiodło się.",
       "archivedEmpty": "Brak zarchiwizowanych kluczy dostępu.",
       "archivedTitle": "Zarchiwizowane klucze dostępu",
@@ -1230,7 +1220,6 @@
       "assistExposureLabel": "Ogranicz do encji udostępnionych Assist",
       "back": "Wstecz",
       "cancel": "Anuluj",
-      "capsSummary": "{persona} · {allow} zezwól / {confirm} potwierdź / {deny} odmów",
       "cardCapabilities": "Możliwości",
       "cardPersona": "Persona",
       "cardPresets": "Ustawienia wstępne",
@@ -1274,8 +1263,6 @@
       "editAria": "Edytuj klucz dostępu {name}",
       "empty": "Nie ma jeszcze kluczy dostępu. Utwórz jeden, aby zacząć.",
       "emptyFiltered": "Żadne klucze dostępu nie pasują do filtra.",
-      "emulatorPassThrough": "Klucze dostępu Pass-through pomijają drzewo uprawnień, więc każda encja spoza Phoenix jest rozwiązywana do zapisu. Symulacja nie jest potrzebna.",
-      "emulatorTitle": "Emulator efektywnych uprawnień",
       "enablePtBody": "<strong>Pass-through daje temu kluczowi dostępu szeroki dostęp do encji i usług.</strong> Zmiany konfiguracji, akcje systemowe, możliwości wysokiego ryzyka, dostęp do dziennika systemowego, reguły MESA, lista blokowanych Phoenix MCP i usuwanie wrażliwych atrybutów nadal obowiązują.",
       "enablePtCheck": "Rozumiem, że ten klucz dostępu będzie miał szeroki dostęp do Home Assistant",
       "enablePtFailed": "Nie udało się włączyć trybu pass-through.",
@@ -1354,8 +1341,6 @@
       "presetSwitchSaveInto": "Twoje niezapisane zmiany zostaną najpierw zapisane w <strong>{name}</strong>:",
       "presetSwitchTitle": "Przełącz na ustawienie wstępne: {name}",
       "presetSwitchTo": "Przełącz na",
-      "presetsSummaryModified": "{name} (zmodyfikowane)",
-      "presetsSummarySaved": "Zapisano {count}",
       "ptConvertBody": "Przełączenie na tryb ograniczony natychmiast stosuje zapisane drzewo uprawnień. Jeśli nie ma ono uprawnień, ten klucz dostępu straci dostęp do encji, dopóki ich nie dodasz.",
       "ptConvertFailed": "Nie udało się przekonwertować klucza dostępu.",
       "ptHeaderBanner": "<strong>To jest klucz dostępu pass-through.</strong> Ma szeroki dostęp do encji i usług Home Assistant. Chronione możliwości, reguły MESA, usuwanie wrażliwych atrybutów i blokada domeny Phoenix MCP pozostają aktywne.",
@@ -1366,8 +1351,6 @@
       "rateLimitingDisabled": "Ograniczanie szybkości jest wyłączone dla tego klucza dostępu.",
       "rateRequestsLabel": "Żądania na minutę (0 = wyłączone)",
       "rateSaveFailed": "Zapis nie powiódł się.",
-      "rateSummary": "{requests}/min · burst {burst}",
-      "rateSummaryNone": "Bez limitu",
       "rateValuesError": "Wartości muszą być nieujemnymi liczbami całkowitymi.",
       "rawAccessKeyNote": "<strong>Ten klucz dostępu nie zostanie ponownie wyświetlony.</strong> Skopiuj go teraz, zanim zamkniesz.",
       "reconnectBanner": "<strong>Połącz ponownie swojego agenta.</strong> Dostępne narzędzia tego klucza dostępu uległy zmianie.",
@@ -1412,14 +1395,7 @@
       "notesHelp": "Wskazówki dla każdego agenta, który używa tego klucza dostępu, na przykład jak nazywają się pomieszczenia i urządzenia, kto go używa lub gdzie znajduje się dokumentacja domu. Phoenix MCP dodaje notatki do instrukcji każdego agenta i ukrywa ID encji spoza zakresu tego klucza dostępu.",
       "notesLabel": "Notatki dla agentów",
       "notesPlaceholder": "Przykład: Pokój gościnny nazywamy gabinetem. Zapytaj, zanim zmienisz cokolwiek w pokoju dziecięcym.",
-      "notesSummaryNone": "Brak",
-      "notesTooLong": "Notatki mogą mieć co najwyżej {max} znaków.",
-      "notesSummaryChars": {
-        "one": "{count} znak",
-        "few": "{count} znaki",
-        "many": "{count} znaków",
-        "other": "{count} znaku"
-      }
+      "notesTooLong": "Notatki mogą mieć co najwyżej {max} znaków."
     },
     "mesa": {
       "addAreaProfile": "Dodaj profil obszaru",
@@ -2527,7 +2503,13 @@
       "logDetails": "Szczegóły dziennika",
       "logDetailsEmpty": "Wybierz wpis w dzienniku, aby zobaczyć jego szczegóły.",
       "previousRecord": "Poprzedni wpis",
-      "nextRecord": "Następny wpis"
+      "nextRecord": "Następny wpis",
+      "keySettings": "Ustawienia klucza",
+      "keyActions": "Działania klucza",
+      "rename": "Zmień nazwę",
+      "selectAccessKey": "Wybierz klucz dostępu, aby zobaczyć jego ustawienia.",
+      "clearAllPermissions": "Wyczyść wszystkie uprawnienia",
+      "summaryPassThrough": "Klucze dostępu Pass-through nie używają drzewa uprawnień, więc nie ma reguł do podsumowania."
     }
   }
 }

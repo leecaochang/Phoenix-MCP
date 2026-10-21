@@ -14,7 +14,7 @@ const arrange = (_: DockviewApi, add: (id: string, position?: AddPanelOptions["p
 const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div data-window={id}>{id}</div>]));
 
 function mount(saved?: Parameters<WorkspaceController["load"]>[0]) {
-  const controller = new WorkspaceController("logs", WINDOWS, arrange, (id) => `Title ${id}`, new Set(["attention"]));
+  const controller = new WorkspaceController("logs", WINDOWS, arrange, (id) => `Title ${id}`, { transient: new Set(["attention"]) });
   render(<DockviewReact components={components} onReady={(e) => { controller.api = e.api; controller.load(saved); }} />);
   return controller;
 }
@@ -103,5 +103,80 @@ describe("workspace controller", () => {
     language = "de";
     c.retitle();
     expect(c.api!.getPanel("auditLog")!.title).toBe("de:auditLog");
+  });
+
+  describe("windows shown only while a setting allows", () => {
+    const KEYS = ["accessKeys", "keySettings", "presets"] as const;
+    const keyComponents = Object.fromEntries(KEYS.map((id) => [id, () => <div>{id}</div>]));
+    const keysArrange = (_: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => {
+      add("accessKeys");
+      add("keySettings", { referencePanel: "accessKeys", direction: "below" });
+    };
+    function mountKeys(allowed: () => boolean | null, saved?: Parameters<WorkspaceController["load"]>[0]) {
+      const c = new WorkspaceController("accessKeys", KEYS, keysArrange, (id) => id, {
+        folded: ["keySettings", "presets"],
+        conditional: { presets: { neighbor: "keySettings", side: "bottom" } },
+      });
+      c.availability = (id) => (id === "presets" ? allowed() : true);
+      render(<DockviewReact components={keyComponents} onReady={(e) => { c.api = e.api; c.load(saved); }} />);
+      return c;
+    }
+
+    it("starts the listed windows folded", () => {
+      const c = mountKeys(() => true);
+      expect(c.folds.isFolded("keySettings")).toBe(true);
+      expect(c.folds.isFolded("accessKeys")).toBe(false);
+    });
+
+    it("adds the window in its place, folded, once the setting is known to allow it", () => {
+      let allowed: boolean | null = null;
+      const c = mountKeys(() => allowed);
+      expect(ids(c)).not.toContain("presets");
+      allowed = true;
+      c.syncAvailable();
+      expect(ids(c)).toContain("presets");
+      expect(c.folds.isFolded("presets")).toBe(true);
+      expect(c.windowOrder()).toEqual(["accessKeys", "keySettings", "presets"]);
+    });
+
+    it("removes it without remembering it as closed, and never saves or offers it while off", () => {
+      let allowed = true;
+      const c = mountKeys(() => allowed);
+      allowed = false;
+      c.syncAvailable();
+      expect(ids(c)).not.toContain("presets");
+      expect(c.closedWindows()).toEqual([]);
+      expect(Object.keys(c.layout()!.dock.panels)).not.toContain("presets");
+      c.reopen("presets");
+      expect(ids(c)).not.toContain("presets");
+      allowed = true;
+      c.syncAvailable();
+      expect(ids(c)).toContain("presets");
+    });
+
+    it("keeps it closed when the user closed it, offering it again only while allowed", () => {
+      let allowed = true;
+      const c = mountKeys(() => allowed);
+      c.close(c.api!.getPanel("presets")!.group);
+      c.syncAvailable();
+      expect(ids(c)).not.toContain("presets");
+      expect(c.closedWindows()).toEqual(["presets"]);
+      allowed = false;
+      expect(c.closedWindows()).toEqual([]);
+      allowed = true;
+      c.syncAvailable();
+      expect(ids(c)).not.toContain("presets");
+      c.reopen("presets");
+      expect(ids(c)).toContain("presets");
+    });
+
+    it("brings it back after a reload of a layout saved while it was off", () => {
+      let allowed = false;
+      const first = mountKeys(() => allowed);
+      const saved = first.layout()!;
+      allowed = true;
+      const second = mountKeys(() => allowed, saved);
+      expect(ids(second)).toContain("presets");
+    });
   });
 });

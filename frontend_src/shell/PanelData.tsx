@@ -28,11 +28,10 @@ export type AccessKeyView =
 
 export type ApprovalsTab = "pending" | "history";
 
-// Persist the access key being edited so returning to Access Keys reopens its
-// detail; with none stored (or any other workspace), reopen at the list.
+// Persist the selected access key so a reload selects it again; with none stored,
+// the Access Keys windows wait for a selection.
 const ACCESS_KEY_DETAIL_STORAGE_KEY = "phx-access-key-detail";
-function readStoredView(workspace: WorkspaceId): AccessKeyView {
-  if (workspace !== "accessKeys") return { name: "list" };
+function readStoredView(): AccessKeyView {
   try {
     const id = localStorage.getItem(ACCESS_KEY_DETAIL_STORAGE_KEY)
       ?? localStorage.getItem("phx-token-detail");
@@ -140,7 +139,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   children: ReactNode;
 }) {
   const [workspace, setWorkspace] = useState<WorkspaceId>(initialWorkspace);
-  const [accessKeyView, setView] = useState<AccessKeyView>(() => readStoredView(initialWorkspace));
+  const [accessKeyView, setView] = useState<AccessKeyView>(readStoredView);
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [loadingAccessKeys, setLoadingAccessKeys] = useState(true);
@@ -249,17 +248,16 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     void syncCardCatalog();
   }, []);
 
-  // Remember the open access key detail (only on Access Keys); clear it otherwise
-  // so returning lands on the list rather than a stale detail.
+  // Remember the selected access key; clear it when nothing is selected.
   useEffect(() => {
     try {
-      if (workspace === "accessKeys" && accessKeyView.name === "detail") {
+      if (accessKeyView.name === "detail") {
         localStorage.setItem(ACCESS_KEY_DETAIL_STORAGE_KEY, accessKeyView.accessKeyId);
       } else {
         localStorage.removeItem(ACCESS_KEY_DETAIL_STORAGE_KEY);
       }
     } catch { /* storage blocked: skip */ }
-  }, [workspace, accessKeyView]);
+  }, [accessKeyView]);
 
   useEffect(() => {
     try { localStorage.setItem(APPROVALS_TAB_STORAGE_KEY, approvalsTab); } catch { /* storage blocked: skip */ }

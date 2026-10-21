@@ -541,11 +541,8 @@
       "skillHarnessHint": "Die Anleitung unter ~/.dsh/skills/phoenix/SKILL.md installieren. Bei eigenem DSH_HOME dessen skills-Verzeichnis verwenden."
     },
     "accessKeys": {
-      "advanced": "Erweitert",
       "announceAllHelp": "Zeigt jedes Phoenix MCP-Tool an, auch Tools, die dieser Zugriffsschlüssel nicht verwenden kann. Lassen Sie die Option deaktiviert, um die Modellnutzung zu reduzieren und fehlgeschlagene Aufrufe zu vermeiden. Nur zur Fehlerbehebung aktivieren.",
       "announceAllLabel": "Immer alle Tools ankündigen",
-      "announceSummaryAll": "Alle Tools angekündigt",
-      "announceSummaryScoped": "Auf Fähigkeiten beschränkt",
       "archivedDeleteFailed": "Löschen fehlgeschlagen.",
       "archivedEmpty": "Keine archivierten Zugriffsschlüssel.",
       "archivedTitle": "Archivierte Zugriffsschlüssel",
@@ -553,7 +550,6 @@
       "assistExposureLabel": "Auf Assist-freigegebene Entitäten beschränken",
       "back": "Zurück",
       "cancel": "Abbrechen",
-      "capsSummary": "{persona} · {allow} Erlauben / {confirm} Bestätigen / {deny} Verweigern",
       "cardCapabilities": "Fähigkeiten",
       "cardPersona": "Persona",
       "cardPresets": "Voreinstellungen",
@@ -597,8 +593,6 @@
       "editAria": "Zugriffsschlüssel {name} bearbeiten",
       "empty": "Noch keine Zugriffsschlüssel. Erstellen Sie einen, um zu beginnen.",
       "emptyFiltered": "Keine Zugriffsschlüssel entsprechen dem Filter.",
-      "emulatorPassThrough": "Durchreichungs-Zugriffsschlüssel umgehen den Berechtigungsbaum, sodass jede Nicht-Phoenix-Entität auf Schreiben aufgelöst wird. Keine Simulation erforderlich.",
-      "emulatorTitle": "Emulator für effektive Berechtigungen",
       "enablePtBody": "<strong>Durchreichung gewährt diesem Zugriffsschlüssel umfassenden Zugriff auf Entitäten und Dienste.</strong> Konfigurationsänderungen, Systemaktionen, risikoreiche Fähigkeiten, der Zugriff auf das Systemprotokoll, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
       "enablePtCheck": "Ich verstehe, dass dieser Zugriffsschlüssel umfassenden Zugriff auf Home Assistant haben wird",
       "enablePtFailed": "Durchreichung konnte nicht aktiviert werden.",
@@ -677,8 +671,6 @@
       "presetSwitchSaveInto": "Ihre ungespeicherten Änderungen werden zunächst in <strong>{name}</strong> gespeichert:",
       "presetSwitchTitle": "Zu Voreinstellung wechseln: {name}",
       "presetSwitchTo": "Wechseln zu",
-      "presetsSummaryModified": "{name} (geändert)",
-      "presetsSummarySaved": "{count} gespeichert",
       "ptConvertBody": "Beim Wechseln in den beschränkten Modus wird der gespeicherte Berechtigungsbaum sofort angewendet. Wenn er keine Freigaben enthält, verliert dieser Zugriffsschlüssel den Entitätszugriff, bis Sie diese hinzufügen.",
       "ptConvertFailed": "Zugriffsschlüssel konnte nicht konvertiert werden.",
       "ptHeaderBanner": "<strong>Dies ist ein Durchreichungs-Zugriffsschlüssel.</strong> Er hat umfassenden Zugriff auf Entitäten und Dienste von Home Assistant. Geschützte Fähigkeiten, MESA-Regeln, das Entfernen sensibler Attribute und die Phoenix MCP-Domänensperre bleiben aktiv.",
@@ -689,8 +681,6 @@
       "rateLimitingDisabled": "Das Ratenlimit ist für diesen Zugriffsschlüssel deaktiviert.",
       "rateRequestsLabel": "Anfragen pro Minute (0 = deaktiviert)",
       "rateSaveFailed": "Speichern fehlgeschlagen.",
-      "rateSummary": "{requests}/min · Burst {burst}",
-      "rateSummaryNone": "Kein Limit",
       "rateValuesError": "Die Werte müssen nicht negative ganze Zahlen sein.",
       "rawAccessKeyNote": "<strong>Dieser Zugriffsschlüssel wird nicht erneut angezeigt.</strong> Kopieren Sie ihn jetzt, bevor Sie schließen.",
       "reconnectBanner": "<strong>Verbinden Sie Ihren Agenten erneut.</strong> Die verfügbaren Tools dieses Zugriffsschlüssels haben sich geändert.",
@@ -735,12 +725,7 @@
       "notesHelp": "Hinweise für jeden Agenten, der diesen Zugriffsschlüssel verwendet, etwa wie Räume und Geräte heißen, wer ihn nutzt oder wo die Dokumentation des Haushalts liegt. Phoenix MCP fügt die Notizen den Anweisungen jedes Agenten hinzu und blendet Entitäts-IDs außerhalb des Geltungsbereichs dieses Zugriffsschlüssels aus.",
       "notesLabel": "Notizen für Agenten",
       "notesPlaceholder": "Beispiel: Das Gästezimmer heißt Hobbyraum. Vor Änderungen im Kinderzimmer bitte nachfragen.",
-      "notesSummaryNone": "Keine",
-      "notesTooLong": "Notizen dürfen höchstens {max} Zeichen lang sein.",
-      "notesSummaryChars": {
-        "one": "{count} Zeichen",
-        "other": "{count} Zeichen"
-      }
+      "notesTooLong": "Notizen dürfen höchstens {max} Zeichen lang sein."
     },
     "mesa": {
       "addAreaProfile": "Bereichsprofil hinzufügen",
@@ -1893,7 +1878,6 @@
       "loadTreeFailed": "Entitätsbaum konnte nicht geladen werden.",
       "missingBadge": "Fehlt",
       "missingTitle": "Diese Entität existiert in Home Assistant nicht mehr.",
-      "noMesaProfile": "Kein MESA-Profil - eines erstellen",
       "permFor": "Berechtigung für {name}",
       "permForDevice": "Berechtigung für Gerät {name}",
       "permForDomain": "Berechtigung für Domäne {name}",
@@ -1908,13 +1892,8 @@
       "selRed": "Deny: Verweigern (überschreibt alle untergeordneten Elemente)",
       "selSelected": "{title}, ausgewählt",
       "selYellow": "Read: Nur Lesen",
-      "simEntityAria": "Zu simulierende Entitäts-ID",
-      "simEntityPlaceholder": "entity_id (z. B. light.kitchen)",
-      "simFailed": "Simulation fehlgeschlagen.",
-      "simResult": "Ergebnis: ",
       "simulateEntityTitle": "Berechtigungen für {id} simulieren",
       "simulateTitle": "{type}-Berechtigungen für {id} simulieren",
-      "simulating": "Wird simuliert...",
       "stateDeny": "Verweigern",
       "stateInherit": "Erben",
       "stateNoAccess": "Kein Zugriff",
@@ -1933,7 +1912,6 @@
       "unmatchedDeviceName": "Gerät nicht im aktuellen Baum",
       "unmatchedDevicesNote": "Diese expliziten Berechtigungen verweisen auf Geräte-IDs, die sich nicht im aktuellen Entitätsbaum befinden. Setzen Sie N, um eine veraltete Berechtigung zu entfernen.",
       "unmatchedDevicesTitle": "Nicht zugeordnete Geräteberechtigungen",
-      "viewMesaProfile": "MESA-Profil anzeigen",
       "hintCaution": "Wird an Agenten und deren Modellanbieter gesendet. Tragen Sie niemals Passwörter oder Codes ein."
     },
     "changes": {
@@ -2415,7 +2393,13 @@
       "logDetails": "Protokolldetails",
       "logDetailsEmpty": "Wählen Sie einen Eintrag in einem Protokoll aus, um die Details anzuzeigen.",
       "previousRecord": "Vorheriger Eintrag",
-      "nextRecord": "Nächster Eintrag"
+      "nextRecord": "Nächster Eintrag",
+      "keySettings": "Schlüsseleinstellungen",
+      "keyActions": "Schlüsselaktionen",
+      "rename": "Umbenennen",
+      "selectAccessKey": "Wählen Sie einen Zugriffsschlüssel aus, um seine Einstellungen anzuzeigen.",
+      "clearAllPermissions": "Alle Berechtigungen entfernen",
+      "summaryPassThrough": "Durchreichungs-Zugriffsschlüssel verwenden den Berechtigungsbaum nicht, daher gibt es keine Regeln zum Zusammenfassen."
     }
   },
   "notification": {
