@@ -2436,7 +2436,7 @@
       "wsLogs": "Loggar: granskningsloggen över begäranden till Phoenix och inspelade agentsamtal.",
       "wsSettings": "Inställningar: AI-leverantörer, Agent Chat, Home Assistant-funktioner, säkerhet och loggning.",
       "agentChat": "Öppna Agent Chat för att arbeta med en agent från den här panelen.",
-      "documentation": "Visa eller dölj hjälpfältet, eller öppna dokumentationswebbplatsen.",
+      "documentation": "Visa eller dölj hjälpfältet eller guiden, eller öppna dokumentationswebbplatsen.",
       "workspaceOptions": "Öppna stängda fönster igen, spara eller återställ den här arbetsytans layout, eller återställ panelens standardvärden.",
       "moveToolbar": "Dra för att flytta verktygsfältet, eller öppna den här menyn för att docka det vid en kant eller välja hur knapparna visas.",
       "collapseToolbar": "Fäll ihop verktygsfältet till en enda knapp, eller fäll ut det igen.",
@@ -2447,7 +2447,14 @@
       "floatWindow": "Gör fönstret flytande ovanför arbetsytan. Det stannar på plats medan arbetsytan rullar.",
       "dockWindow": "Docka fönstret i arbetsytan igen.",
       "maximizeWindow": "Låt fönstret fylla den synliga delen av arbetsytan, eller återställ det.",
-      "closeWindow": "Stäng fönstret. Öppna det igen från menyn Alternativ för arbetsytan."
+      "closeWindow": "Stäng fönstret. Öppna det igen från menyn Alternativ för arbetsytan.",
+      "guideTitle": "Dra i namnlisten för att flytta guiden, eller dra i en kant eller ett hörn för att ändra storleken."
+    },
+    "guide": {
+      "title": "Guide",
+      "back": "Tillbaka",
+      "unavailable": "Guiden kunde inte läsas in. Läs in sidan igen för att försöka på nytt.",
+      "noTopic": "Det finns ännu inget guideavsnitt för den här arbetsytan."
     }
   },
   "voice": {

@@ -2431,7 +2431,7 @@
       "wsLogs": "Protokolle: das Prüfprotokoll der Anfragen an Phoenix und aufgezeichnete Agentengespräche.",
       "wsSettings": "Einstellungen: KI-Anbieter, Agent Chat, Home Assistant-Funktionen, Sicherheit und Protokollierung.",
       "agentChat": "Agent Chat öffnen, um in diesem Panel mit einem Agenten zu arbeiten.",
-      "documentation": "Hilfeleiste ein- oder ausblenden oder die Dokumentationswebsite öffnen.",
+      "documentation": "Hilfeleiste oder Leitfaden ein- oder ausblenden oder die Dokumentationswebsite öffnen.",
       "workspaceOptions": "Geschlossene Fenster erneut öffnen, die Anordnung dieses Arbeitsbereichs speichern oder wiederherstellen oder die Standardwerte des Panels wiederherstellen.",
       "moveToolbar": "Ziehen, um die Symbolleiste zu verschieben, oder dieses Menü öffnen, um sie an einem Rand anzudocken oder die Darstellung ihrer Schaltflächen zu wählen.",
       "collapseToolbar": "Die Symbolleiste auf eine einzige Schaltfläche einklappen oder wieder ausklappen.",
@@ -2442,7 +2442,14 @@
       "floatWindow": "Dieses Fenster über dem Arbeitsbereich lösen. Es bleibt an seinem Platz, während der Arbeitsbereich scrollt.",
       "dockWindow": "Dieses Fenster wieder im Arbeitsbereich andocken.",
       "maximizeWindow": "Den sichtbaren Arbeitsbereich mit diesem Fenster füllen oder es wiederherstellen.",
-      "closeWindow": "Dieses Fenster schließen. Über das Menü „Arbeitsbereich-Optionen“ lässt es sich wieder öffnen."
+      "closeWindow": "Dieses Fenster schließen. Über das Menü „Arbeitsbereich-Optionen“ lässt es sich wieder öffnen.",
+      "guideTitle": "Die Titelleiste ziehen, um den Leitfaden zu verschieben, oder an einer Kante oder Ecke ziehen, um die Größe zu ändern."
+    },
+    "guide": {
+      "title": "Leitfaden",
+      "back": "Zurück",
+      "unavailable": "Der Leitfaden konnte nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
+      "noTopic": "Für diesen Arbeitsbereich gibt es noch kein Thema im Leitfaden."
     }
   },
   "notification": {

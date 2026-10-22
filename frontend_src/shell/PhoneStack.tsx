@@ -1,6 +1,6 @@
 /** Narrow screens: the workspace's windows as one scrolling stack, each foldable into its title bar. */
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { t } from "../i18n";
 import { Icon } from "../ui/Icon";
@@ -40,13 +40,15 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention, settings }: { workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null }) {
+export function PhoneStack({ workspace, showAttention, settings, guide }: { workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; guide?: ReactNode }) {
   const def = WORKSPACES[workspace];
   const windows = def.windows.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings) === true));
   // Needs Attention leads the stack when it is shown.
   windows.sort((a, b) => Number(b === ATTENTION_WINDOW) - Number(a === ATTENTION_WINDOW));
   return (
     <div className="phx-phone-stack" data-workspace={workspace}>
+      {/* The Guide heads the stack when it is open. */}
+      {guide}
       {windows.map((id) => <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace} />)}
     </div>
   );

@@ -52,6 +52,11 @@ export function withHelpIn(help: HelpPrefs, workspace: WorkspaceId, open: boolea
   return { show: help.show, workspaces };
 }
 
+/** Where the Guide sits on screen, in CSS pixels from the viewport's top-left corner. */
+export interface GuideRect { x: number; y: number; w: number; h: number }
+/** The Guide in one workspace: whether it is open, and where the user put it. */
+export interface GuideState { open: boolean; rect?: GuideRect }
+
 export interface ShellRecord {
   schema: number;
   savedAt: number;
@@ -64,6 +69,8 @@ export interface ShellRecord {
   lastWorkspace?: WorkspaceId;
   toolbar?: ToolbarState;
   help?: HelpPrefs;
+  /** The Guide per workspace; it starts closed. */
+  guide?: Partial<Record<WorkspaceId, GuideState>>;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
   /** Arrangements the user saved as My Default, one per workspace; automatic saving never changes them. */
   myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
@@ -85,6 +92,22 @@ export function readToolbar(raw: unknown): ToolbarState {
 }
 
 const isWorkspace = (v: unknown): v is WorkspaceId => (WORKSPACE_IDS as readonly unknown[]).includes(v);
+
+/** Saved Guide states, with anything unreadable left out. */
+export function readGuide(raw: unknown): Partial<Record<WorkspaceId, GuideState>> {
+  const out: Partial<Record<WorkspaceId, GuideState>> = {};
+  if (!raw || typeof raw !== "object") return out;
+  const px = (v: unknown, max: number) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max;
+  for (const [id, value] of Object.entries(raw)) {
+    const v = value as { open?: unknown; rect?: Partial<Record<keyof GuideRect, unknown>> } | null;
+    if (!isWorkspace(id) || !v || typeof v.open !== "boolean") continue;
+    const r = v.rect;
+    const rect = r && px(r.x, 20000) && px(r.y, 20000) && px(r.w, 20000) && px(r.h, 20000) && (r.w as number) >= 200 && (r.h as number) >= 120
+      ? { x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number } : undefined;
+    out[id] = { open: v.open, ...(rect ? { rect } : {}) };
+  }
+  return out;
+}
 
 /** Saved Help preferences, with anything unreadable left out. */
 export function readHelp(raw: unknown): HelpPrefs {
@@ -140,6 +163,7 @@ export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
     lastWorkspace: isWorkspace(parsed.lastWorkspace) ? parsed.lastWorkspace : undefined,
     toolbar: parsed.toolbar === undefined ? undefined : readToolbar(parsed.toolbar),
     ...(parsed.help !== undefined ? { help: readHelp(parsed.help) } : {}),
+    ...(parsed.guide !== undefined ? { guide: readGuide(parsed.guide) } : {}),
     workspaces: layouts(parsed.workspaces),
     ...(Object.keys(myDefaults).length ? { myDefaults } : {}),
   };

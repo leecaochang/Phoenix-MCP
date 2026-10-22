@@ -9,19 +9,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AgentCliWindow } from "../components/AgentCliWindow";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { t } from "../i18n";
+import { resolveLanguage, t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
 import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
-import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
+import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
+import { GuideWindow, PhoneGuide } from "./guide";
 import { DOCS_BASE_URL } from "../components/common";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
@@ -38,7 +39,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 /** Every section a record holds, to send a whole record to Home Assistant. */
 function allSections(record: ShellRecord): Section[] {
   return [
-    "toolbar", "help", "lastWorkspace",
+    "toolbar", "help", "guide", "lastWorkspace",
     ...Object.keys(record.workspaces).map((id) => `ws:${id}` as Section),
     ...Object.keys(record.myDefaults ?? {}).map((id) => `my:${id}` as Section),
   ];
@@ -97,6 +98,11 @@ export function Shell() {
   useEffect(() => { setHelp(record?.help ?? DEFAULT_HELP); }, [record]);
   const helpRef = useRef(help);
   helpRef.current = help;
+  // The Guide in each workspace: open or not, and where it was put.
+  const [guide, setGuide] = useState<Partial<Record<WorkspaceId, GuideState>>>(() => record?.guide ?? {});
+  useEffect(() => { setGuide(record?.guide ?? {}); }, [record]);
+  const guideRef = useRef(guide);
+  guideRef.current = guide;
 
   // A different user or environment, or an adopted record, starts from fresh controllers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,6 +175,8 @@ export function Shell() {
         if (!same(rec.toolbar, toolbarRef.current)) { rec.toolbar = toolbarRef.current; changed.push(section); }
       } else if (section === "help") {
         if (!same(rec.help, helpRef.current)) { rec.help = helpRef.current; changed.push(section); }
+      } else if (section === "guide") {
+        if (!same(rec.guide ?? {}, guideRef.current)) { rec.guide = guideRef.current; changed.push(section); }
       } else if (section === "lastWorkspace") {
         if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
       } else if (section.startsWith("ws:")) {
@@ -245,6 +253,12 @@ export function Shell() {
     for (const [id, controller] of controllers) controller.want(HELP_WINDOW, helpOpen(help, id));
     if (!same(help, recordRef.current?.help ?? DEFAULT_HELP)) markChanged(["help"]);
   }, [help, controllers, markChanged]);
+  useEffect(() => {
+    if (!same(guide, recordRef.current?.guide ?? {})) markChanged(["guide"]);
+  }, [guide, markChanged]);
+  const setGuideIn = useCallback((id: WorkspaceId, next: Partial<GuideState>) => {
+    setGuide((prev) => ({ ...prev, [id]: { open: false, ...prev[id], ...next } }));
+  }, []);
   const lastSeenWorkspace = useRef(d.workspace);
   useEffect(() => {
     if (lastSeenWorkspace.current === d.workspace) return;
@@ -259,15 +273,18 @@ export function Shell() {
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
   const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
 
-  // Documentation: Show Help Bar (every workspace; desktop only for now) and the website.
+  // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (this workspace) and the website.
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
       items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: helpRef.current.show, onSelect: () => setHelp((prev) => ({ show: !prev.show, workspaces: {} })) });
     }
+    const here = workspaceRef.current;
+    const guideOpen = !!guideRef.current[here]?.open;
+    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, onSelect: () => setGuideIn(here, { open: !guideOpen }) });
     items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
     return items;
-  }, [env]);
+  }, [env, setGuideIn]);
 
   // Restore Panel Default Settings asks first, inside the workspace area.
   const [confirmDefaults, setConfirmDefaults] = useState(false);
@@ -277,11 +294,13 @@ export function Shell() {
     setToolbar(DEFAULT_TOOLBAR);
     setHelp(DEFAULT_HELP);
     helpRef.current = DEFAULT_HELP;
+    setGuide({});
+    guideRef.current = {};
     for (const controller of controllers.values()) {
       controller.want(HELP_WINDOW, true);
       controller.restoreOriginal();
     }
-    const sections: Section[] = ["toolbar", "help"];
+    const sections: Section[] = ["toolbar", "help", "guide"];
     for (const id of WORKSPACE_IDS) {
       sections.push(`ws:${id}`);
       if (rec && !controllers.has(id)) delete rec.workspaces[id];
@@ -345,6 +364,7 @@ export function Shell() {
 
   const s = d.settings;
   const active = d.workspace;
+  const language = resolveLanguage(d.hass);
   const dock = env === "mobile" ? "top" : toolbar.dock;
   return (
     <MenuRootContext.Provider value={rootEl}>
@@ -392,7 +412,8 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} />}
+            : <PhoneStack workspace={active} showAttention={showAttention} settings={s}
+              guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => setGuideIn(active, { open: false })} /> : null} />}
         </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
@@ -411,6 +432,10 @@ export function Shell() {
               hass={d.hass}
             />
           </ErrorBoundary>
+        )}
+        {env === "desktop" && guide[active]?.open && (
+          <GuideWindow key={active} workspace={active} controller={visited.has(active) ? controllerFor(active) : null} language={language}
+            rect={guide[active]?.rect} onRect={(rect) => setGuideIn(active, { rect })} onClose={() => setGuideIn(active, { open: false })} />
         )}
         <Toasts center={notifications} />
       </div>

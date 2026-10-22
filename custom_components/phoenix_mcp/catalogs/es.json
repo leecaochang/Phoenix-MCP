@@ -2431,7 +2431,7 @@
       "wsLogs": "Registros: el registro de auditoría de las solicitudes a Phoenix y las conversaciones de agentes grabadas.",
       "wsSettings": "Configuración: proveedores de IA, Agent Chat, funciones de Home Assistant, seguridad y registro.",
       "agentChat": "Abra Agent Chat para trabajar con un agente desde este panel.",
-      "documentation": "Muestre u oculte la barra de ayuda, o abra el sitio web de documentación.",
+      "documentation": "Muestre u oculte la barra de ayuda o la guía, o abra el sitio web de documentación.",
       "workspaceOptions": "Vuelva a abrir ventanas cerradas, guarde o restaure la disposición de este espacio de trabajo, o restaure los valores predeterminados del panel.",
       "moveToolbar": "Arrastre para mover la barra de herramientas, o abra este menú para acoplarla a un borde o elegir cómo se muestran sus botones.",
       "collapseToolbar": "Contraiga la barra de herramientas a un solo botón, o vuelva a expandirla.",
@@ -2442,7 +2442,14 @@
       "floatWindow": "Desacople esta ventana sobre el espacio de trabajo. Se queda en su sitio mientras el espacio de trabajo se desplaza.",
       "dockWindow": "Vuelva a acoplar esta ventana en el espacio de trabajo.",
       "maximizeWindow": "Haga que esta ventana ocupe la parte visible del espacio de trabajo, o restáurela.",
-      "closeWindow": "Cierre esta ventana. Puede volver a abrirla desde el menú Opciones del espacio de trabajo."
+      "closeWindow": "Cierre esta ventana. Puede volver a abrirla desde el menú Opciones del espacio de trabajo.",
+      "guideTitle": "Arrastre la barra de título para mover la guía, o arrastre un borde o una esquina para cambiar su tamaño."
+    },
+    "guide": {
+      "title": "Guía",
+      "back": "Atrás",
+      "unavailable": "No se pudo cargar la guía. Vuelva a cargar la página para intentarlo de nuevo.",
+      "noTopic": "Todavía no hay ningún tema de la guía para este espacio de trabajo."
     }
   },
   "notification": {

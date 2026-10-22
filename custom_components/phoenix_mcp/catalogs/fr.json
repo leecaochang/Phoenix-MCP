@@ -2431,7 +2431,7 @@
       "wsLogs": "Journaux : le journal d’audit des requêtes adressées à Phoenix et les conversations d’agents enregistrées.",
       "wsSettings": "Paramètres : fournisseurs d’IA, Agent Chat, fonctionnalités de Home Assistant, sécurité et journalisation.",
       "agentChat": "Ouvrez Agent Chat pour travailler avec un agent depuis ce panneau.",
-      "documentation": "Affichez ou masquez la barre d’aide, ou ouvrez le site de documentation.",
+      "documentation": "Affichez ou masquez la barre d’aide ou le guide, ou ouvrez le site de documentation.",
       "workspaceOptions": "Rouvrez des fenêtres fermées, enregistrez ou rétablissez la disposition de cet espace de travail, ou rétablissez les réglages par défaut du panneau.",
       "moveToolbar": "Faites glisser pour déplacer la barre d’outils, ou ouvrez ce menu pour l’ancrer à un bord ou choisir l’affichage de ses boutons.",
       "collapseToolbar": "Réduisez la barre d’outils à un seul bouton, ou développez-la de nouveau.",
@@ -2442,7 +2442,14 @@
       "floatWindow": "Rendez cette fenêtre flottante au-dessus de l’espace de travail. Elle reste en place pendant le défilement de l’espace de travail.",
       "dockWindow": "Ancrez de nouveau cette fenêtre dans l’espace de travail.",
       "maximizeWindow": "Faites occuper à cette fenêtre la partie visible de l’espace de travail, ou rétablissez-la.",
-      "closeWindow": "Fermez cette fenêtre. Vous pouvez la rouvrir depuis le menu Réglages de l’espace de travail."
+      "closeWindow": "Fermez cette fenêtre. Vous pouvez la rouvrir depuis le menu Réglages de l’espace de travail.",
+      "guideTitle": "Faites glisser la barre de titre pour déplacer le guide, ou faites glisser un bord ou un coin pour le redimensionner."
+    },
+    "guide": {
+      "title": "Guide",
+      "back": "Retour",
+      "unavailable": "Impossible de charger le guide. Rechargez la page pour réessayer.",
+      "noTopic": "Il n’y a pas encore de rubrique du guide pour cet espace de travail."
     }
   },
   "notification": {

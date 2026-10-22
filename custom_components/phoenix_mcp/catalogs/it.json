@@ -2431,7 +2431,7 @@
       "wsLogs": "Registri: il registro di controllo delle richieste a Phoenix e le conversazioni registrate degli agenti.",
       "wsSettings": "Impostazioni: fornitori di IA, Agent Chat, funzioni di Home Assistant, sicurezza e registrazione.",
       "agentChat": "Apri Agent Chat per lavorare con un agente da questo pannello.",
-      "documentation": "Mostra o nascondi la barra di aiuto, oppure apri il sito della documentazione.",
+      "documentation": "Mostra o nascondi la barra di aiuto o la guida, oppure apri il sito della documentazione.",
       "workspaceOptions": "Riapri le finestre chiuse, salva o ripristina la disposizione di quest'area di lavoro, oppure ripristina i valori predefiniti del pannello.",
       "moveToolbar": "Trascina per spostare la barra degli strumenti, oppure apri questo menu per agganciarla a un bordo o scegliere come mostrare i suoi pulsanti.",
       "collapseToolbar": "Comprimi la barra degli strumenti in un solo pulsante, oppure espandila di nuovo.",
@@ -2442,7 +2442,14 @@
       "floatWindow": "Sgancia questa finestra sopra l'area di lavoro. Resta al suo posto mentre l'area di lavoro scorre.",
       "dockWindow": "Riaggancia questa finestra all'area di lavoro.",
       "maximizeWindow": "Fai occupare a questa finestra la parte visibile dell'area di lavoro, oppure ripristinala.",
-      "closeWindow": "Chiudi questa finestra. Puoi riaprirla dal menu Opzioni dell'area di lavoro."
+      "closeWindow": "Chiudi questa finestra. Puoi riaprirla dal menu Opzioni dell'area di lavoro.",
+      "guideTitle": "Trascina la barra del titolo per spostare la guida, oppure trascina un bordo o un angolo per ridimensionarla."
+    },
+    "guide": {
+      "title": "Guida",
+      "back": "Indietro",
+      "unavailable": "Impossibile caricare la guida. Ricarica la pagina per riprovare.",
+      "noTopic": "Non c'è ancora un argomento della guida per quest'area di lavoro."
     }
   },
   "notification": {

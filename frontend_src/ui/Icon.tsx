@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  Archive, ArrowDownLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
+  Archive, ArrowDownLeft, ArrowLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
   Download, Ellipsis, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, ListChecks, ListX, Maximize2, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
@@ -75,6 +75,7 @@ const ICONS = {
   keyActions: KeySquare,
   selectBy: SquareDashedMousePointer,
   clearList: ListX,
+  back: ArrowLeft,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

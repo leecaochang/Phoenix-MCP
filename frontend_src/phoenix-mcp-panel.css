@@ -44,6 +44,8 @@
   --phx-z-modal:      100;
   --phx-z-agentcli:   200;
   --phx-z-toast:      210;
+  /* The Guide floats over the windows, below menus and dialogs. */
+  --phx-z-guide:      90;
   --phx-grey-tint:    rgba(0,0,0,0.06);
   --phx-hover:        #efefef;
   --phx-purple:       #5e5e5e;
@@ -441,6 +443,43 @@
 .phx-window-body[data-phx-window="help"] { padding-bottom: 8px; }
 .phx-help-text { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--phx-text); }
 .phx-help-text.is-idle { color: var(--phx-text-2); }
+
+/* The Guide: a window of its own outside the workspace, fixed on screen. */
+.phx-guide {
+  position: fixed;
+  z-index: var(--phx-z-guide);
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 280px;
+  background: var(--phx-surface);
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
+  box-shadow: var(--phx-shadow-lg);
+}
+.phx-guide-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 4px 0 8px;
+  border-bottom: 1px solid var(--phx-border);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+.phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
+.phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
+.phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.phx-guide-topic h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.phx-guide-topic p, .phx-guide-topic ul, .phx-guide-topic ol, .phx-guide-topic blockquote { margin: 0 0 10px; }
+.phx-guide-topic ul, .phx-guide-topic ol { padding-left: 20px; }
+.phx-guide-topic li + li { margin-top: 4px; }
+.phx-guide-topic a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
+.phx-guide-missing { color: var(--phx-error); }
+.phx-guide-note { margin: 0; color: var(--phx-text-2); }
+.phx-guide-phone .phx-phone-title .phx-window-title-text { flex: 1; }
+.phx-guide-phone .phx-phone-body { padding: 0 12px 12px; }
 
 /* The Notifications window: this session's notices, newest first. */
 .phx-notifications { list-style: none; margin: 0; padding: 0; }

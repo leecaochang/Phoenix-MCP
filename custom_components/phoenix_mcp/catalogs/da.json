@@ -2436,7 +2436,7 @@
       "wsLogs": "Logge: revisionsloggen over anmodninger til Phoenix og optagede agentsamtaler.",
       "wsSettings": "Indstillinger: AI-udbydere, Agent Chat, Home Assistant-funktioner, sikkerhed og logning.",
       "agentChat": "Åbn Agent Chat for at arbejde med en agent fra dette panel.",
-      "documentation": "Vis eller skjul hjælpelinjen, eller åbn dokumentationswebstedet.",
+      "documentation": "Vis eller skjul hjælpelinjen eller guiden, eller åbn dokumentationswebstedet.",
       "workspaceOptions": "Genåbn lukkede vinduer, gem eller gendan dette arbejdsområdes layout, eller gendan panelets standarder.",
       "moveToolbar": "Træk for at flytte værktøjslinjen, eller åbn denne menu for at fastgøre den til en kant eller vælge, hvordan knapperne vises.",
       "collapseToolbar": "Fold værktøjslinjen sammen til en enkelt knap, eller fold den ud igen.",
@@ -2447,7 +2447,14 @@
       "floatWindow": "Gør vinduet flydende over arbejdsområdet. Det bliver på sin plads, mens arbejdsområdet ruller.",
       "dockWindow": "Fastgør vinduet i arbejdsområdet igen.",
       "maximizeWindow": "Lad vinduet fylde den synlige del af arbejdsområdet, eller gendan det.",
-      "closeWindow": "Luk vinduet. Genåbn det fra menuen Indstillinger for arbejdsområde."
+      "closeWindow": "Luk vinduet. Genåbn det fra menuen Indstillinger for arbejdsområde.",
+      "guideTitle": "Træk i titellinjen for at flytte guiden, eller træk i en kant eller et hjørne for at ændre størrelsen."
+    },
+    "guide": {
+      "title": "Guide",
+      "back": "Tilbage",
+      "unavailable": "Guiden kunne ikke indlæses. Genindlæs siden for at prøve igen.",
+      "noTopic": "Der er endnu intet emne i guiden for dette arbejdsområde."
     }
   },
   "voice": {

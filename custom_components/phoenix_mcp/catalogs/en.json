@@ -594,7 +594,7 @@
       "wsLogs": "Logs: the audit log of requests to Phoenix, and recorded agent conversations.",
       "wsSettings": "Settings: AI providers, Agent Chat, Home Assistant features, safety, and logging.",
       "agentChat": "Open Agent Chat to work with an agent from this panel.",
-      "documentation": "Show or hide the Help bar, or open the documentation website.",
+      "documentation": "Show or hide the Help bar or the Guide, or open the documentation website.",
       "workspaceOptions": "Reopen closed windows, save or restore this workspace's arrangement, or restore the panel's defaults.",
       "moveToolbar": "Drag to move the toolbar, or open this menu to dock it at an edge or choose how its buttons show.",
       "collapseToolbar": "Collapse the toolbar to a single button, or expand it again.",
@@ -605,7 +605,14 @@
       "floatWindow": "Float this window above the workspace; it stays in place while the workspace scrolls.",
       "dockWindow": "Dock this window back into the workspace.",
       "maximizeWindow": "Fill the visible workspace with this window, or restore it.",
-      "closeWindow": "Close this window. Reopen it from the workspace options menu."
+      "closeWindow": "Close this window. Reopen it from the workspace options menu.",
+      "guideTitle": "Drag the title bar to move the Guide, or drag an edge or corner to resize it."
+    },
+    "guide": {
+      "title": "Guide",
+      "back": "Back",
+      "unavailable": "The Guide could not be loaded. Reload the page to try again.",
+      "noTopic": "There is no Guide topic for this workspace yet."
     },
     "perms": {
       "addHint": "Add Hint",

@@ -2541,7 +2541,7 @@
       "wsLogs": "Dzienniki: dziennik audytu żądań kierowanych do Phoenix oraz zapisane rozmowy z agentami.",
       "wsSettings": "Ustawienia: dostawcy AI, Agent Chat, funkcje Home Assistant, bezpieczeństwo i rejestrowanie.",
       "agentChat": "Otwórz Agent Chat, aby pracować z agentem z poziomu tego panelu.",
-      "documentation": "Pokaż lub ukryj pasek pomocy albo otwórz witrynę z dokumentacją.",
+      "documentation": "Pokaż lub ukryj pasek pomocy albo przewodnik lub otwórz witrynę z dokumentacją.",
       "workspaceOptions": "Otwórz ponownie zamknięte okna, zapisz lub przywróć układ tego obszaru roboczego albo przywróć ustawienia domyślne panelu.",
       "moveToolbar": "Przeciągnij, aby przenieść pasek narzędzi, lub otwórz to menu, aby zadokować go przy krawędzi albo wybrać sposób wyświetlania przycisków.",
       "collapseToolbar": "Zwiń pasek narzędzi do jednego przycisku lub rozwiń go ponownie.",
@@ -2552,7 +2552,14 @@
       "floatWindow": "Odłącz to okno nad obszarem roboczym. Pozostaje na miejscu podczas przewijania obszaru roboczego.",
       "dockWindow": "Zadokuj to okno z powrotem w obszarze roboczym.",
       "maximizeWindow": "Wypełnij tym oknem widoczną część obszaru roboczego lub przywróć je.",
-      "closeWindow": "Zamknij to okno. Możesz otworzyć je ponownie z menu Opcje obszaru roboczego."
+      "closeWindow": "Zamknij to okno. Możesz otworzyć je ponownie z menu Opcje obszaru roboczego.",
+      "guideTitle": "Przeciągnij pasek tytułu, aby przenieść przewodnik, albo przeciągnij krawędź lub róg, aby zmienić jego rozmiar."
+    },
+    "guide": {
+      "title": "Przewodnik",
+      "back": "Wstecz",
+      "unavailable": "Nie udało się wczytać przewodnika. Odśwież stronę, aby spróbować ponownie.",
+      "noTopic": "Dla tego obszaru roboczego nie ma jeszcze tematu w przewodniku."
     }
   }
 }

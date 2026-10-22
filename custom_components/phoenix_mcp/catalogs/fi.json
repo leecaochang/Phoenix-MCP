@@ -2436,7 +2436,7 @@
       "wsLogs": "Lokit: Phoenixiin tehtyjen pyyntöjen valvontaloki ja tallennetut agenttikeskustelut.",
       "wsSettings": "Asetukset: tekoälypalveluntarjoajat, Agent Chat, Home Assistantin ominaisuudet, turvallisuus ja lokitus.",
       "agentChat": "Avaa Agent Chat työskennelläksesi agentin kanssa tästä paneelista.",
-      "documentation": "Näytä tai piilota ohjepalkki tai avaa dokumentaatiosivusto.",
+      "documentation": "Näytä tai piilota ohjepalkki tai opas tai avaa dokumentaatiosivusto.",
       "workspaceOptions": "Avaa suljettuja ikkunoita uudelleen, tallenna tai palauta tämän työtilan asettelu tai palauta paneelin oletukset.",
       "moveToolbar": "Vedä siirtääksesi työkaluriviä tai avaa tämä valikko kiinnittääksesi sen reunaan tai valitaksesi, miten sen painikkeet näkyvät.",
       "collapseToolbar": "Tiivistä työkalurivi yhdeksi painikkeeksi tai laajenna se uudelleen.",
@@ -2447,7 +2447,14 @@
       "floatWindow": "Irrota tämä ikkuna työtilan päälle. Se pysyy paikallaan, kun työtilaa vieritetään.",
       "dockWindow": "Kiinnitä tämä ikkuna takaisin työtilaan.",
       "maximizeWindow": "Täytä työtilan näkyvä osa tällä ikkunalla tai palauta se.",
-      "closeWindow": "Sulje tämä ikkuna. Voit avata sen uudelleen Työtilan asetukset -valikosta."
+      "closeWindow": "Sulje tämä ikkuna. Voit avata sen uudelleen Työtilan asetukset -valikosta.",
+      "guideTitle": "Siirrä opasta vetämällä otsikkoriviä tai muuta sen kokoa vetämällä reunaa tai kulmaa."
+    },
+    "guide": {
+      "title": "Opas",
+      "back": "Takaisin",
+      "unavailable": "Opasta ei voitu ladata. Yritä uudelleen lataamalla sivu uudelleen.",
+      "noTopic": "Tälle työtilalle ei ole vielä oppaan aihetta."
     }
   },
   "voice": {

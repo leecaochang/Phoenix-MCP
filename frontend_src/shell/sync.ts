@@ -7,7 +7,7 @@
  * higher `rev`) and this browser has nothing unsent, the shell adopts it.
  * Writes are debounced, because Home Assistant saves the whole store on every
  * write, and merge section by section: the sections this browser changed
- * (the toolbar, Help, the last workspace, each workspace's arrangement, each
+ * (the toolbar, Help, the Guide, the last workspace, each workspace's arrangement, each
  * My Default) replace the stored ones, and everything else keeps the stored copy.
  * Nothing is written over a record from a newer build or above the size limit.
  */
@@ -15,7 +15,7 @@
 import { MAX_RECORD_BYTES, SHELL_SCHEMA, parseRecord, type Env, type ShellRecord, type WorkspaceId } from "./storage";
 
 /** A part of the record that changes independently. */
-export type Section = "toolbar" | "help" | "lastWorkspace" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`;
+export type Section = "toolbar" | "help" | "guide" | "lastWorkspace" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`;
 
 /** Wait this long after the last change before writing to Home Assistant, but never longer than the maximum. */
 export const SYNC_DELAY_MS = 2000;
@@ -66,6 +66,7 @@ export function mergeRecords(stored: ShellRecord | null, local: ShellRecord, cha
   for (const section of changed) {
     if (section === "toolbar") out.toolbar = local.toolbar;
     else if (section === "help") out.help = local.help;
+    else if (section === "guide") out.guide = local.guide;
     else if (section === "lastWorkspace") out.lastWorkspace = local.lastWorkspace;
     else {
       const [kind, id] = section.split(":") as ["ws" | "my", WorkspaceId];

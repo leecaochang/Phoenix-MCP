@@ -2431,7 +2431,7 @@
       "wsLogs": "日志：发往 Phoenix 的请求的审计日志，以及已记录的智能体对话。",
       "wsSettings": "设置：AI 提供商、Agent Chat、Home Assistant 功能、安全和日志记录。",
       "agentChat": "打开 Agent Chat，在此面板中与智能体协作。",
-      "documentation": "显示或隐藏帮助栏，或打开文档网站。",
+      "documentation": "显示或隐藏帮助栏或指南，或打开文档网站。",
       "workspaceOptions": "重新打开已关闭的窗口，保存或还原此工作区的布局，或还原面板的默认设置。",
       "moveToolbar": "拖动以移动工具栏，或打开此菜单将其停靠到边缘或选择按钮的显示方式。",
       "collapseToolbar": "将工具栏收起为一个按钮，或再次展开。",
@@ -2442,7 +2442,14 @@
       "floatWindow": "使此窗口浮动在工作区上方。工作区滚动时它保持不动。",
       "dockWindow": "将此窗口重新停靠到工作区中。",
       "maximizeWindow": "让此窗口填满工作区的可见部分，或将其还原。",
-      "closeWindow": "关闭此窗口。可从“工作区选项”菜单重新打开。"
+      "closeWindow": "关闭此窗口。可从“工作区选项”菜单重新打开。",
+      "guideTitle": "拖动标题栏可移动指南，拖动边缘或角可调整其大小。"
+    },
+    "guide": {
+      "title": "指南",
+      "back": "返回",
+      "unavailable": "无法加载指南。请重新加载页面后重试。",
+      "noTopic": "此工作区暂时还没有指南主题。"
     }
   },
   "notification": {

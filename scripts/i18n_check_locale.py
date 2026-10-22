@@ -189,6 +189,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Danish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -302,6 +303,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.guide.title",  # "Guide", the same word in this language
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -542,6 +544,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Swedish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
