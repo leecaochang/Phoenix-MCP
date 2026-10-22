@@ -33,6 +33,55 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
   };
 }
 
+describe("tools several windows share", () => {
+  const logTools = (window: string, opts: { pressed?: boolean; badge?: number; onSelect?: () => void; onSet?: (on: boolean) => void; clear?: boolean } = {}) => [{
+    id: window,
+    label: window,
+    tools: [
+      { id: "refresh", label: `Refresh ${window}`, short: "Refresh", icon: "refresh" as const, shared: { id: "refresh", label: "Refresh" }, onSelect: opts.onSelect },
+      { id: "filters", label: "Filters", icon: "filter" as const, pressed: opts.pressed ?? false, badge: opts.badge,
+        shared: { id: "filters", label: "Filters", countLabel: "logs.filtersCount" }, onSet: opts.onSet },
+      ...(opts.clear ? [{ id: "clear", label: "Clear Conversation History", short: "Clear History", icon: "delete" as const }] : []),
+    ],
+  }];
+
+  it("shows a shared tool once, ahead of each window's own tools, adding up badges", () => {
+    const registry = new ToolRegistry();
+    registry.set({ workspace: "logs", window: "auditLog" }, logTools("auditLog", { badge: 1 }));
+    registry.set({ workspace: "logs", window: "conversationLog" }, logTools("conversationLog", { badge: 2, clear: true }));
+    const groups = registry.groupsFor("logs", ["auditLog", "conversationLog"], "Logs");
+    expect(groups.map((g) => [g.label, g.tools.map((tool) => tool.short ?? tool.label)])).toEqual([
+      ["Logs", ["Refresh", "Filters"]],
+      ["conversationLog", ["Clear History"]],
+    ]);
+    expect(groups[0].tools[1]).toMatchObject({ badge: 3, label: "Filters (3)", pressed: false });
+  });
+
+  it("keeps a tool in its own window's group while only one window offers it", () => {
+    const registry = new ToolRegistry();
+    registry.set({ workspace: "logs", window: "auditLog" }, logTools("auditLog"));
+    const groups = registry.groupsFor("logs", ["auditLog"], "Logs");
+    expect(groups.map((g) => g.id)).toEqual(["auditLog"]);
+    expect(groups[0].tools[0].label).toBe("Refresh auditLog");
+  });
+
+  it("runs a shared tool in every window, and turns a shared toggle the same way everywhere", () => {
+    const registry = new ToolRegistry();
+    const refreshA = vi.fn(), refreshB = vi.fn(), setA = vi.fn(), setB = vi.fn();
+    registry.set({ workspace: "logs", window: "auditLog" }, logTools("auditLog", { onSelect: refreshA, onSet: setA, pressed: true }));
+    registry.set({ workspace: "logs", window: "conversationLog" }, logTools("conversationLog", { onSelect: refreshB, onSet: setB }));
+    const order = ["auditLog", "conversationLog"];
+    registry.runShared("logs", order, "refresh");
+    expect(refreshA).toHaveBeenCalledOnce();
+    expect(refreshB).toHaveBeenCalledOnce();
+    // One panel is open, so the shared button reads as on and closes both.
+    expect(registry.groupsFor("logs", order, "Logs")[0].tools[1].pressed).toBe(true);
+    registry.runShared("logs", order, "filters");
+    expect(setA).toHaveBeenCalledWith(false);
+    expect(setB).toHaveBeenCalledWith(false);
+  });
+});
+
 describe("toolbar tool registry", () => {
   it("lists each open window's tools in reading order and skips windows with none", () => {
     const registry = new ToolRegistry();

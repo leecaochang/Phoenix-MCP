@@ -210,7 +210,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       return el;
     }
     const menuItem = (el: HTMLElement, label: string) => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role="menuitem"]')].find((i) => i.textContent === label);
-    const openOptions = (el: HTMLElement) => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="Workspace options"]')!.click(); });
+    const openOptions = (el: HTMLElement) => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
 
     it("adopts a newer arrangement saved from another computer", async () => {
       const toolbar = { dock: "top", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icon-text" };

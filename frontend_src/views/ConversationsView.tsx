@@ -15,6 +15,7 @@ import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
+import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
 import type { MenuEntry } from "../ui/Menu";
@@ -97,9 +98,12 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     id: "conversationLog",
     label: t("conversations.title"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), icon: "refresh", onSelect: () => { void load(); } },
-      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), icon: "filter", pressed: filtersOpen, onSelect: () => setFiltersOpen((open) => !open) },
-      { id: "clear", label: t("conversations.clear"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
+      { id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh",
+        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } },
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
+        pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
+        onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
+      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
@@ -137,16 +141,11 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const [tableSettings] = useTableSettings("conversationLog");
   const partialSort = entries.length < total && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
 
-  return <div className="view-root conversations-view" ref={root}>
+  return <div className="view-root conversations-view phx-log-view" ref={root}>
     {!enabled && <p className="banner">{t("conversations.disabledHelp")}</p>}
     {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {confirmBanner}
-    <div className="filter-row conversation-toolbar">
-      <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
-        onChange={e => { setSearch(e.target.value); resetPage(); }} />
-      {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
-    </div>
     <div className="phx-filters" hidden={!showFilters}>
       <div className="filter-row">
         <select className="input input-auto" data-filter="source" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
@@ -160,15 +159,21 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         <select className="input input-auto" data-filter="days" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>
         </select>
-        {activeFilters > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>{t("logs.clearFilters")}</button>}
+        {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
       </div>
     </div>
     {!showFilters && activeFilters > 0 && (
       <p className="phx-filters-active">
         {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-        <button type="button" className="btn btn-text btn-sm" onClick={clearFilters}>{t("logs.clearFilters")}</button>
+        <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
       </p>
     )}
+    {/* The search sits below the filters, as the text filters do in the Audit Log. */}
+    <div className="filter-row conversation-toolbar">
+      <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
+        onChange={e => { setSearch(e.target.value); resetPage(); }} />
+      {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
+    </div>
     <div className="conversation-list" aria-busy={loading}>
       <ConfigTable
         id="conversationLog"
@@ -186,7 +191,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     <div className="phx-table-footer">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
       {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
-      {entries.length < total && <BusyButton busy={loading} className="btn btn-ghost btn-sm" onClick={() => setLimit(n => n + 25)}>{t("common.loadMore")}</BusyButton>}
+      {entries.length < total && <ActionButton icon="loadMore" label={t("common.loadMore")} busy={loading} onClick={() => setLimit(n => n + 25)} />}
       {!onToolbar && <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>}
     </div>
   </div>;

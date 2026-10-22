@@ -349,6 +349,13 @@
   white-space: nowrap;
 }
 .phx-toolbar[data-mode="icons"] .phx-toolbar-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; font-size: 10px; }
+/* Icons and text along the top or bottom, or floating: the buttons of a group share one width, set by the
+   widest label, so the row reads evenly. Phones keep plain wrapping; side docks already stack at full width. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) :is(.phx-toolbar-nav, .phx-toolbar-group, .phx-tool-group) {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
 
 /* The second row: tools for the visible workspace, grouped with separator bars. */
 .phx-toolbar-tools {
@@ -363,6 +370,10 @@
 .phx-toolbar[data-dock="right"] .phx-toolbar-tools { flex-direction: column; align-items: stretch; padding: 0 0 0 6px; border-top: none; border-left: 1px solid var(--phx-border); }
 .phx-toolbar[data-dock="right"] .phx-toolbar-tools { padding: 0 6px 0 0; border-left: none; border-right: 1px solid var(--phx-border); }
 .phx-tool-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+/* Hide Tools ends the tools row it hides. */
+.phx-toolbar-tools > .phx-toolbar-tools-toggle { margin-inline-start: auto; }
+.phx-toolbar[data-dock="left"] .phx-toolbar-tools > .phx-toolbar-tools-toggle,
+.phx-toolbar[data-dock="right"] .phx-toolbar-tools > .phx-toolbar-tools-toggle { margin: auto 0 0; }
 .phx-tool-group + .phx-tool-group { padding-inline-start: 6px; border-inline-start: 1px solid var(--phx-border); }
 .phx-toolbar[data-dock="left"] .phx-tool-group,
 .phx-toolbar[data-dock="right"] .phx-tool-group { flex-direction: column; align-items: stretch; }
@@ -549,7 +560,9 @@
 .phx-log-details-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .phx-log-details-bar .audit-section-title { margin: 0; }
 .phx-log-details-nav { display: flex; gap: 4px; }
-.phx-log-details-nav .phx-toolbar-button { width: 32px; height: 32px; min-width: 32px; padding: 0; }
+/* A window's own action buttons follow the toolbar's display mode. */
+.phx-action { display: inline-flex; align-items: center; gap: 6px; }
+.phx-action.is-icon-only { padding-inline: 8px; }
 .phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
 .access-key-table tr.is-selected > td { background: var(--phx-accent-lt); }
 
@@ -571,10 +584,19 @@
 
 /* The configurable table: native table, fixed layout, scrolling sideways inside its window. */
 .phx-table-wrap { position: relative; overflow-x: auto; }
+/* A log fills its window: filters and search on top, the table scrolling in both directions with its
+   headers held at the top, and the count and Load More always in view below it. */
+.phx-window-body > .phx-log-view { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
+.phx-log-view > .conversation-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.phx-log-view .phx-table-wrap { flex: 1 1 auto; min-height: 120px; overflow: auto; }
 .phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Column headers stay at the top of their window while the rows scroll under them. */
 .phx-table th {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 2;
   padding: 0;
+  background: var(--phx-surface);
   text-align: left;
   font-size: 12px;
   font-weight: 600;

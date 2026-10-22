@@ -4,10 +4,10 @@ import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive, ArrowDownLeft, ArrowLeft, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
-  ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
-  Download, Ellipsis, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
-  LayoutDashboard, ListChecks, ListFilter, ListX, Maximize2, Menu, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
-  PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
+  ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
+  Download, Ellipsis, FunnelX, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
+  LayoutDashboard, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
+  PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
   Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
 } from "lucide-react";
@@ -64,8 +64,14 @@ const ICONS = {
   grip: GripVertical,
   showTools: ChevronsDown,
   hideTools: ChevronsUp,
-  collapseToolbar: ChevronsLeft,
-  expandToolbar: ChevronsRight,
+  toolbarCloseTop: PanelTopClose,
+  toolbarOpenTop: PanelTopOpen,
+  toolbarCloseBottom: PanelBottomClose,
+  toolbarOpenBottom: PanelBottomOpen,
+  toolbarCloseLeft: PanelLeftClose,
+  toolbarOpenLeft: PanelLeftOpen,
+  toolbarCloseRight: PanelRightClose,
+  toolbarOpenRight: PanelRightOpen,
   setupAgent: WandSparkles,
   archive: Archive,
   add: Plus,
@@ -82,6 +88,8 @@ const ICONS = {
   sortUp: ChevronUp,
   sortDown: ChevronDown,
   filter: ListFilter,
+  clearFilters: FunnelX,
+  loadMore: ListEnd,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

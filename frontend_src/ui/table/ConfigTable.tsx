@@ -7,7 +7,7 @@
  * pointer or keyboard, and the chosen row stays marked across refreshes.
  */
 
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { compareStrings, t } from "../../i18n";
 import { Icon } from "../Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../Menu";
@@ -229,6 +229,13 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     e.preventDefault();
     move(col.id, e.key === "ArrowLeft" ? -1 : 1);
   };
+
+  // When the choice changes from outside (Previous or Next in Log Details), keep the chosen row in view.
+  useEffect(() => {
+    if (!selectedKey) return;
+    const tr = [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === selectedKey);
+    tr?.scrollIntoView?.({ block: "nearest" });
+  }, [selectedKey]);
 
   // Rows: one tab stop (the chosen row, or the first); arrow keys move the choice.
   const focusKey = selectedKey && sorted.some((r) => rowKey(r) === selectedKey) ? selectedKey : sorted[0] ? rowKey(sorted[0]) : null;

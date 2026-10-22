@@ -154,3 +154,25 @@ describe("table settings", () => {
     expect(store.snapshot()).toEqual({ t1: { sort: { column: "a", dir: "desc" } } });
   });
 });
+
+describe("keeping the chosen row in view", () => {
+  it("scrolls the chosen row into view when the choice changes from outside", () => {
+    const scrolled: string[] = [];
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { scrolled.push(this.dataset.row ?? ""); };
+    try {
+      const store = new TableSettingsStore();
+      const view = (key: string | null) => (
+        <TableSettingsContext.Provider value={store}>
+          <ConfigTable id="things" label="Things" columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} onSelect={() => {}} selectedKey={key} />
+        </TableSettingsContext.Provider>
+      );
+      const { rerender } = render(view(null));
+      expect(scrolled).toEqual([]);
+      rerender(view("c"));
+      expect(scrolled).toEqual(["c"]);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+});

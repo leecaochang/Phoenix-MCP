@@ -6,7 +6,6 @@
  * menu can open its filter.
  */
 
-import { BusyButton } from "../components/BusyButton";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
@@ -18,6 +17,7 @@ import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "..
 import { useLatestRequest } from "../utils/latest_request";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
+import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
 import type { MenuEntry } from "../ui/Menu";
@@ -138,8 +138,11 @@ export function AuditView({ accessKeys }: Props) {
     id: "auditLog",
     label: t("shell.tabAudit"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), icon: "refresh", onSelect: () => { void load(0); } },
-      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), icon: "filter", pressed: filtersOpen, onSelect: () => setFiltersOpen((open) => !open) },
+      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh",
+        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(0); } },
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
+        pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
+        onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
@@ -164,7 +167,7 @@ export function AuditView({ accessKeys }: Props) {
   const partialSort = hasMore && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
 
   return (
-    <div className="view-root" ref={root}>
+    <div className="view-root phx-log-view" ref={root}>
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
           <select
@@ -243,14 +246,14 @@ export function AuditView({ accessKeys }: Props) {
             </button>
           )}
           {activeFilters > 0 && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>{t("logs.clearFilters")}</button>
+            <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />
           )}
         </div>
       </div>
       {!showFilters && activeFilters > 0 && (
         <p className="phx-filters-active">
           {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-          <button type="button" className="btn btn-text btn-sm" onClick={clearFilters}>{t("logs.clearFilters")}</button>
+          <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
         </p>
       )}
 
@@ -279,10 +282,8 @@ export function AuditView({ accessKeys }: Props) {
           {/* Not while a first page is loading: a later page fetched for the new
               filters would append to rows from the old ones. */}
           {hasMore && (
-            <BusyButton className="btn btn-ghost btn-sm" busy={loadingMore}
-              onClick={() => load(entries.length)}>
-              {loadingMore ? t("common.loading") : t("common.loadMore")}
-            </BusyButton>
+            <ActionButton icon="loadMore" label={loadingMore ? t("common.loading") : t("common.loadMore")} busy={loadingMore}
+              onClick={() => { void load(entries.length); }} />
           )}
         </div>
       )}

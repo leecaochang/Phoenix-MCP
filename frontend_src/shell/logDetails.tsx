@@ -11,7 +11,7 @@ import type { AuditEntry, ConversationSummary } from "../types";
 import { AuditEntryDetail, auditEntryKey } from "../components/AuditEntry";
 import { ConversationDetail, EntryDetail, SignalIcon, label, outcomeIcon, outcomeSignal, rowStatus } from "../components/ConversationRecord";
 import { localeDateTime, localeNumber, t, tn } from "../i18n";
-import { Icon } from "../ui/Icon";
+import { ActionButton } from "../ui/ActionButton";
 
 export type LogRecord =
   | {
@@ -127,14 +127,8 @@ export function LogDetailsContent() {
       <div className="phx-log-details-bar">
         <h3 className="audit-section-title">{value.kind === "audit" ? t("audit.detailTitle") : t("conversations.conversation")}</h3>
         <div className="phx-log-details-nav">
-          <button type="button" className="phx-toolbar-button" aria-label={t("workspace.previousRecord")} title={t("workspace.previousRecord")}
-            disabled={at <= 0} onClick={() => selection.step(-1)}>
-            <Icon name="previous" size={16} />
-          </button>
-          <button type="button" className="phx-toolbar-button" aria-label={t("workspace.nextRecord")} title={t("workspace.nextRecord")}
-            disabled={at < 0 || at >= value.ordered.length - 1} onClick={() => selection.step(1)}>
-            <Icon name="next" size={16} />
-          </button>
+          <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={at <= 0} onClick={() => selection.step(-1)} className="btn btn-outline btn-sm" />
+          <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={at < 0 || at >= value.ordered.length - 1} onClick={() => selection.step(1)} className="btn btn-outline btn-sm" />
         </div>
       </div>
       {value.kind === "audit"

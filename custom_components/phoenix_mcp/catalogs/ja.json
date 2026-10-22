@@ -2338,7 +2338,8 @@
         "contextHelp": "構造化された判断リクエスト内のユーザーテキストです。コンテキストの件数は生データに表示され、プロバイダーへの指示は含まれません。",
         "requestCompleted": "モデルへのリクエスト完了"
       },
-      "attachmentPrompt": "画像またはファイルのメッセージ"
+      "attachmentPrompt": "画像またはファイルのメッセージ",
+      "clearShort": "履歴を消去"
     },
     "attention": {
       "title": "確認が必要",

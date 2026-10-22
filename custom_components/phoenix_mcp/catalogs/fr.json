@@ -2338,7 +2338,8 @@
         "contextHelp": "Il s’agit du texte utilisateur dans la demande de décision structurée. Les quantités de contexte figurent dans les données brutes ; les instructions du fournisseur sont exclues.",
         "requestCompleted": "Demande au modèle terminée"
       },
-      "attachmentPrompt": "Message avec image ou fichier"
+      "attachmentPrompt": "Message avec image ou fichier",
+      "clearShort": "Effacer l’historique"
     },
     "attention": {
       "title": "À vérifier",

@@ -126,7 +126,7 @@ export function AccessKeyListView({
         { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
         { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived((v) => !v) },
         { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", onSelect: onOpenCreate },
-        { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAccessKeys") }), icon: "refresh", onSelect: onRefresh },
+        { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAccessKeys") }), short: t("common.refresh"), icon: "refresh", onSelect: onRefresh },
       ],
     },
     ...(selectedKeyTools ? [selectedKeyTools] : []),

@@ -1346,7 +1346,8 @@
       "toolResult": "Työkalun tulos",
       "turns": "Vuoroja: {count}",
       "unknown": "Tuntematon",
-      "week": "Viimeinen viikko"
+      "week": "Viimeinen viikko",
+      "clearShort": "Tyhjennä historia"
     },
     "diff": {
       "blueprint.create": "Luo {domain}-mallipohja '{rel}'",

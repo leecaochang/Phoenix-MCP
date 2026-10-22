@@ -1346,7 +1346,8 @@
       "toolResult": "Verktygsresultat",
       "turns": "Turer: {count}",
       "unknown": "Okänd",
-      "week": "Senaste veckan"
+      "week": "Senaste veckan",
+      "clearShort": "Rensa historik"
     },
     "diff": {
       "blueprint.create": "Skapa {domain}-blueprint '{rel}'",

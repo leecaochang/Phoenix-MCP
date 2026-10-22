@@ -1346,7 +1346,8 @@
       "toolResult": "Verktøyresultat",
       "turns": "Runder: {count}",
       "unknown": "Ukjent",
-      "week": "Siste uke"
+      "week": "Siste uke",
+      "clearShort": "Tøm historikk"
     },
     "diff": {
       "blueprint.create": "Opprett {domain}-blåkopi «{rel}»",

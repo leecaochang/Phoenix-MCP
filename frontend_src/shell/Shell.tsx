@@ -12,6 +12,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { resolveLanguage, t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
+import { DisplayModeContext } from "../ui/ActionButton";
 import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
@@ -371,6 +372,7 @@ export function Shell() {
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
     <NotificationsContext.Provider value={notifications}>
+    <DisplayModeContext.Provider value={toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
     <LogSelectionContext.Provider value={logSelection}>
     <WorkspaceActionsContext.Provider value={actions}>
@@ -443,6 +445,7 @@ export function Shell() {
     </WorkspaceActionsContext.Provider>
     </LogSelectionContext.Provider>
     </HelpContext.Provider>
+    </DisplayModeContext.Provider>
     </NotificationsContext.Provider>
     </ToolRegistryContext.Provider>
     </ContextMenuHost>

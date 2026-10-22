@@ -2416,7 +2416,8 @@
         "contextHelp": "Dit is de gebruikerstekst in het gestructureerde beslisverzoek. Contextaantallen staan bij Ruwe gegevens; providerinstructies zijn uitgesloten.",
         "requestCompleted": "Modelverzoek voltooid"
       },
-      "attachmentPrompt": "Bericht met afbeelding of bestand"
+      "attachmentPrompt": "Bericht met afbeelding of bestand",
+      "clearShort": "Geschiedenis wissen"
     },
     "attention": {
       "title": "Aandacht nodig",

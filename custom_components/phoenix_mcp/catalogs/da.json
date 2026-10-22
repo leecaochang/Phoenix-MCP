@@ -1346,7 +1346,8 @@
       "toolResult": "Værktøjsresultat",
       "turns": "Runder: {count}",
       "unknown": "Ukendt",
-      "week": "Seneste uge"
+      "week": "Seneste uge",
+      "clearShort": "Ryd historik"
     },
     "diff": {
       "blueprint.create": "Opret {domain}-blueprint '{rel}'",

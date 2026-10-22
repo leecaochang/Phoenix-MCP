@@ -2448,7 +2448,8 @@
         "contextHelp": "To tekst użytkownika w ustrukturyzowanym żądaniu decyzji. Liczby elementów kontekstu są w danych surowych; instrukcje dostawcy są pominięte.",
         "requestCompleted": "Żądanie do modelu zakończone"
       },
-      "attachmentPrompt": "Wiadomość z obrazem lub plikiem"
+      "attachmentPrompt": "Wiadomość z obrazem lub plikiem",
+      "clearShort": "Wyczyść historię"
     },
     "attention": {
       "title": "Wymaga uwagi",

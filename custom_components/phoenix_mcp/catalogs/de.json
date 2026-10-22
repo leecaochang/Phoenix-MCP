@@ -2338,7 +2338,8 @@
         "contextHelp": "Dies ist der Benutzertext in der strukturierten Entscheidungsanfrage. Kontextmengen stehen unter Rohdaten; Anbieteranweisungen sind ausgeschlossen.",
         "requestCompleted": "Modellanfrage abgeschlossen"
       },
-      "attachmentPrompt": "Anfrage mit Bild oder Datei"
+      "attachmentPrompt": "Anfrage mit Bild oder Datei",
+      "clearShort": "Verlauf löschen"
     },
     "attention": {
       "title": "Handlungsbedarf",
