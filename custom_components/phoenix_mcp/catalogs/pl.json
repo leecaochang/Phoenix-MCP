@@ -2562,6 +2562,27 @@
       "back": "Wstecz",
       "unavailable": "Nie udało się wczytać przewodnika. Odśwież stronę, aby spróbować ponownie.",
       "noTopic": "Dla tego obszaru roboczego nie ma jeszcze tematu w przewodniku."
+    },
+    "logs": {
+      "filters": "Filtry",
+      "filtersCount": "Filtry ({count})",
+      "activeFilters": "Aktywne filtry: {count}",
+      "clearFilters": "Wyczyść filtry",
+      "latest": "Ostatnio",
+      "turns": "Tury",
+      "toolCalls": "Wywołania narzędzi"
+    },
+    "table": {
+      "sortAscending": "Sortuj rosnąco",
+      "sortDescending": "Sortuj malejąco",
+      "hideColumn": "Ukryj kolumnę",
+      "showColumn": "Pokaż: {column}",
+      "resetOrder": "Przywróć kolejność kolumn",
+      "resetColumns": "Przywróć kolumny",
+      "columnMenu": "Opcje kolumny {column}",
+      "resizeColumn": "Zmień szerokość kolumny {column}",
+      "filterColumn": "Filtruj tę kolumnę",
+      "sortedLoaded": "Posortowano tylko wśród wczytanych wpisów. Wczytaj więcej, aby uwzględnić pozostałe."
     }
   }
 }

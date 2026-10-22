@@ -6,13 +6,16 @@
  * aria-label stays a hardcoded English literal would pass there. These tests
  * prime zh-Hans and assert the names change on the controls that build them.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+
+vi.mock("../api", () => ({ api: { getAudit: vi.fn() } }));
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 import zh from "../../custom_components/phoenix_mcp/catalogs/zh-Hans.json";
 import { primeTranslations, flattenCatalog } from "../i18n";
 import { PermissionSelector } from "../components/PermissionSelector";
-import { AuditTable } from "../components/AuditTable";
+import { AuditView } from "../views/AuditView";
+import { api } from "../api";
 import type { AuditEntry } from "../types";
 
 // HA overlays the requested language on English, so a locale missing a key
@@ -45,23 +48,28 @@ describe("accessible names are localized, not just present", () => {
     expect(chosen).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("localizes the audit row's composed accessible name", () => {
+  it("localizes the audit row's composed accessible name", async () => {
     // audit.openEntryAria interpolates a translated outcome label; an English
     // outcome leaking through would be visible in this name.
-    render(<AuditTable entries={[entry()]} />);
-    const opener = screen.getByRole("button", { name: /已允许/ });
-    expect(opener).toBeInTheDocument();
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry()], total: 1 });
+    render(<AuditView accessKeys={[]} />);
+    const row = await screen.findByRole("row", { name: /已允许/ });
+    expect(row).toBeInTheDocument();
   });
 
-  it("localizes the MESA advisory badge's name and tooltip", () => {
-    render(<AuditTable entries={[entry({ mesa_advisory: true })]} />);
+  it("localizes the MESA advisory badge's name and tooltip", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry({ mesa_advisory: true })], total: 1 });
+    render(<AuditView accessKeys={[]} />);
+    await screen.findAllByRole("row");
     const badge = screen.getByLabelText(/建议模式/);
     expect(badge).toHaveAttribute("title", expect.stringContaining("建议模式"));
   });
 
-  it("leaves no raw catalog keys in any accessible name", () => {
+  it("leaves no raw catalog keys in any accessible name", async () => {
     // A missing key renders as the key itself, which reads as gibberish aloud.
-    render(<AuditTable entries={[entry({ mesa_advisory: true })]} />);
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry({ mesa_advisory: true })], total: 1 });
+    render(<AuditView accessKeys={[]} />);
+    await screen.findAllByRole("row");
     for (const el of screen.getAllByRole("button")) {
       const name = el.getAttribute("aria-label") ?? el.textContent ?? "";
       expect(name).not.toMatch(/^[a-z]+(\.[A-Za-z]+)+$/);

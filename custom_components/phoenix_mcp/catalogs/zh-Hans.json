@@ -2452,6 +2452,27 @@
       "back": "返回",
       "unavailable": "无法加载指南。请重新加载页面后重试。",
       "noTopic": "此工作区暂时还没有指南主题。"
+    },
+    "logs": {
+      "filters": "筛选",
+      "filtersCount": "筛选（{count}）",
+      "activeFilters": "已启用的筛选：{count}",
+      "clearFilters": "清除筛选",
+      "latest": "最新",
+      "turns": "轮次",
+      "toolCalls": "工具调用"
+    },
+    "table": {
+      "sortAscending": "升序排序",
+      "sortDescending": "降序排序",
+      "hideColumn": "隐藏列",
+      "showColumn": "显示{column}",
+      "resetOrder": "重置列顺序",
+      "resetColumns": "重置列",
+      "columnMenu": "{column}列选项",
+      "resizeColumn": "调整{column}列宽",
+      "filterColumn": "筛选此列",
+      "sortedLoaded": "仅在已加载的条目中排序。加载更多以包含其余条目。"
     }
   },
   "notification": {

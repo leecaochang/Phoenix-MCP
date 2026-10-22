@@ -2457,6 +2457,27 @@
       "back": "Tillbaka",
       "unavailable": "Guiden kunde inte läsas in. Läs in sidan igen för att försöka på nytt.",
       "noTopic": "Det finns ännu inget guideavsnitt för den här arbetsytan."
+    },
+    "logs": {
+      "filters": "Filter",
+      "filtersCount": "Filter ({count})",
+      "activeFilters": "Aktiva filter: {count}",
+      "clearFilters": "Rensa filter",
+      "latest": "Senaste",
+      "turns": "Turer",
+      "toolCalls": "Verktygsanrop"
+    },
+    "table": {
+      "sortAscending": "Sortera stigande",
+      "sortDescending": "Sortera fallande",
+      "hideColumn": "Dölj kolumn",
+      "showColumn": "Visa {column}",
+      "resetOrder": "Återställ kolumnordning",
+      "resetColumns": "Återställ kolumner",
+      "columnMenu": "Alternativ för kolumnen {column}",
+      "resizeColumn": "Ändra bredd på kolumnen {column}",
+      "filterColumn": "Filtrera den här kolumnen",
+      "sortedLoaded": "Sorterat bara bland de inlästa posterna. Läs in fler för att ta med resten."
     }
   },
   "voice": {

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, fireEvent, waitFor, act, within } from "@testing-library/react";
+import { useState } from "react";
 import { ConversationsView } from "../views/ConversationsView";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext } from "../shell/tools";
+import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { api } from "../api";
 import { validApiResponse } from "../api_response";
 import type { AccessKeyRecord, ConversationEntry, ConversationListResponse, ConversationSummary } from "../types";
@@ -19,6 +21,12 @@ const detail: ConversationEntry = { ...summary, prompt: null, response: null, me
 const list = (entries = [summary]): ConversationListResponse => ({ entries, total: entries.length, enabled: true, available: true, bytes: 100 });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 
+/** The Conversation Log with Log Details beside it, as in the Logs workspace. */
+function Logs({ accessKeys }: { accessKeys?: AccessKeyRecord[] }) {
+  const [selection] = useState(() => new LogSelection());
+  return <LogSelectionContext.Provider value={selection}><ConversationsView accessKeys={accessKeys} /><LogDetailsContent /></LogSelectionContext.Provider>;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getConversations).mockImplementation(async () => list());
@@ -31,24 +39,24 @@ describe("ConversationsView", () => {
     const stored = { ...detail, metadata: { access_key_id: "key-1", access_key_name: "Old_name" } };
     vi.mocked(api.getConversation).mockResolvedValue(stored);
     const keys = [{ id: "key-1", name: "Current_name" }] as AccessKeyRecord[];
-    const view = render(<ConversationsView accessKeys={keys} />);
-    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+    const view = render(<Logs accessKeys={keys} />);
+    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
     await view.findByText("Current_name");
     expect(view.queryByText("Old_name")).toBeNull();
-    view.rerender(<ConversationsView accessKeys={[{ ...keys[0], name: "Renamed_again" }]} />);
+    view.rerender(<Logs accessKeys={[{ ...keys[0], name: "Renamed_again" }]} />);
     await view.findByText("Renamed_again");
-    expect(view.container.querySelector(".conversation-entry")?.hasAttribute("open")).toBe(true);
+    expect(view.container.querySelector(".phx-log-details")).toBeTruthy();
     expect(stored.metadata.access_key_name).toBe("Old_name");
-    view.rerender(<ConversationsView accessKeys={[]} />);
+    view.rerender(<Logs accessKeys={[]} />);
     await view.findByText("Old_name");
   });
 
   it("loads details only on expansion and renders untrusted content as inert text", async () => {
-    const view = render(<ConversationsView />);
+    const view = render(<Logs />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
     expect(api.getConversation).not.toHaveBeenCalled();
-    fireEvent.click(title.closest("summary")!);
-    await view.findByText("Prompt");
+    fireEvent.click(title.closest("tr")!);
+    await view.findByRole("region", { name: "Prompt" });
     expect(api.getConversation).toHaveBeenCalledWith("one");
     expect(view.getByText(/did not provide the user/)).toBeTruthy();
     expect(view.getByText(/external client did not provide/)).toBeTruthy();
@@ -60,16 +68,17 @@ describe("ConversationsView", () => {
     const image = { ...summary, coverage: "partial_conversation" as const, source: "agentcli", prompt_attachments: 1 };
     vi.mocked(api.getConversations).mockImplementation(async () => list([image]));
     vi.mocked(api.getConversation).mockResolvedValue({ ...detail, ...image, prompt: [{ attachment: true, type: "image", omitted: "media" }] });
-    const view = render(<ConversationsView />);
-    fireEvent.click((await view.findByText("Image or File Prompt")).closest("summary")!);
-    await waitFor(() => expect(view.getAllByText("Image or File Prompt")).toHaveLength(2));
+    const view = render(<Logs />);
+    fireEvent.click((await view.findByText("Image or File Prompt")).closest("tr")!);
+    // In the row, as the heading of Log Details, and as the prompt itself.
+    await waitFor(() => expect(view.getAllByText("Image or File Prompt")).toHaveLength(3));
     expect(view.queryByText(/did not receive a usable prompt/)).toBeNull();
   });
 
   it("discards stale filtered responses", async () => {
     const old = deferred<ConversationListResponse>();
     vi.mocked(api.getConversations).mockReturnValueOnce(old.promise).mockResolvedValueOnce(list([{ ...summary, excerpt: "Current" }]));
-    const view = render(<ConversationsView />);
+    const view = render(<Logs />);
     fireEvent.change(view.getByLabelText("Filter by source"), { target: { value: "voice" } });
     await view.findByText("Current");
     await act(async () => old.resolve(list([{ ...summary, excerpt: "Stale" }])));
@@ -77,16 +86,16 @@ describe("ConversationsView", () => {
   });
 
   it("requires explicit clear and removes opened payloads", async () => {
-    const view = render(<ConversationsView />);
+    const view = render(<Logs />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
-    fireEvent.click(title.closest("summary")!);
-    await view.findByText("Prompt");
+    fireEvent.click(title.closest("tr")!);
+    await view.findByRole("region", { name: "Prompt" });
     fireEvent.click(view.getByText("Clear Conversation History"));
     expect(api.clearConversations).not.toHaveBeenCalled();
-    fireEvent.click(view.getAllByText("Clear Conversation History")[1]);
+    fireEvent.click(within(view.container.querySelector<HTMLElement>(".conversation-clear-confirm")!).getByText("Clear Conversation History"));
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
     await view.findByText("No conversations to show");
-    expect(view.queryByText("Prompt")).toBeNull();
+    expect(view.queryByRole("region", { name: "Prompt" })).toBeNull();
   });
 
   it("offers Clear on the toolbar inside the shell and still asks before deleting", async () => {
@@ -105,24 +114,25 @@ describe("ConversationsView", () => {
     act(() => clear!.onSelect!());
     expect(api.clearConversations).not.toHaveBeenCalled();
     const banner = view.container.querySelector(".conversation-clear-confirm")!;
-    expect(banner.compareDocumentPosition(view.container.querySelector(".conversation-entry")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner.compareDocumentPosition(view.container.querySelector(".phx-table")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(view.getByText("Clear Conversation History"));
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce(), { timeout: 3000 });
     await waitFor(() => expect(registry.latest("logs", "conversationLog", "clear")?.disabled).toBe(true), { timeout: 3000 });
   });
 
   it("keeps expanded entries through a refresh and reports recoverable errors", async () => {
-    const view = render(<ConversationsView />);
+    const view = render(<Logs />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
-    fireEvent.click(title.closest("summary")!);
-    await view.findByText("Prompt");
+    fireEvent.click(title.closest("tr")!);
+    await view.findByRole("region", { name: "Prompt" });
     vi.mocked(api.getConversations).mockRejectedValueOnce(new Error("unavailable"));
     fireEvent.click(view.getByRole("button", { name: "Refresh" }));
     await view.findByRole("alert");
-    expect(view.getByText("Prompt")).toBeTruthy();
+    expect(view.getByRole("region", { name: "Prompt" })).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(view.queryByRole("alert")).toBeNull());
-    expect(title.closest("details")?.open).toBe(true);
+    expect(view.getByRole("region", { name: "Prompt" })).toBeTruthy();
+    expect(title.closest("tr")).toHaveAttribute("aria-selected", "true");
   });
 
   it("marks activity and failures with icons and exposes identity and error text without opening payloads", async () => {
@@ -134,10 +144,10 @@ describe("ConversationsView", () => {
         { kind: "error", timestamp: summary.updated_at, tool_id: null, payload: { code: "unauthorized", message: "This access key is no longer authorized." } },
       ],
     });
-    const view = render(<ConversationsView />);
-    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+    const view = render(<Logs />);
+    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
     const message = await view.findByText("This access key is no longer authorized.");
-    expect(message.closest("details")?.className).toBe("conversation-entry");
+    expect(message.closest(".phx-log-details")).toBeTruthy();
     expect(message.closest("li")?.className).toContain("conversation-event-error");
     expect(view.container.querySelectorAll(".conversation-event > svg[aria-hidden='true']")).toHaveLength(4);
     expect(view.container.querySelector(".conversation-status.conversation-signal-error svg")).toBeTruthy();
@@ -159,9 +169,10 @@ describe("ConversationsView", () => {
 
 it("shows mixed outcomes and tool titles without the redundant intro or storage line", async () => {
   vi.mocked(api.getConversations).mockResolvedValue({ ...list([{ ...summary, first_tool: "call_service", execution_status: "partial", tool_count: 2 }]), bytes: 500000, max_bytes: 25000000 });
-  const view = render(<ConversationsView />);
+  const view = render(<Logs />);
   await view.findByText("call_service");
   expect(view.container.querySelector(".conversation-status")?.textContent).toBe("Mixed outcomes");
+  fireEvent.click(view.getByText("call_service").closest("tr")!);
   expect(view.queryByText("Storage: 0.5 of 25 MB")).toBeNull();
   expect(view.queryByText("Recording enabled")).toBeNull();
   expect(view.getByText(/2 tool calls/)).toBeTruthy();
@@ -176,8 +187,8 @@ it("keeps narration, tool activity and reply in order with omissions explained",
       { kind: "assistant_text", timestamp: summary.updated_at, tool_id: null, payload: "The light is on." },
     ],
   });
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
   await view.findByText("Let me check.");
   const rows = view.container.querySelectorAll(".conversation-event");
   expect(rows[0].textContent).toContain("Let me check.");
@@ -195,8 +206,8 @@ it("opens grouped turns in chronological order and preserves reading position on
   const second = { ...first, id: "second", excerpt: "Follow-up question", started_at: "2026-10-03T01:00:00Z" };
   vi.mocked(api.getConversations).mockResolvedValue(list([{ ...first, turns: [first, second], history_missing: true }]));
   vi.mocked(api.getConversation).mockImplementation(async id => ({ ...detail, ...(id === "first" ? first : second), prompt: id === "first" ? "First question" : "Follow-up question", response: `${id} reply`, events: [] }));
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("First question")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("First question")).closest("tr")!);
   await view.findByText("second reply");
   const turns = view.container.querySelectorAll(".conversation-turn");
   expect(turns[0].textContent).toContain("First question");
@@ -218,8 +229,8 @@ it("combines a delegated operation with routing and pairs its result without hid
     { kind: "error", timestamp: summary.updated_at, tool_id: "outer", payload: { message: "Target ambiguous; not executed.", name: "intent__HassTurnOn" } },
     { ...detail.events[1], tool_id: "outer" },
   ] });
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
   await view.findByText("home_request");
   expect(view.getByText("Sent to LLM provider: example").closest(".conversation-route-inline")).toBeTruthy();
   expect(view.container.querySelectorAll(".conversation-detail > section > .conversation-timeline > li")).toHaveLength(1);
@@ -230,8 +241,8 @@ it("combines a delegated operation with routing and pairs its result without hid
 
 it("does not label a missing tool receipt as still running after interruption", async () => {
   vi.mocked(api.getConversation).mockResolvedValue({ ...detail, status: "interrupted", response_status: "interrupted", events: [detail.events[0]] });
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
   await view.findByText("get_state");
   expect(view.container.querySelector(".conversation-event-body > .conversation-outcome")?.textContent).toBe("Outcome unknown");
 });
@@ -246,10 +257,10 @@ it("shows copyable tool invocations and explains provider purpose, output and ch
     { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "provider", result: "completed", provider: "test-provider", model: "test-model", purpose: "tool_results", text_characters: 25, tool_call_count: 1 } },
     { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "decision_result", reason: "context_unavailable", executed: false } },
   ] });
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
   const invocation = await view.findByText(/get_state \{/);
-  expect(invocation.closest("details")?.className).toBe("conversation-entry");
+  expect(invocation.closest(".phx-log-details")).toBeTruthy();
   fireEvent.click(invocation.closest(".conversation-evidence")!.querySelector("button")!);
   await waitFor(() => expect(writeText).toHaveBeenCalledWith('get_state {\n  "entity_id": "light.test"\n}'));
   expect(view.getByText("Assist did not recognize a supported command.")).toBeTruthy();
@@ -268,8 +279,8 @@ it.each(["missing", "rejected", "unavailable"])("copies through HTTP fallback an
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: mode === "rejected" ? { writeText } : undefined });
   const command = vi.fn(() => mode !== "unavailable");
   document.execCommand = command;
-  const view = render(<ConversationsView />);
-  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const view = render(<Logs />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("tr")!);
   const invocation = await view.findByText(/get_state \{/);
   const evidence = invocation.closest(".conversation-evidence")!;
   const button = evidence.querySelector("button")!;

@@ -2457,6 +2457,27 @@
       "back": "Tilbake",
       "unavailable": "Veiledningen kunne ikke lastes inn. Last inn siden på nytt for å prøve igjen.",
       "noTopic": "Det finnes ennå ikke noe emne i veiledningen for dette arbeidsområdet."
+    },
+    "logs": {
+      "filters": "Filtre",
+      "filtersCount": "Filtre ({count})",
+      "activeFilters": "Aktive filtre: {count}",
+      "clearFilters": "Tøm filtre",
+      "latest": "Siste",
+      "turns": "Runder",
+      "toolCalls": "Verktøykall"
+    },
+    "table": {
+      "sortAscending": "Sorter stigende",
+      "sortDescending": "Sorter synkende",
+      "hideColumn": "Skjul kolonne",
+      "showColumn": "Vis {column}",
+      "resetOrder": "Tilbakestill kolonnerekkefølge",
+      "resetColumns": "Tilbakestill kolonner",
+      "columnMenu": "Alternativer for kolonnen {column}",
+      "resizeColumn": "Endre bredden på kolonnen {column}",
+      "filterColumn": "Filtrer denne kolonnen",
+      "sortedLoaded": "Sortert bare blant de innlastede oppføringene. Last inn mer for å ta med resten."
     }
   },
   "voice": {

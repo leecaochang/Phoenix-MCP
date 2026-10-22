@@ -2457,6 +2457,27 @@
       "back": "뒤로",
       "unavailable": "가이드를 불러올 수 없습니다. 페이지를 새로 고친 후 다시 시도하세요.",
       "noTopic": "이 작업 공간에 대한 가이드 주제가 아직 없습니다."
+    },
+    "logs": {
+      "filters": "필터",
+      "filtersCount": "필터({count})",
+      "activeFilters": "적용된 필터: {count}",
+      "clearFilters": "필터 지우기",
+      "latest": "최근",
+      "turns": "턴",
+      "toolCalls": "도구 호출"
+    },
+    "table": {
+      "sortAscending": "오름차순 정렬",
+      "sortDescending": "내림차순 정렬",
+      "hideColumn": "열 숨기기",
+      "showColumn": "{column} 표시",
+      "resetOrder": "열 순서 초기화",
+      "resetColumns": "열 초기화",
+      "columnMenu": "{column} 열 옵션",
+      "resizeColumn": "{column} 열 너비 조정",
+      "filterColumn": "이 열 필터링",
+      "sortedLoaded": "불러온 항목 안에서만 정렬되었습니다. 나머지를 포함하려면 더 불러오세요."
     }
   },
   "voice": {

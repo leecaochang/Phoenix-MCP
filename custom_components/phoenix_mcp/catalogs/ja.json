@@ -2452,6 +2452,27 @@
       "back": "戻る",
       "unavailable": "ガイドを読み込めませんでした。ページを再読み込みしてもう一度お試しください。",
       "noTopic": "このワークスペースのガイドのトピックはまだありません。"
+    },
+    "logs": {
+      "filters": "フィルター",
+      "filtersCount": "フィルター（{count}）",
+      "activeFilters": "有効なフィルター：{count}",
+      "clearFilters": "フィルターをクリア",
+      "latest": "最新",
+      "turns": "ターン",
+      "toolCalls": "ツール呼び出し"
+    },
+    "table": {
+      "sortAscending": "昇順で並べ替え",
+      "sortDescending": "降順で並べ替え",
+      "hideColumn": "列を非表示",
+      "showColumn": "{column} を表示",
+      "resetOrder": "列の順序をリセット",
+      "resetColumns": "列をリセット",
+      "columnMenu": "{column} 列のオプション",
+      "resizeColumn": "{column} 列の幅を変更",
+      "filterColumn": "この列で絞り込む",
+      "sortedLoaded": "読み込み済みの項目内でのみ並べ替えています。残りも含めるにはさらに読み込んでください。"
     }
   },
   "notification": {

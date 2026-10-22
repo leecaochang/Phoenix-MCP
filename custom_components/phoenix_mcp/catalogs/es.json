@@ -2452,6 +2452,27 @@
       "back": "Atrás",
       "unavailable": "No se pudo cargar la guía. Vuelva a cargar la página para intentarlo de nuevo.",
       "noTopic": "Todavía no hay ningún tema de la guía para este espacio de trabajo."
+    },
+    "logs": {
+      "filters": "Filtros",
+      "filtersCount": "Filtros ({count})",
+      "activeFilters": "Filtros activos: {count}",
+      "clearFilters": "Borrar filtros",
+      "latest": "Última",
+      "turns": "Turnos",
+      "toolCalls": "Llamadas a herramientas"
+    },
+    "table": {
+      "sortAscending": "Orden ascendente",
+      "sortDescending": "Orden descendente",
+      "hideColumn": "Ocultar columna",
+      "showColumn": "Mostrar {column}",
+      "resetOrder": "Restablecer el orden de las columnas",
+      "resetColumns": "Restablecer columnas",
+      "columnMenu": "Opciones de la columna {column}",
+      "resizeColumn": "Cambiar el ancho de la columna {column}",
+      "filterColumn": "Filtrar esta columna",
+      "sortedLoaded": "Ordenado solo entre las entradas cargadas. Cargue más para incluir el resto."
     }
   },
   "notification": {

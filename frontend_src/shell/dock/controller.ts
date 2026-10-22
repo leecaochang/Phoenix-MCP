@@ -11,6 +11,7 @@
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
 import { FoldStore, foldWindow, reapplyCollapsed, toggleFold, type FoldSnapshot } from "./fold";
+import { TableSettingsStore, type TableSettings } from "../../ui/table/settings";
 import { largestGridGroup, moveWindow, rowOf, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
 import { leafOrder, type Heights, type WorkspaceCanvas } from "./scroll";
@@ -42,6 +43,8 @@ export interface WorkspaceLayout {
   bands?: Partial<Record<Band, BandLayout>>;
   /** Floating windows, fixed on screen. */
   floats?: SerializedDockview;
+  /** Column order, widths, hidden columns and sort of the workspace's tables, by table id. */
+  tables?: Record<string, TableSettings>;
 }
 
 interface Host {
@@ -88,6 +91,8 @@ export interface WorkspaceExtras {
 
 export class WorkspaceController {
   readonly folds = new FoldStore();
+  /** The workspace's table settings, saved with its arrangement. */
+  readonly tables = new TableSettingsStore();
   /** Called when the user closes a shell-managed window. */
   onTransientClose: ((id: string) => void) | null = null;
   /** Called when the user closes or reopens a window (not when the shell does). */
@@ -253,6 +258,7 @@ export class WorkspaceController {
           this.loadHost("float", saved?.floats, undefined, known, used);
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
           this.folds.restore(saved?.folds, (id) => used.has(id));
+          this.tables.restore(saved?.tables);
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
           this.moveFloatsToLayer();
           // Needs Attention stays when an arrangement is restored over it.
@@ -307,6 +313,7 @@ export class WorkspaceController {
       const keep = [...this.transient].filter((id) => api.getPanel(id));
       for (const [, host] of this.attached()) host.api.clear();
       this.folds.restore(undefined, () => false);
+      this.tables.restore(undefined);
       this.closed.clear();
       this.floatedFrom.clear();
       this.pinnedFrom.clear();
@@ -403,7 +410,8 @@ export class WorkspaceController {
     const dock = sanitizeLayout(api.toJSON(), saved);
     if (!dock) return null;
     const heights = this.canvas ? { ...this.canvas.intended } : undefined;
-    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}) };
+    const tables = this.tables.snapshot();
+    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}) };
     const bands: Partial<Record<Band, BandLayout>> = {};
     for (const band of BANDS) {
       const bandApi = this.apiOf(band);

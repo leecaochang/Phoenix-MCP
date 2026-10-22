@@ -2452,6 +2452,27 @@
       "back": "Retour",
       "unavailable": "Impossible de charger le guide. Rechargez la page pour réessayer.",
       "noTopic": "Il n’y a pas encore de rubrique du guide pour cet espace de travail."
+    },
+    "logs": {
+      "filters": "Filtres",
+      "filtersCount": "Filtres ({count})",
+      "activeFilters": "Filtres actifs : {count}",
+      "clearFilters": "Effacer les filtres",
+      "latest": "Dernier",
+      "turns": "Tours",
+      "toolCalls": "Appels d'outils"
+    },
+    "table": {
+      "sortAscending": "Tri croissant",
+      "sortDescending": "Tri décroissant",
+      "hideColumn": "Masquer la colonne",
+      "showColumn": "Afficher {column}",
+      "resetOrder": "Rétablir l’ordre des colonnes",
+      "resetColumns": "Rétablir les colonnes",
+      "columnMenu": "Options de la colonne {column}",
+      "resizeColumn": "Redimensionner la colonne {column}",
+      "filterColumn": "Filtrer cette colonne",
+      "sortedLoaded": "Trié parmi les entrées chargées uniquement. Chargez-en plus pour inclure le reste."
     }
   },
   "notification": {

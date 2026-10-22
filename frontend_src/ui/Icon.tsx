@@ -6,7 +6,7 @@ import {
   Archive, ArrowDownLeft, ArrowLeft, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
   Download, Ellipsis, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
-  LayoutDashboard, ListChecks, ListX, Maximize2, Menu, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
+  LayoutDashboard, ListChecks, ListFilter, ListX, Maximize2, Menu, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
   Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
@@ -79,6 +79,9 @@ const ICONS = {
   chatMenu: Menu,
   send: ArrowUp,
   stop: Square,
+  sortUp: ChevronUp,
+  sortDown: ChevronDown,
+  filter: ListFilter,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -551,8 +551,81 @@
 .phx-log-details-nav { display: flex; gap: 4px; }
 .phx-log-details-nav .phx-toolbar-button { width: 32px; height: 32px; min-width: 32px; padding: 0; }
 .phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
-.audit-table tr.is-selected > td,
 .access-key-table tr.is-selected > td { background: var(--phx-accent-lt); }
+
+/* Log Details: a record's heading, compact fields, then its larger evidence. */
+.phx-log-record { display: flex; flex-direction: column; gap: 12px; }
+.phx-log-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.phx-log-record-head h4 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-log-record-head p { margin: 2px 0 0; }
+.phx-log-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 16px; margin: 0; }
+.phx-log-field dt { font-size: 12px; color: var(--phx-text-2); }
+.phx-log-field dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.phx-log-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
+.phx-log-section-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
+.phx-log-record .audit-payload-section { border-bottom: none; padding: 0; }
+
+/* An outcome as a semantic icon and readable words. */
+.phx-outcome { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.phx-outcome .conversation-icon { width: 16px; height: 16px; flex: none; }
+
+/* The configurable table: native table, fixed layout, scrolling sideways inside its window. */
+.phx-table-wrap { position: relative; overflow-x: auto; }
+.phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
+.phx-table th {
+  position: relative;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--phx-text-2);
+  border-bottom: 1px solid var(--phx-border);
+  user-select: none;
+}
+.phx-table th.is-dragged { opacity: 0.45; }
+.phx-th { display: flex; align-items: center; min-width: 0; }
+.phx-th-label {
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+  padding: 8px 4px 8px 10px; border: none; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer; touch-action: none;
+}
+.phx-th-label:hover { color: var(--phx-text); }
+.phx-th-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-th-menu {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; margin-right: 6px; padding: 0;
+  border: none; border-radius: var(--phx-radius-sm); background: transparent; color: var(--phx-text-2); cursor: pointer;
+  opacity: 0;
+}
+.phx-table th:hover .phx-th-menu, .phx-th-menu:focus-visible, .phx-th-menu.is-active { opacity: 1; }
+.phx-th-menu:hover { background: var(--phx-hover); color: var(--phx-text); }
+@media (hover: none) { .phx-th-menu { opacity: 1; } }
+.phx-th-resize { position: absolute; top: 0; right: -4px; z-index: 1; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+.phx-th-resize::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: var(--phx-divider); }
+.phx-th-resize:hover::after, .phx-th-resize:focus-visible::after { background: var(--phx-text-2); }
+.phx-table-drop { position: absolute; top: 0; width: 2px; height: 100%; margin-left: -1px; background: var(--phx-accent); pointer-events: none; }
+.phx-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--phx-divider);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.phx-table tbody tr[tabindex] { cursor: pointer; }
+.phx-table tbody tr[tabindex]:hover > td { background: var(--phx-hover); }
+.phx-table tbody tr.pass-through-row > td { background: var(--phx-accent-lt); }
+.phx-table tbody tr.is-selected > td { background: var(--phx-accent-lt); box-shadow: inset 0 -1px 0 var(--phx-border); }
+.phx-table tbody tr:focus-visible { outline: 2px solid var(--phx-focus, var(--phx-accent)); outline-offset: -2px; }
+.phx-cell-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
+.phx-table-empty { padding: 16px 10px; color: var(--phx-text-2); }
+.phx-table-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 2px 0; }
+.phx-table-footer > .btn { margin-left: auto; }
+
+/* Filters open in a panel above a log; while closed, a line says how many are active. */
+.phx-filters { padding: 4px 0 8px; }
+.phx-filters[hidden] { display: none; }
+.phx-filters-active { margin: 0 0 8px; color: var(--phx-text-2); font-size: 12px; }
 
 /* Access Keys: the selected key's windows below the key list. */
 .phx-window-pad { padding-top: 12px; }
@@ -744,7 +817,6 @@
 }
 .collapsible-body { margin-top: 16px; }
 
-
 /* Effective resolved control_mode/enforcement panel in the MESA entity editor. */
 .mesa-effective { margin: 0 0 14px; padding: 8px 10px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface-2, var(--phx-surface)); font-size: 12px; color: var(--phx-text-2); }
 .mesa-effective-title { font-weight: 600; margin-right: 8px; font-size: 12px; }
@@ -891,8 +963,6 @@
 .data-table tbody tr.clickable:hover { background: var(--phx-hover); }
 .data-table tbody tr.pass-through-row { background: var(--phx-accent-lt); }
 .data-table tbody tr.pass-through-row.clickable:hover { background: var(--phx-accent-lt); }
-.audit-table tbody tr:nth-child(even) { background: var(--phx-surface-2); }
-.audit-table tbody tr:nth-child(even).clickable:hover { background: var(--phx-hover); }
 
 /* ============================================================
    Inputs and selects
@@ -1156,8 +1226,6 @@ select.input {
 /* ============================================================
    Timestamps
    ============================================================ */
-.audit-time-short { display: none; }
-.audit-time-full  { display: inline; }
 
 /* ============================================================
    Two-column layout
@@ -1295,21 +1363,17 @@ select.input {
   .archived-table th, .archived-table td { padding: 6px 4px; }
   .archived-table td:nth-child(1) { word-break: break-all; }
 
-  .audit-table { table-layout: fixed; }
-  .audit-table th:nth-child(1), .audit-table th:nth-child(4),
-  .audit-table th:nth-child(5), .audit-table th:nth-child(7),
-  .audit-table td:nth-child(1), .audit-table td:nth-child(4),
-  .audit-table td:nth-child(5), .audit-table td:nth-child(7) { display: none; }
-  .audit-table th, .audit-table td { padding: 6px 2px; }
+  
+
   /* Time (.audit-time-short, e.g. "7/11, 2:30 PM") was cut down too far
      chasing room for IP; both are similar length, so give them comparable
      width instead of starving one for the other. */
-  .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 28%; }
-  .audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 33%; }
-  .audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 39%; }
-  .audit-table td:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .audit-time-full { display: none; }
-  .audit-time-short { display: inline; white-space: nowrap; }
+
+  
+
+  
+
+  
 
   .access-key-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
   .access-key-card-body { flex-direction: column; }
@@ -1449,12 +1513,10 @@ select.input {
 /* Audit filters: Source input + its Refresh button, grouped as one flex item so
    they can be forced onto a shared row on mobile (see the 600px block)
    instead of Refresh wrapping onto its own row below every other filter. */
-.audit-source-row { display: flex; gap: 8px; flex: 1 1 0; min-width: 80px; }
-.audit-source-row .input { flex: 1 1 0; min-width: 0; }
+
 /* Placed after the base rule above (not in the earlier shared 600px block)
    so this equal-specificity flex-basis override actually wins the cascade
    tie on source order, the same bug already hit once this session. */
-@media (max-width: 600px) { .audit-source-row { flex-basis: 100%; } }
 
 /* ============================================================
    Section header
@@ -1566,10 +1628,7 @@ select.input {
 /* ============================================================
    Audit detail modal rows
    ============================================================ */
-.detail-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--phx-divider); }
-.detail-label { width: 90px; flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--phx-text-2); padding-top: 1px; }
-.detail-value { font-size: 13px; word-break: break-all; }
-.detail-value-mono { font-size: 13px; word-break: break-all; font-family: monospace; }
+
 .audit-payload-section { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--phx-divider); }
 
 /* ============================================================
@@ -1578,10 +1637,9 @@ select.input {
 .audit-section-title { margin-bottom: 12px; }
 .audit-empty { color: var(--phx-text-2); font-size: 13px; }
 .audit-cell-reqid    { font-family: monospace; font-size: 11px; color: var(--phx-text-2); }
-.audit-cell-method   { font-family: monospace; font-size: 12px; }
-.audit-cell-resource { font-family: monospace; font-size: 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .audit-cell-source   { font-family: monospace; font-size: 12px; }
-.audit-cell-source.audit-source-name { font-family: inherit; }
+.audit-cell-source .audit-source-name { font-family: inherit; }
 
 /* ============================================================
    Access key list
@@ -3312,7 +3370,7 @@ hui-card { display: block; min-width: 0; }
 .diff-line-marker { display: inline-block; width: 1.25em; user-select: none; }
 
 /* Conversation evidence: readable prose with progressively disclosed details. */
-.conversation-event-heading, .conversation-footer {
+.conversation-event-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -3322,25 +3380,11 @@ hui-card { display: block; min-width: 0; }
 .conversation-secondary, .conversation-event time { color: var(--phx-text-2); font-size: 13px; }
 .conversation-toolbar input[type="search"] { min-width: 180px; }
 .conversation-list { border-top: 1px solid var(--phx-border); }
-.conversation-entry:nth-child(even) > summary { background: var(--phx-surface-2); }
-.conversation-entry + .conversation-entry { border-top: 1px solid var(--phx-border); }
+
 /* An expanded conversation is framed, so where it ends and the next record begins is unmistakable. */
-.conversation-entry[open] {
-  margin: 10px 0;
-  border: 1px solid var(--phx-line-strong);
-  border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface);
-}
-.conversation-entry[open] > summary { background: var(--phx-surface-2); border-bottom: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm) var(--phx-radius-sm) 0 0; }
-.conversation-entry[open] + .conversation-entry { border-top: none; }
+
 .conversation-clear-confirm { margin-bottom: 12px; }
-.conversation-entry > summary { padding: 10px 12px; cursor: pointer; display: flex; gap: 12px; align-items: baseline; }
-.conversation-entry > summary::before { content: ""; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid currentColor; flex: 0 0 0; }
-.conversation-entry[open] > summary::before { transform: rotate(90deg); }
-.conversation-entry > summary:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: -2px; }
-.conversation-entry > summary::-webkit-details-marker { display: none; }
-.conversation-entry > summary:hover { background: var(--phx-hover); }
-.conversation-summary { display: grid; gap: 3px; flex: 1; min-width: 0; }
+
 .conversation-summary-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .conversation-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
 .conversation-detail { padding: 0 24px 24px 40px; }
@@ -3377,7 +3421,7 @@ hui-card { display: block; min-width: 0; }
 .conversation-event time { font-variant-numeric: tabular-nums; }
 .conversation-event p { margin: 4px 0; }
 .conversation-technical { margin-top: 24px; }
-.conversation-footer { margin-top: 16px; }
+
 .conversation-empty { padding: 32px 24px; }
 .conversation-empty h3 { margin: 0 0 8px; }
 .conversation-turn + .conversation-turn { border-top: 1px solid var(--phx-border); }
@@ -3390,8 +3434,8 @@ hui-card { display: block; min-width: 0; }
 .conversation-nested { padding-left: 12px; }
 .conversation-limit { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 10px; margin: 12px 0; }
 @media (max-width: 600px) {
-  .conversation-entry > summary { padding: 10px 8px; gap: 8px; flex-wrap: wrap; }
-  .conversation-summary { flex-basis: calc(100% - 24px); }
+
+  
   .conversation-status { margin-left: 16px; }
   .conversation-detail { padding: 0 14px 20px; }
   .conversation-nested { padding-left: 0; list-style: none; }

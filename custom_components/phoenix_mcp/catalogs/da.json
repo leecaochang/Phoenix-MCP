@@ -2457,6 +2457,27 @@
       "back": "Tilbage",
       "unavailable": "Guiden kunne ikke indlæses. Genindlæs siden for at prøve igen.",
       "noTopic": "Der er endnu intet emne i guiden for dette arbejdsområde."
+    },
+    "logs": {
+      "filters": "Filtre",
+      "filtersCount": "Filtre ({count})",
+      "activeFilters": "Aktive filtre: {count}",
+      "clearFilters": "Ryd filtre",
+      "latest": "Seneste",
+      "turns": "Runder",
+      "toolCalls": "Værktøjskald"
+    },
+    "table": {
+      "sortAscending": "Sortér stigende",
+      "sortDescending": "Sortér faldende",
+      "hideColumn": "Skjul kolonne",
+      "showColumn": "Vis {column}",
+      "resetOrder": "Nulstil kolonnerækkefølge",
+      "resetColumns": "Nulstil kolonner",
+      "columnMenu": "Indstillinger for kolonnen {column}",
+      "resizeColumn": "Tilpas bredden på kolonnen {column}",
+      "filterColumn": "Filtrér denne kolonne",
+      "sortedLoaded": "Sorteret blandt de indlæste poster. Indlæs flere for at medtage resten."
     }
   },
   "voice": {

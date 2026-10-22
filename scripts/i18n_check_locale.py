@@ -445,6 +445,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     }),
     "nl": frozenset({
         "panel.help.title",  # "Help", the usual Dutch interface term
+        "panel.logs.filters",  # "Filters", also Dutch
+        "panel.logs.filtersCount",  # "Filters ({count})", also Dutch
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name

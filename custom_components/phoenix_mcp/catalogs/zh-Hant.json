@@ -2457,6 +2457,27 @@
       "back": "返回",
       "unavailable": "無法載入指南。請重新載入頁面後再試一次。",
       "noTopic": "此工作區目前還沒有指南主題。"
+    },
+    "logs": {
+      "filters": "篩選",
+      "filtersCount": "篩選（{count}）",
+      "activeFilters": "已啟用的篩選：{count}",
+      "clearFilters": "清除篩選",
+      "latest": "最新",
+      "turns": "回合",
+      "toolCalls": "工具呼叫"
+    },
+    "table": {
+      "sortAscending": "遞增排序",
+      "sortDescending": "遞減排序",
+      "hideColumn": "隱藏欄",
+      "showColumn": "顯示{column}",
+      "resetOrder": "重設欄順序",
+      "resetColumns": "重設欄",
+      "columnMenu": "{column}欄選項",
+      "resizeColumn": "調整{column}欄寬",
+      "filterColumn": "篩選此欄",
+      "sortedLoaded": "僅在已載入的項目中排序。載入更多以包含其餘項目。"
     }
   },
   "voice": {

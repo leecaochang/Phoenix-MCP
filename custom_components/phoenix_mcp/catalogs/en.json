@@ -614,6 +614,27 @@
       "unavailable": "The Guide could not be loaded. Reload the page to try again.",
       "noTopic": "There is no Guide topic for this workspace yet."
     },
+    "logs": {
+      "filters": "Filters",
+      "filtersCount": "Filters ({count})",
+      "activeFilters": "Active filters: {count}",
+      "clearFilters": "Clear Filters",
+      "latest": "Latest",
+      "turns": "Turns",
+      "toolCalls": "Tool Calls"
+    },
+    "table": {
+      "sortAscending": "Sort Ascending",
+      "sortDescending": "Sort Descending",
+      "hideColumn": "Hide Column",
+      "showColumn": "Show {column}",
+      "resetOrder": "Reset Column Order",
+      "resetColumns": "Reset Columns",
+      "columnMenu": "{column} Column Options",
+      "resizeColumn": "Resize {column} Column",
+      "filterColumn": "Filter This Column",
+      "sortedLoaded": "Sorted within the loaded entries. Load more to include the rest."
+    },
     "perms": {
       "addHint": "Add Hint",
       "colId": "ID",

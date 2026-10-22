@@ -2452,6 +2452,27 @@
       "back": "Indietro",
       "unavailable": "Impossibile caricare la guida. Ricarica la pagina per riprovare.",
       "noTopic": "Non c'è ancora un argomento della guida per quest'area di lavoro."
+    },
+    "logs": {
+      "filters": "Filtri",
+      "filtersCount": "Filtri ({count})",
+      "activeFilters": "Filtri attivi: {count}",
+      "clearFilters": "Cancella filtri",
+      "latest": "Ultimo",
+      "turns": "Turni",
+      "toolCalls": "Chiamate a strumenti"
+    },
+    "table": {
+      "sortAscending": "Ordine crescente",
+      "sortDescending": "Ordine decrescente",
+      "hideColumn": "Nascondi colonna",
+      "showColumn": "Mostra {column}",
+      "resetOrder": "Ripristina l'ordine delle colonne",
+      "resetColumns": "Ripristina colonne",
+      "columnMenu": "Opzioni della colonna {column}",
+      "resizeColumn": "Ridimensiona la colonna {column}",
+      "filterColumn": "Filtra questa colonna",
+      "sortedLoaded": "Ordinato solo tra le voci caricate. Carica altro per includere il resto."
     }
   },
   "notification": {

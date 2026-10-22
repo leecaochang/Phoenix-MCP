@@ -87,6 +87,18 @@ describe("workspace controller", () => {
     expect(make(older).closedWindows()).toEqual(["notifications"]);
   });
 
+  it("saves table settings with the arrangement, loads them back, and Restore Original Layout clears them", () => {
+    const c = mount();
+    c.tables.set("auditLog", { order: ["resource", "time"], sort: { column: "resource", dir: "asc" } });
+    const saved = c.layout()!;
+    expect(saved.tables).toEqual({ auditLog: { order: ["resource", "time"], sort: { column: "resource", dir: "asc" } } });
+    const reloaded = mount(saved);
+    expect(reloaded.tables.get("auditLog").order).toEqual(["resource", "time"]);
+    reloaded.restoreOriginal();
+    expect(reloaded.tables.get("auditLog")).toEqual({});
+    expect(reloaded.layout()!.tables).toBeUndefined();
+  });
+
   it("tells the shell when the user closes its managed window, and does not offer it again", () => {
     const c = mount();
     const closed = vi.fn();

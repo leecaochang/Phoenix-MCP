@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import { AuditView } from "../views/AuditView";
+import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { api } from "../api";
 import type { AuditEntry } from "../types";
 
@@ -127,17 +128,25 @@ describe("AuditView", () => {
       total: 4,
     });
 
-    const { findByText, getByRole, getByText } = render(<AuditView accessKeys={[]} />);
-    await findByText("Agent Chat");
+    const selection = new LogSelection();
+    const { findByRole, getByRole, getByText } = render(
+      <LogSelectionContext.Provider value={selection}><AuditView accessKeys={[]} /><LogDetailsContent /></LogSelectionContext.Provider>,
+    );
+    // Source starts hidden; any column's menu shows it again.
+    fireEvent.click(await findByRole("button", { name: "Time Column Options" }));
+    fireEvent.click(getByRole("menuitem", { name: "Show Source" }));
 
     expect(getByRole("columnheader", { name: /Source/ })).toBeTruthy();
+    expect(getByText("Agent Chat")).toBeTruthy();
     expect(getByText("Assist Tool Provider")).toBeTruthy();
     expect(getByText("Voice Agent")).toBeTruthy();
     expect(getByText("AI Task")).toBeTruthy();
+    // Choosing the entry shows it in Log Details, with the source by its friendly name.
     fireEvent.click(getByText("Agent Chat"));
-    expect(within(getByRole("dialog")).getByText("Source")).toBeTruthy();
-    expect(within(getByRole("dialog")).getByText("Agent Chat")).toBeTruthy();
-    expect(within(getByRole("dialog")).queryByText("agentcli")).toBeNull();
+    const details = document.querySelector<HTMLElement>(".phx-log-details")!;
+    expect(within(details).getByText("Source")).toBeTruthy();
+    expect(within(details).getByText("Agent Chat")).toBeTruthy();
+    expect(within(details).queryByText("agentcli")).toBeNull();
   });
 
   it("filters a friendly Agent Chat source name using the stored marker", async () => {

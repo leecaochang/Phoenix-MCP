@@ -2452,6 +2452,27 @@
       "back": "Zurück",
       "unavailable": "Der Leitfaden konnte nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
       "noTopic": "Für diesen Arbeitsbereich gibt es noch kein Thema im Leitfaden."
+    },
+    "logs": {
+      "filters": "Filter",
+      "filtersCount": "Filter ({count})",
+      "activeFilters": "Aktive Filter: {count}",
+      "clearFilters": "Filter zurücksetzen",
+      "latest": "Zuletzt",
+      "turns": "Gesprächsrunden",
+      "toolCalls": "Werkzeugaufrufe"
+    },
+    "table": {
+      "sortAscending": "Aufsteigend sortieren",
+      "sortDescending": "Absteigend sortieren",
+      "hideColumn": "Spalte ausblenden",
+      "showColumn": "{column} einblenden",
+      "resetOrder": "Spaltenreihenfolge zurücksetzen",
+      "resetColumns": "Spalten zurücksetzen",
+      "columnMenu": "Optionen für die Spalte {column}",
+      "resizeColumn": "Breite der Spalte {column} ändern",
+      "filterColumn": "Diese Spalte filtern",
+      "sortedLoaded": "Nur innerhalb der geladenen Einträge sortiert. Laden Sie mehr, um den Rest einzubeziehen."
     }
   },
   "notification": {

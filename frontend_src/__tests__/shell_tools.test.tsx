@@ -9,7 +9,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { DEFAULT_TOOLBAR, readToolbar } from "../shell/storage";
-import { AuditTable } from "../components/AuditTable";
+import { auditEntryKey } from "../components/AuditEntry";
+import { ConfigTable } from "../ui/table/ConfigTable";
 import { ContextMenuHost, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { AuditEntry } from "../types";
 
@@ -98,15 +99,15 @@ describe("Log Details", () => {
     const selection = new LogSelection();
     const reveal = vi.fn();
     selection.onSelect = reveal;
-    selection.set({ entry: entries[0], ordered: entries, nameOf });
+    selection.set({ kind: "audit", entry: entries[0], ordered: entries, nameOf });
     expect(reveal).toHaveBeenCalledOnce();
     selection.step(1);
-    expect(selection.get()?.entry.request_id).toBe("b");
+    expect(selection.get()?.entry).toBe(entries[1]);
     selection.step(1);
     selection.step(1);
-    expect(selection.get()?.entry.request_id).toBe("c");
+    expect(selection.get()?.entry).toBe(entries[2]);
     selection.step(-1);
-    expect(selection.get()?.entry.request_id).toBe("b");
+    expect(selection.get()?.entry).toBe(entries[1]);
     expect(reveal).toHaveBeenCalledOnce();
   });
 
@@ -115,8 +116,9 @@ describe("Log Details", () => {
     function Logs() {
       return (
         <LogSelectionContext.Provider value={selection}>
-          <AuditTable entries={entries} loading={false} accessKeyNames={{}}
-            onSelect={(e, ordered) => selection.set({ entry: e, ordered, nameOf })} selectedKey={selection.selectedKey()} />
+          <ConfigTable id="audit" label="Audit Log" columns={[{ id: "resource", label: "Resource", cell: (e: AuditEntry) => e.request_id }]}
+            rows={entries} rowKey={auditEntryKey}
+            onSelect={(e, ordered) => selection.set({ kind: "audit", entry: e, ordered, nameOf })} selectedKey={selection.selectedKey("audit")} />
           <LogDetailsContent />
         </LogSelectionContext.Provider>
       );
@@ -134,12 +136,6 @@ describe("Log Details", () => {
     expect(screen.getByRole("button", { name: "Next Record" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Next Record" }));
     expect(screen.getByRole("button", { name: "Next Record" })).toBeDisabled();
-  });
-
-  it("keeps the dialog when the log is drawn on its own", () => {
-    render(<AuditTable entries={entries} loading={false} accessKeyNames={{}} />);
-    fireEvent.click(screen.getAllByRole("row")[1]);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 

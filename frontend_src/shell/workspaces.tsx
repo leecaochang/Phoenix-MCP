@@ -29,6 +29,7 @@ import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
 import { LogDetailsContent } from "./logDetails";
+import { TableSettingsContext } from "../ui/table/settings";
 import { NotificationsWindow } from "./notifications";
 import { HELP_WINDOW, HelpWindow } from "./help";
 import { MIN_WINDOW_HEIGHT } from "./dock/fold";
@@ -163,10 +164,12 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   return (
     <WindowPlaceContext.Provider value={place}>
     <WindowVisibleContext.Provider value={workspaceVisible && !folded}>
+    <TableSettingsContext.Provider value={controller?.tables ?? null}>
       <div className="phx-window-body" data-phx-window={id} hidden={folded}>
         <h2 className="sr-only">{windowTitle(id)}</h2>
         <ErrorBoundary>{children}</ErrorBoundary>
       </div>
+    </TableSettingsContext.Provider>
     </WindowVisibleContext.Provider>
     </WindowPlaceContext.Provider>
   );

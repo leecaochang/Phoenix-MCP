@@ -2530,6 +2530,27 @@
       "back": "Terug",
       "unavailable": "De gids kon niet worden geladen. Laad de pagina opnieuw om het nog eens te proberen.",
       "noTopic": "Er is nog geen gidsonderwerp voor deze werkruimte."
+    },
+    "logs": {
+      "filters": "Filters",
+      "filtersCount": "Filters ({count})",
+      "activeFilters": "Actieve filters: {count}",
+      "clearFilters": "Filters wissen",
+      "latest": "Laatste",
+      "turns": "Beurten",
+      "toolCalls": "Hulpmiddelaanroepen"
+    },
+    "table": {
+      "sortAscending": "Oplopend sorteren",
+      "sortDescending": "Aflopend sorteren",
+      "hideColumn": "Kolom verbergen",
+      "showColumn": "{column} weergeven",
+      "resetOrder": "Kolomvolgorde herstellen",
+      "resetColumns": "Kolommen herstellen",
+      "columnMenu": "Opties voor kolom {column}",
+      "resizeColumn": "Breedte van kolom {column} wijzigen",
+      "filterColumn": "Op deze kolom filteren",
+      "sortedLoaded": "Alleen gesorteerd binnen de geladen items. Laad meer om de rest mee te nemen."
     }
   }
 }

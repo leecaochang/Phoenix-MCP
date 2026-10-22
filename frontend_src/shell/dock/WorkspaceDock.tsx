@@ -157,7 +157,8 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       out.push(() => refitMain.disconnect(), () => refitBands.disconnect());
     }
     const folds = controller.folds.subscribe(() => onChange.current());
-    out.push(folds);
+    const tables = controller.tables.subscribe(() => onChange.current());
+    out.push(folds, tables);
     disposers.current = out;
   };
 

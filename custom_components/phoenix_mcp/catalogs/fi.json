@@ -2457,6 +2457,27 @@
       "back": "Takaisin",
       "unavailable": "Opasta ei voitu ladata. Yritä uudelleen lataamalla sivu uudelleen.",
       "noTopic": "Tälle työtilalle ei ole vielä oppaan aihetta."
+    },
+    "logs": {
+      "filters": "Suodattimet",
+      "filtersCount": "Suodattimet ({count})",
+      "activeFilters": "Aktiivisia suodattimia: {count}",
+      "clearFilters": "Tyhjennä suodattimet",
+      "latest": "Viimeisin",
+      "turns": "Vuorot",
+      "toolCalls": "Työkalukutsut"
+    },
+    "table": {
+      "sortAscending": "Lajittele nousevasti",
+      "sortDescending": "Lajittele laskevasti",
+      "hideColumn": "Piilota sarake",
+      "showColumn": "Näytä {column}",
+      "resetOrder": "Palauta sarakkeiden järjestys",
+      "resetColumns": "Palauta sarakkeet",
+      "columnMenu": "Sarakkeen {column} asetukset",
+      "resizeColumn": "Muuta sarakkeen {column} leveyttä",
+      "filterColumn": "Suodata tätä saraketta",
+      "sortedLoaded": "Lajiteltu vain ladattujen merkintöjen kesken. Lataa lisää, jotta loputkin otetaan mukaan."
     }
   },
   "voice": {
