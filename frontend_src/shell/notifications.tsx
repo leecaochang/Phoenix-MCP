@@ -1,0 +1,37 @@
+/**
+ * The Notifications window: this session's notices, newest first, each with
+ * its time and a Clear button. Clear All sits on the toolbar with the
+ * window's other tools. Every workspace shows the same history.
+ */
+
+import { localeClock, t } from "../i18n";
+import { Icon } from "../ui/Icon";
+import { useNotifications } from "../ui/notify";
+import { useToolbarTools } from "./tools";
+
+export function NotificationsWindow() {
+  const center = useNotifications();
+  const items = center?.history ?? [];
+  useToolbarTools([{
+    id: "notifications",
+    label: t("notifications.title"),
+    tools: [{ id: "clear-all", label: t("notifications.clearAll"), icon: "clearList", disabled: !items.length, onSelect: () => center?.clearAll() }],
+  }]);
+  if (!items.length) return <p className="phx-notifications-empty">{t("notifications.empty")}</p>;
+  return (
+    <ul className="phx-notifications">
+      {items.map((n) => (
+        <li key={n.id} className="phx-notification">
+          <div className="phx-notification-text">
+            <p>{n.text}</p>
+            <time dateTime={new Date(n.time).toISOString()}>{localeClock(n.time)}</time>
+          </div>
+          <button type="button" className="phx-window-control" aria-label={t("notifications.clear")} title={t("notifications.clear")}
+            onClick={() => center?.clear(n.id)}>
+            <Icon name="close" size={14} />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}

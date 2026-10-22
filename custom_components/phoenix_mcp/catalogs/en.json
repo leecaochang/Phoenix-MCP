@@ -575,6 +575,13 @@
       "myDefaultRestored": "Restored your default arrangement.",
       "panelDefaultsRestored": "Restored the panel's default settings."
     },
+    "notifications": {
+      "title": "Notifications",
+      "empty": "No notifications in this session.",
+      "clear": "Clear Notification",
+      "clearAll": "Clear All",
+      "dismiss": "Dismiss"
+    },
     "perms": {
       "addHint": "Add Hint",
       "colId": "ID",

@@ -2416,6 +2416,13 @@
       "myDefaultSaved": "Den här layouten sparades som din standard för {workspace}.",
       "myDefaultRestored": "Din standardlayout har återställts.",
       "panelDefaultsRestored": "Panelens standardinställningar har återställts."
+    },
+    "notifications": {
+      "title": "Aviseringar",
+      "empty": "Inga aviseringar under den här sessionen.",
+      "clear": "Rensa avisering",
+      "clearAll": "Rensa alla",
+      "dismiss": "Stäng"
     }
   },
   "voice": {

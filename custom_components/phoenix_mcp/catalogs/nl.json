@@ -2489,6 +2489,13 @@
       "myDefaultSaved": "Deze indeling is opgeslagen als uw standaard voor {workspace}.",
       "myDefaultRestored": "Uw standaardindeling is hersteld.",
       "panelDefaultsRestored": "De standaardinstellingen van het paneel zijn hersteld."
+    },
+    "notifications": {
+      "title": "Meldingen",
+      "empty": "Geen meldingen in deze sessie.",
+      "clear": "Melding wissen",
+      "clearAll": "Alles wissen",
+      "dismiss": "Sluiten"
     }
   }
 }

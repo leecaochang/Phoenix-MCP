@@ -2411,6 +2411,13 @@
       "myDefaultSaved": "Cette disposition a été enregistrée comme votre disposition par défaut pour {workspace}.",
       "myDefaultRestored": "Votre disposition par défaut a été restaurée.",
       "panelDefaultsRestored": "Les réglages par défaut du panneau ont été restaurés."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "empty": "Aucune notification dans cette session.",
+      "clear": "Effacer la notification",
+      "clearAll": "Tout effacer",
+      "dismiss": "Fermer"
     }
   },
   "notification": {

@@ -11,6 +11,7 @@ import { AgentCliWindow } from "../components/AgentCliWindow";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
+import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
 import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
@@ -29,8 +30,6 @@ const DESKTOP_ABOVE = 720;
 /** Arrangements are written this long after the last change. */
 const SAVE_DELAY_MS = 1000;
 const TRANSIENT = new Set([ATTENTION_WINDOW]);
-/** How long a status message stays on screen. */
-const STATUS_MS = 2800;
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -234,13 +233,9 @@ export function Shell() {
     markChanged(["lastWorkspace", ...WORKSPACE_IDS.filter((id) => controllers.has(id)).map((id) => `ws:${id}` as Section)], true);
   }, [d.workspace, markChanged, controllers]);
 
-  // A short status message, read by screen readers too.
-  const [status, setStatus] = useState<string | null>(null);
-  useEffect(() => {
-    if (!status) return;
-    const timer = window.setTimeout(() => setStatus(null), STATUS_MS);
-    return () => window.clearTimeout(timer);
-  }, [status]);
+  // Toasts and this session's notification history, shared by every workspace.
+  const notifications = useMemo(() => new Notifications(), []);
+  const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
 
   // Restore Panel Default Settings asks first, inside the workspace area.
   const [confirmDefaults, setConfirmDefaults] = useState(false);
@@ -257,8 +252,8 @@ export function Shell() {
     toolbarRef.current = DEFAULT_TOOLBAR;
     markChanged(sections, true);
     if (rec) commit(WORKSPACE_IDS.filter((id) => !controllers.has(id)).map((id) => `ws:${id}` as Section), true);
-    setStatus(t("workspace.panelDefaultsRestored"));
-  }, [commit, controllers, markChanged]);
+    notify(t("workspace.panelDefaultsRestored"));
+  }, [commit, controllers, markChanged, notify]);
 
   const actions = useMemo<WorkspaceActions>(() => ({
     saveMyDefault: (controller) => {
@@ -268,7 +263,7 @@ export function Shell() {
       const id = controller.id as WorkspaceId;
       rec.myDefaults = { ...rec.myDefaults, [id]: layout };
       commit([`my:${id}`], true);
-      setStatus(t("workspace.myDefaultSaved", { workspace: t(WORKSPACES[id].labelKey) }));
+      notify(t("workspace.myDefaultSaved", { workspace: t(WORKSPACES[id].labelKey) }));
     },
     hasMyDefault: (controller) => !!recordRef.current?.myDefaults?.[controller.id as WorkspaceId],
     restoreMyDefault: (controller) => {
@@ -277,14 +272,14 @@ export function Shell() {
       if (!saved) return;
       controller.load(saved);
       markChanged([`ws:${id}`], true);
-      setStatus(t("workspace.myDefaultRestored"));
+      notify(t("workspace.myDefaultRestored"));
     },
     restoreOriginal: (controller) => {
       controller.restoreOriginal();
       markChanged([`ws:${controller.id as WorkspaceId}`], true);
     },
     restorePanelDefaults: () => setConfirmDefaults(true),
-  }), [commit, markChanged]);
+  }), [commit, markChanged, notify]);
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
@@ -318,6 +313,7 @@ export function Shell() {
     <MenuRootContext.Provider value={rootEl}>
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
+    <NotificationsContext.Provider value={notifications}>
     <LogSelectionContext.Provider value={logSelection}>
     <WorkspaceActionsContext.Provider value={actions}>
     <AccessKeyDetailProvider
@@ -378,11 +374,12 @@ export function Shell() {
             />
           </ErrorBoundary>
         )}
-        <div className="phx-shell-status" role="status" aria-live="polite">{status}</div>
+        <Toasts center={notifications} />
       </div>
     </AccessKeyDetailProvider>
     </WorkspaceActionsContext.Provider>
     </LogSelectionContext.Provider>
+    </NotificationsContext.Provider>
     </ToolRegistryContext.Provider>
     </ContextMenuHost>
     </MenuRootContext.Provider>

@@ -43,6 +43,7 @@
   --phx-z-dropdown:   30;
   --phx-z-modal:      100;
   --phx-z-agentcli:   200;
+  --phx-z-toast:      210;
   --phx-grey-tint:    rgba(0,0,0,0.06);
   --phx-hover:        #efefef;
   --phx-purple:       #5e5e5e;
@@ -398,23 +399,60 @@
 .phx-shell-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; flex: none; }
 .phx-shell-confirm p { flex: 1 1 280px; margin: 0; }
 .phx-shell-confirm-actions { display: flex; gap: 8px; }
-/* A short status message near the bottom of the panel; the empty live region stays for screen readers. */
-.phx-shell-status {
+/* Toasts near the bottom of the panel, above every window; the empty live region stays for screen readers. */
+.phx-toasts {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: var(--phx-z-toast);
   max-width: min(520px, calc(100% - 32px));
-  padding: 8px 14px;
+  pointer-events: none;
+}
+.phx-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
   border-radius: var(--phx-radius);
   background: var(--phx-text);
   color: var(--phx-surface);
   font-size: 13px;
   box-shadow: var(--phx-shadow-lg);
-  pointer-events: none;
+  pointer-events: auto;
 }
-.phx-shell-status:empty { padding: 0; background: transparent; box-shadow: none; }
+.phx-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.phx-toast-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--phx-radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.phx-toast-dismiss:hover { background: color-mix(in srgb, var(--phx-surface) 18%, transparent); }
+.phx-toast-dismiss:focus-visible { outline-color: var(--phx-surface); }
+
+/* The Notifications window: this session's notices, newest first. */
+.phx-notifications { list-style: none; margin: 0; padding: 0; }
+.phx-notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--phx-border);
+}
+.phx-notification:last-child { border-bottom: none; }
+.phx-notification-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.phx-notification-text p { margin: 0; }
+.phx-notification-text time { display: block; margin-top: 2px; font-size: 12px; color: var(--phx-text-2); }
+.phx-notifications-empty { margin: 12px 0 0; color: var(--phx-text-2); }
 .phx-attention.phx-attention-window { margin: 0; border: none; border-radius: 0; padding: 0 0 16px; }
 
 /* Narrow screens: the workspace's windows as one stack. */

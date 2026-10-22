@@ -2416,6 +2416,13 @@
       "myDefaultSaved": "Dette layout er gemt som din standard for {workspace}.",
       "myDefaultRestored": "Dit standardlayout er gendannet.",
       "panelDefaultsRestored": "Panelets standardindstillinger er gendannet."
+    },
+    "notifications": {
+      "title": "Notifikationer",
+      "empty": "Ingen notifikationer i denne session.",
+      "clear": "Ryd notifikation",
+      "clearAll": "Ryd alle",
+      "dismiss": "Luk"
     }
   },
   "voice": {

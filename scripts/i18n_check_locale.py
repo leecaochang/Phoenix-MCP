@@ -320,6 +320,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesa.privPublic",                    # privacy level
         "panel.mesaSuggestion.noun.script",         # "script"
         "panel.settings.notificationsCard",         # "Notifications"
+        "panel.notifications.title",                # "Notifications"
         "panel.shell.documentation",                # "Documentation"
         "panel.accessKeys.expiryMinutes",               # "Minutes"
         "panel.version.loc.section",                # "section {index}"

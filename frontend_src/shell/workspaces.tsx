@@ -29,6 +29,7 @@ import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
 import { LogDetailsContent } from "./logDetails";
+import { NotificationsWindow } from "./notifications";
 
 export const WINDOW_TITLE_KEYS = {
   accessKeys: "shell.tabAccessKeys",
@@ -46,6 +47,7 @@ export const WINDOW_TITLE_KEYS = {
   logDetails: "workspace.logDetails",
   settings: "shell.tabSettings",
   attention: "attention.title",
+  notifications: "notifications.title",
 } as const;
 export type WindowId = keyof typeof WINDOW_TITLE_KEYS;
 
@@ -80,7 +82,7 @@ export function windowAvailable(id: string, settings: GlobalSettings | null): bo
 
 const size = (api: DockviewApi, id: string, dims: { width?: number; height?: number }) => api.getPanel(id)?.group.api.setSize(dims);
 
-export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
+const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
   accessKeys: {
     labelKey: "shell.tabAccessKeys",
     icon: "accessKeys",
@@ -119,6 +121,18 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = {
   },
   settings: { labelKey: "shell.tabSettings", icon: "settings", windows: ["settings", "attention"], arrange: (_, add) => add("settings") },
 };
+
+/** Windows every workspace offers besides its own, closed until reopened from Workspace Options; desktop only for now. */
+export const SHARED_WINDOWS: readonly WindowId[] = ["notifications"];
+const SHARED_HEIGHTS: Partial<Record<WindowId, number>> = { notifications: 240 };
+
+export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = Object.fromEntries(
+  Object.entries(OWN_WINDOWS).map(([id, def]) => [id, {
+    ...def,
+    windows: [...def.windows, ...SHARED_WINDOWS],
+    heights: { ...SHARED_HEIGHTS, ...def.heights },
+  }]),
+) as Record<WorkspaceId, WorkspaceDef>;
 
 /** Whether this workspace is on screen; windows in a hidden workspace stay mounted but pause. */
 export const WorkspaceVisibleContext = createContext(true);
@@ -238,6 +252,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   settings: SettingsContent,
   logDetails: LogDetailsWindowContent,
   attention: AttentionContent,
+  notifications: NotificationsWindow,
 };
 
 /** A window's content, rendered once per workspace and moved between hosts with the window. */

@@ -2416,6 +2416,13 @@
       "myDefaultSaved": "已將此佈局儲存為 {workspace} 的預設佈局。",
       "myDefaultRestored": "已還原你的預設佈局。",
       "panelDefaultsRestored": "已還原面板預設設定。"
+    },
+    "notifications": {
+      "title": "通知",
+      "empty": "本次工作階段中沒有通知。",
+      "clear": "清除通知",
+      "clearAll": "全部清除",
+      "dismiss": "關閉"
     }
   },
   "voice": {

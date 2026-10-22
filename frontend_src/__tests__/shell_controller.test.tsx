@@ -69,6 +69,24 @@ describe("workspace controller", () => {
     expect(reloaded.closedWindows()).toEqual([]);
   });
 
+  it("offers a window the arrangement leaves out, or an older save did not know, as closed", () => {
+    const windows = [...WINDOWS, "notifications"];
+    const slots = { ...components, notifications: () => <div>notifications</div> };
+    const make = (saved?: Parameters<WorkspaceController["load"]>[0]) => {
+      const c = new WorkspaceController("logs", windows, arrange, (id) => id, { transient: new Set(["attention"]) });
+      render(<DockviewReact components={slots} onReady={(e) => { c.api = e.api; c.load(saved); }} />);
+      return c;
+    };
+    const c = make();
+    expect(c.closedWindows()).toEqual(["notifications"]);
+    c.reopen("notifications");
+    expect(ids(c)).toContain("notifications");
+    expect(c.closedWindows()).toEqual([]);
+    // A save made before the window existed still offers it.
+    const older = mount().layout()!;
+    expect(make(older).closedWindows()).toEqual(["notifications"]);
+  });
+
   it("tells the shell when the user closes its managed window, and does not offer it again", () => {
     const c = mount();
     const closed = vi.fn();

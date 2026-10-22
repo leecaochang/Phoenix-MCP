@@ -236,7 +236,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       expect(menuItem(el, "Restore My Default")).toHaveAttribute("aria-disabled", "true");
       act(() => { menuItem(el, "Save as My Default")!.click(); });
       await waitFor(() => expect(sets.some((s) => (s.value.myDefaults as Record<string, unknown> | undefined)?.accessKeys)).toBe(true));
-      expect(el.shadowRoot!.querySelector(".phx-shell-status")?.textContent).toBe("Saved this arrangement as your default for Access Keys.");
+      expect(el.shadowRoot!.querySelector(".phx-toast-text")?.textContent).toBe("Saved this arrangement as your default for Access Keys.");
       openOptions(el);
       expect(menuItem(el, "Restore My Default")).not.toHaveAttribute("aria-disabled");
     });

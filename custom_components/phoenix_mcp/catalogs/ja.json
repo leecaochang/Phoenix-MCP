@@ -2411,6 +2411,13 @@
       "myDefaultSaved": "この配置を {workspace} のマイ既定として保存しました。",
       "myDefaultRestored": "既定の配置を復元しました。",
       "panelDefaultsRestored": "パネルの既定の設定を復元しました。"
+    },
+    "notifications": {
+      "title": "通知",
+      "empty": "このセッションの通知はありません。",
+      "clear": "通知をクリア",
+      "clearAll": "すべてクリア",
+      "dismiss": "閉じる"
     }
   },
   "notification": {

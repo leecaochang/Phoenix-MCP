@@ -2411,6 +2411,13 @@
       "myDefaultSaved": "Se guardó esta disposición como su predeterminado para {workspace}.",
       "myDefaultRestored": "Se restauró su disposición predeterminada.",
       "panelDefaultsRestored": "Se restauró la configuración predeterminada del panel."
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "empty": "No hay notificaciones en esta sesión.",
+      "clear": "Borrar notificación",
+      "clearAll": "Borrar todo",
+      "dismiss": "Descartar"
     }
   },
   "notification": {

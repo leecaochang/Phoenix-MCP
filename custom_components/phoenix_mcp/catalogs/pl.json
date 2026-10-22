@@ -2521,6 +2521,13 @@
       "myDefaultSaved": "Zapisano ten układ jako domyślny dla obszaru {workspace}.",
       "myDefaultRestored": "Przywrócono Twój układ domyślny.",
       "panelDefaultsRestored": "Przywrócono domyślne ustawienia panelu."
+    },
+    "notifications": {
+      "title": "Powiadomienia",
+      "empty": "Brak powiadomień w tej sesji.",
+      "clear": "Wyczyść powiadomienie",
+      "clearAll": "Wyczyść wszystko",
+      "dismiss": "Zamknij"
     }
   }
 }

@@ -491,9 +491,18 @@ export class WorkspaceController {
     this.changed();
   }
 
-  /** Closed windows that can be reopened, in default order. */
+  /**
+   * Closed windows that can be reopened, in default order. A window the
+   * arrangement leaves out, or that an older saved arrangement did not know,
+   * counts as closed; a conditional one only once the user closed it.
+   */
   closedWindows(): string[] {
-    return this.windows.filter((id) => this.closed.has(id) && this.availability(id) !== false);
+    const live = !!this.api;
+    return this.windows.filter((id) => {
+      if (this.transient.has(id) || this.availability(id) === false) return false;
+      if (this.closed.has(id)) return !live || !this.hostOf(id);
+      return live && !this.hostOf(id) && !(id in this.conditional);
+    });
   }
 
   reopen(id: string): void {
@@ -521,6 +530,16 @@ export class WorkspaceController {
           this.add(id, { direction: "below" });
         }
       }, { [id]: height });
+    });
+    this.reveal(id);
+  }
+
+  /** Scroll the workspace so a window just placed in the grid is in view. */
+  private reveal(id: string): void {
+    if (typeof requestAnimationFrame === "undefined") return;
+    requestAnimationFrame(() => {
+      const group = this.api?.getPanel(id)?.group;
+      if (group?.api.location.type === "grid") group.element.scrollIntoView?.({ block: "nearest" });
     });
   }
 

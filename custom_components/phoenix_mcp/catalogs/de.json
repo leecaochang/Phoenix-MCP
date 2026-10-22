@@ -2411,6 +2411,13 @@
       "myDefaultSaved": "Diese Anordnung wurde als Ihr Standard für {workspace} gespeichert.",
       "myDefaultRestored": "Ihre Standardanordnung wurde wiederhergestellt.",
       "panelDefaultsRestored": "Die Standardeinstellungen des Panels wurden wiederhergestellt."
+    },
+    "notifications": {
+      "title": "Benachrichtigungen",
+      "empty": "In dieser Sitzung gibt es keine Benachrichtigungen.",
+      "clear": "Benachrichtigung entfernen",
+      "clearAll": "Alle entfernen",
+      "dismiss": "Schließen"
     }
   },
   "notification": {

@@ -2411,6 +2411,13 @@
       "myDefaultSaved": "已将此布局保存为 {workspace} 的默认布局。",
       "myDefaultRestored": "已还原你的默认布局。",
       "panelDefaultsRestored": "已还原面板默认设置。"
+    },
+    "notifications": {
+      "title": "通知",
+      "empty": "本次会话中没有通知。",
+      "clear": "清除通知",
+      "clearAll": "全部清除",
+      "dismiss": "关闭"
     }
   },
   "notification": {

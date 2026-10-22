@@ -2416,6 +2416,13 @@
       "myDefaultSaved": "Dette oppsettet er lagret som din standard for {workspace}.",
       "myDefaultRestored": "Standardoppsettet ditt er gjenopprettet.",
       "panelDefaultsRestored": "Panelets standardinnstillinger er gjenopprettet."
+    },
+    "notifications": {
+      "title": "Varsler",
+      "empty": "Ingen varsler i denne økten.",
+      "clear": "Fjern varsel",
+      "clearAll": "Tøm alle",
+      "dismiss": "Lukk"
     }
   },
   "voice": {

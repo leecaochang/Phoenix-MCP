@@ -2416,6 +2416,13 @@
       "myDefaultSaved": "Tämä asettelu tallennettiin omaksi oletukseksesi työtilassa {workspace}.",
       "myDefaultRestored": "Oletusasettelusi palautettiin.",
       "panelDefaultsRestored": "Paneelin oletusasetukset palautettiin."
+    },
+    "notifications": {
+      "title": "Ilmoitukset",
+      "empty": "Tässä istunnossa ei ole ilmoituksia.",
+      "clear": "Tyhjennä ilmoitus",
+      "clearAll": "Tyhjennä kaikki",
+      "dismiss": "Sulje"
     }
   },
   "voice": {
