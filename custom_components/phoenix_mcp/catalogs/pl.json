@@ -2512,7 +2512,15 @@
       "summaryPassThrough": "Klucze dostępu Pass-through nie używają drzewa uprawnień, więc nie ma reguł do podsumowania.",
       "pinTop": "Przypnij u góry",
       "pinBottom": "Przypnij u dołu",
-      "unpin": "Odepnij"
+      "unpin": "Odepnij",
+      "saveMyDefault": "Zapisz jako Mój domyślny",
+      "restoreMyDefault": "Przywróć Mój domyślny",
+      "restorePanelDefaults": "Przywróć domyślne ustawienia panelu",
+      "restorePanelDefaultsConfirm": "Przywrócić domyślny pasek narzędzi i układ wszystkich obszarów roboczych? Zapisane układy domyślne i wszystkie ustawienia Phoenix zostaną zachowane.",
+      "restoreDefaultsAction": "Przywróć domyślne",
+      "myDefaultSaved": "Zapisano ten układ jako domyślny dla obszaru {workspace}.",
+      "myDefaultRestored": "Przywrócono Twój układ domyślny.",
+      "panelDefaultsRestored": "Przywrócono domyślne ustawienia panelu."
     }
   }
 }

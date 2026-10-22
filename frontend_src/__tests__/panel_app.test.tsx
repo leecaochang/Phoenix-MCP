@@ -188,4 +188,77 @@ describe("phoenix-mcp-panel full app shell", () => {
     await waitFor(() => expect(restore).toHaveBeenCalledOnce());
     expect(open).not.toHaveBeenCalled();
   });
+
+  describe("arrangements in Home Assistant's per-user storage", () => {
+    /** A fake connection holding one stored value per key, like frontend/*_user_data. */
+    function userData(initial: Record<string, unknown> = {}) {
+      const values: Record<string, unknown> = { ...initial };
+      const sets: Array<{ key: string; value: Record<string, unknown> }> = [];
+      const connection = {
+        sendMessagePromise: vi.fn(async (msg: { type: string; key: string; value?: unknown }) => {
+          if (msg.type === "frontend/set_user_data") { values[msg.key] = msg.value; sets.push({ key: msg.key, value: msg.value as Record<string, unknown> }); }
+          return msg.type === "frontend/get_user_data" ? { value: values[msg.key] } : undefined;
+        }),
+        subscribeMessage: vi.fn(async (cb: (e: { value: unknown }) => void, msg: { key: string }) => { cb({ value: values[msg.key] }); return () => undefined; }),
+      };
+      return { connection, sets };
+    }
+    function mountWith(connection: unknown) {
+      const el = document.createElement("phoenix-mcp-panel") as HTMLElement & { hass: unknown };
+      document.body.appendChild(el);
+      el.hass = { user: { id: "u1" }, connection };
+      return el;
+    }
+    const menuItem = (el: HTMLElement, label: string) => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role="menuitem"]')].find((i) => i.textContent === label);
+    const openOptions = (el: HTMLElement) => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="Workspace options"]')!.click(); });
+
+    it("adopts a newer arrangement saved from another computer", async () => {
+      const toolbar = { dock: "top", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icon-text" };
+      const { connection } = userData({ "phoenix_mcp_ui:desktop": { schema: 1, savedAt: 1, rev: 4, writer: "other", toolbar, workspaces: {} } });
+      const el = mountWith(connection);
+      await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icon-text"));
+      expect(JSON.parse(localStorage.getItem("phx-ui:u1:desktop")!).rev).toBe(4);
+    });
+
+    it("sends this browser's arrangement when Home Assistant has none yet", async () => {
+      const { connection, sets } = userData();
+      mountWith(connection);
+      await waitFor(() => expect(sets.length).toBeGreaterThan(0), { timeout: 4000 });
+      expect(sets[0].key).toBe("phoenix_mcp_ui:desktop");
+      expect(sets[0].value.rev).toBe(1);
+    });
+
+    it("saves My Default to Home Assistant at once, and offers Restore My Default only afterwards", async () => {
+      const { connection, sets } = userData();
+      const el = mountWith(connection);
+      await waitFor(() => expect(el.shadowRoot!.querySelector('[data-phx-window="accessKeys"]')).toBeTruthy());
+      openOptions(el);
+      expect(menuItem(el, "Restore My Default")).toHaveAttribute("aria-disabled", "true");
+      act(() => { menuItem(el, "Save as My Default")!.click(); });
+      await waitFor(() => expect(sets.some((s) => (s.value.myDefaults as Record<string, unknown> | undefined)?.accessKeys)).toBe(true));
+      expect(el.shadowRoot!.querySelector(".phx-shell-status")?.textContent).toBe("Saved this arrangement as your default for Access Keys.");
+      openOptions(el);
+      expect(menuItem(el, "Restore My Default")).not.toHaveAttribute("aria-disabled");
+    });
+
+    it("Restore Panel Default Settings asks first, then resets the toolbar and keeps My Defaults", async () => {
+      const toolbar = { dock: "left", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icon-text" };
+      const saved = { schema: 1, savedAt: 1, rev: 2, toolbar, workspaces: {}, myDefaults: { logs: { dock: {}, folds: { folded: [], collapsed: {} }, closed: {} } } };
+      const { connection, sets } = userData({ "phoenix_mcp_ui:desktop": saved });
+      const el = mountWith(connection);
+      await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "left"));
+      openOptions(el);
+      act(() => { menuItem(el, "Restore Panel Default Settings")!.click(); });
+      const confirm = el.shadowRoot!.querySelector(".phx-shell-confirm")!;
+      expect(confirm).toHaveAttribute("role", "alertdialog");
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "left");
+      act(() => { [...confirm.querySelectorAll("button")].find((b) => b.textContent === "Restore Defaults")!.click(); });
+      await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "top"));
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icons");
+      await waitFor(() => expect(sets.length).toBeGreaterThan(0), { timeout: 4000 });
+      const last = sets[sets.length - 1].value;
+      expect((last.toolbar as { dock: string }).dock).toBe("top");
+      expect(last.myDefaults).toEqual(saved.myDefaults);
+    });
+  });
 });

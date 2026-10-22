@@ -2480,7 +2480,15 @@
       "summaryPassThrough": "Pass-through-toegangssleutels gebruiken de machtigingsboom niet, dus er zijn geen regels om samen te vatten.",
       "pinTop": "Bovenaan vastzetten",
       "pinBottom": "Onderaan vastzetten",
-      "unpin": "Losmaken"
+      "unpin": "Losmaken",
+      "saveMyDefault": "Opslaan als Mijn standaard",
+      "restoreMyDefault": "Mijn standaard herstellen",
+      "restorePanelDefaults": "Standaardinstellingen van het paneel herstellen",
+      "restorePanelDefaultsConfirm": "De werkbalk en de indeling van alle werkruimten terugzetten naar de standaard? Uw opgeslagen standaarden en alle Phoenix-instellingen blijven behouden.",
+      "restoreDefaultsAction": "Standaard herstellen",
+      "myDefaultSaved": "Deze indeling is opgeslagen als uw standaard voor {workspace}.",
+      "myDefaultRestored": "Uw standaardindeling is hersteld.",
+      "panelDefaultsRestored": "De standaardinstellingen van het paneel zijn hersteld."
     }
   }
 }

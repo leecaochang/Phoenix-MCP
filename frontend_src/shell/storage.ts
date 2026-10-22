@@ -1,10 +1,12 @@
 /**
- * Per-user, per-environment workspace state in this browser.
+ * Per-user, per-environment workspace state.
  *
  * Desktop and mobile are separate records, so arranging one never rearranges
  * the other. Records are keyed by the Home Assistant user id and nothing is
- * stored without one, so state never crosses accounts. A record written by a
- * newer build is left untouched rather than overwritten.
+ * stored without one, so state never crosses accounts. This browser keeps a
+ * copy for an instant first paint; Home Assistant's per-user storage keeps the
+ * shared one (see `sync.ts`). A record written by a newer build is left
+ * untouched rather than overwritten.
  */
 
 import type { WorkspaceLayout } from "./dock/controller";
@@ -34,9 +36,17 @@ export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collap
 export interface ShellRecord {
   schema: number;
   savedAt: number;
+  /** The version of the shared copy this record matches; it grows with every shared write. */
+  rev?: number;
+  /** The browser that wrote the shared copy. */
+  writer?: string;
+  /** This browser has changes the shared copy does not have yet. */
+  pending?: boolean;
   lastWorkspace?: WorkspaceId;
   toolbar?: ToolbarState;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
+  /** Arrangements the user saved as My Default, one per workspace; automatic saving never changes them. */
+  myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
 }
 
 /** A saved toolbar state, with anything unreadable replaced by the default. */
@@ -70,6 +80,40 @@ function legacyWorkspace(): WorkspaceId | undefined {
   return isWorkspace(tab) ? tab : undefined;
 }
 
+const layouts = (raw: unknown): Partial<Record<WorkspaceId, WorkspaceLayout>> => {
+  const out: Partial<Record<WorkspaceId, WorkspaceLayout>> = {};
+  if (raw && typeof raw === "object") {
+    for (const [id, layout] of Object.entries(raw)) {
+      if (isWorkspace(id) && layout && typeof layout === "object") out[id] = layout as WorkspaceLayout;
+    }
+  }
+  return out;
+};
+const count = (v: unknown): number | undefined => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined);
+
+/**
+ * A record from storage: "newer" when a newer build wrote it, null when it is
+ * not a record at all. Each workspace layout is checked again when it loads.
+ */
+export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
+  if (!raw || typeof raw !== "object") return null;
+  const parsed = raw as Partial<ShellRecord>;
+  if (typeof parsed.schema !== "number") return null;
+  if (parsed.schema > SHELL_SCHEMA) return "newer";
+  const myDefaults = layouts(parsed.myDefaults);
+  return {
+    schema: SHELL_SCHEMA,
+    savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
+    ...(count(parsed.rev) !== undefined ? { rev: count(parsed.rev) } : {}),
+    ...(typeof parsed.writer === "string" ? { writer: parsed.writer.slice(0, 64) } : {}),
+    ...(parsed.pending === true ? { pending: true } : {}),
+    lastWorkspace: isWorkspace(parsed.lastWorkspace) ? parsed.lastWorkspace : undefined,
+    toolbar: parsed.toolbar === undefined ? undefined : readToolbar(parsed.toolbar),
+    workspaces: layouts(parsed.workspaces),
+    ...(Object.keys(myDefaults).length ? { myDefaults } : {}),
+  };
+}
+
 /** The stored record, an empty one when absent or unreadable, or null when a newer build owns it. */
 export function readRecord(userId: string | null, env: Env): ShellRecord | null {
   if (!userId) return emptyRecord();
@@ -77,22 +121,9 @@ export function readRecord(userId: string | null, env: Env): ShellRecord | null 
   try { raw = localStorage.getItem(storageKey(userId, env)); } catch { /* storage blocked */ }
   if (!raw) return { ...emptyRecord(), lastWorkspace: legacyWorkspace() };
   try {
-    const parsed = JSON.parse(raw) as Partial<ShellRecord>;
-    if (typeof parsed.schema !== "number") return emptyRecord();
-    if (parsed.schema > SHELL_SCHEMA) return null;
-    const workspaces: ShellRecord["workspaces"] = {};
-    if (parsed.workspaces && typeof parsed.workspaces === "object") {
-      for (const [id, layout] of Object.entries(parsed.workspaces)) {
-        if (isWorkspace(id) && layout && typeof layout === "object") workspaces[id] = layout as WorkspaceLayout;
-      }
-    }
-    return {
-      schema: SHELL_SCHEMA,
-      savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
-      lastWorkspace: isWorkspace(parsed.lastWorkspace) ? parsed.lastWorkspace : undefined,
-      toolbar: parsed.toolbar === undefined ? undefined : readToolbar(parsed.toolbar),
-      workspaces,
-    };
+    const parsed = parseRecord(JSON.parse(raw));
+    if (parsed === "newer") return null;
+    return parsed ?? emptyRecord();
   } catch {
     return emptyRecord();
   }

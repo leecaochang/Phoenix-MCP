@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "Durchreichungs-Zugriffsschlüssel verwenden den Berechtigungsbaum nicht, daher gibt es keine Regeln zum Zusammenfassen.",
       "pinTop": "Oben anheften",
       "pinBottom": "Unten anheften",
-      "unpin": "Lösen"
+      "unpin": "Lösen",
+      "saveMyDefault": "Als Mein Standard speichern",
+      "restoreMyDefault": "Mein Standard wiederherstellen",
+      "restorePanelDefaults": "Standardeinstellungen des Panels wiederherstellen",
+      "restorePanelDefaultsConfirm": "Werkzeugleiste und die Anordnung aller Arbeitsbereiche auf die Standardwerte zurücksetzen? Ihre gespeicherten Standards und alle Phoenix-Einstellungen bleiben erhalten.",
+      "restoreDefaultsAction": "Standards wiederherstellen",
+      "myDefaultSaved": "Diese Anordnung wurde als Ihr Standard für {workspace} gespeichert.",
+      "myDefaultRestored": "Ihre Standardanordnung wurde wiederhergestellt.",
+      "panelDefaultsRestored": "Die Standardeinstellungen des Panels wurden wiederhergestellt."
     }
   },
   "notification": {

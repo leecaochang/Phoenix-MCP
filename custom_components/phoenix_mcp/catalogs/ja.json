@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "パススルーアクセスキーは権限ツリーを使用しないため、要約するルールはありません。",
       "pinTop": "上部に固定",
       "pinBottom": "下部に固定",
-      "unpin": "固定を解除"
+      "unpin": "固定を解除",
+      "saveMyDefault": "マイ既定として保存",
+      "restoreMyDefault": "マイ既定を復元",
+      "restorePanelDefaults": "パネルの既定の設定を復元",
+      "restorePanelDefaultsConfirm": "ツールバーとすべてのワークスペースの配置を既定に戻しますか？保存したマイ既定と Phoenix のすべての設定は保持されます。",
+      "restoreDefaultsAction": "既定に戻す",
+      "myDefaultSaved": "この配置を {workspace} のマイ既定として保存しました。",
+      "myDefaultRestored": "既定の配置を復元しました。",
+      "panelDefaultsRestored": "パネルの既定の設定を復元しました。"
     }
   },
   "notification": {

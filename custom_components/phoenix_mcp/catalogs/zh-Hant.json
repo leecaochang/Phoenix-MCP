@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "直通存取金鑰不使用權限樹，因此沒有可彙總的規則。",
       "pinTop": "固定到頂端",
       "pinBottom": "固定到底部",
-      "unpin": "取消固定"
+      "unpin": "取消固定",
+      "saveMyDefault": "儲存為我的預設佈局",
+      "restoreMyDefault": "還原我的預設佈局",
+      "restorePanelDefaults": "還原面板預設設定",
+      "restorePanelDefaultsConfirm": "將工具列和所有工作區的佈局還原為預設值？已儲存的我的預設佈局和所有 Phoenix 設定都會保留。",
+      "restoreDefaultsAction": "還原預設值",
+      "myDefaultSaved": "已將此佈局儲存為 {workspace} 的預設佈局。",
+      "myDefaultRestored": "已還原你的預設佈局。",
+      "panelDefaultsRestored": "已還原面板預設設定。"
     }
   },
   "voice": {

@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "直通访问密钥不使用权限树，因此没有可汇总的规则。",
       "pinTop": "固定到顶部",
       "pinBottom": "固定到底部",
-      "unpin": "取消固定"
+      "unpin": "取消固定",
+      "saveMyDefault": "保存为我的默认布局",
+      "restoreMyDefault": "还原我的默认布局",
+      "restorePanelDefaults": "还原面板默认设置",
+      "restorePanelDefaultsConfirm": "将工具栏和所有工作区的布局还原为默认值？已保存的我的默认布局和所有 Phoenix 设置都会保留。",
+      "restoreDefaultsAction": "还原默认值",
+      "myDefaultSaved": "已将此布局保存为 {workspace} 的默认布局。",
+      "myDefaultRestored": "已还原你的默认布局。",
+      "panelDefaultsRestored": "已还原面板默认设置。"
     }
   },
   "notification": {

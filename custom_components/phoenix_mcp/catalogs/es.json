@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "Las claves de acceso de paso directo no usan el árbol de permisos, por lo que no hay reglas que resumir.",
       "pinTop": "Fijar arriba",
       "pinBottom": "Fijar abajo",
-      "unpin": "Desfijar"
+      "unpin": "Desfijar",
+      "saveMyDefault": "Guardar como Mi predeterminado",
+      "restoreMyDefault": "Restaurar Mi predeterminado",
+      "restorePanelDefaults": "Restaurar la configuración predeterminada del panel",
+      "restorePanelDefaultsConfirm": "¿Restaurar la barra de herramientas y la disposición de todos los espacios de trabajo a sus valores predeterminados? Se conservan sus predeterminados guardados y toda la configuración de Phoenix.",
+      "restoreDefaultsAction": "Restaurar valores predeterminados",
+      "myDefaultSaved": "Se guardó esta disposición como su predeterminado para {workspace}.",
+      "myDefaultRestored": "Se restauró su disposición predeterminada.",
+      "panelDefaultsRestored": "Se restauró la configuración predeterminada del panel."
     }
   },
   "notification": {

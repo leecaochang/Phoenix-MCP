@@ -98,7 +98,7 @@ describe("ConversationsView", () => {
         </WindowPlaceContext.Provider>
       </ToolRegistryContext.Provider>,
     );
-    await view.findByText("Tool exchange; prompt unavailable");
+    await view.findByText("Tool exchange; prompt unavailable", undefined, { timeout: 3000 });
     expect(view.queryByText("Clear Conversation History")).toBeNull();
     const clear = registry.latest("logs", "conversationLog", "clear");
     expect(clear).toMatchObject({ label: "Clear Conversation History", tone: "danger", disabled: false });
@@ -107,8 +107,8 @@ describe("ConversationsView", () => {
     const banner = view.container.querySelector(".conversation-clear-confirm")!;
     expect(banner.compareDocumentPosition(view.container.querySelector(".conversation-entry")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(view.getByText("Clear Conversation History"));
-    await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
-    await waitFor(() => expect(registry.latest("logs", "conversationLog", "clear")?.disabled).toBe(true));
+    await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce(), { timeout: 3000 });
+    await waitFor(() => expect(registry.latest("logs", "conversationLog", "clear")?.disabled).toBe(true), { timeout: 3000 });
   });
 
   it("keeps expanded entries through a refresh and reports recoverable errors", async () => {

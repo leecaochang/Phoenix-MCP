@@ -5,7 +5,7 @@
  * one icon, and shows icons only or icons with text (chosen by right-click).
  */
 
-import { useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { DOCS_BASE_URL } from "../components/common";
 import { localeNumber, t } from "../i18n";
 import { Icon } from "../ui/Icon";
@@ -16,15 +16,36 @@ import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState } from "./
 import { ToolRegistryContext, type ToolGroup, type ToolRegistry } from "./tools";
 import { WORKSPACES, windowTitle } from "./workspaces";
 
-/** Workspace options: reopen closed windows, restore the original arrangement. */
-export function workspaceMenu(controller: WorkspaceController): MenuEntry[] {
+/** The shell's arrangement actions, shared by every Workspace Options menu. */
+export interface WorkspaceActions {
+  saveMyDefault: (controller: WorkspaceController) => void;
+  restoreMyDefault: (controller: WorkspaceController) => void;
+  hasMyDefault: (controller: WorkspaceController) => boolean;
+  restoreOriginal: (controller: WorkspaceController) => void;
+  /** Asks first; resets the toolbar and every arrangement, never My Defaults or settings. */
+  restorePanelDefaults: () => void;
+}
+export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);
+
+/**
+ * Workspace options: reopen closed windows, save or restore My Default,
+ * restore the original arrangement, and restore the panel's default settings.
+ */
+export function workspaceMenu(controller: WorkspaceController, actions: WorkspaceActions | null): MenuEntry[] {
   const items: MenuEntry[] = controller.closedWindows().map((id) => ({
     id: `reopen-${id}`,
     label: t("workspace.reopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
   if (items.length) items.push("separator");
-  items.push({ id: "restore", label: t("workspace.restoreOriginal"), onSelect: () => controller.restoreOriginal() });
+  if (actions) {
+    items.push(
+      { id: "save-default", label: t("workspace.saveMyDefault"), onSelect: () => actions.saveMyDefault(controller) },
+      { id: "restore-default", label: t("workspace.restoreMyDefault"), disabled: !actions.hasMyDefault(controller), onSelect: () => actions.restoreMyDefault(controller) },
+    );
+  }
+  items.push({ id: "restore", label: t("workspace.restoreOriginal"), onSelect: () => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal()) });
+  if (actions) items.push("separator", { id: "panel-defaults", label: t("workspace.restorePanelDefaults"), onSelect: actions.restorePanelDefaults });
   return items;
 }
 
@@ -93,6 +114,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
   const self = useRef<HTMLDivElement | null>(null);
   const showMenu = useContextMenu();
   const registry = useContext(ToolRegistryContext);
+  const actions = useContext(WorkspaceActionsContext);
   useSyncExternalStore(registry?.subscribe ?? (() => () => {}), registry?.getVersion ?? (() => 0));
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
 
@@ -251,7 +273,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
             </a>
             {controller && (
               <MenuButton label={t("workspace.options")} icon={<Icon name="workspaceOptions" size={16} />}
-                items={() => workspaceMenu(controller)} className="phx-toolbar-button" />
+                items={() => workspaceMenu(controller, actions)} className="phx-toolbar-button" />
             )}
           </div>
         )}

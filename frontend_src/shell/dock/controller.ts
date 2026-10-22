@@ -216,7 +216,12 @@ export class WorkspaceController {
     }
   }
 
-  /** Load a saved layout, or the default arrangement when it is missing or unusable. */
+  /**
+   * Load a saved layout, or the default arrangement when it is missing or
+   * unusable. It also replaces a live arrangement (Restore My Default): the
+   * bands and the floating layer are emptied first, so no window is ever in
+   * two places, and each window's content stays mounted throughout.
+   */
   load(saved: WorkspaceLayout | undefined): void {
     const api = this.api;
     if (!api) return;
@@ -225,6 +230,16 @@ export class WorkspaceController {
     if (dock) {
       try {
         this.batch(() => {
+          const keep = [...this.transient].filter((id) => api.getPanel(id));
+          for (const host of ["top", "bottom", "float"] as const) {
+            const other = this.apiOf(host);
+            if (other?.panels.length) other.clear();
+            const canvas = this.canvasOf(host);
+            if (canvas) canvas.intended = {};
+          }
+          this.floatedFrom.clear();
+          this.pinnedFrom.clear();
+          this.maximizedHere = false;
           const used = new Set(Object.keys(dock.panels));
           this.restoreHeights("main", saved?.heights, known);
           api.fromJSON(dock, { reuseExistingPanels: true });
@@ -234,6 +249,8 @@ export class WorkspaceController {
           this.folds.restore(saved?.folds, (id) => used.has(id));
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
           this.moveFloatsToLayer();
+          // Needs Attention stays when an arrangement is restored over it.
+          for (const id of keep) if (!api.getPanel(id)) this.add(id, { direction: "above" });
           for (const [, host] of this.attached()) host.canvas?.apply();
           this.retitle();
           this.syncAvailable();

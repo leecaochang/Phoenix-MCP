@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "패스스루 액세스 키는 권한 트리를 사용하지 않으므로 요약할 규칙이 없습니다.",
       "pinTop": "상단에 고정",
       "pinBottom": "하단에 고정",
-      "unpin": "고정 해제"
+      "unpin": "고정 해제",
+      "saveMyDefault": "내 기본값으로 저장",
+      "restoreMyDefault": "내 기본값 복원",
+      "restorePanelDefaults": "패널 기본 설정 복원",
+      "restorePanelDefaultsConfirm": "도구 모음과 모든 작업 공간의 배치를 기본값으로 되돌리시겠습니까? 저장된 내 기본값과 모든 Phoenix 설정은 유지됩니다.",
+      "restoreDefaultsAction": "기본값 복원",
+      "myDefaultSaved": "이 배치를 {workspace}의 내 기본값으로 저장했습니다.",
+      "myDefaultRestored": "기본 배치를 복원했습니다.",
+      "panelDefaultsRestored": "패널 기본 설정을 복원했습니다."
     }
   },
   "voice": {

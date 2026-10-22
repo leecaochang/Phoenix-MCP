@@ -565,7 +565,15 @@
       "summaryPassThrough": "Pass-through access keys don't use the permissions tree, so there are no rules to summarize.",
       "pinTop": "Pin to Top",
       "pinBottom": "Pin to Bottom",
-      "unpin": "Unpin"
+      "unpin": "Unpin",
+      "saveMyDefault": "Save as My Default",
+      "restoreMyDefault": "Restore My Default",
+      "restorePanelDefaults": "Restore Panel Default Settings",
+      "restorePanelDefaultsConfirm": "Restore the toolbar and every workspace's arrangement to their defaults? Your saved My Defaults and all Phoenix settings are kept.",
+      "restoreDefaultsAction": "Restore Defaults",
+      "myDefaultSaved": "Saved this arrangement as your default for {workspace}.",
+      "myDefaultRestored": "Restored your default arrangement.",
+      "panelDefaultsRestored": "Restored the panel's default settings."
     },
     "perms": {
       "addHint": "Add Hint",

@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "Les clés d’accès en transmission directe n’utilisent pas l’arbre des autorisations ; il n’y a donc aucune règle à résumer.",
       "pinTop": "Épingler en haut",
       "pinBottom": "Épingler en bas",
-      "unpin": "Désépingler"
+      "unpin": "Désépingler",
+      "saveMyDefault": "Enregistrer comme Ma disposition par défaut",
+      "restoreMyDefault": "Restaurer Ma disposition par défaut",
+      "restorePanelDefaults": "Restaurer les réglages par défaut du panneau",
+      "restorePanelDefaultsConfirm": "Rétablir la barre d’outils et la disposition de chaque espace de travail par défaut ? Vos dispositions par défaut enregistrées et tous les réglages de Phoenix sont conservés.",
+      "restoreDefaultsAction": "Restaurer les valeurs par défaut",
+      "myDefaultSaved": "Cette disposition a été enregistrée comme votre disposition par défaut pour {workspace}.",
+      "myDefaultRestored": "Votre disposition par défaut a été restaurée.",
+      "panelDefaultsRestored": "Les réglages par défaut du panneau ont été restaurés."
     }
   },
   "notification": {

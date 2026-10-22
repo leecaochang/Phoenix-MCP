@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "Adgangsnøgler med pass-through bruger ikke tilladelsestræet, så der er ingen regler at opsummere.",
       "pinTop": "Fastgør øverst",
       "pinBottom": "Fastgør nederst",
-      "unpin": "Frigør"
+      "unpin": "Frigør",
+      "saveMyDefault": "Gem som Min standard",
+      "restoreMyDefault": "Gendan Min standard",
+      "restorePanelDefaults": "Gendan panelets standardindstillinger",
+      "restorePanelDefaultsConfirm": "Vil du gendanne værktøjslinjen og layoutet i alle arbejdsområder til standard? Dine gemte standarder og alle Phoenix-indstillinger bevares.",
+      "restoreDefaultsAction": "Gendan standard",
+      "myDefaultSaved": "Dette layout er gemt som din standard for {workspace}.",
+      "myDefaultRestored": "Dit standardlayout er gendannet.",
+      "panelDefaultsRestored": "Panelets standardindstillinger er gendannet."
     }
   },
   "voice": {

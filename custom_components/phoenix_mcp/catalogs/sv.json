@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "Pass-through-åtkomstnycklar använder inte behörighetsträdet, så det finns inga regler att sammanfatta.",
       "pinTop": "Fäst överst",
       "pinBottom": "Fäst nederst",
-      "unpin": "Lossa"
+      "unpin": "Lossa",
+      "saveMyDefault": "Spara som Min standard",
+      "restoreMyDefault": "Återställ Min standard",
+      "restorePanelDefaults": "Återställ panelens standardinställningar",
+      "restorePanelDefaultsConfirm": "Återställa verktygsfältet och layouten för alla arbetsytor till standard? Dina sparade standarder och alla Phoenix-inställningar behålls.",
+      "restoreDefaultsAction": "Återställ standard",
+      "myDefaultSaved": "Den här layouten sparades som din standard för {workspace}.",
+      "myDefaultRestored": "Din standardlayout har återställts.",
+      "panelDefaultsRestored": "Panelens standardinställningar har återställts."
     }
   },
   "voice": {

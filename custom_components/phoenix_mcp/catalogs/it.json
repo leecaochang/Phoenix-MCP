@@ -2402,7 +2402,15 @@
       "summaryPassThrough": "Le chiavi di accesso pass-through non usano l'albero delle autorizzazioni, quindi non ci sono regole da riepilogare.",
       "pinTop": "Fissa in alto",
       "pinBottom": "Fissa in basso",
-      "unpin": "Sblocca"
+      "unpin": "Sblocca",
+      "saveMyDefault": "Salva come Mio predefinito",
+      "restoreMyDefault": "Ripristina Mio predefinito",
+      "restorePanelDefaults": "Ripristina le impostazioni predefinite del pannello",
+      "restorePanelDefaultsConfirm": "Ripristinare la barra degli strumenti e la disposizione di tutte le aree di lavoro ai valori predefiniti? I tuoi predefiniti salvati e tutte le impostazioni di Phoenix vengono mantenuti.",
+      "restoreDefaultsAction": "Ripristina predefiniti",
+      "myDefaultSaved": "Questa disposizione è stata salvata come tuo predefinito per {workspace}.",
+      "myDefaultRestored": "La tua disposizione predefinita è stata ripristinata.",
+      "panelDefaultsRestored": "Le impostazioni predefinite del pannello sono state ripristinate."
     }
   },
   "notification": {

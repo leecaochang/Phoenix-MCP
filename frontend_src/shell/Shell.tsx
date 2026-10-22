@@ -1,7 +1,9 @@
 /**
  * The workspace shell: toolbar, one window workspace per destination, and the
  * panel-only Agent Chat window. Desktop and phone layouts are chosen from the
- * panel's own width and remembered separately.
+ * panel's own width and remembered separately: in this browser at once, and in
+ * Home Assistant's per-user storage shortly after (see `sync.ts`), along with
+ * each workspace's My Default.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +16,8 @@ import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
 import { DEFAULT_TOOLBAR, readRecord, writeRecord, WORKSPACE_IDS, type Env, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
-import { Toolbar, workspaceMenu } from "./Toolbar";
+import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
+import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
@@ -26,6 +29,19 @@ const DESKTOP_ABOVE = 720;
 /** Arrangements are written this long after the last change. */
 const SAVE_DELAY_MS = 1000;
 const TRANSIENT = new Set([ATTENTION_WINDOW]);
+/** How long a status message stays on screen. */
+const STATUS_MS = 2800;
+
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** Every section a record holds, to send a whole record to Home Assistant. */
+function allSections(record: ShellRecord): Section[] {
+  return [
+    "toolbar", "lastWorkspace",
+    ...Object.keys(record.workspaces).map((id) => `ws:${id}` as Section),
+    ...Object.keys(record.myDefaults ?? {}).map((id) => `my:${id}` as Section),
+  ];
+}
 
 function useEnvironment(root: React.RefObject<HTMLElement | null>): Env {
   const [env, setEnv] = useState<Env>(() => (window.innerWidth < (PHONE_BELOW + DESKTOP_ABOVE) / 2 ? "mobile" : "desktop"));
@@ -66,11 +82,18 @@ export function Shell() {
   const env = useEnvironment(root);
   const userId = (d.hass as { user?: { id?: string } } | null)?.user?.id ?? null;
 
-  // A record written by a newer build reads as null: arrange from defaults and never write over it.
-  const record = useMemo<ShellRecord | null>(() => readRecord(userId, env), [userId, env]);
-  // A different user or environment starts from fresh controllers and its own record.
+  // The record: this browser's copy paints first; Home Assistant's copy replaces it at
+  // start-up when it is newer. A record written by a newer build reads as null: arrange
+  // from defaults and never write over it.
+  const recordKey = `${userId ?? ""}:${env}`;
+  const [store, setStore] = useState(() => ({ key: recordKey, record: readRecord(userId, env), generation: 0 }));
+  if (store.key !== recordKey) setStore({ key: recordKey, record: readRecord(userId, env), generation: store.generation + 1 });
+  const record = store.record;
+  const recordRef = useRef(record);
+  recordRef.current = record;
+  // A different user or environment, or an adopted record, starts from fresh controllers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const controllers = useMemo(() => new Map<WorkspaceId, WorkspaceController>(), [userId, env]);
+  const controllers = useMemo(() => new Map<WorkspaceId, WorkspaceController>(), [store.generation]);
   const controllerFor = useCallback((id: WorkspaceId): WorkspaceController => {
     let controller = controllers.get(id);
     if (!controller) {
@@ -107,37 +130,161 @@ export function Shell() {
   }, [d.workspace]);
   useEffect(() => { setVisited(new Set([d.workspace])); }, [controllers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save shortly after the last change, and at once when the page is hidden or the shell goes away.
+  // Save what changed: in this browser shortly after the last change, then in Home
+  // Assistant. Only sections that really changed are written, so another computer's
+  // changes to other sections survive.
+  const dirty = useRef(new Set<Section>());
+  const remote = useRef<RemoteRecord | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
   const workspaceRef = useRef(d.workspace);
   workspaceRef.current = d.workspace;
-  const flush = useCallback(() => {
+  /** Store sections already updated in the record, here and in Home Assistant. */
+  const commit = useCallback((sections: Section[], now = false) => {
+    const rec = recordRef.current;
+    if (!rec || !sections.length) return;
+    rec.pending = !!remote.current?.writable;
+    writeRecord(userId, env, rec);
+    remote.current?.schedule(sections, now);
+  }, [env, userId]);
+  const flush = useCallback((now = false) => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = undefined;
-    if (!record) return;
-    for (const [id, controller] of controllers) {
-      const layout = controller.layout();
-      if (layout) record.workspaces[id] = layout;
+    const rec = recordRef.current;
+    if (!rec || !dirty.current.size) return;
+    const changed: Section[] = [];
+    for (const section of dirty.current) {
+      if (section === "toolbar") {
+        if (!same(rec.toolbar, toolbarRef.current)) { rec.toolbar = toolbarRef.current; changed.push(section); }
+      } else if (section === "lastWorkspace") {
+        if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
+      } else if (section.startsWith("ws:")) {
+        const id = section.slice(3) as WorkspaceId;
+        const controller = controllers.get(id);
+        const layout = controller?.layout();
+        if (layout && !same(layout, rec.workspaces[id])) { rec.workspaces[id] = layout; changed.push(section); }
+      }
     }
-    record.lastWorkspace = workspaceRef.current;
-    record.toolbar = toolbarRef.current;
-    writeRecord(userId, env, record);
-  }, [controllers, env, record, userId]);
-  const scheduleSave = useCallback(() => {
+    dirty.current.clear();
+    commit(changed, now);
+  }, [commit, controllers]);
+  const markChanged = useCallback((sections: Section[], now = false) => {
+    for (const section of sections) dirty.current.add(section);
+    if (now) {
+      flush(true);
+      return;
+    }
     window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(flush, SAVE_DELAY_MS);
+    saveTimer.current = window.setTimeout(() => flush(), SAVE_DELAY_MS);
   }, [flush]);
-  useEffect(() => { scheduleSave(); }, [d.workspace, toolbar, scheduleSave]);
   useEffect(() => {
-    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    const onHide = () => {
+      if (document.visibilityState !== "hidden") return;
+      flush(true);
+      void remote.current?.flush();
+    };
     document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", flush);
+    window.addEventListener("pagehide", onHide);
     return () => {
       document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", flush);
-      if (saveTimer.current !== undefined) flush();
+      window.removeEventListener("pagehide", onHide);
+      if (saveTimer.current !== undefined) flush(true);
     };
   }, [flush]);
+
+  // Home Assistant's copy: adopt it at start-up when it is newer, otherwise send ours.
+  useEffect(() => {
+    const conn = (d.hass as { connection?: Partial<UserDataConnection> } | null)?.connection;
+    if (!userId || !recordRef.current || typeof conn?.subscribeMessage !== "function" || typeof conn.sendMessagePromise !== "function") return;
+    const startPending = !!recordRef.current.pending;
+    const sync = new RemoteRecord(conn as UserDataConnection, env, writerId(), () => recordRef.current, (stored) => {
+      const rec = recordRef.current;
+      if (!rec) return;
+      for (const key of Object.keys(rec)) delete (rec as unknown as Record<string, unknown>)[key];
+      Object.assign(rec, stored, { pending: dirty.current.size > 0 || sync.hasPending() });
+      writeRecord(userId, env, rec);
+    });
+    remote.current = sync;
+    void sync.start((stored) => {
+      const local = recordRef.current;
+      if (!local) return;
+      if (stored && shouldAdopt(stored, { ...local, pending: startPending })) {
+        dirty.current.clear();
+        const adopted = { ...stored, pending: false };
+        writeRecord(userId, env, adopted);
+        setStore((st) => ({ ...st, record: adopted, generation: st.generation + 1 }));
+        return;
+      }
+      if (!stored || startPending || (local.rev ?? 0) > (stored.rev ?? 0)) sync.schedule(allSections(local));
+    });
+    return () => {
+      void sync.flush();
+      sync.stop();
+      if (remote.current === sync) remote.current = null;
+    };
+  }, [userId, env]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The toolbar and the visible workspace are part of the record.
+  useEffect(() => {
+    if (!same(toolbar, recordRef.current?.toolbar ?? DEFAULT_TOOLBAR)) markChanged(["toolbar"]);
+  }, [toolbar, markChanged]);
+  const lastSeenWorkspace = useRef(d.workspace);
+  useEffect(() => {
+    if (lastSeenWorkspace.current === d.workspace) return;
+    lastSeenWorkspace.current = d.workspace;
+    markChanged(["lastWorkspace", ...WORKSPACE_IDS.filter((id) => controllers.has(id)).map((id) => `ws:${id}` as Section)], true);
+  }, [d.workspace, markChanged, controllers]);
+
+  // A short status message, read by screen readers too.
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!status) return;
+    const timer = window.setTimeout(() => setStatus(null), STATUS_MS);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
+  // Restore Panel Default Settings asks first, inside the workspace area.
+  const [confirmDefaults, setConfirmDefaults] = useState(false);
+  const restorePanelDefaults = useCallback(() => {
+    setConfirmDefaults(false);
+    const rec = recordRef.current;
+    setToolbar(DEFAULT_TOOLBAR);
+    for (const controller of controllers.values()) controller.restoreOriginal();
+    const sections: Section[] = ["toolbar"];
+    for (const id of WORKSPACE_IDS) {
+      sections.push(`ws:${id}`);
+      if (rec && !controllers.has(id)) delete rec.workspaces[id];
+    }
+    toolbarRef.current = DEFAULT_TOOLBAR;
+    markChanged(sections, true);
+    if (rec) commit(WORKSPACE_IDS.filter((id) => !controllers.has(id)).map((id) => `ws:${id}` as Section), true);
+    setStatus(t("workspace.panelDefaultsRestored"));
+  }, [commit, controllers, markChanged]);
+
+  const actions = useMemo<WorkspaceActions>(() => ({
+    saveMyDefault: (controller) => {
+      const rec = recordRef.current;
+      const layout = controller.layout();
+      if (!rec || !layout) return;
+      const id = controller.id as WorkspaceId;
+      rec.myDefaults = { ...rec.myDefaults, [id]: layout };
+      commit([`my:${id}`], true);
+      setStatus(t("workspace.myDefaultSaved", { workspace: t(WORKSPACES[id].labelKey) }));
+    },
+    hasMyDefault: (controller) => !!recordRef.current?.myDefaults?.[controller.id as WorkspaceId],
+    restoreMyDefault: (controller) => {
+      const id = controller.id as WorkspaceId;
+      const saved = recordRef.current?.myDefaults?.[id];
+      if (!saved) return;
+      controller.load(saved);
+      markChanged([`ws:${id}`], true);
+      setStatus(t("workspace.myDefaultRestored"));
+    },
+    restoreOriginal: (controller) => {
+      controller.restoreOriginal();
+      markChanged([`ws:${controller.id as WorkspaceId}`], true);
+    },
+    restorePanelDefaults: () => setConfirmDefaults(true),
+  }), [commit, markChanged]);
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
@@ -172,6 +319,7 @@ export function Shell() {
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
     <LogSelectionContext.Provider value={logSelection}>
+    <WorkspaceActionsContext.Provider value={actions}>
     <AccessKeyDetailProvider
       accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
       onDeselect={d.goBack}
@@ -185,10 +333,19 @@ export function Shell() {
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
           state={toolbar} onChange={setToolbar} />
-        <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active)) : null}>
+        <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
+          {confirmDefaults && (
+            <div className="banner banner-warning phx-shell-confirm" role="alertdialog" aria-labelledby="phx-defaults-question">
+              <p id="phx-defaults-question">{t("workspace.restorePanelDefaultsConfirm")}</p>
+              <div className="phx-shell-confirm-actions">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setConfirmDefaults(false)}>{t("common.cancel")}</button>
+                <button type="button" className="btn btn-primary btn-sm" autoFocus onClick={restorePanelDefaults}>{t("workspace.restoreDefaultsAction")}</button>
+              </div>
+            </div>
+          )}
           {env === "desktop"
             ? WORKSPACE_IDS.filter((id) => visited.has(id)).map((id) => (
-              <WorkspaceVisibleContext.Provider key={`${userId}:${id}`} value={id === active}>
+              <WorkspaceVisibleContext.Provider key={`${userId}:${store.generation}:${id}`} value={id === active}>
                 <WorkspaceDock
                   controller={controllerFor(id)}
                   components={DOCK_COMPONENTS}
@@ -196,8 +353,8 @@ export function Shell() {
                   watermark={EmptyWorkspace}
                   saved={record?.workspaces[id]}
                   visible={id === active}
-                  onLayoutChange={scheduleSave}
-                  workspaceMenu={() => workspaceMenu(controllerFor(id))}
+                  onLayoutChange={() => markChanged([`ws:${id}`])}
+                  workspaceMenu={() => workspaceMenu(controllerFor(id), actions)}
                 />
               </WorkspaceVisibleContext.Provider>
             ))
@@ -221,8 +378,10 @@ export function Shell() {
             />
           </ErrorBoundary>
         )}
+        <div className="phx-shell-status" role="status" aria-live="polite">{status}</div>
       </div>
     </AccessKeyDetailProvider>
+    </WorkspaceActionsContext.Provider>
     </LogSelectionContext.Provider>
     </ToolRegistryContext.Provider>
     </ContextMenuHost>

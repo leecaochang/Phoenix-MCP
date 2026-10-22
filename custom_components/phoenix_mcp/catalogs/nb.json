@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "Gjennomkoblede tilgangsnøkler bruker ikke tillatelsestreet, så det finnes ingen regler å oppsummere.",
       "pinTop": "Fest øverst",
       "pinBottom": "Fest nederst",
-      "unpin": "Løsne"
+      "unpin": "Løsne",
+      "saveMyDefault": "Lagre som Min standard",
+      "restoreMyDefault": "Gjenopprett Min standard",
+      "restorePanelDefaults": "Gjenopprett panelets standardinnstillinger",
+      "restorePanelDefaultsConfirm": "Vil du tilbakestille verktøylinjen og oppsettet i alle arbeidsområder til standard? Lagrede standarder og alle Phoenix-innstillinger beholdes.",
+      "restoreDefaultsAction": "Gjenopprett standard",
+      "myDefaultSaved": "Dette oppsettet er lagret som din standard for {workspace}.",
+      "myDefaultRestored": "Standardoppsettet ditt er gjenopprettet.",
+      "panelDefaultsRestored": "Panelets standardinnstillinger er gjenopprettet."
     }
   },
   "voice": {

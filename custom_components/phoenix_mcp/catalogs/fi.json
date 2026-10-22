@@ -2407,7 +2407,15 @@
       "summaryPassThrough": "Läpivientikäyttöavaimet eivät käytä käyttöoikeuspuuta, joten tiivistettäviä sääntöjä ei ole.",
       "pinTop": "Kiinnitä ylös",
       "pinBottom": "Kiinnitä alas",
-      "unpin": "Irrota"
+      "unpin": "Irrota",
+      "saveMyDefault": "Tallenna Omaksi oletukseksi",
+      "restoreMyDefault": "Palauta Oma oletus",
+      "restorePanelDefaults": "Palauta paneelin oletusasetukset",
+      "restorePanelDefaultsConfirm": "Palautetaanko työkalurivi ja kaikkien työtilojen asettelu oletuksiin? Tallentamasi oletukset ja kaikki Phoenixin asetukset säilyvät.",
+      "restoreDefaultsAction": "Palauta oletukset",
+      "myDefaultSaved": "Tämä asettelu tallennettiin omaksi oletukseksesi työtilassa {workspace}.",
+      "myDefaultRestored": "Oletusasettelusi palautettiin.",
+      "panelDefaultsRestored": "Paneelin oletusasetukset palautettiin."
     }
   },
   "voice": {
