@@ -335,7 +335,6 @@
 }
 .phx-toolbar-warning { border-color: var(--phx-error); background: var(--phx-error-bg); color: var(--phx-error); }
 .phx-toolbar-warning:hover { background: var(--phx-error-bg); }
-.phx-toolbar-external { opacity: 0.7; }
 
 /* Icons only: labels stay available to assistive technology and as tooltips. */
 .phx-toolbar[data-mode="icons"] .phx-toolbar-button { width: 36px; padding: 0; }
@@ -347,7 +346,6 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.phx-toolbar[data-mode="icons"] .phx-toolbar-external { display: none; }
 .phx-toolbar[data-mode="icons"] .phx-toolbar-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; font-size: 10px; }
 
 /* The second row: tools for the visible workspace, grouped with separator bars. */
@@ -438,6 +436,11 @@
 }
 .phx-toast-dismiss:hover { background: color-mix(in srgb, var(--phx-surface) 18%, transparent); }
 .phx-toast-dismiss:focus-visible { outline-color: var(--phx-surface); }
+
+/* The Help window: short help for the control under the pointer or in focus. */
+.phx-window-body[data-phx-window="help"] { padding-bottom: 8px; }
+.phx-help-text { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--phx-text); }
+.phx-help-text.is-idle { color: var(--phx-text-2); }
 
 /* The Notifications window: this session's notices, newest first. */
 .phx-notifications { list-style: none; margin: 0; padding: 0; }

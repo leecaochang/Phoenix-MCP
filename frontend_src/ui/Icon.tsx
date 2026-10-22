@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Archive, ArrowDownLeft, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsLeft, ChevronsRight, ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
-  Download, Ellipsis, ExternalLink, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
+  Download, Ellipsis, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, ListChecks, ListX, Maximize2, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, ScrollText, SearchCheck,
   Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Star, Trash2, TriangleAlert, Upload,
@@ -22,7 +22,6 @@ const ICONS = {
   edit: Pencil,
   delete: Trash2,
   probe: SearchCheck,
-  externalLink: ExternalLink,
   popOut: SquareArrowOutUpRight,
   popIn: SquareArrowDownLeft,
   close: X,

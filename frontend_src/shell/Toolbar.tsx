@@ -6,7 +6,6 @@
  */
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { DOCS_BASE_URL } from "../components/common";
 import { localeNumber, t } from "../i18n";
 import { Icon } from "../ui/Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
@@ -101,13 +100,15 @@ function ToolRow({ registry, workspace, groups }: { registry: ToolRegistry; work
   );
 }
 
-export function Toolbar({ controller, shellRoot, env, state, onChange }: {
+export function Toolbar({ controller, shellRoot, env, state, onChange, documentation }: {
   /** The visible workspace's controller; absent in the phone stack. */
   controller: WorkspaceController | null;
   shellRoot: RefObject<HTMLElement | null>;
   env: Env;
   state: ToolbarState;
   onChange: (next: ToolbarState) => void;
+  /** The Documentation menu: Help, the Guide and the documentation website. */
+  documentation: () => MenuEntry[];
 }) {
   const d = usePanelData();
   const menuRef = useRef<HTMLElement | null>(null);
@@ -224,6 +225,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
         {!collapsed && env === "desktop" && (
           <MenuButton
             label={t("workspace.moveToolbar")}
+            help="help.moveToolbar"
             icon={<Icon name="grip" size={16} />}
             items={() => appearanceMenu(state, update, env)}
             className="phx-toolbar-handle"
@@ -244,6 +246,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
                   aria-current={active ? "page" : undefined}
                   aria-label={count > 0 ? t("shell.approvalsTabAria", { count }) : undefined}
                   title={label}
+                  data-help={def.helpKey}
                   onClick={() => d.navigate(id)}>
                   <Icon name={def.icon} size={16} />
                   <span className="phx-toolbar-label">{label}</span>
@@ -261,18 +264,17 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
                 <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
               </button>
             ) : d.accessKeys.length > 0 ? (
-              <button type="button" className="phx-toolbar-button" title={t("shell.agentChat")} onClick={() => d.openAgentCli()}>
+              <button type="button" className="phx-toolbar-button" title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => d.openAgentCli()}>
                 <Icon name="agentChat" size={16} />
                 <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
               </button>
             ) : null}
-            <a className="phx-toolbar-button" href={DOCS_BASE_URL} target="_blank" rel="noopener noreferrer" title={t("shell.documentation")}>
-              <Icon name="documentation" size={16} />
+            <MenuButton label={t("shell.documentation")} help="help.documentation" icon={<Icon name="documentation" size={16} />}
+              items={documentation} className="phx-toolbar-button">
               <span className="phx-toolbar-label">{t("shell.documentation")}</span>
-              <Icon name="externalLink" size={11} className="phx-toolbar-external" />
-            </a>
+            </MenuButton>
             {controller && (
-              <MenuButton label={t("workspace.options")} icon={<Icon name="workspaceOptions" size={16} />}
+              <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}
                 items={() => workspaceMenu(controller, actions)} className="phx-toolbar-button" />
             )}
           </div>
@@ -281,6 +283,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
           <button type="button" className="phx-toolbar-button phx-toolbar-plain"
             aria-label={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
             title={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
+            data-help="help.tools"
             aria-expanded={effective.toolsShown}
             onClick={() => update({ toolsShown: !state.toolsShown })}>
             <Icon name={effective.toolsShown ? "hideTools" : "showTools"} size={16} />
@@ -289,6 +292,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange }: {
         <button type="button" className="phx-toolbar-button phx-toolbar-plain"
           aria-label={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
           title={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
+          data-help="help.collapseToolbar"
           aria-expanded={!collapsed}
           onClick={() => update({ collapsed: !state.collapsed })}>
           <Icon name={collapsed ? (vertical ? "showTools" : "expandToolbar") : (vertical ? "hideTools" : "collapseToolbar")} size={16} />

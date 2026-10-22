@@ -2496,6 +2496,31 @@
       "clear": "Melding wissen",
       "clearAll": "Alles wissen",
       "dismiss": "Sluiten"
+    },
+    "help": {
+      "title": "Help",
+      "idle": "Wijs een bedieningselement aan of geef het focus om te zien wat het doet.",
+      "showHelpBar": "Helpbalk weergeven",
+      "openDocumentation": "Documentatie openen",
+      "wsAccessKeys": "Toegangssleutels: maak de sleutels waarmee agents verbinding maken en kies wat elke sleutel mag doen.",
+      "wsApprovals": "Goedkeuringen: bekijk de wijzigingen die agents willen aanbrengen en keur ze goed of af.",
+      "wsChanges": "Wijzigingen: zie wat agents hebben gewijzigd, vergelijk versies en zet een eerdere terug.",
+      "wsMesa": "MESA: veiligheidsprofielen per entiteit die een apparaat alleen met bevestiging of helemaal niet toegankelijk kunnen maken, wat een toegangssleutel ook toestaat.",
+      "wsLogs": "Logboeken: het auditlogboek van verzoeken aan Phoenix en opgenomen gesprekken met agents.",
+      "wsSettings": "Instellingen: AI-aanbieders, Agent Chat, Home Assistant-functies, veiligheid en logboekregistratie.",
+      "agentChat": "Open Agent Chat om vanuit dit paneel met een agent te werken.",
+      "documentation": "Toon of verberg de helpbalk, of open de documentatiewebsite.",
+      "workspaceOptions": "Open gesloten vensters opnieuw, sla de indeling van deze werkruimte op of zet die terug, of zet de standaardinstellingen van het paneel terug.",
+      "moveToolbar": "Sleep om de werkbalk te verplaatsen, of open dit menu om hem aan een rand vast te koppelen of te kiezen hoe de knoppen worden weergegeven.",
+      "collapseToolbar": "Vouw de werkbalk samen tot één knop, of vouw hem weer uit.",
+      "tools": "Toon of verberg de rij hulpmiddelen voor de geopende vensters.",
+      "windowTitle": "Sleep de titelbalk om dit venster te verplaatsen en zet het neer op de rand van een ander venster om het daar vast te koppelen.",
+      "fold": "Vouw dit venster op in de titelbalk, of vouw het weer uit.",
+      "windowMenu": "Verplaats dit venster, zet het vast, koppel het los of wijzig het formaat met het toetsenbord.",
+      "floatWindow": "Koppel dit venster los boven de werkruimte. Het blijft op zijn plaats terwijl de werkruimte schuift.",
+      "dockWindow": "Koppel dit venster weer vast in de werkruimte.",
+      "maximizeWindow": "Laat dit venster het zichtbare deel van de werkruimte vullen, of zet het terug.",
+      "closeWindow": "Sluit dit venster. U kunt het opnieuw openen via het menu Werkruimte-opties."
     }
   }
 }

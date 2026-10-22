@@ -121,10 +121,12 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   };
 }
 
-export function MenuButton({ label, title, icon, children, items, className = "", buttonRef, onButtonKeyDown, onPointerDown, pressed = false }: {
+export function MenuButton({ label, title, help, icon, children, items, className = "", buttonRef, onButtonKeyDown, onPointerDown, pressed = false }: {
   /** Accessible name of the button and of the menu. */
   label: string;
   title?: string;
+  /** Catalog key of the button's longer help, shown in the Help window. */
+  help?: string;
   icon: ReactNode;
   /** Visible text after the icon, when the button shows one. */
   children?: ReactNode;
@@ -165,6 +167,7 @@ export function MenuButton({ label, title, icon, children, items, className = ""
         className={`${className}${open || pressed ? " is-active" : ""}`}
         aria-label={label}
         title={title ?? label}
+        data-help={help}
         aria-haspopup="menu"
         aria-expanded={!!open}
         onPointerDown={onPointerDown}

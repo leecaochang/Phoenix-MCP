@@ -31,12 +31,13 @@ export function TitleTab(props: IDockviewPanelHeaderProps) {
   }, [props.api]);
   const folded = useFolded(controller, props.api.id);
   return (
-    <div className="phx-window-title">
+    <div className="phx-window-title" data-help="help.windowTitle">
       <button
         type="button"
         className="phx-window-control"
         aria-label={folded ? t("workspace.unfold") : t("workspace.fold")}
         title={folded ? t("workspace.unfold") : t("workspace.fold")}
+        data-help="help.fold"
         aria-expanded={!folded}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => controller.toggleFold(props.api.group)}
@@ -146,6 +147,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
       {resizing && <span className="phx-window-resize-hint" role="status">{t("workspace.resizeHint")}</span>}
       <MenuButton
         label={t("workspace.windowMenu")}
+        help="help.windowMenu"
         icon={<Icon name="more" size={14} />}
         items={items}
         className="phx-window-control"
@@ -158,26 +160,26 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
       />
       {floating ? (
         <button type="button" className="phx-window-control" aria-label={t("workspace.dockWindowAria")} title={t("workspace.dockWindowAria")}
-          onClick={thenRefocus(() => controller.dock(group))}>
+          data-help="help.dockWindow" onClick={thenRefocus(() => controller.dock(group))}>
           <Icon name="dock" size={14} />
         </button>
       ) : (
         <>
           <button type="button" className="phx-window-control" aria-label={t("workspace.floatWindowAria")} title={t("workspace.floatWindowAria")}
-            onClick={thenRefocus(() => controller.float(group))}>
+            data-help="help.floatWindow" onClick={thenRefocus(() => controller.float(group))}>
             <Icon name="float" size={14} />
           </button>
           {!pinned && (
             <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
               title={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
-              onClick={() => (maximized ? controller.restoreMaximized(group) : controller.maximize(group))}>
+              data-help="help.maximizeWindow" onClick={() => (maximized ? controller.restoreMaximized(group) : controller.maximize(group))}>
               <Icon name={maximized ? "restore" : "maximize"} size={14} />
             </button>
           )}
         </>
       )}
       <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")}
-        onClick={() => controller.close(group)}>
+        data-help="help.closeWindow" onClick={() => controller.close(group)}>
         <Icon name="close" size={14} />
       </button>
     </div>

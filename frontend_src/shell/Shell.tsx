@@ -16,11 +16,13 @@ import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
-import { DEFAULT_TOOLBAR, readRecord, writeRecord, WORKSPACE_IDS, type Env, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
+import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
+import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
+import { DOCS_BASE_URL } from "../components/common";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
 
@@ -36,7 +38,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 /** Every section a record holds, to send a whole record to Home Assistant. */
 function allSections(record: ShellRecord): Section[] {
   return [
-    "toolbar", "lastWorkspace",
+    "toolbar", "help", "lastWorkspace",
     ...Object.keys(record.workspaces).map((id) => `ws:${id}` as Section),
     ...Object.keys(record.myDefaults ?? {}).map((id) => `my:${id}` as Section),
   ];
@@ -90,6 +92,12 @@ export function Shell() {
   const record = store.record;
   const recordRef = useRef(record);
   recordRef.current = record;
+  // Show Help Bar and the workspaces where Help was reopened or closed against it.
+  const [help, setHelp] = useState<HelpPrefs>(() => record?.help ?? DEFAULT_HELP);
+  useEffect(() => { setHelp(record?.help ?? DEFAULT_HELP); }, [record]);
+  const helpRef = useRef(help);
+  helpRef.current = help;
+
   // A different user or environment, or an adopted record, starts from fresh controllers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const controllers = useMemo(() => new Map<WorkspaceId, WorkspaceController>(), [store.generation]);
@@ -98,6 +106,11 @@ export function Shell() {
     if (!controller) {
       const def = WORKSPACES[id];
       controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned });
+      controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
+      // Closing or reopening Help in one workspace overrides Show Help Bar there only.
+      controller.onWindowToggle = (windowId, open) => {
+        if (windowId === HELP_WINDOW) setHelp((prev) => withHelpIn(prev, id, open));
+      };
       controllers.set(id, controller);
     }
     return controller;
@@ -154,6 +167,8 @@ export function Shell() {
     for (const section of dirty.current) {
       if (section === "toolbar") {
         if (!same(rec.toolbar, toolbarRef.current)) { rec.toolbar = toolbarRef.current; changed.push(section); }
+      } else if (section === "help") {
+        if (!same(rec.help, helpRef.current)) { rec.help = helpRef.current; changed.push(section); }
       } else if (section === "lastWorkspace") {
         if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
       } else if (section.startsWith("ws:")) {
@@ -222,10 +237,14 @@ export function Shell() {
     };
   }, [userId, env]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The toolbar and the visible workspace are part of the record.
+  // The toolbar, Help and the visible workspace are part of the record.
   useEffect(() => {
     if (!same(toolbar, recordRef.current?.toolbar ?? DEFAULT_TOOLBAR)) markChanged(["toolbar"]);
   }, [toolbar, markChanged]);
+  useEffect(() => {
+    for (const [id, controller] of controllers) controller.want(HELP_WINDOW, helpOpen(help, id));
+    if (!same(help, recordRef.current?.help ?? DEFAULT_HELP)) markChanged(["help"]);
+  }, [help, controllers, markChanged]);
   const lastSeenWorkspace = useRef(d.workspace);
   useEffect(() => {
     if (lastSeenWorkspace.current === d.workspace) return;
@@ -235,7 +254,20 @@ export function Shell() {
 
   // Toasts and this session's notification history, shared by every workspace.
   const notifications = useMemo(() => new Notifications(), []);
+  // Help follows the pointer and focus anywhere in the shell.
+  const helpTracker = useMemo(() => new HelpTracker(), []);
+  useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
   const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
+
+  // Documentation: Show Help Bar (every workspace; desktop only for now) and the website.
+  const documentationMenu = useCallback((): MenuEntry[] => {
+    const items: MenuEntry[] = [];
+    if (env === "desktop") {
+      items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: helpRef.current.show, onSelect: () => setHelp((prev) => ({ show: !prev.show, workspaces: {} })) });
+    }
+    items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
+    return items;
+  }, [env]);
 
   // Restore Panel Default Settings asks first, inside the workspace area.
   const [confirmDefaults, setConfirmDefaults] = useState(false);
@@ -243,8 +275,13 @@ export function Shell() {
     setConfirmDefaults(false);
     const rec = recordRef.current;
     setToolbar(DEFAULT_TOOLBAR);
-    for (const controller of controllers.values()) controller.restoreOriginal();
-    const sections: Section[] = ["toolbar"];
+    setHelp(DEFAULT_HELP);
+    helpRef.current = DEFAULT_HELP;
+    for (const controller of controllers.values()) {
+      controller.want(HELP_WINDOW, true);
+      controller.restoreOriginal();
+    }
+    const sections: Section[] = ["toolbar", "help"];
     for (const id of WORKSPACE_IDS) {
       sections.push(`ws:${id}`);
       if (rec && !controllers.has(id)) delete rec.workspaces[id];
@@ -314,6 +351,7 @@ export function Shell() {
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
     <NotificationsContext.Provider value={notifications}>
+    <HelpContext.Provider value={helpTracker}>
     <LogSelectionContext.Provider value={logSelection}>
     <WorkspaceActionsContext.Provider value={actions}>
     <AccessKeyDetailProvider
@@ -328,7 +366,7 @@ export function Shell() {
       <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
-          state={toolbar} onChange={setToolbar} />
+          state={toolbar} onChange={setToolbar} documentation={documentationMenu} />
         <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
           {confirmDefaults && (
             <div className="banner banner-warning phx-shell-confirm" role="alertdialog" aria-labelledby="phx-defaults-question">
@@ -379,6 +417,7 @@ export function Shell() {
     </AccessKeyDetailProvider>
     </WorkspaceActionsContext.Provider>
     </LogSelectionContext.Provider>
+    </HelpContext.Provider>
     </NotificationsContext.Provider>
     </ToolRegistryContext.Provider>
     </ContextMenuHost>

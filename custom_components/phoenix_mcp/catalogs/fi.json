@@ -2423,6 +2423,31 @@
       "clear": "Tyhjennä ilmoitus",
       "clearAll": "Tyhjennä kaikki",
       "dismiss": "Sulje"
+    },
+    "help": {
+      "title": "Ohje",
+      "idle": "Osoita säädintä tai siirrä kohdistus siihen nähdäksesi, mitä se tekee.",
+      "showHelpBar": "Näytä ohjepalkki",
+      "openDocumentation": "Avaa dokumentaatio",
+      "wsAccessKeys": "Käyttöavaimet: luo avaimet, joilla agentit yhdistävät, ja valitse, mitä kukin avain saa tehdä.",
+      "wsApprovals": "Hyväksynnät: tarkista muutokset, joita agentit ovat pyytäneet tekemään, ja hyväksy tai hylkää ne.",
+      "wsChanges": "Muutokset: näe, mitä agentit ovat muuttaneet, vertaa versioita ja palauta aiempi.",
+      "wsMesa": "MESA: entiteettikohtaiset turvaprofiilit, jotka voivat vaatia laitteelle vahvistuksen tai estää sen kokonaan riippumatta siitä, mitä käyttöavain sallii.",
+      "wsLogs": "Lokit: Phoenixiin tehtyjen pyyntöjen valvontaloki ja tallennetut agenttikeskustelut.",
+      "wsSettings": "Asetukset: tekoälypalveluntarjoajat, Agent Chat, Home Assistantin ominaisuudet, turvallisuus ja lokitus.",
+      "agentChat": "Avaa Agent Chat työskennelläksesi agentin kanssa tästä paneelista.",
+      "documentation": "Näytä tai piilota ohjepalkki tai avaa dokumentaatiosivusto.",
+      "workspaceOptions": "Avaa suljettuja ikkunoita uudelleen, tallenna tai palauta tämän työtilan asettelu tai palauta paneelin oletukset.",
+      "moveToolbar": "Vedä siirtääksesi työkaluriviä tai avaa tämä valikko kiinnittääksesi sen reunaan tai valitaksesi, miten sen painikkeet näkyvät.",
+      "collapseToolbar": "Tiivistä työkalurivi yhdeksi painikkeeksi tai laajenna se uudelleen.",
+      "tools": "Näytä tai piilota avoimien ikkunoiden työkalurivi.",
+      "windowTitle": "Vedä otsikkoriviä siirtääksesi tätä ikkunaa ja pudota se toisen ikkunan reunaan kiinnittääksesi sen siihen.",
+      "fold": "Taita tämä ikkuna otsikkoriviinsä tai avaa se uudelleen.",
+      "windowMenu": "Siirrä tätä ikkunaa, kiinnitä se, irrota se tai muuta sen kokoa näppäimistöllä.",
+      "floatWindow": "Irrota tämä ikkuna työtilan päälle. Se pysyy paikallaan, kun työtilaa vieritetään.",
+      "dockWindow": "Kiinnitä tämä ikkuna takaisin työtilaan.",
+      "maximizeWindow": "Täytä työtilan näkyvä osa tällä ikkunalla tai palauta se.",
+      "closeWindow": "Sulje tämä ikkuna. Voit avata sen uudelleen Työtilan asetukset -valikosta."
     }
   },
   "voice": {

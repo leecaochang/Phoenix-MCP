@@ -2528,6 +2528,31 @@
       "clear": "Wyczyść powiadomienie",
       "clearAll": "Wyczyść wszystko",
       "dismiss": "Zamknij"
+    },
+    "help": {
+      "title": "Pomoc",
+      "idle": "Wskaż kontrolkę lub ustaw na niej fokus, aby zobaczyć, co robi.",
+      "showHelpBar": "Pokaż pasek pomocy",
+      "openDocumentation": "Otwórz dokumentację",
+      "wsAccessKeys": "Klucze dostępu: twórz klucze, którymi łączą się agenci, i wybieraj, co może robić każdy klucz.",
+      "wsApprovals": "Zatwierdzenia: przeglądaj zmiany, o które poprosili agenci, a następnie je zatwierdzaj lub odrzucaj.",
+      "wsChanges": "Zmiany: zobacz, co zmienili agenci, porównuj wersje i przywracaj wcześniejsze.",
+      "wsMesa": "MESA: profile bezpieczeństwa dla poszczególnych encji, które mogą wymagać potwierdzenia dla urządzenia lub całkowicie je blokować, niezależnie od uprawnień klucza dostępu.",
+      "wsLogs": "Dzienniki: dziennik audytu żądań kierowanych do Phoenix oraz zapisane rozmowy z agentami.",
+      "wsSettings": "Ustawienia: dostawcy AI, Agent Chat, funkcje Home Assistant, bezpieczeństwo i rejestrowanie.",
+      "agentChat": "Otwórz Agent Chat, aby pracować z agentem z poziomu tego panelu.",
+      "documentation": "Pokaż lub ukryj pasek pomocy albo otwórz witrynę z dokumentacją.",
+      "workspaceOptions": "Otwórz ponownie zamknięte okna, zapisz lub przywróć układ tego obszaru roboczego albo przywróć ustawienia domyślne panelu.",
+      "moveToolbar": "Przeciągnij, aby przenieść pasek narzędzi, lub otwórz to menu, aby zadokować go przy krawędzi albo wybrać sposób wyświetlania przycisków.",
+      "collapseToolbar": "Zwiń pasek narzędzi do jednego przycisku lub rozwiń go ponownie.",
+      "tools": "Pokaż lub ukryj wiersz narzędzi otwartych okien.",
+      "windowTitle": "Przeciągnij pasek tytułu, aby przenieść to okno, i upuść je przy krawędzi innego okna, aby je tam zadokować.",
+      "fold": "Złóż to okno do paska tytułu lub rozłóż je ponownie.",
+      "windowMenu": "Przenieś to okno, przypnij je, odłącz lub zmień jego rozmiar za pomocą klawiatury.",
+      "floatWindow": "Odłącz to okno nad obszarem roboczym. Pozostaje na miejscu podczas przewijania obszaru roboczego.",
+      "dockWindow": "Zadokuj to okno z powrotem w obszarze roboczym.",
+      "maximizeWindow": "Wypełnij tym oknem widoczną część obszaru roboczego lub przywróć je.",
+      "closeWindow": "Zamknij to okno. Możesz otworzyć je ponownie z menu Opcje obszaru roboczego."
     }
   }
 }

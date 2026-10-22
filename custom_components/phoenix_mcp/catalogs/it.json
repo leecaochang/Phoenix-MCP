@@ -2418,6 +2418,31 @@
       "clear": "Cancella notifica",
       "clearAll": "Cancella tutto",
       "dismiss": "Chiudi"
+    },
+    "help": {
+      "title": "Aiuto",
+      "idle": "Punta o metti a fuoco un controllo per vedere che cosa fa.",
+      "showHelpBar": "Mostra barra di aiuto",
+      "openDocumentation": "Apri documentazione",
+      "wsAccessKeys": "Chiavi di accesso: crea le chiavi con cui si connettono gli agenti e scegli che cosa può fare ciascuna chiave.",
+      "wsApprovals": "Approvazioni: esamina le modifiche che gli agenti hanno chiesto di fare, poi approvale o rifiutale.",
+      "wsChanges": "Modifiche: vedi che cosa hanno modificato gli agenti, confronta le versioni e ripristinane una precedente.",
+      "wsMesa": "MESA: profili di sicurezza per entità che possono rendere un dispositivo soggetto a conferma o inaccessibile, qualunque cosa consenta una chiave di accesso.",
+      "wsLogs": "Registri: il registro di controllo delle richieste a Phoenix e le conversazioni registrate degli agenti.",
+      "wsSettings": "Impostazioni: fornitori di IA, Agent Chat, funzioni di Home Assistant, sicurezza e registrazione.",
+      "agentChat": "Apri Agent Chat per lavorare con un agente da questo pannello.",
+      "documentation": "Mostra o nascondi la barra di aiuto, oppure apri il sito della documentazione.",
+      "workspaceOptions": "Riapri le finestre chiuse, salva o ripristina la disposizione di quest'area di lavoro, oppure ripristina i valori predefiniti del pannello.",
+      "moveToolbar": "Trascina per spostare la barra degli strumenti, oppure apri questo menu per agganciarla a un bordo o scegliere come mostrare i suoi pulsanti.",
+      "collapseToolbar": "Comprimi la barra degli strumenti in un solo pulsante, oppure espandila di nuovo.",
+      "tools": "Mostra o nascondi la riga degli strumenti delle finestre aperte.",
+      "windowTitle": "Trascina la barra del titolo per spostare questa finestra e rilasciala sul bordo di un'altra finestra per agganciarla lì.",
+      "fold": "Piega questa finestra nella sua barra del titolo, oppure aprila.",
+      "windowMenu": "Sposta questa finestra, fissala, sganciala o ridimensionala con la tastiera.",
+      "floatWindow": "Sgancia questa finestra sopra l'area di lavoro. Resta al suo posto mentre l'area di lavoro scorre.",
+      "dockWindow": "Riaggancia questa finestra all'area di lavoro.",
+      "maximizeWindow": "Fai occupare a questa finestra la parte visibile dell'area di lavoro, oppure ripristinala.",
+      "closeWindow": "Chiudi questa finestra. Puoi riaprirla dal menu Opzioni dell'area di lavoro."
     }
   },
   "notification": {

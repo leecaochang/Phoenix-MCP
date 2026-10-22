@@ -2418,6 +2418,31 @@
       "clear": "Effacer la notification",
       "clearAll": "Tout effacer",
       "dismiss": "Fermer"
+    },
+    "help": {
+      "title": "Aide",
+      "idle": "Pointez ou sélectionnez une commande pour voir ce qu’elle fait.",
+      "showHelpBar": "Afficher la barre d’aide",
+      "openDocumentation": "Ouvrir la documentation",
+      "wsAccessKeys": "Clés d’accès : créez les clés avec lesquelles les agents se connectent et choisissez ce que chaque clé peut faire.",
+      "wsApprovals": "Approbations : examinez les modifications que les agents ont demandé à faire, puis approuvez-les ou refusez-les.",
+      "wsChanges": "Modifications : voyez ce que les agents ont modifié, comparez les versions et restaurez-en une plus ancienne.",
+      "wsMesa": "MESA : profils de sécurité par entité qui peuvent rendre un appareil soumis à confirmation ou interdit, quoi qu’autorise une clé d’accès.",
+      "wsLogs": "Journaux : le journal d’audit des requêtes adressées à Phoenix et les conversations d’agents enregistrées.",
+      "wsSettings": "Paramètres : fournisseurs d’IA, Agent Chat, fonctionnalités de Home Assistant, sécurité et journalisation.",
+      "agentChat": "Ouvrez Agent Chat pour travailler avec un agent depuis ce panneau.",
+      "documentation": "Affichez ou masquez la barre d’aide, ou ouvrez le site de documentation.",
+      "workspaceOptions": "Rouvrez des fenêtres fermées, enregistrez ou rétablissez la disposition de cet espace de travail, ou rétablissez les réglages par défaut du panneau.",
+      "moveToolbar": "Faites glisser pour déplacer la barre d’outils, ou ouvrez ce menu pour l’ancrer à un bord ou choisir l’affichage de ses boutons.",
+      "collapseToolbar": "Réduisez la barre d’outils à un seul bouton, ou développez-la de nouveau.",
+      "tools": "Affichez ou masquez la rangée d’outils des fenêtres ouvertes.",
+      "windowTitle": "Faites glisser la barre de titre pour déplacer cette fenêtre, et déposez-la sur le bord d’une autre fenêtre pour l’y ancrer.",
+      "fold": "Repliez cette fenêtre dans sa barre de titre, ou dépliez-la.",
+      "windowMenu": "Déplacez cette fenêtre, épinglez-la, rendez-la flottante ou redimensionnez-la au clavier.",
+      "floatWindow": "Rendez cette fenêtre flottante au-dessus de l’espace de travail. Elle reste en place pendant le défilement de l’espace de travail.",
+      "dockWindow": "Ancrez de nouveau cette fenêtre dans l’espace de travail.",
+      "maximizeWindow": "Faites occuper à cette fenêtre la partie visible de l’espace de travail, ou rétablissez-la.",
+      "closeWindow": "Fermez cette fenêtre. Vous pouvez la rouvrir depuis le menu Réglages de l’espace de travail."
     }
   },
   "notification": {

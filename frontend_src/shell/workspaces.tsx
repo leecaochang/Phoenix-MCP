@@ -30,6 +30,8 @@ import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
 import { LogDetailsContent } from "./logDetails";
 import { NotificationsWindow } from "./notifications";
+import { HELP_WINDOW, HelpWindow } from "./help";
+import { MIN_WINDOW_HEIGHT } from "./dock/fold";
 
 export const WINDOW_TITLE_KEYS = {
   accessKeys: "shell.tabAccessKeys",
@@ -48,6 +50,7 @@ export const WINDOW_TITLE_KEYS = {
   settings: "shell.tabSettings",
   attention: "attention.title",
   notifications: "notifications.title",
+  help: "help.title",
 } as const;
 export type WindowId = keyof typeof WINDOW_TITLE_KEYS;
 
@@ -61,6 +64,8 @@ type Add = (id: string, position?: AddPanelOptions["position"]) => void;
 
 export interface WorkspaceDef {
   labelKey: string;
+  /** What the workspace is for, shown in Help when its toolbar button is pointed at. */
+  helpKey: string;
   icon: IconName;
   windows: WindowId[];
   arrange: (api: DockviewApi, add: Add) => void;
@@ -85,6 +90,7 @@ const size = (api: DockviewApi, id: string, dims: { width?: number; height?: num
 const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
   accessKeys: {
     labelKey: "shell.tabAccessKeys",
+    helpKey: "help.wsAccessKeys",
     icon: "accessKeys",
     windows: ["accessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
     // The key list across the top; the selected key's windows below it, editing on the
@@ -104,11 +110,12 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     // Comfortable heights; the workspace scrolls when the screen is shorter than they need.
     heights: { accessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
   },
-  approvals: { labelKey: "shell.tabApprovals", icon: "approvals", windows: ["approvals", "attention"], arrange: (_, add) => add("approvals") },
-  changes: { labelKey: "shell.tabChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
-  mesa: { labelKey: "shell.tabMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
+  approvals: { labelKey: "shell.tabApprovals", helpKey: "help.wsApprovals", icon: "approvals", windows: ["approvals", "attention"], arrange: (_, add) => add("approvals") },
+  changes: { labelKey: "shell.tabChanges", helpKey: "help.wsChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
+  mesa: { labelKey: "shell.tabMesa", helpKey: "help.wsMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
   logs: {
     labelKey: "workspace.logs",
+    helpKey: "help.wsLogs",
     icon: "logs",
     windows: ["auditLog", "conversationLog", "logDetails", "attention"],
     // The two logs side by side with equal space, Log Details across the bottom, as accepted for Logs.
@@ -119,18 +126,27 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       api.getPanel("logDetails")?.group.api.setSize({ height: Math.round(api.height * 0.4) });
     },
   },
-  settings: { labelKey: "shell.tabSettings", icon: "settings", windows: ["settings", "attention"], arrange: (_, add) => add("settings") },
+  settings: { labelKey: "shell.tabSettings", helpKey: "help.wsSettings", icon: "settings", windows: ["settings", "attention"], arrange: (_, add) => add("settings") },
 };
 
-/** Windows every workspace offers besides its own, closed until reopened from Workspace Options; desktop only for now. */
-export const SHARED_WINDOWS: readonly WindowId[] = ["notifications"];
-const SHARED_HEIGHTS: Partial<Record<WindowId, number>> = { notifications: 240 };
+/**
+ * Windows every workspace offers besides its own; desktop only for now. Help
+ * starts pinned along the bottom and follows Show Help Bar; Notifications
+ * starts closed until reopened from Workspace Options.
+ */
+export const SHARED_WINDOWS: readonly WindowId[] = [HELP_WINDOW, "notifications"];
+const SHARED_HEIGHTS: Partial<Record<WindowId, number>> = { help: MIN_WINDOW_HEIGHT, notifications: 240 };
 
 export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = Object.fromEntries(
   Object.entries(OWN_WINDOWS).map(([id, def]) => [id, {
     ...def,
     windows: [...def.windows, ...SHARED_WINDOWS],
+    arrange: (api: DockviewApi, add: Add) => {
+      def.arrange(api, add);
+      add(HELP_WINDOW, { direction: "below" });
+    },
     heights: { ...SHARED_HEIGHTS, ...def.heights },
+    pinned: { ...def.pinned, bottom: [...(def.pinned?.bottom ?? []), HELP_WINDOW] },
   }]),
 ) as Record<WorkspaceId, WorkspaceDef>;
 
@@ -253,6 +269,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   logDetails: LogDetailsWindowContent,
   attention: AttentionContent,
   notifications: NotificationsWindow,
+  help: HelpWindow,
 };
 
 /** A window's content, rendered once per workspace and moved between hosts with the window. */

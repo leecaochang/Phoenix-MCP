@@ -2423,6 +2423,31 @@
       "clear": "Rensa avisering",
       "clearAll": "Rensa alla",
       "dismiss": "Stäng"
+    },
+    "help": {
+      "title": "Hjälp",
+      "idle": "Peka på eller fokusera en kontroll för att se vad den gör.",
+      "showHelpBar": "Visa hjälpfält",
+      "openDocumentation": "Öppna dokumentation",
+      "wsAccessKeys": "Åtkomstnycklar: skapa nycklarna som agenter ansluter med och välj vad varje nyckel får göra.",
+      "wsApprovals": "Godkännanden: granska ändringarna som agenter har bett om att göra och godkänn eller avvisa dem.",
+      "wsChanges": "Ändringar: se vad agenter har ändrat, jämför versioner och återställ en tidigare.",
+      "wsMesa": "MESA: säkerhetsprofiler per entitet som kan kräva bekräftelse för en enhet eller stänga av den helt, oavsett vad en åtkomstnyckel tillåter.",
+      "wsLogs": "Loggar: granskningsloggen över begäranden till Phoenix och inspelade agentsamtal.",
+      "wsSettings": "Inställningar: AI-leverantörer, Agent Chat, Home Assistant-funktioner, säkerhet och loggning.",
+      "agentChat": "Öppna Agent Chat för att arbeta med en agent från den här panelen.",
+      "documentation": "Visa eller dölj hjälpfältet, eller öppna dokumentationswebbplatsen.",
+      "workspaceOptions": "Öppna stängda fönster igen, spara eller återställ den här arbetsytans layout, eller återställ panelens standardvärden.",
+      "moveToolbar": "Dra för att flytta verktygsfältet, eller öppna den här menyn för att docka det vid en kant eller välja hur knapparna visas.",
+      "collapseToolbar": "Fäll ihop verktygsfältet till en enda knapp, eller fäll ut det igen.",
+      "tools": "Visa eller dölj raden med verktyg för de öppna fönstren.",
+      "windowTitle": "Dra i namnlisten för att flytta fönstret och släpp det vid kanten av ett annat fönster för att docka det där.",
+      "fold": "Vik ihop fönstret till namnlisten, eller fäll ut det igen.",
+      "windowMenu": "Flytta fönstret, fäst det, gör det flytande eller ändra storleken med tangentbordet.",
+      "floatWindow": "Gör fönstret flytande ovanför arbetsytan. Det stannar på plats medan arbetsytan rullar.",
+      "dockWindow": "Docka fönstret i arbetsytan igen.",
+      "maximizeWindow": "Låt fönstret fylla den synliga delen av arbetsytan, eller återställ det.",
+      "closeWindow": "Stäng fönstret. Öppna det igen från menyn Alternativ för arbetsytan."
     }
   },
   "voice": {

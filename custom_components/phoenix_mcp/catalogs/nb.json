@@ -2423,6 +2423,31 @@
       "clear": "Fjern varsel",
       "clearAll": "Tøm alle",
       "dismiss": "Lukk"
+    },
+    "help": {
+      "title": "Hjelp",
+      "idle": "Pek på eller fokuser på en kontroll for å se hva den gjør.",
+      "showHelpBar": "Vis hjelpelinje",
+      "openDocumentation": "Åpne dokumentasjon",
+      "wsAccessKeys": "Tilgangsnøkler: opprett nøklene agenter kobler til med, og velg hva hver nøkkel kan gjøre.",
+      "wsApprovals": "Godkjenninger: gå gjennom endringene agenter har bedt om å gjøre, og godkjenn eller avvis dem.",
+      "wsChanges": "Endringer: se hva agenter har endret, sammenlign versjoner og gjenopprett en tidligere.",
+      "wsMesa": "MESA: sikkerhetsprofiler per entitet som kan kreve bekreftelse for en enhet eller stenge den helt, uansett hva en tilgangsnøkkel tillater.",
+      "wsLogs": "Logger: revisjonsloggen over forespørsler til Phoenix og innspilte agentsamtaler.",
+      "wsSettings": "Innstillinger: AI-leverandører, Agent Chat, Home Assistant-funksjoner, sikkerhet og logging.",
+      "agentChat": "Åpne Agent Chat for å jobbe med en agent fra dette panelet.",
+      "documentation": "Vis eller skjul hjelpelinjen, eller åpne dokumentasjonsnettstedet.",
+      "workspaceOptions": "Åpne lukkede vinduer igjen, lagre eller gjenopprett oppsettet for dette arbeidsområdet, eller gjenopprett panelets standarder.",
+      "moveToolbar": "Dra for å flytte verktøylinjen, eller åpne denne menyen for å feste den til en kant eller velge hvordan knappene vises.",
+      "collapseToolbar": "Fold inn verktøylinjen til én knapp, eller fold den ut igjen.",
+      "tools": "Vis eller skjul raden med verktøy for de åpne vinduene.",
+      "windowTitle": "Dra i tittellinjen for å flytte vinduet, og slipp det på kanten av et annet vindu for å feste det der.",
+      "fold": "Rull vinduet opp i tittellinjen, eller rull det ut igjen.",
+      "windowMenu": "Flytt vinduet, fest det, gjør det flytende eller endre størrelsen med tastaturet.",
+      "floatWindow": "Gjør vinduet flytende over arbeidsområdet. Det blir stående på plass mens arbeidsområdet ruller.",
+      "dockWindow": "Fest vinduet i arbeidsområdet igjen.",
+      "maximizeWindow": "La vinduet fylle den synlige delen av arbeidsområdet, eller gjenopprett det.",
+      "closeWindow": "Lukk vinduet. Åpne det igjen fra menyen Alternativer for arbeidsområdet."
     }
   },
   "voice": {

@@ -2418,6 +2418,31 @@
       "clear": "Benachrichtigung entfernen",
       "clearAll": "Alle entfernen",
       "dismiss": "Schließen"
+    },
+    "help": {
+      "title": "Hilfe",
+      "idle": "Zeigen Sie auf ein Bedienelement oder fokussieren Sie es, um zu sehen, was es tut.",
+      "showHelpBar": "Hilfeleiste anzeigen",
+      "openDocumentation": "Dokumentation öffnen",
+      "wsAccessKeys": "Zugriffsschlüssel: Schlüssel erstellen, mit denen sich Agenten verbinden, und festlegen, was jeder Schlüssel darf.",
+      "wsApprovals": "Genehmigungen: Änderungen prüfen, die Agenten vornehmen möchten, und sie genehmigen oder ablehnen.",
+      "wsChanges": "Änderungen: sehen, was Agenten geändert haben, Versionen vergleichen und eine frühere wiederherstellen.",
+      "wsMesa": "MESA: Sicherheitsprofile pro Entität, die ein Gerät unabhängig von den Rechten eines Zugriffsschlüssels nur mit Bestätigung oder gar nicht zugänglich machen können.",
+      "wsLogs": "Protokolle: das Prüfprotokoll der Anfragen an Phoenix und aufgezeichnete Agentengespräche.",
+      "wsSettings": "Einstellungen: KI-Anbieter, Agent Chat, Home Assistant-Funktionen, Sicherheit und Protokollierung.",
+      "agentChat": "Agent Chat öffnen, um in diesem Panel mit einem Agenten zu arbeiten.",
+      "documentation": "Hilfeleiste ein- oder ausblenden oder die Dokumentationswebsite öffnen.",
+      "workspaceOptions": "Geschlossene Fenster erneut öffnen, die Anordnung dieses Arbeitsbereichs speichern oder wiederherstellen oder die Standardwerte des Panels wiederherstellen.",
+      "moveToolbar": "Ziehen, um die Symbolleiste zu verschieben, oder dieses Menü öffnen, um sie an einem Rand anzudocken oder die Darstellung ihrer Schaltflächen zu wählen.",
+      "collapseToolbar": "Die Symbolleiste auf eine einzige Schaltfläche einklappen oder wieder ausklappen.",
+      "tools": "Die Werkzeugzeile für die geöffneten Fenster ein- oder ausblenden.",
+      "windowTitle": "Die Titelleiste ziehen, um dieses Fenster zu verschieben, und am Rand eines anderen Fensters ablegen, um es dort anzudocken.",
+      "fold": "Dieses Fenster in seine Titelleiste zusammenfalten oder wieder aufklappen.",
+      "windowMenu": "Dieses Fenster verschieben, anheften, lösen oder mit der Tastatur in der Größe ändern.",
+      "floatWindow": "Dieses Fenster über dem Arbeitsbereich lösen. Es bleibt an seinem Platz, während der Arbeitsbereich scrollt.",
+      "dockWindow": "Dieses Fenster wieder im Arbeitsbereich andocken.",
+      "maximizeWindow": "Den sichtbaren Arbeitsbereich mit diesem Fenster füllen oder es wiederherstellen.",
+      "closeWindow": "Dieses Fenster schließen. Über das Menü „Arbeitsbereich-Optionen“ lässt es sich wieder öffnen."
     }
   },
   "notification": {

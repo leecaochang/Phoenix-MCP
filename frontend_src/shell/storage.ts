@@ -33,6 +33,25 @@ export interface ToolbarState {
 /** Docked at the top, icons only, tools shown: the accepted starting point. */
 export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icons" };
 
+/** Show Help Bar, and the workspaces where Help was reopened or closed against it. */
+export interface HelpPrefs {
+  show: boolean;
+  /** true: Help is open here although Show Help Bar is off; false: closed here although it is on. */
+  workspaces: Partial<Record<WorkspaceId, boolean>>;
+}
+export const DEFAULT_HELP: HelpPrefs = { show: true, workspaces: {} };
+
+/** Whether Help is open in a workspace. */
+export const helpOpen = (help: HelpPrefs, workspace: WorkspaceId): boolean => help.workspaces[workspace] ?? help.show;
+
+/** Help preferences after the user opened or closed Help in one workspace. */
+export function withHelpIn(help: HelpPrefs, workspace: WorkspaceId, open: boolean): HelpPrefs {
+  const workspaces = { ...help.workspaces };
+  if (open === help.show) delete workspaces[workspace];
+  else workspaces[workspace] = open;
+  return { show: help.show, workspaces };
+}
+
 export interface ShellRecord {
   schema: number;
   savedAt: number;
@@ -44,6 +63,7 @@ export interface ShellRecord {
   pending?: boolean;
   lastWorkspace?: WorkspaceId;
   toolbar?: ToolbarState;
+  help?: HelpPrefs;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
   /** Arrangements the user saved as My Default, one per workspace; automatic saving never changes them. */
   myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
@@ -65,6 +85,16 @@ export function readToolbar(raw: unknown): ToolbarState {
 }
 
 const isWorkspace = (v: unknown): v is WorkspaceId => (WORKSPACE_IDS as readonly unknown[]).includes(v);
+
+/** Saved Help preferences, with anything unreadable left out. */
+export function readHelp(raw: unknown): HelpPrefs {
+  const r = (raw && typeof raw === "object" ? raw : {}) as { show?: unknown; workspaces?: unknown };
+  const workspaces: Partial<Record<WorkspaceId, boolean>> = {};
+  if (r.workspaces && typeof r.workspaces === "object") {
+    for (const [id, open] of Object.entries(r.workspaces)) if (isWorkspace(id) && typeof open === "boolean") workspaces[id] = open;
+  }
+  return { show: typeof r.show === "boolean" ? r.show : DEFAULT_HELP.show, workspaces };
+}
 
 export function storageKey(userId: string, env: Env): string {
   return `phx-ui:${encodeURIComponent(userId)}:${env}`;
@@ -109,6 +139,7 @@ export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
     ...(parsed.pending === true ? { pending: true } : {}),
     lastWorkspace: isWorkspace(parsed.lastWorkspace) ? parsed.lastWorkspace : undefined,
     toolbar: parsed.toolbar === undefined ? undefined : readToolbar(parsed.toolbar),
+    ...(parsed.help !== undefined ? { help: readHelp(parsed.help) } : {}),
     workspaces: layouts(parsed.workspaces),
     ...(Object.keys(myDefaults).length ? { myDefaults } : {}),
   };

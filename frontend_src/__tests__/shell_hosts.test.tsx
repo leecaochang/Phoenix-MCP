@@ -29,7 +29,7 @@ const stacked: Arrange = (_, add) => {
 };
 
 /** A controller with all four hosts, each a real Dockview instance with a stubbed size. */
-function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>> } = {}) {
+function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number } = {}) {
   const controller = new WorkspaceController("test", WINDOWS, stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned });
   const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div>{id}</div>]));
   const hosts: Partial<Record<HostId, HTMLElement>> = {};
@@ -37,7 +37,10 @@ function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record
   const sized = (id: HostId, visible: number) => (el: HTMLElement | null) => {
     if (!el) return;
     hosts[id] = el;
-    Object.defineProperty(el, "clientHeight", { configurable: true, get: () => (id === "main" ? visible : Number.parseInt(el.style.height || "0", 10)) });
+    // With a frame height, the grid sees what the bands leave of it, as in the browser.
+    const band = (h: HostId) => Number.parseInt(hosts[h]?.style.height || "0", 10);
+    const grid = () => (opts.frame ? opts.frame - band("top") - band("bottom") : visible);
+    Object.defineProperty(el, "clientHeight", { configurable: true, get: () => (id === "main" ? grid() : Number.parseInt(el.style.height || "0", 10)) });
   };
   const ready = (id: HostId) => (e: { api: DockviewApi }) => {
     apis[id] = e.api;
@@ -118,6 +121,35 @@ describe("pinned bands and the floating layer", () => {
     expect(w.controller.closedWindows()).toEqual(["b"]);
     w.controller.reopen("b");
     expect(w.controller.hostOf("b")).toBe("top");
+  });
+
+  it("keeps only the arrangement's own heights in the grid when the default arrangement pins a window", () => {
+    // Otherwise the last window, drawn taller to fill the screen, would snap back on the first push-down resize.
+    const w = mount({ heights: { a: 300 }, pinned: { bottom: ["c"] } });
+    expect(w.controller.hostOf("c")).toBe("bottom");
+    expect(w.controller.canvasOf("main")!.intended).toEqual({ a: 300 });
+  });
+
+  it("lays out the bands before the grid when loading, so a saved arrangement taller than the rest of the screen still scrolls", () => {
+    const first = mount({ heights: { a: 330, b: 330, c: 100 }, pinned: { bottom: ["c"] } });
+    const saved = first.controller.layout()!;
+    expect(saved.heights).toMatchObject({ a: 330, b: 330 });
+    // 700 px of workspace: the band takes 100, leaving 600 for 660 px of windows.
+    const second = mount({ frame: 700 });
+    second.controller.load(saved);
+    expect(second.controller.hostOf("c")).toBe("bottom");
+    expect(second.controller.canvasOf("main")!.height).toBe(660);
+  });
+
+  it("reopens a window an older save did not know into the band the default arrangement pins it to", () => {
+    const first = mount({ pinned: { bottom: ["c"] } });
+    first.controller.close(first.group("c"));
+    const saved = { ...first.controller.layout()!, closed: {} };
+    const second = mount({ pinned: { bottom: ["c"] } });
+    second.controller.load(saved);
+    expect(second.controller.closedWindows()).toEqual(["c"]);
+    second.controller.reopen("c");
+    expect(second.controller.hostOf("c")).toBe("bottom");
   });
 
   it("saves bands and floating windows and loads them back, each window once", () => {

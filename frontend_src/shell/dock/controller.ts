@@ -21,6 +21,8 @@ export type HostId = "main" | "top" | "bottom" | "float";
 export type Band = "top" | "bottom";
 const BANDS: readonly Band[] = ["top", "bottom"];
 const HOST_ORDER: readonly HostId[] = ["top", "main", "bottom", "float"];
+/** Bands are laid out before the grid, since their heights decide how much of the grid is visible. */
+const LAYOUT_ORDER: readonly HostId[] = ["top", "bottom", "main", "float"];
 
 /** A pinned band's saved arrangement. */
 export interface BandLayout {
@@ -88,6 +90,8 @@ export class WorkspaceController {
   readonly folds = new FoldStore();
   /** Called when the user closes a shell-managed window. */
   onTransientClose: ((id: string) => void) | null = null;
+  /** Called when the user closes or reopens a window (not when the shell does). */
+  onWindowToggle: ((id: string, open: boolean) => void) | null = null;
   /** The window that last had focus in this workspace. */
   activeWindow: string | null = null;
   /** Whether a conditional window is allowed now: true, false, or null while unknown. */
@@ -98,6 +102,8 @@ export class WorkspaceController {
   private floatedFrom = new Map<string, Slot | null>();
   private pinnedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
+  /** Windows the shell keeps open or closed whatever the arrangement says (Help follows Show Help Bar). */
+  private wanted = new Map<string, boolean>();
   /** Each window's content element, which moves between hosts with the window. */
   private contents = new Map<string, HTMLElement>();
   private listeners = new Set<() => void>();
@@ -132,8 +138,8 @@ export class WorkspaceController {
   }
   apiOf(host: HostId): DockviewApi | null { return this.hosts[host]?.api ?? null; }
   canvasOf(host: HostId): WorkspaceCanvas | null { return this.hosts[host]?.canvas ?? null; }
-  private attached(): Array<[HostId, Host]> {
-    return HOST_ORDER.flatMap((id) => (this.hosts[id] ? [[id, this.hosts[id]!] as [HostId, Host]] : []));
+  private attached(order: readonly HostId[] = HOST_ORDER): Array<[HostId, Host]> {
+    return order.flatMap((id) => (this.hosts[id] ? [[id, this.hosts[id]!] as [HostId, Host]] : []));
   }
 
   /** The host holding a window, or null when it is closed. */
@@ -207,7 +213,7 @@ export class WorkspaceController {
     const hosts = this.attached().filter(([, h]) => h.canvas);
     for (const [, h] of hosts) h.canvas!.capture();
     change();
-    for (const [, h] of this.attached()) {
+    for (const [, h] of this.attached(LAYOUT_ORDER)) {
       const canvas = h.canvas;
       if (!canvas) continue;
       canvas.prune();
@@ -251,9 +257,10 @@ export class WorkspaceController {
           this.moveFloatsToLayer();
           // Needs Attention stays when an arrangement is restored over it.
           for (const id of keep) if (!api.getPanel(id)) this.add(id, { direction: "above" });
-          for (const [, host] of this.attached()) host.canvas?.apply();
+          for (const [, host] of this.attached(LAYOUT_ORDER)) host.canvas?.apply();
           this.retitle();
           this.syncAvailable();
+          this.applyWanted();
         });
         return;
       } catch {
@@ -317,12 +324,34 @@ export class WorkspaceController {
           if (group) this.pin(group, band);
         }
       }
+      // Pinning recorded the grid's heights mid-arrangement; keep only the arrangement's own,
+      // so windows without one still share the space left over.
+      if (this.canvas) {
+        this.canvas.intended = Object.fromEntries(Object.entries(this.extras.heights ?? {}).filter(([id]) => api.getPanel(id)));
+        this.canvas.apply();
+      }
       for (const id of this.extras.folded ?? []) this.foldById(id);
       for (const id of keep) this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: TRANSIENT_HEIGHT });
       this.syncAvailable();
+      this.applyWanted();
       // Bands emptied above are measured again, so an empty band takes no space.
       for (const band of BANDS) this.canvasOf(band)?.apply();
     });
+  }
+
+  /** Keep a window open or closed whatever the arrangement says; undefined lets the arrangement decide. */
+  want(id: string, open: boolean | undefined): void {
+    if (open === undefined) this.wanted.delete(id);
+    else this.wanted.set(id, open);
+    if (this.api) this.batch(() => this.applyWanted());
+  }
+
+  private applyWanted(): void {
+    for (const [id, open] of this.wanted) {
+      const group = this.groupOf(id);
+      if (open && !group) this.place(id);
+      else if (!open && group) this.closeGroup(group);
+    }
   }
 
   private foldById(id: string): void {
@@ -475,8 +504,14 @@ export class WorkspaceController {
   }
 
   close(group: DockviewGroupPanel): void {
+    const id = this.closeGroup(group);
+    if (id && !this.transient.has(id)) this.onWindowToggle?.(id, false);
+  }
+
+  /** Close a window, remembering where it was; returns its id. */
+  private closeGroup(group: DockviewGroupPanel): string | null {
     const panel = group.activePanel;
-    if (!panel || !this.hostOfGroup(group)) return;
+    if (!panel || !this.hostOfGroup(group)) return null;
     if (!this.transient.has(panel.id)) {
       const place = this.placeOf(panel.id, group);
       const floating = this.hostOfGroup(group) === "float";
@@ -489,6 +524,7 @@ export class WorkspaceController {
     this.keepHeights(() => panel.api.close());
     if (this.transient.has(panel.id)) this.onTransientClose?.(panel.id);
     this.changed();
+    return panel.id;
   }
 
   /**
@@ -506,14 +542,26 @@ export class WorkspaceController {
   }
 
   reopen(id: string): void {
+    if (!this.place(id)) return;
+    this.reveal(id);
+    this.onWindowToggle?.(id, true);
+  }
+
+  /**
+   * Put a closed window back where it was closed from; without a remembered
+   * place, in the band the default arrangement pins it to, or else along the
+   * bottom of the grid. False when it cannot be placed.
+   */
+  private place(id: string): boolean {
     const api = this.api;
-    if (!api || this.hostOf(id) || !this.windows.includes(id) || this.availability(id) === false) return;
+    if (!api || this.hostOf(id) || !this.windows.includes(id) || this.availability(id) === false) return false;
     const slot = this.closed.get(id) ?? null;
     this.closed.delete(id);
     const height = validHeight(slot?.height) ?? this.extras.heights?.[id] ?? REOPEN_HEIGHT;
+    const band = isBand(slot?.host) ? slot!.host as Band : slot ? undefined : BANDS.find((b) => this.extras.pinned?.[b]?.includes(id));
     this.batch(() => {
-      if (isBand(slot?.host) && this.apiOf(slot!.host as Band)) {
-        this.keepHeights(() => this.addToBand(id, slot!.host as Band), { [id]: height });
+      if (band && this.apiOf(band)) {
+        this.keepHeights(() => this.addToBand(id, band), { [id]: height });
         return;
       }
       if (slot?.host === "float" && this.apiOf("float")) {
@@ -531,7 +579,7 @@ export class WorkspaceController {
         }
       }, { [id]: height });
     });
-    this.reveal(id);
+    return true;
   }
 
   /** Scroll the workspace so a window just placed in the grid is in view. */

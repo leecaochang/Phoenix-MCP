@@ -2418,6 +2418,31 @@
       "clear": "Borrar notificación",
       "clearAll": "Borrar todo",
       "dismiss": "Descartar"
+    },
+    "help": {
+      "title": "Ayuda",
+      "idle": "Señale o enfoque un control para ver qué hace.",
+      "showHelpBar": "Mostrar barra de ayuda",
+      "openDocumentation": "Abrir documentación",
+      "wsAccessKeys": "Claves de acceso: cree las claves con las que se conectan los agentes y elija qué puede hacer cada clave.",
+      "wsApprovals": "Aprobaciones: revise los cambios que los agentes han pedido hacer y apruébelos o rechácelos.",
+      "wsChanges": "Cambios: vea qué han cambiado los agentes, compare versiones y restaure una anterior.",
+      "wsMesa": "MESA: perfiles de seguridad por entidad que pueden hacer que un dispositivo requiera confirmación o quede vetado, permita lo que permita una clave de acceso.",
+      "wsLogs": "Registros: el registro de auditoría de las solicitudes a Phoenix y las conversaciones de agentes grabadas.",
+      "wsSettings": "Configuración: proveedores de IA, Agent Chat, funciones de Home Assistant, seguridad y registro.",
+      "agentChat": "Abra Agent Chat para trabajar con un agente desde este panel.",
+      "documentation": "Muestre u oculte la barra de ayuda, o abra el sitio web de documentación.",
+      "workspaceOptions": "Vuelva a abrir ventanas cerradas, guarde o restaure la disposición de este espacio de trabajo, o restaure los valores predeterminados del panel.",
+      "moveToolbar": "Arrastre para mover la barra de herramientas, o abra este menú para acoplarla a un borde o elegir cómo se muestran sus botones.",
+      "collapseToolbar": "Contraiga la barra de herramientas a un solo botón, o vuelva a expandirla.",
+      "tools": "Muestre u oculte la fila de herramientas de las ventanas abiertas.",
+      "windowTitle": "Arrastre la barra de título para mover esta ventana y suéltela en el borde de otra ventana para acoplarla allí.",
+      "fold": "Pliegue esta ventana en su barra de título, o despliéguela.",
+      "windowMenu": "Mueva esta ventana, fíjela, desacóplela o cambie su tamaño con el teclado.",
+      "floatWindow": "Desacople esta ventana sobre el espacio de trabajo. Se queda en su sitio mientras el espacio de trabajo se desplaza.",
+      "dockWindow": "Vuelva a acoplar esta ventana en el espacio de trabajo.",
+      "maximizeWindow": "Haga que esta ventana ocupe la parte visible del espacio de trabajo, o restáurela.",
+      "closeWindow": "Cierre esta ventana. Puede volver a abrirla desde el menú Opciones del espacio de trabajo."
     }
   },
   "notification": {
