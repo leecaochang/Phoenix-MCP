@@ -652,7 +652,9 @@
       "attachUnreadable": "{name}을(를) 이미지로 읽을 수 없습니다.",
       "attachVisionUnknown": "이 모델은 이미지를 받는지 여부를 밝히지 않았습니다. 공급자가 이미지를 거부하면 이 모델에 대해 그 사실이 기억됩니다.",
       "attachNoVision": "이 모델은 이미지를 받지 않습니다.",
-      "attachCompanion": "Home Companion은 텍스트 명령만 받으므로 이미지를 첨부할 수 없습니다."
+      "attachCompanion": "Home Companion은 텍스트 명령만 받으므로 이미지를 첨부할 수 없습니다.",
+      "connection": "연결",
+      "changeConnection": "연결 변경"
     },
     "diff": {
       "blueprint.create": "{domain} 블루프린트 '{rel}' 생성",

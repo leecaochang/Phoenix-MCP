@@ -298,7 +298,9 @@
       "attachUnreadable": "無法將 {name} 讀取為影像。",
       "attachVisionUnknown": "此模型未說明是否接受影像。如果提供者拒絕影像，系統會為此模型記住這一點。",
       "attachNoVision": "此模型不接受影像。",
-      "attachCompanion": "Home Companion 僅接受文字指令，因此無法附加影像。"
+      "attachCompanion": "Home Companion 僅接受文字指令，因此無法附加影像。",
+      "connection": "連線",
+      "changeConnection": "變更連線"
     },
     "approvalSummary": {
       "action.approve": "核准並執行",

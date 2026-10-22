@@ -239,7 +239,9 @@
       "attachUnreadable": "{name} konnte nicht als Bild gelesen werden.",
       "attachVisionUnknown": "Dieses Modell hat nicht angegeben, ob es Bilder akzeptiert. Lehnt der Anbieter sie ab, wird das für dieses Modell vermerkt.",
       "attachNoVision": "Dieses Modell akzeptiert keine Bilder.",
-      "attachCompanion": "Home Companion nimmt nur Textbefehle an, daher können keine Bilder angehängt werden."
+      "attachCompanion": "Home Companion nimmt nur Textbefehle an, daher können keine Bilder angehängt werden.",
+      "connection": "Verbindung",
+      "changeConnection": "Verbindung ändern"
     },
     "caps": {
       "cap_config_read": {

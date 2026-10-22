@@ -2768,7 +2768,7 @@ hui-card { display: block; min-width: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: 4px 6px 4px 12px;
   background: var(--phx-agentcli-titlebar);
   border-bottom: 1px solid var(--phx-border);
   cursor: move;
@@ -2779,7 +2779,7 @@ hui-card { display: block; min-width: 0; }
 /* The title art sets the titlebar's minimum content height. */
 .agentcli-title-icon { width: 22px; height: 22px; flex-shrink: 0; border-radius: 4px; }
 .agentcli-window.agentcli-minimized .agentcli-title-icon { width: 16px; height: 16px; border-radius: 3px; }
-.agentcli-titlebar-actions { display: flex; align-items: center; gap: 4px; }
+.agentcli-titlebar-actions { display: flex; align-items: center; gap: 2px; }
 .agentcli-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -2802,13 +2802,8 @@ hui-card { display: block; min-width: 0; }
   padding: 3px 6px;
 }
 .agentcli-pop-btn svg { display: block; width: 16px; height: 16px; }
-.agentcli-gear-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 7px;
-}
-.agentcli-gear-btn svg { display: block; width: 18px; height: 18px; }
+.agentcli-menu-btn { padding: 4px 6px; }
+.agentcli-menu-btn.is-active { background: var(--phx-hover); color: var(--phx-text); }
 
 .agentcli-popout-error {
   padding: 8px 10px;
@@ -2819,45 +2814,50 @@ hui-card { display: block; min-width: 0; }
   line-height: 1.4;
 }
 
-.agentcli-gear {
-  position: absolute;
-  top: 40px; right: 8px;
-  z-index: 1;
-  background: var(--phx-surface);
-  border: 1px solid var(--phx-border);
-  border-radius: var(--phx-radius-sm);
-  box-shadow: var(--phx-shadow-lg);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 180px;
-}
-.agentcli-gear-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-}
-.agentcli-gear-row select.agentcli-select, .agentcli-gear-row input[type="number"] { width: 90px; }
 .agentcli-select {
   font-size: 12px;
   padding: 6px 28px 6px 8px;
 }
-.agentcli-gear-clear { align-self: stretch; }
 
-.agentcli-controls {
+/* The connection: a one-line summary that opens in place into compact fields. */
+.agentcli-connection { flex: none; border-bottom: 1px solid var(--phx-border); }
+.agentcli-connection-summary {
   display: flex;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--phx-border);
+  align-items: baseline;
+  justify-content: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--phx-text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
 }
-.agentcli-control { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.agentcli-control > span {
-  font-size: 10px; color: var(--phx-text-2);
+.agentcli-connection-summary:hover { background: var(--phx-hover); color: var(--phx-text); }
+.agentcli-connection-key { color: var(--phx-text); font-weight: 500; flex: none; }
+.agentcli-connection-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.agentcli-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px 8px;
+  padding: 8px 12px 10px;
 }
-.agentcli-control select.agentcli-select { width: 100%; min-width: 0; }
+.agentcli-controls[hidden] { display: none; }
+.agentcli-control { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.agentcli-control > span { font-size: 11px; color: var(--phx-text-2); }
+.agentcli-control .agentcli-select { width: 100%; min-width: 0; }
+.agentcli-connection-note { grid-column: 1 / -1; font-size: 12px; color: var(--phx-text-2); }
+/* Compact fields for a mouse; touch keeps full-size targets, and phones 16 px text so the browser does not zoom. */
+@media (pointer: fine) {
+  .agentcli-controls .agentcli-select { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; font-size: 12px; }
+}
+@media (max-width: 700px) {
+  .agentcli-controls .agentcli-select { font-size: 16px; }
+}
 
 .agentcli-body {
   flex: 1 1 auto;
@@ -2887,17 +2887,24 @@ hui-card { display: block; min-width: 0; }
   font-size: var(--phx-agentcli-text-size, 13px);
 }
 .agentcli-msg-assistant {
-  background: var(--phx-surface-2);
   align-self: flex-start;
   max-width: 95%;
+  padding-left: 2px;
   font-size: var(--phx-agentcli-text-size, 13px);
 }
-/* Optional per-message time (gear toggle). Inherits the bubble's text color at
-   reduced opacity so it reads on both bubble backgrounds without new vars. */
-.agentcli-ts {
+/* Under a message: Copy, and the time when timestamps are on. Copy stays quiet
+   until the message is pointed at or focused; touch screens always show it. */
+.agentcli-msg-meta {
   display: flex; align-items: center; gap: 4px;
-  font-size: 10px; opacity: 0.6; margin-top: 3px; user-select: none;
+  margin-top: 3px; color: var(--phx-text-2); user-select: none;
 }
+.agentcli-msg-user .agentcli-msg-meta { justify-content: flex-end; }
+.agentcli-ts { font-size: 10px; }
+.agentcli-msg-meta .agentcli-copy-btn { opacity: 0; }
+.agentcli-msg:hover .agentcli-copy-btn,
+.agentcli-msg:focus-within .agentcli-copy-btn,
+.agentcli-copy-btn.is-copied { opacity: 1; }
+@media (hover: none) { .agentcli-msg-meta .agentcli-copy-btn { opacity: 0.85; } }
 .agentcli-copy-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; margin: -2px 0; padding: 3px;
@@ -2998,12 +3005,17 @@ hui-card { display: block; min-width: 0; }
   .agentcli-progress-dot { animation: none; opacity: 0.8; }
 }
 .agentcli-approval {
-  border: 1px solid var(--phx-accent);
-  border-radius: var(--phx-radius-sm);
-  padding: 8px 10px;
-  background: var(--phx-accent-lt);
+  border-top: 1px solid var(--phx-divider);
+  border-bottom: 1px solid var(--phx-divider);
+  padding: 10px 2px;
   font-size: var(--phx-agentcli-text-size, 13px);
 }
+/* Approve is green and Reject red, as on the request in Approvals. */
+.agentcli-approve, .agentcli-reject { gap: 4px; border: 1px solid; }
+.agentcli-approve { background: var(--phx-success-bg); border-color: var(--phx-success); color: var(--phx-success); }
+.agentcli-reject { background: var(--phx-error-bg); border-color: var(--phx-error); color: var(--phx-error); }
+.agentcli-approve:hover { background: var(--phx-success); color: var(--phx-accent-fg); }
+.agentcli-reject:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
 .agentcli-approval-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .agentcli-approval-status { margin-top: 4px; font-size: inherit; color: var(--phx-text-2); }
 /* The admin's rejection reason or the executor's failure detail; selectable so
@@ -3014,7 +3026,6 @@ hui-card { display: block; min-width: 0; }
   font-size: 0.92em; color: var(--phx-text-2); font-style: italic;
   border-left: 2px solid var(--phx-border); padding: 2px 0 2px 8px; white-space: pre-line;
 }
-.agentcli-gear-note { font-size: 12px; color: var(--phx-text-2); }
 .agentcli-unsafe {
   font-size: 0.92em; color: var(--phx-warning); background: var(--phx-warning-bg); border: 1px solid var(--phx-warning);
   border-radius: var(--phx-radius-xs); padding: 4px 8px; margin-bottom: 6px;
@@ -3025,12 +3036,12 @@ hui-card { display: block; min-width: 0; }
   gap: 6px;
   padding: 8px 10px;
   border-top: 1px solid var(--phx-border);
-  align-items: stretch;
+  align-items: flex-end;
 }
 /* The preview strip above already draws the divider. */
 .agentcli-attachments + .agentcli-input { border-top: none; }
-/* Send/Cancel matches the textarea height in the same row. */
-.agentcli-input > button { align-self: stretch; display: inline-flex; align-items: center; justify-content: center; }
+/* Attach, Send and Stop sit at the bottom of the row, square, beside the message box. */
+.agentcli-input > button { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; padding: 0; }
 .agentcli-cancel-btn { background: var(--phx-surface); border-color: var(--phx-error); color: var(--phx-error); }
 
 /* The "continue?" checkpoint bar, shown above the composer when a turn paused

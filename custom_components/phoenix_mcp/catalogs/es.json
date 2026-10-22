@@ -759,7 +759,9 @@
       "attachUnreadable": "No se pudo leer {name} como imagen.",
       "attachVisionUnknown": "Este modelo no ha indicado si acepta imágenes. Si el proveedor las rechaza, se recordará para este modelo.",
       "attachNoVision": "Este modelo no acepta imágenes.",
-      "attachCompanion": "Home Companion solo acepta comandos de texto, por lo que no se pueden adjuntar imágenes."
+      "attachCompanion": "Home Companion solo acepta comandos de texto, por lo que no se pueden adjuntar imágenes.",
+      "connection": "Conexión",
+      "changeConnection": "Cambiar conexión"
     },
     "diff": {
       "blueprint.create": "Crear el plano {domain} '{rel}'",

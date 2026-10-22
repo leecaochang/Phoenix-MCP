@@ -21,6 +21,10 @@ export interface MenuItem {
   disabled?: boolean;
   /** Shows a check mark, for a choice that is currently in effect. */
   checked?: boolean;
+  /** An on/off setting rather than one of several choices; announced as a checkbox. */
+  toggle?: boolean;
+  /** Longer explanation, shown on hover and in Help. */
+  hint?: string;
   onSelect: () => void;
 }
 export type MenuEntry = MenuItem | "separator";
@@ -51,8 +55,10 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
     const el = listRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const left = Math.max(EDGE, Math.min(place.left, window.innerWidth - r.width - EDGE));
-    const top = place.top + r.height > window.innerHeight - EDGE ? Math.max(EDGE, place.top - r.height - 2 * GAP) : place.top;
+    // The menu's own window: Agent Chat can be in a separate browser window.
+    const view = el.ownerDocument.defaultView ?? window;
+    const left = Math.max(EDGE, Math.min(place.left, view.innerWidth - r.width - EDGE));
+    const top = place.top + r.height > view.innerHeight - EDGE ? Math.max(EDGE, place.top - r.height - 2 * GAP) : place.top;
     if (left !== pos.left || top !== pos.top) setPos({ top, left });
     (focusFirst ? available()[0] : el)?.focus();
   }, [place]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,19 +82,22 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
     item.onSelect();
   };
 
+  // When some items can be checked, every item keeps the check column so the labels line up.
+  const checkColumn = entries.some((e) => e !== "separator" && e.checked !== undefined);
   return createPortal(
     <div ref={listRef} className="phx-menu" role="menu" aria-label={label} tabIndex={-1}
       style={{ top: pos.top, left: pos.left }} onKeyDown={onKeyDown} onContextMenu={(e) => e.preventDefault()}>
       {entries.map((item, i) => item === "separator"
         ? <div key={`sep-${i}`} className="phx-menu-separator" role="separator" />
         : (
-          <div key={item.id} role={item.checked === undefined ? "menuitem" : "menuitemradio"} tabIndex={-1}
+          <div key={item.id} role={item.checked === undefined ? "menuitem" : item.toggle ? "menuitemcheckbox" : "menuitemradio"} tabIndex={-1}
             className="phx-menu-item"
+            title={item.hint}
             aria-checked={item.checked}
             aria-disabled={item.disabled || undefined}
             onClick={() => run(item)}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run(item); } }}>
-            {item.checked !== undefined && <span className="phx-menu-check" aria-hidden="true">{item.checked && <Icon name="check" size={14} />}</span>}
+            {checkColumn && <span className="phx-menu-check" aria-hidden="true">{item.checked && <Icon name="check" size={14} />}</span>}
             {item.label}
           </div>
         ))}
@@ -107,8 +116,10 @@ function useOutsidePress(open: boolean, list: React.RefObject<HTMLElement | null
       if (alsoInside?.current && path.includes(alsoInside.current)) return;
       onOutside();
     };
-    window.addEventListener("pointerdown", outside, true);
-    return () => window.removeEventListener("pointerdown", outside, true);
+    // Listen in the menu's own window, which may be a separate Agent Chat window.
+    const view = list.current?.ownerDocument.defaultView ?? window;
+    view.addEventListener("pointerdown", outside, true);
+    return () => view.removeEventListener("pointerdown", outside, true);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 

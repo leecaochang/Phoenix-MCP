@@ -485,7 +485,9 @@
       "attachUnreadable": "{name} kunne ikke læses som et billede.",
       "attachVisionUnknown": "Denne model har ikke oplyst, om den accepterer billeder. Hvis udbyderen afviser dem, huskes det for denne model.",
       "attachNoVision": "Denne model accepterer ikke billeder.",
-      "attachCompanion": "Home Companion tager kun imod tekstkommandoer, så der kan ikke vedhæftes billeder."
+      "attachCompanion": "Home Companion tager kun imod tekstkommandoer, så der kan ikke vedhæftes billeder.",
+      "connection": "Forbindelse",
+      "changeConnection": "Skift forbindelse"
     },
     "approvalSummary": {
       "action.approve": "Godkend og udfør",

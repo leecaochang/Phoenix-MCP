@@ -945,7 +945,9 @@
       "attachUnreadable": "Nie udało się odczytać pliku {name} jako obrazu.",
       "attachVisionUnknown": "Ten model nie określił, czy przyjmuje obrazy. Jeśli dostawca je odrzuci, zostanie to zapamiętane dla tego modelu.",
       "attachNoVision": "Ten model nie przyjmuje obrazów.",
-      "attachCompanion": "Home Companion przyjmuje tylko polecenia tekstowe, więc nie można załączać obrazów."
+      "attachCompanion": "Home Companion przyjmuje tylko polecenia tekstowe, więc nie można załączać obrazów.",
+      "connection": "Połączenie",
+      "changeConnection": "Zmień połączenie"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",

@@ -1193,7 +1193,9 @@
       "attachUnreadable": "{name} を画像として読み取れませんでした。",
       "attachVisionUnknown": "このモデルは画像を受け付けるかどうかを示していません。プロバイダーが画像を拒否した場合、このモデルについてそのことが記録されます。",
       "attachNoVision": "このモデルは画像を受け付けません。",
-      "attachCompanion": "Home Companion はテキストのコマンドのみを受け付けるため、画像を添付できません。"
+      "attachCompanion": "Home Companion はテキストのコマンドのみを受け付けるため、画像を添付できません。",
+      "connection": "接続",
+      "changeConnection": "接続を変更"
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",

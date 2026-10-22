@@ -1515,7 +1515,9 @@
       "attachUnreadable": "{name} n'a pas pu être lu comme une image.",
       "attachVisionUnknown": "Ce modèle n'a pas indiqué s'il accepte les images. Si le fournisseur les refuse, cela est mémorisé pour ce modèle.",
       "attachNoVision": "Ce modèle n'accepte pas les images.",
-      "attachCompanion": "Home Companion n'accepte que des commandes textuelles ; les images ne peuvent donc pas être jointes."
+      "attachCompanion": "Home Companion n'accepte que des commandes textuelles ; les images ne peuvent donc pas être jointes.",
+      "connection": "Connexion",
+      "changeConnection": "Changer de connexion"
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",

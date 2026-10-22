@@ -933,7 +933,9 @@
       "attachUnreadable": "{name} kon niet als afbeelding worden gelezen.",
       "attachVisionUnknown": "Dit model heeft niet aangegeven of het afbeeldingen accepteert. Als de provider ze weigert, wordt dat voor dit model onthouden.",
       "attachNoVision": "Dit model accepteert geen afbeeldingen.",
-      "attachCompanion": "Home Companion accepteert alleen tekstopdrachten, dus afbeeldingen kunnen niet worden bijgevoegd."
+      "attachCompanion": "Home Companion accepteert alleen tekstopdrachten, dus afbeeldingen kunnen niet worden bijgevoegd.",
+      "connection": "Verbinding",
+      "changeConnection": "Verbinding wijzigen"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",

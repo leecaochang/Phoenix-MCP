@@ -66,6 +66,13 @@ const INSTANCES: AgentCliInstance[] = [
   { id: "i-claude", kind: "claude", name: "Claude", model: "claude-opus-4-8" },
 ];
 
+
+/** Open Agent Chat's header menu and switch one of its settings. */
+function pickChatMenu(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Options" }));
+  fireEvent.click(screen.getByRole("menuitemcheckbox", { name }));
+}
+
 describe("Agent Chat text size bounds", () => {
   it("clamps storage values and keeps the half-point scale anchored to the 13px default", () => {
     expect(normalizeAgentCliTextSize(-100)).toBe(AGENTCLI_TEXT_SIZE_MIN_PT);
@@ -672,6 +679,12 @@ describe("AgentCliWindow pop-out", () => {
     expect(popInButton.querySelector("svg")).toHaveClass("lucide-square-arrow-down-left");
     expect(popInButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     const popOutGear = popupUi.getByRole("button", { name: "Options" });
+    // The header menu opens inside the separate window, not in Home Assistant's.
+    fireEvent.click(popOutGear);
+    expect(popup.document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    fireEvent.keyDown(popup.document.querySelector('[role="menu"]')!, { key: "Escape" });
+    expect(popup.document.querySelector('[role="menu"]')).toBeNull();
     expect(popOutGear.querySelector("svg")).toHaveAttribute("viewBox", "0 0 24 24");
     expect(popOutGear.querySelector("svg path")?.getAttribute("d")).toBe(inAppGearPath);
     expect(popupUi.queryByRole("button", { name: "Minimize" })).toBeNull();
@@ -958,9 +971,9 @@ describe("AgentCliWindow streaming", () => {
 
     const textSizeControls = screen.getByRole("group", { name: "Text size" });
     expect(within(textSizeControls).getAllByRole("button").map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Decrease text size", "Increase text size"]);
+      .toEqual(["Decrease Text Size", "Increase Text Size"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Increase text size" }));
+    fireEvent.click(screen.getByRole("button", { name: "Increase Text Size" }));
     expect(dialog.style.getPropertyValue("--phx-agentcli-text-size")).toBe("10.25pt");
     expect(getDurable().textSizePt).toBe(10.25);
 
@@ -1344,8 +1357,7 @@ describe("AgentCliWindow streaming", () => {
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     // Enable verbose via the gear popover.
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show verbose output"));
+    pickChatMenu("Show Verbose Output");
     const textarea = screen.getByPlaceholderText(/Message Agent Chat/i);
     fireEvent.change(textarea, { target: { value: "how many lights?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
@@ -1401,11 +1413,10 @@ describe("AgentCliWindow streaming", () => {
 
     // The gear toggle hides the entire footer, including both text controls,
     // and persists the choice.
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show footer"));
+    pickChatMenu("Show Footer");
     expect(screen.queryByText(/Session 0 tokens/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Decrease text size" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Increase text size" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decrease Text Size" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Increase Text Size" })).toBeNull();
     expect(getDurable().showFooter).toBe(false);
   });
 
@@ -1429,8 +1440,7 @@ describe("AgentCliWindow streaming", () => {
 
     // Toggle on: both the user and assistant bubbles show a time, and the
     // choice persists.
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show timestamps"));
+    pickChatMenu("Show Timestamps");
     await waitFor(() => expect(document.querySelectorAll(".agentcli-ts").length).toBe(2));
     for (const el of document.querySelectorAll(".agentcli-ts")) {
       expect(el.textContent?.trim()).toBeTruthy();
@@ -1456,8 +1466,7 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
     await waitFor(() => expect(screen.getByText("Copy this response.")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show timestamps"));
+    pickChatMenu("Show Timestamps");
     const copyButtons = screen.getAllByRole("button", { name: "Copy" });
     expect(copyButtons).toHaveLength(2);
 
@@ -1497,8 +1506,7 @@ describe("AgentCliWindow streaming", () => {
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show timestamps"));
+    pickChatMenu("Show Timestamps");
     const textarea = screen.getByPlaceholderText(/Message Agent Chat/i);
     fireEvent.change(textarea, { target: { value: "why did it turn off?" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
@@ -1509,8 +1517,7 @@ describe("AgentCliWindow streaming", () => {
 
     // Turning verbose output on makes the two thinking-only messages visible,
     // so their timestamps become visible with them rather than on their own.
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show verbose output"));
+    pickChatMenu("Show Verbose Output");
     await waitFor(() => expect(document.querySelectorAll(".agentcli-msg-assistant").length).toBe(3));
     expect(document.querySelectorAll(".agentcli-ts").length).toBe(4);
   });
@@ -1571,7 +1578,7 @@ describe("AgentCliWindow streaming", () => {
     await waitFor(() => expect(screen.getByText("Working on it.")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
     // The partial turn stays visible with a Cancelled marker appended. The
     // user bubble is asserted via its class because the restored textarea
@@ -1601,7 +1608,7 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.change(textarea, { target: { value: "turn A" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
     await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
     fireEvent.change(textarea, { target: { value: "turn B" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
@@ -1612,11 +1619,11 @@ describe("AgentCliWindow streaming", () => {
     act(() => callbacks[0]("assistant_delta", { text: "late A" }));
     await act(async () => { resolvers[0](); });
     expect(screen.queryByText("late A")).toBeNull();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
 
     act(() => callbacks[1]("messages", { messages: [] }));
     await act(async () => { resolvers[1](); });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).toBeNull());
     expect(screen.getAllByText("current B").length).toBeGreaterThan(0);
   });
 
@@ -1655,11 +1662,11 @@ describe("AgentCliWindow streaming", () => {
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
-    fireEvent.click(screen.getByLabelText("Options"));
-    // Single dropdown (no separate effort control); the popover closes with "Close".
+    // Single dropdown (no separate effort control), with the connection fields.
+    fireEvent.click(screen.getByTitle("Change Connection"));
     const sel = screen.getByLabelText("Thinking") as HTMLSelectElement;
+    expect(sel).toBeVisible();
     expect(sel.value).toBe("high");
-    expect(screen.getByText("Close")).toBeInTheDocument();
     fireEvent.change(sel, { target: { value: "off" } });
     expect(getDurable().options.thinking).toBe(false);
     fireEvent.change(sel, { target: { value: "low" } });
@@ -1989,9 +1996,9 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.keyDown(ta, { key: "Enter" });
 
     await waitFor(() => expect(screen.getByText(/half an answer/)).toBeInTheDocument());
-    fireEvent.click(screen.getByText("Cancel"));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
-    await waitFor(() => expect(screen.getByText("Send")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
     expect(signalRef?.aborted).toBe(true);
     expect(screen.getByText(/half an answer/)).toBeInTheDocument();  // partial kept in the transcript
     expect(ta.value).toBe("do the thing");                           // query restored for editing
@@ -2006,8 +2013,7 @@ describe("AgentCliWindow streaming", () => {
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-a"));
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "m-b" } });
     fireEvent.change(screen.getByLabelText("Access key"), { target: { value: "t2" } });
-    fireEvent.click(screen.getByLabelText("Options"));
-    fireEvent.click(screen.getByLabelText("Show verbose output"));
+    pickChatMenu("Show Verbose Output");
 
     await waitFor(() => expect(getDurable().model).toBe("m-b"));
     expect(getDurable().accessKeyId).toBe("t2");
@@ -2021,6 +2027,81 @@ describe("AgentCliWindow streaming", () => {
     // Restored from persistence, not reset to defaults.
     await waitFor(() => expect((screen.getByLabelText("Access key") as HTMLSelectElement).value).toBe("t2"));
     expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-b");
+  });
+});
+
+describe("AgentCliWindow header and connection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetAgentCliState();
+    getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
+  });
+  const mount = () => render(
+    <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                    initialAccessKeyId="t1" onClose={() => {}} />,
+  );
+
+  it("keeps the settings in the header menu, drawn inside the window", async () => {
+    mount();
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    expect(document.querySelector(".agentcli-gear")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    const menu = screen.getByRole("menu", { name: "Options" });
+    expect(screen.getByRole("dialog", { name: "Agent Chat" }).contains(menu)).toBe(true);
+    const items = [...menu.querySelectorAll('[role^="menuitem"]')];
+    expect(items.map((i) => i.textContent)).toEqual([
+      "Connection", "Show Verbose Output", "Show Timestamps", "Show Footer", "Decrease Text Size", "Increase Text Size", "Clear Chat History",
+    ]);
+    expect(items.slice(0, 4).map((i) => [i.getAttribute("role"), i.getAttribute("aria-checked")])).toEqual([
+      ["menuitemcheckbox", "false"], ["menuitemcheckbox", "false"], ["menuitemcheckbox", "false"], ["menuitemcheckbox", String(getDurable().showFooter)],
+    ]);
+    expect(items[1]).toHaveAttribute("title", "Show the agent's tool calls, tool results, and thinking. Off shows only the final answer.");
+    const before = getDurable().textSizePt;
+    fireEvent.click(within(menu).getByText("Increase Text Size"));
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(getDurable().textSizePt).toBeGreaterThan(before);
+  });
+
+  it("shows the connection as one line that opens in place into its fields", async () => {
+    mount();
+    const summary = await screen.findByTitle("Change Connection");
+    await waitFor(() => expect(summary.textContent).toBe("alpha · claude-opus-4-8 · Claude"));
+    expect(screen.getByLabelText("Model")).not.toBeVisible();
+    fireEvent.click(summary);
+    expect(screen.queryByTitle("Change Connection")).toBeNull();
+    expect(screen.getByLabelText("Model")).toBeVisible();
+    expect(screen.getByLabelText("Thinking")).toBeVisible();
+    fireEvent.keyDown(screen.getByLabelText("Model"), { key: "Escape" });
+    expect(screen.getByTitle("Change Connection")).toBeInTheDocument();
+    // The menu's Connection item opens it too, and is checked while it is open.
+    pickChatMenu("Connection");
+    expect(screen.getByLabelText("Model")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Connection" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("offers Copy on messages while timestamps are off", async () => {
+    agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("assistant_delta", { text: "Copy me." });
+      onEvent("messages", { messages: [] });
+      onEvent("done", { stop_reason: "end_turn" });
+    });
+    mount();
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByPlaceholderText(/Message Agent Chat/i);
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByText("Copy me.")).toBeInTheDocument());
+    expect(document.querySelector(".agentcli-ts")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2);
+  });
+
+  it("colours Approve green and Reject red on a request in the conversation", async () => {
+    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "ap-colour", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+    getApproval.mockResolvedValueOnce({ id: "ap-colour", status: "pending" });
+    mount();
+    expect(await screen.findByRole("button", { name: "Approve" })).toHaveClass("agentcli-approve");
+    expect(screen.getByRole("button", { name: "Reject" })).toHaveClass("agentcli-reject");
   });
 });
 
@@ -2315,8 +2396,7 @@ describe("AgentCliWindow generic activity line", () => {
     await running([["tool_call", { id: "tc1", name: "get_states", arguments: {} }]]);
     await waitFor(() => expect(screen.getByText("Working: get_states")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Options" }));
-    fireEvent.click(screen.getByLabelText("Show verbose output"));
+    pickChatMenu("Show Verbose Output");
 
     await waitFor(() => expect(screen.queryByText("Working: get_states")).toBeNull());
     expect(screen.getByText(/calling/)).toBeInTheDocument();

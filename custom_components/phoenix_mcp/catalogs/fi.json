@@ -485,7 +485,9 @@
       "attachUnreadable": "Tiedostoa {name} ei voitu lukea kuvana.",
       "attachVisionUnknown": "Tämä malli ei ole ilmoittanut, hyväksyykö se kuvia. Jos palveluntarjoaja torjuu ne, tämä muistetaan tämän mallin kohdalla.",
       "attachNoVision": "Tämä malli ei hyväksy kuvia.",
-      "attachCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää."
+      "attachCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää.",
+      "connection": "Yhteys",
+      "changeConnection": "Vaihda yhteys"
     },
     "approvalSummary": {
       "action.approve": "Hyväksy ja suorita",

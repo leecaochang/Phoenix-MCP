@@ -1704,7 +1704,9 @@
       "attachUnreadable": "无法将 {name} 读取为图像。",
       "attachVisionUnknown": "此模型未说明是否接受图像。如果提供商拒绝图像，系统会为此模型记住这一点。",
       "attachNoVision": "此模型不接受图像。",
-      "attachCompanion": "Home Companion 仅接受文本命令，因此无法附加图像。"
+      "attachCompanion": "Home Companion 仅接受文本命令，因此无法附加图像。",
+      "connection": "连接",
+      "changeConnection": "更改连接"
     },
     "wizard": {
       "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择 <strong>W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",

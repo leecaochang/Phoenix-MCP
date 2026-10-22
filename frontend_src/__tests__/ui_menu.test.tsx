@@ -62,6 +62,21 @@ describe("menu button", () => {
     expect(screen.getByRole("menuitem", { name: "A" })).not.toHaveAttribute("aria-disabled");
   });
 
+  it("announces on/off settings as checkboxes with their hint, and lines every label up with the check column", () => {
+    const button = setup([
+      { id: "verbose", label: "Show Verbose Output", toggle: true, checked: true, hint: "Show tool calls.", onSelect: vi.fn() },
+      { id: "icons", label: "Icons Only", checked: false, onSelect: vi.fn() },
+      "separator",
+      { id: "clear", label: "Clear", onSelect: vi.fn() },
+    ]);
+    fireEvent.click(button);
+    const verbose = screen.getByRole("menuitemcheckbox", { name: "Show Verbose Output" });
+    expect(verbose).toHaveAttribute("aria-checked", "true");
+    expect(verbose).toHaveAttribute("title", "Show tool calls.");
+    expect(screen.getByRole("menuitemradio", { name: "Icons Only" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("menuitem", { name: "Clear" }).querySelector(".phx-menu-check")).not.toBeNull();
+  });
+
   it("closes when the pointer presses outside", () => {
     const button = setup([{ id: "a", label: "A", onSelect: vi.fn() }]);
     fireEvent.click(button);

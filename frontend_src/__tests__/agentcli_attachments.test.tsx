@@ -237,7 +237,7 @@ describe("Agent Chat image attachments", () => {
     await waitFor(() => expect(agentCliChat).toHaveBeenCalled());
     expect(document.querySelector(".agentcli-attachment-list")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(document.querySelector(".agentcli-attachment-list img"))
       .toHaveAttribute("alt", "Attached image shot.png"));
     expect(textarea.value).toBe("look");

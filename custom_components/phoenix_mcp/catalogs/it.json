@@ -293,7 +293,9 @@
       "attachUnreadable": "Impossibile leggere {name} come immagine.",
       "attachVisionUnknown": "Questo modello non ha indicato se accetta immagini. Se il provider le rifiuta, il rifiuto viene memorizzato per questo modello.",
       "attachNoVision": "Questo modello non accetta immagini.",
-      "attachCompanion": "Home Companion accetta solo comandi di testo, quindi non è possibile allegare immagini."
+      "attachCompanion": "Home Companion accetta solo comandi di testo, quindi non è possibile allegare immagini.",
+      "connection": "Connessione",
+      "changeConnection": "Cambia connessione"
     },
     "audit": {
       "allOutcomes": "Tutti gli esiti",

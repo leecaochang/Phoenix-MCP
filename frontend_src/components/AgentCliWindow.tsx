@@ -36,6 +36,7 @@ import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
 import { Icon } from "../ui/Icon";
+import { MenuButton, MenuRootContext, type MenuEntry } from "../ui/Menu";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
@@ -653,7 +654,8 @@ export function AgentCliWindow({
   });
   const minimized = mode === "min";
   const maximized = mode === "max";
-  const [gearOpen, setGearOpen] = useState(false);
+  // The connection fields (key, provider, model and its options) replace their one-line summary while open.
+  const [connectionOpen, setConnectionOpen] = useState(false);
   const [options, setOptions] = useState<GenOptions>(saved.options);
   const [showFooter, setShowFooter] = useState(saved.showFooter);
   const [showTimestamps, setShowTimestamps] = useState(saved.showTimestamps);
@@ -681,6 +683,9 @@ export function AgentCliWindow({
   const [reviewingApprovalId, setReviewingApprovalId] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  // Menus open inside the window, so they follow it into a separate browser window.
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const attachRoot = useCallback((el: HTMLDivElement | null) => { rootRef.current = el; setRootEl(el); }, []);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -755,7 +760,7 @@ export function AgentCliWindow({
     const ownsGesture = (target: EventTarget | null): boolean => {
       const element = target as { closest?: (selector: string) => Element | null } | null;
       if (typeof element?.closest !== "function") return false;
-      if (element.closest(".agentcli-controls, .agentcli-input, .agentcli-continue, .agentcli-footer, .agentcli-gear")) {
+      if (element.closest(".agentcli-connection, .agentcli-input, .agentcli-continue, .agentcli-footer")) {
         return true;
       }
       const transcript = bodyRef.current;
@@ -972,7 +977,6 @@ export function AgentCliWindow({
     setTurns([]);
     updateLive([]);
     resetUsage();
-    setGearOpen(false);
     setAnnouncement("");
     // Images waiting to be sent belong to the conversation being cleared.
     setAttachments([]);
@@ -1110,7 +1114,7 @@ export function AgentCliWindow({
   ) => {
     if (sending) return;
     const generation = ++turnGenerationRef.current;
-    setGearOpen(false);
+    setConnectionOpen(false);
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
@@ -1842,8 +1846,25 @@ export function AgentCliWindow({
     setTextSizePt((current) => normalizeAgentCliTextSize(current + delta));
   };
 
+  // The header menu: the connection, what the conversation shows, text size, and clearing it.
+  const chatMenu = (): MenuEntry[] => [
+    { id: "connection", label: t("agentchat.connection"), toggle: true, checked: connectionOpen, onSelect: () => setConnectionOpen((open) => !open) },
+    { id: "verbose", label: t("agentchat.verbose"), hint: t("agentchat.verboseHint"), toggle: true, checked: options.verbose,
+      onSelect: () => setOptions((o) => ({ ...o, verbose: !o.verbose })) },
+    { id: "timestamps", label: t("agentchat.showTimestamps"), hint: t("agentchat.showTimestampsHint"), toggle: true, checked: showTimestamps,
+      onSelect: () => setShowTimestamps((on) => !on) },
+    { id: "footer", label: t("agentchat.showFooter"), hint: t("agentchat.showFooterHint"), toggle: true, checked: showFooter,
+      onSelect: () => setShowFooter((on) => !on) },
+    "separator",
+    { id: "smaller", label: t("agentchat.decreaseTextSize"), disabled: textSizePt <= AGENTCLI_TEXT_SIZE_MIN_PT, onSelect: () => adjustTextSize(-AGENTCLI_TEXT_SIZE_STEP_PT) },
+    { id: "larger", label: t("agentchat.increaseTextSize"), disabled: textSizePt >= AGENTCLI_TEXT_SIZE_MAX_PT, onSelect: () => adjustTextSize(AGENTCLI_TEXT_SIZE_STEP_PT) },
+    "separator",
+    { id: "clear", label: t("agentchat.clearHistory"), onSelect: clearHistory },
+  ];
+
   const content = (
-    <div ref={rootRef} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}
+    <MenuRootContext.Provider value={rootEl}>
+    <div ref={attachRoot} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}
          // Files dropped anywhere on the window attach; unhandled, the browser
          // would open the image in place of Home Assistant.
          onDragOver={(e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); }}
@@ -1862,8 +1883,12 @@ export function AgentCliWindow({
           <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />
         </button>
       ) : <div className="agentcli-titlebar" onPointerDown={startDrag}>
-        <span className="agentcli-title"><img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />{agentChatTitle}</span>
+        <span className="agentcli-title">{collapsed && <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />}{agentChatTitle}</span>
         <div className="agentcli-titlebar-actions">
+          {!collapsed && (
+            <MenuButton label={t("agentchat.options")} icon={<Icon name="chatMenu" />} items={chatMenu}
+              className="agentcli-icon-btn agentcli-menu-btn" />
+          )}
           {(!narrowViewport || poppedOut) && (
             <button
               className="agentcli-icon-btn agentcli-pop-btn"
@@ -1876,13 +1901,6 @@ export function AgentCliWindow({
               ) : (
                 <Icon name="popOut" />
               )}
-            </button>
-          )}
-          {!collapsed && (
-            <button className="agentcli-icon-btn agentcli-gear-btn" title={t("agentchat.options")} aria-label={t("agentchat.options")}
-                    aria-expanded={gearOpen}
-                    onClick={() => setGearOpen((v) => !v)}>
-              <Icon name="settings" size={18} />
             </button>
           )}
           {!poppedOut && mode !== "min" && (
@@ -1905,84 +1923,63 @@ export function AgentCliWindow({
         <div className="agentcli-popout-error" role="alert">{popOutError}</div>
       )}
 
-      {gearOpen && !collapsed && (
-        <div className="agentcli-gear">
-          {caps.thinking.length > 0 && (
-            // One dropdown carries this provider's real API thinking levels.
-            <label className="agentcli-gear-row">
-              {kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}
-              <select className="input agentcli-select" value={thinkValue(caps, options)}
-                      onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
-                {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-            </label>
-          )}
-          {caps.note && (
-            <div className="agentcli-gear-note">{caps.note}</div>
-          )}
-          {caps.temperature && (
-            <label className="agentcli-gear-row">
-              {t("agentchat.temperature")}
-              <input type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
-                     onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
-            </label>
-          )}
-          <div className="agentcli-gear-row" title={t("agentchat.verboseHint")}>
-            <span>{t("agentchat.verbose")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={options.verbose} aria-label={t("agentchat.verbose")}
-                     onChange={(e) => setOptions((o) => ({ ...o, verbose: e.target.checked }))} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <div className="agentcli-gear-row" title={t("agentchat.showTimestampsHint")}>
-            <span>{t("agentchat.showTimestamps")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={showTimestamps} aria-label={t("agentchat.showTimestamps")}
-                     onChange={(e) => setShowTimestamps(e.target.checked)} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <div className="agentcli-gear-row" title={t("agentchat.showFooterHint")}>
-            <span>{t("agentchat.showFooter")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={showFooter} aria-label={t("agentchat.showFooter")}
-                     onChange={(e) => setShowFooter(e.target.checked)} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <button className="btn btn-outline btn-sm agentcli-gear-clear" onClick={clearHistory}>{t("agentchat.clearHistory")}</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setGearOpen(false)}>{t("common.close")}</button>
-        </div>
-      )}
-
       {!collapsed && (
         <>
-          <div className="agentcli-controls">
-            <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
-              <span>{t("agentchat.accessKey")}</span>
-              <select className="input agentcli-select" value={accessKeyId} onChange={(e) => { setGearOpen(false); setAccessKeyId(e.target.value); }} aria-label={t("agentchat.accessKey")} disabled={sending}>
-                {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
-              </select>
-            </label>
-            <label className="agentcli-control" title={t("agentchat.providerHint")}>
-              <span>{t("agentchat.provider")}</span>
-              <select className="input agentcli-select" value={instanceId} onChange={(e) => { setGearOpen(false); setInstanceId(e.target.value); }} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
-                {noInstances
-                  ? <option value="">{t("common.none")}</option>
-                  : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-            </label>
-            <label className="agentcli-control" title={t("agentchat.modelHint")}>
-              <span>{t("agentchat.model")}</span>
-              <select className="input agentcli-select" value={model} onChange={(e) => { setGearOpen(false); setModel(e.target.value); }} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
-                {noInstances
-                  ? <option value="">{t("common.none")}</option>
-                  : models.length
-                    ? models.map((m) => <option key={m} value={m}>{m}</option>)
-                    : <option value="">{t("agentchat.noModels")}</option>}
-              </select>
-            </label>
+          {/* One line naming the key, model and account; it opens in place into the fields that change them. */}
+          <div className="agentcli-connection">
+            {!connectionOpen && (
+              <button type="button" className="agentcli-connection-summary" aria-expanded={false}
+                      title={t("agentchat.changeConnection")} onClick={() => setConnectionOpen(true)}>
+                <span className="agentcli-connection-key">{accessKeys.find((k) => k.id === accessKeyId)?.name ?? t("common.none")}</span>
+                <span className="agentcli-connection-rest">{noInstances ? ` · ${t("common.none")}` : ` · ${model || t("agentchat.noModels")} · ${instance?.name ?? ""}`}</span>
+              </button>
+            )}
+            {/* Kept mounted while closed, so the selections stay in place for the rest of the window. */}
+            <div className="agentcli-controls" hidden={!connectionOpen}
+                 onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setConnectionOpen(false); } }}>
+              <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
+                <span>{t("agentchat.accessKey")}</span>
+                <select className="input agentcli-select" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} aria-label={t("agentchat.accessKey")} disabled={sending}>
+                  {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
+                </select>
+              </label>
+              <label className="agentcli-control" title={t("agentchat.providerHint")}>
+                <span>{t("agentchat.provider")}</span>
+                <select className="input agentcli-select" value={instanceId} onChange={(e) => setInstanceId(e.target.value)} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
+                  {noInstances
+                    ? <option value="">{t("common.none")}</option>
+                    : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+              </label>
+              <label className="agentcli-control" title={t("agentchat.modelHint")}>
+                <span>{t("agentchat.model")}</span>
+                <select className="input agentcli-select" value={model} onChange={(e) => setModel(e.target.value)} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
+                  {noInstances
+                    ? <option value="">{t("common.none")}</option>
+                    : models.length
+                      ? models.map((m) => <option key={m} value={m}>{m}</option>)
+                      : <option value="">{t("agentchat.noModels")}</option>}
+                </select>
+              </label>
+              {caps.thinking.length > 0 && (
+                // One dropdown carries this provider's real API thinking levels.
+                <label className="agentcli-control">
+                  <span>{kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}</span>
+                  <select className="input agentcli-select" value={thinkValue(caps, options)}
+                          onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
+                    {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </label>
+              )}
+              {caps.temperature && (
+                <label className="agentcli-control">
+                  <span>{t("agentchat.temperature")}</span>
+                  <input className="input agentcli-select" type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
+                         onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
+                </label>
+              )}
+              {caps.note && <div className="agentcli-connection-note">{caps.note}</div>}
+            </div>
           </div>
 
           <div className="agentcli-body" ref={bodyRef}>
@@ -2073,14 +2070,16 @@ export function AgentCliWindow({
               }}
             />
             {sending ? (
-              <button className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()} title={t("agentchat.stopRequest")}>
-                {t("common.cancel")}
+              <button type="button" className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()}
+                      aria-label={t("agentchat.stop")} title={t("agentchat.stopRequest")}>
+                <Icon name="stop" size={16} filled />
               </button>
             ) : (
-              <button className="btn btn-primary btn-sm"
+              <button type="button" className="btn btn-primary btn-sm agentcli-send-btn"
+                      aria-label={t("agentchat.send")} title={t("agentchat.send")}
                       aria-disabled={noInstances || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
                       onClick={() => { if (!noInstances) void send(); }}>
-                {t("agentchat.send")}
+                <Icon name="send" size={18} />
               </button>
             )}
           </div>
@@ -2126,6 +2125,7 @@ export function AgentCliWindow({
         </>
       )}
     </div>
+    </MenuRootContext.Provider>
   );
   return popupMount ? createPortal(content, popupMount) : content;
 }
@@ -2233,16 +2233,18 @@ function ChatItem({
   onResolve: (id: string, approve: boolean) => void;
   onReview: (approvalId: string) => void;
 }) {
-  // Wall-clock label under a message bubble; entries without a ts (restored
-  // from a session transcript) show none.
+  // Under a message: Copy, always available, and the wall-clock time when
+  // timestamps are on. Entries without a ts (restored from a session
+  // transcript) show no time.
   const copyText = (entry.kind === "user" || entry.kind === "assistant") && entry.text.trim()
     ? entry.text
     : null;
-  const ts = showTs && "ts" in entry && entry.ts
+  const time = showTs && "ts" in entry && entry.ts ? fmtClock(entry.ts) : null;
+  const ts = copyText !== null || time !== null
     ? (
-      <div className="agentcli-ts">
+      <div className="agentcli-msg-meta">
         {copyText !== null && <CopyResponseButton text={copyText} />}
-        <span>{fmtClock(entry.ts)}</span>
+        {time !== null && <span className="agentcli-ts">{time}</span>}
       </div>
     )
     : null;
@@ -2342,8 +2344,12 @@ function ChatItem({
           {entry.status === "pending" && !entry.checking ? (
             <div className="agentcli-approval-actions">
               <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
-              <button className="btn btn-primary btn-sm" onClick={() => onResolve(entry.approvalId, true)}>{t("agentchat.approve")}</button>
-              <button className="btn btn-sm" onClick={() => onResolve(entry.approvalId, false)}>{t("agentchat.reject")}</button>
+              <button className="btn btn-sm agentcli-approve" onClick={() => onResolve(entry.approvalId, true)}>
+                <Icon name="check" size={14} />{t("agentchat.approve")}
+              </button>
+              <button className="btn btn-sm agentcli-reject" onClick={() => onResolve(entry.approvalId, false)}>
+                <Icon name="close" size={14} />{t("agentchat.reject")}
+              </button>
             </div>
           ) : (
             <div className="agentcli-approval-status">
