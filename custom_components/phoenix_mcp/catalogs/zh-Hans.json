@@ -2399,7 +2399,10 @@
       "rename": "重命名",
       "selectAccessKey": "选择一个访问密钥以查看其设置。",
       "clearAllPermissions": "清除所有权限",
-      "summaryPassThrough": "直通访问密钥不使用权限树，因此没有可汇总的规则。"
+      "summaryPassThrough": "直通访问密钥不使用权限树，因此没有可汇总的规则。",
+      "pinTop": "固定到顶部",
+      "pinBottom": "固定到底部",
+      "unpin": "取消固定"
     }
   },
   "notification": {

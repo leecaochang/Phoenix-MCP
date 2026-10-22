@@ -2404,7 +2404,10 @@
       "rename": "Byt namn",
       "selectAccessKey": "Välj en åtkomstnyckel för att se dess inställningar.",
       "clearAllPermissions": "Rensa alla behörigheter",
-      "summaryPassThrough": "Pass-through-åtkomstnycklar använder inte behörighetsträdet, så det finns inga regler att sammanfatta."
+      "summaryPassThrough": "Pass-through-åtkomstnycklar använder inte behörighetsträdet, så det finns inga regler att sammanfatta.",
+      "pinTop": "Fäst överst",
+      "pinBottom": "Fäst nederst",
+      "unpin": "Lossa"
     }
   },
   "voice": {

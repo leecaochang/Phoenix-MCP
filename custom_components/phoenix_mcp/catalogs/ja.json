@@ -2399,7 +2399,10 @@
       "rename": "名前を変更",
       "selectAccessKey": "アクセスキーを選択すると、その設定が表示されます。",
       "clearAllPermissions": "すべての権限をクリア",
-      "summaryPassThrough": "パススルーアクセスキーは権限ツリーを使用しないため、要約するルールはありません。"
+      "summaryPassThrough": "パススルーアクセスキーは権限ツリーを使用しないため、要約するルールはありません。",
+      "pinTop": "上部に固定",
+      "pinBottom": "下部に固定",
+      "unpin": "固定を解除"
     }
   },
   "notification": {

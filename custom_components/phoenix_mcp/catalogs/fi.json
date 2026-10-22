@@ -2404,7 +2404,10 @@
       "rename": "Nimeä uudelleen",
       "selectAccessKey": "Valitse käyttöavain nähdäksesi sen asetukset.",
       "clearAllPermissions": "Tyhjennä kaikki käyttöoikeudet",
-      "summaryPassThrough": "Läpivientikäyttöavaimet eivät käytä käyttöoikeuspuuta, joten tiivistettäviä sääntöjä ei ole."
+      "summaryPassThrough": "Läpivientikäyttöavaimet eivät käytä käyttöoikeuspuuta, joten tiivistettäviä sääntöjä ei ole.",
+      "pinTop": "Kiinnitä ylös",
+      "pinBottom": "Kiinnitä alas",
+      "unpin": "Irrota"
     }
   },
   "voice": {

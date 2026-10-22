@@ -2399,7 +2399,10 @@
       "rename": "Renommer",
       "selectAccessKey": "Sélectionnez une clé d’accès pour en voir les paramètres.",
       "clearAllPermissions": "Effacer toutes les autorisations",
-      "summaryPassThrough": "Les clés d’accès en transmission directe n’utilisent pas l’arbre des autorisations ; il n’y a donc aucune règle à résumer."
+      "summaryPassThrough": "Les clés d’accès en transmission directe n’utilisent pas l’arbre des autorisations ; il n’y a donc aucune règle à résumer.",
+      "pinTop": "Épingler en haut",
+      "pinBottom": "Épingler en bas",
+      "unpin": "Désépingler"
     }
   },
   "notification": {

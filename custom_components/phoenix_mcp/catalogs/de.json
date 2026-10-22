@@ -2399,7 +2399,10 @@
       "rename": "Umbenennen",
       "selectAccessKey": "Wählen Sie einen Zugriffsschlüssel aus, um seine Einstellungen anzuzeigen.",
       "clearAllPermissions": "Alle Berechtigungen entfernen",
-      "summaryPassThrough": "Durchreichungs-Zugriffsschlüssel verwenden den Berechtigungsbaum nicht, daher gibt es keine Regeln zum Zusammenfassen."
+      "summaryPassThrough": "Durchreichungs-Zugriffsschlüssel verwenden den Berechtigungsbaum nicht, daher gibt es keine Regeln zum Zusammenfassen.",
+      "pinTop": "Oben anheften",
+      "pinBottom": "Unten anheften",
+      "unpin": "Lösen"
     }
   },
   "notification": {

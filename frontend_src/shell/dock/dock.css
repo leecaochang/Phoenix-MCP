@@ -23,7 +23,17 @@
   font-family: var(--phx-font);
 }
 
-/* The workspace scrolls vertically; Dockview lays windows out on a canvas of the height the shell sets. */
+/* A workspace: a pinned band on top, the scrolling grid, a pinned band below, and floating windows above them all. */
+.phx-workspace-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.phx-workspace-frame[hidden] { display: none; }
+
+/* The grid scrolls vertically; Dockview lays windows out on a canvas of the height the shell sets. */
 .phx-workspace {
   position: relative;
   flex: 1;
@@ -35,10 +45,48 @@
 .phx-workspace[hidden] { display: none; }
 /* Dockview sizes itself to its wrapper; pin the wrapper so that resolves inside nested flex layouts.
    DockviewReact sets an inline height of 100%, so the canvas height must override it. */
-.phx-workspace > div { position: absolute; top: 0; left: 0; right: 0; height: var(--phx-canvas-height, 100%) !important; }
+.phx-canvas-host > div { position: absolute; top: 0; left: 0; right: 0; height: var(--phx-canvas-height, 100%) !important; }
 /* A scrolling canvas leaves room for the scrollbar beside the windows. */
-.phx-workspace.phx-scrolls { scrollbar-gutter: stable; }
-.phx-workspace.phx-resizing, .phx-workspace.phx-resizing * { cursor: ns-resize !important; user-select: none; }
+.phx-canvas-host.phx-scrolls { scrollbar-gutter: stable; }
+.phx-canvas-host.phx-resizing, .phx-canvas-host.phx-resizing * { cursor: ns-resize !important; user-select: none; }
+
+/* Pinned bands are as tall as their windows (up to a share of the workspace) and do not scroll with the grid. */
+.phx-band {
+  position: relative;
+  flex: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.phx-band.phx-band-empty, .phx-band.phx-band-clipped { overflow: hidden; }
+/* The edge between a band and the grid resizes the band's windows along it. */
+.phx-band-edge {
+  flex: none;
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: linear-gradient(var(--phx-border), var(--phx-border)) center / 32px 2px no-repeat;
+  border-radius: 1px;
+}
+.phx-band-edge:hover, .phx-band-edge.is-dragging { background-color: var(--phx-hover); }
+.phx-band-top.phx-band-empty + .phx-band-edge-top,
+.phx-band-edge-bottom:has(+ .phx-band-bottom.phx-band-empty) { display: none; }
+
+/* Floating windows sit in a layer over the whole workspace, fixed while the grid scrolls; only the windows take the pointer. */
+.phx-float-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.phx-float-layer .phx-dock,
+.phx-float-layer .dv-dockview,
+.phx-float-layer .dv-grid-view { background: transparent; }
+.phx-float-layer .dv-resize-container,
+.phx-float-layer .dv-render-overlay { pointer-events: auto; }
+
+/* A window's content element, moved between hosts with the window. */
+.phx-window-slot, .phx-window-content { height: 100%; }
 
 .phx-dock .dv-groupview {
   border: 1px solid var(--phx-border);

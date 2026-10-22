@@ -70,6 +70,8 @@ export interface Slot {
   side: Side;
   /** The window's height when it was docked, so it can come back at that height. */
   height?: number;
+  /** A pinned band or the floating layer, when the window was not in the scrolling grid. */
+  host?: "top" | "bottom" | "float";
 }
 
 /** Remember a window's place before it is closed or floated, by its first neighbour found. */

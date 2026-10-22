@@ -562,7 +562,10 @@
       "rename": "Rename",
       "selectAccessKey": "Select an access key to see its settings.",
       "clearAllPermissions": "Clear All Permissions",
-      "summaryPassThrough": "Pass-through access keys don't use the permissions tree, so there are no rules to summarize."
+      "summaryPassThrough": "Pass-through access keys don't use the permissions tree, so there are no rules to summarize.",
+      "pinTop": "Pin to Top",
+      "pinBottom": "Pin to Bottom",
+      "unpin": "Unpin"
     },
     "perms": {
       "addHint": "Add Hint",

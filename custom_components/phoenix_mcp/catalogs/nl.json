@@ -2477,7 +2477,10 @@
       "rename": "Hernoemen",
       "selectAccessKey": "Selecteer een toegangssleutel om de instellingen te bekijken.",
       "clearAllPermissions": "Alle machtigingen wissen",
-      "summaryPassThrough": "Pass-through-toegangssleutels gebruiken de machtigingsboom niet, dus er zijn geen regels om samen te vatten."
+      "summaryPassThrough": "Pass-through-toegangssleutels gebruiken de machtigingsboom niet, dus er zijn geen regels om samen te vatten.",
+      "pinTop": "Bovenaan vastzetten",
+      "pinBottom": "Onderaan vastzetten",
+      "unpin": "Losmaken"
     }
   }
 }

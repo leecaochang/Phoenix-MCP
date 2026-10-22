@@ -2399,7 +2399,10 @@
       "rename": "Rinomina",
       "selectAccessKey": "Seleziona una chiave di accesso per visualizzarne le impostazioni.",
       "clearAllPermissions": "Cancella tutte le autorizzazioni",
-      "summaryPassThrough": "Le chiavi di accesso pass-through non usano l'albero delle autorizzazioni, quindi non ci sono regole da riepilogare."
+      "summaryPassThrough": "Le chiavi di accesso pass-through non usano l'albero delle autorizzazioni, quindi non ci sono regole da riepilogare.",
+      "pinTop": "Fissa in alto",
+      "pinBottom": "Fissa in basso",
+      "unpin": "Sblocca"
     }
   },
   "notification": {

@@ -17,7 +17,7 @@ import { DEFAULT_TOOLBAR, readRecord, writeRecord, WORKSPACE_IDS, type Env, type
 import { Toolbar, workspaceMenu } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
-import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, windowAvailable, windowTitle } from "./workspaces";
+import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
 
 /** Below this panel width the phone stack is used; the gap between the two bounds stops flicker. */
@@ -75,7 +75,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights });
+      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned });
       controllers.set(id, controller);
     }
     return controller;
@@ -192,6 +192,7 @@ export function Shell() {
                 <WorkspaceDock
                   controller={controllerFor(id)}
                   components={DOCK_COMPONENTS}
+                  renderWindow={renderWindow}
                   watermark={EmptyWorkspace}
                   saved={record?.workspaces[id]}
                   visible={id === active}

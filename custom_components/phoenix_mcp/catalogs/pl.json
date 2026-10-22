@@ -2509,7 +2509,10 @@
       "rename": "Zmień nazwę",
       "selectAccessKey": "Wybierz klucz dostępu, aby zobaczyć jego ustawienia.",
       "clearAllPermissions": "Wyczyść wszystkie uprawnienia",
-      "summaryPassThrough": "Klucze dostępu Pass-through nie używają drzewa uprawnień, więc nie ma reguł do podsumowania."
+      "summaryPassThrough": "Klucze dostępu Pass-through nie używają drzewa uprawnień, więc nie ma reguł do podsumowania.",
+      "pinTop": "Przypnij u góry",
+      "pinBottom": "Przypnij u dołu",
+      "unpin": "Odepnij"
     }
   }
 }

@@ -2404,7 +2404,10 @@
       "rename": "Omdøb",
       "selectAccessKey": "Vælg en adgangsnøgle for at se dens indstillinger.",
       "clearAllPermissions": "Ryd alle tilladelser",
-      "summaryPassThrough": "Adgangsnøgler med pass-through bruger ikke tilladelsestræet, så der er ingen regler at opsummere."
+      "summaryPassThrough": "Adgangsnøgler med pass-through bruger ikke tilladelsestræet, så der er ingen regler at opsummere.",
+      "pinTop": "Fastgør øverst",
+      "pinBottom": "Fastgør nederst",
+      "unpin": "Frigør"
     }
   },
   "voice": {

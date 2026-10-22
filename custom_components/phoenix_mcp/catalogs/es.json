@@ -2399,7 +2399,10 @@
       "rename": "Renombrar",
       "selectAccessKey": "Seleccione una clave de acceso para ver su configuración.",
       "clearAllPermissions": "Borrar todos los permisos",
-      "summaryPassThrough": "Las claves de acceso de paso directo no usan el árbol de permisos, por lo que no hay reglas que resumir."
+      "summaryPassThrough": "Las claves de acceso de paso directo no usan el árbol de permisos, por lo que no hay reglas que resumir.",
+      "pinTop": "Fijar arriba",
+      "pinBottom": "Fijar abajo",
+      "unpin": "Desfijar"
     }
   },
   "notification": {

@@ -2404,7 +2404,10 @@
       "rename": "이름 변경",
       "selectAccessKey": "액세스 키를 선택하면 설정이 표시됩니다.",
       "clearAllPermissions": "모든 권한 지우기",
-      "summaryPassThrough": "패스스루 액세스 키는 권한 트리를 사용하지 않으므로 요약할 규칙이 없습니다."
+      "summaryPassThrough": "패스스루 액세스 키는 권한 트리를 사용하지 않으므로 요약할 규칙이 없습니다.",
+      "pinTop": "상단에 고정",
+      "pinBottom": "하단에 고정",
+      "unpin": "고정 해제"
     }
   },
   "voice": {

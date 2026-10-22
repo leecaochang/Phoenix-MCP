@@ -3,7 +3,7 @@
  * the windows: each keeps its own behavior, data loading and safety checks.
  */
 
-import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -68,6 +68,8 @@ export interface WorkspaceDef {
   conditional?: Partial<Record<WindowId, Slot>>;
   /** Comfortable starting heights; the workspace scrolls when the windows need more than the screen. */
   heights?: Partial<Record<WindowId, number>>;
+  /** Windows the default arrangement pins along the top or bottom of the workspace. */
+  pinned?: Partial<Record<"top" | "bottom", WindowId[]>>;
 }
 
 /** Whether a conditional window is allowed by the current settings; null while they load. */
@@ -238,14 +240,29 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   attention: AttentionContent,
 };
 
+/** A window's content, rendered once per workspace and moved between hosts with the window. */
+export function renderWindow(id: string): ReactNode {
+  const Content = WINDOW_CONTENT[id as WindowId];
+  return Content ? <WindowBody id={id}><Content /></WindowBody> : null;
+}
+
+/** Where Dockview shows a window: the window's content element is placed inside it. */
+function WindowSlot(props: IDockviewPanelProps) {
+  const controller = useContext(ControllerContext);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const slot = ref.current;
+    if (!controller || !slot) return;
+    const content = controller.contentElement(props.api.id);
+    slot.appendChild(content);
+    return () => { if (content.parentElement === slot) slot.removeChild(content); };
+  }, [controller, props.api.id]);
+  return <div ref={ref} className="phx-window-slot" />;
+}
+
 /** Dockview panel components, one per window id; stable for the life of the bundle. */
 export const DOCK_COMPONENTS: Record<string, FunctionComponent<IDockviewPanelProps>> = Object.fromEntries(
-  (Object.keys(WINDOW_CONTENT) as WindowId[]).map((id) => {
-    const Content = WINDOW_CONTENT[id];
-    const Window = () => <WindowBody id={id}><Content /></WindowBody>;
-    Window.displayName = `Window(${id})`;
-    return [id, Window];
-  }),
+  (Object.keys(WINDOW_CONTENT) as WindowId[]).map((id) => [id, WindowSlot]),
 );
 
 /** Shown when every window in a workspace is closed: reopen one, or restore the arrangement. */

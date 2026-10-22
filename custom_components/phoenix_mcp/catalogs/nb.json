@@ -2404,7 +2404,10 @@
       "rename": "Gi nytt navn",
       "selectAccessKey": "Velg en tilgangsnøkkel for å se innstillingene.",
       "clearAllPermissions": "Tøm alle tillatelser",
-      "summaryPassThrough": "Gjennomkoblede tilgangsnøkler bruker ikke tillatelsestreet, så det finnes ingen regler å oppsummere."
+      "summaryPassThrough": "Gjennomkoblede tilgangsnøkler bruker ikke tillatelsestreet, så det finnes ingen regler å oppsummere.",
+      "pinTop": "Fest øverst",
+      "pinBottom": "Fest nederst",
+      "unpin": "Løsne"
     }
   },
   "voice": {

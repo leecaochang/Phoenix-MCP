@@ -21,6 +21,8 @@ interface GridNode {
 }
 
 const isGrid = (group: DockviewGroupPanel): boolean => group.api.location.type === "grid";
+/** Dockview never lays a grid out shorter than this, whatever its windows' minimums. */
+const DOCKVIEW_MIN_GRID = 100;
 const leafId = (node: GridNode): string | undefined => ((node.data as { views?: string[] })?.views ?? [])[0];
 const childrenOf = (node: GridNode): GridNode[] => (Array.isArray(node.data) ? (node.data as GridNode[]) : []);
 
@@ -78,6 +80,11 @@ export class WorkspaceCanvas {
     readonly host: HTMLElement,
     /** Whether a window is folded down to its title bar. */
     private readonly collapsed: (id: string) => boolean,
+    /**
+     * For a pinned band: the band is as tall as its windows, up to this height,
+     * and scrolls only beyond it. Without it, the host keeps its own height.
+     */
+    private readonly maxHeight?: () => number,
   ) {}
 
   visibleHeight(): number {
@@ -118,7 +125,19 @@ export class WorkspaceCanvas {
     const grid = api.toJSON().grid;
     const rootStacks = grid.orientation === "VERTICAL";
     const heightOf = (id: string): number => (this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT);
-    this.setCanvas(requiredHeight(grid.root, rootStacks, heightOf));
+    const required = api.panels.length ? requiredHeight(grid.root, rootStacks, heightOf) : 0;
+    if (this.maxHeight) {
+      const height = Math.min(required, Math.max(0, this.maxHeight()));
+      this.host.style.height = `${height}px`;
+      this.host.classList.toggle("phx-band-empty", required === 0);
+      // A band of folded windows is shorter than Dockview's smallest grid: draw it at that size and clip it.
+      this.host.classList.toggle("phx-band-clipped", required > 0 && required < DOCKVIEW_MIN_GRID);
+      if (required === 0) {
+        this.setCanvas(0);
+        return;
+      }
+    }
+    this.setCanvas(this.maxHeight ? Math.max(required, DOCKVIEW_MIN_GRID) : required);
 
     this.lastVisible = this.visibleHeight();
     const fixed = (node: GridNode): boolean => (node.type === "leaf" ? this.collapsed(leafId(node) ?? "") : childrenOf(node).every(fixed));
@@ -163,6 +182,10 @@ export class WorkspaceCanvas {
     if (visible <= 0) return;
     if (this.api.hasMaximizedGroup()) {
       this.setCanvas(0);
+      return;
+    }
+    if (this.maxHeight) {
+      this.apply();
       return;
     }
     const grid = this.api.toJSON().grid;
@@ -297,4 +320,46 @@ export function scrollWhileDragging(api: DockviewApi, host: HTMLElement): () => 
   const a = api.onWillDragGroup(begin);
   const b = api.onWillDragPanel(begin);
   return () => { a.dispose(); b.dispose(); stop(); };
+}
+
+/**
+ * Dragging the edge between a pinned band and the scrolling grid makes the
+ * band's windows along that edge taller or shorter: the bottom row of the top
+ * band, the top row of the bottom band.
+ */
+export function bandEdgeResizing(api: DockviewApi, canvas: WorkspaceCanvas, edge: HTMLElement, band: "top" | "bottom", onEnd: () => void): () => void {
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0 || !api.panels.length) return;
+    const rows = api.groups.filter((g) => isGrid(g) && g.activePanel).map((g) => ({ id: g.activePanel!.id, rect: g.element.getBoundingClientRect() }));
+    if (!rows.length) return;
+    e.preventDefault();
+    canvas.capture();
+    const start = gridHeights(api);
+    const startIntended = { ...canvas.intended };
+    const edgeY = band === "top" ? Math.max(...rows.map((r) => r.rect.bottom)) : Math.min(...rows.map((r) => r.rect.top));
+    const ids = rows.filter((r) => Math.abs((band === "top" ? r.rect.bottom : r.rect.top) - edgeY) <= 6).map((r) => r.id);
+    const minDelta = Math.max(...ids.map((id) => MIN_WINDOW_HEIGHT - start[id]));
+    const startY = e.clientY;
+    edge.classList.add("is-dragging");
+    const move = (ev: PointerEvent) => {
+      const raw = ev.clientY - startY;
+      const delta = Math.max(minDelta, band === "top" ? raw : -raw);
+      canvas.intended = { ...startIntended };
+      const targets: Heights = {};
+      for (const id of ids) targets[id] = start[id] + delta;
+      canvas.apply(targets);
+    };
+    const end = () => {
+      edge.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      onEnd();
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+  };
+  edge.addEventListener("pointerdown", onPointerDown);
+  return () => edge.removeEventListener("pointerdown", onPointerDown);
 }
