@@ -1125,6 +1125,7 @@ async def _history_summary(
     body = summary_body(
         entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MAX_STATES,
         retention=retention_metadata("short_term", keep_days), warnings=warnings,
+        continued=window.page_start > window.start,
     )
     return _tool_success(json.dumps(body)), "allowed", entity_id
 
@@ -1215,7 +1216,12 @@ async def _tool_get_statistics(
         "short_term" if period == "5minute" else "long_term"
     )
     warnings = retention_warnings(retention_kind, window.start, keep_days, utcnow()) + unit_warnings
-    if not statistics:
+    if not statistics and has_more:
+        # Pages run oldest first, so an empty early page says nothing about later ones.
+        warnings.append(
+            "No statistics in this page. Later pages may hold them: continue with next_cursor through unread_range before concluding there are none."
+        )
+    elif not statistics:
         warnings.append(
             "No statistics were returned. The entity may not expose a state_class, may not produce Recorder statistics, or may have no data in this period."
         )

@@ -542,6 +542,17 @@ class TestCompareState:
         assert comp["state_at_t2"] == "on"
         assert comp["changed"] is True
 
+    @pytest.mark.parametrize("unrecorded", ["t1", "t2"])
+    async def test_an_unrecorded_snapshot_is_unknown_not_a_change(self, hass, unrecorded):
+        hass.states.async_set("light.kitchen", "on", {})
+        now = utcnow()
+        recorded = {"light.kitchen": [_FakeState("light.kitchen", "on", now)]}
+        at_t1, at_t2 = ({}, recorded) if unrecorded == "t1" else (recorded, {})
+        with _patch_history(at_t1, at_t2):
+            content, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _access_key(), hass)
+        assert outcome == "allowed"
+        assert _json(content)["comparisons"][0]["changed"] is None
+
     async def test_invalid_t1(self, hass):
         hass.states.async_set("light.kitchen", "on", {})
         _, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "notatime"}, _access_key(), hass)

@@ -247,10 +247,15 @@ async def test_a_spent_budget_returns_a_cursor_whose_continuations_add_up(record
                 totals.setdefault(row["state"], [0.0, 0])
                 totals[row["state"]][0] += row["duration_seconds"]
                 totals[row["state"]][1] += row["entered"]
+            # Only the first page totals from the requested start; later ones say so.
+            assert body["continuation"] is (cursor is not None)
+            assert any("cover only covered_range" in warning for warning in body["warnings"]) is (cursor is not None)
             if not body["has_more"]:
+                assert "unread_range" not in body
                 break
             assert body["complete"] is False and body["incomplete_reasons"] == ["scan_limit"]
             assert body["covered_range"]["end"] == body["next_cursor"]
+            assert body["unread_range"] == {"start": body["next_cursor"], "end": body["requested_range"]["end"]}
             cursor = body["next_cursor"]
     assert len(pages) > 2 and pages[-1]["complete"] is True
     for previous, following in zip(pages, pages[1:]):

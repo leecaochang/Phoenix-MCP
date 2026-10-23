@@ -148,7 +148,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "are occupant counts: occupied time is the sum of counts above 0. "
             "Follow has_more with next_cursor and the same order; there is intentionally no estimated total. "
             "covered_range and data_range describe only this page; with has_more, unread_range may hold "
-            "more history, so neither shows where history begins."
+            "more history, so neither shows where history begins. state_changes also lists the same-state row "
+            "Home Assistant records at each restart; use summary to learn whether something entered a state."
         ),
         "inputSchema": {
             "type": "object",
@@ -2599,7 +2600,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "compare_states",
         "description": (
             "Compare the state of accessible entities between two times (ISO or relative like 24h, 7d). "
-            "Returns each entity's state at each time and whether it changed. Useful for 'what changed while I was away'."
+            "Returns each entity's state at each time and whether those two snapshots differ: a change that "
+            "reverted in between is not shown (use recent_activity or get_history summary), and changed is null "
+            "when either time has no recorded state."
         ),
         "cap": "cap_search",
         "inputSchema": {
@@ -2639,7 +2642,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "recent_activity",
         "description": (
             "Summarize which accessible entities changed state in the last N minutes (the 'catch me up' "
-            "primitive), newest first. Scoped to entities this access key can read."
+            "primitive), newest first. Scoped to entities this access key can read. A row that only repeats "
+            "the state, as Home Assistant records at a restart, is not a change."
         ),
         "cap": "cap_search",
         "inputSchema": {

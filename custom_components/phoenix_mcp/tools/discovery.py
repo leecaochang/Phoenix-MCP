@@ -69,6 +69,7 @@ from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_p
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
+from ..recorder_queries import iso_utc, state_timestamp
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -2669,7 +2670,9 @@ async def _tool_compare_state(
             dicts2 = [s.as_dict() if hasattr(s, "as_dict") else s for s in at_t2.get(eid, [])]
             s1 = dicts1[-1].get("state") if dicts1 else None
             s2 = dicts2[-1].get("state") if dicts2 else None
-            comparisons.append({"entity_id": eid, "state_at_t1": s1, "state_at_t2": s2, "changed": s1 != s2})
+            # Two snapshots only; with either side unrecorded the answer is unknown, not a change.
+            changed = None if s1 is None or s2 is None else s1 != s2
+            comparisons.append({"entity_id": eid, "state_at_t1": s1, "state_at_t2": s2, "changed": changed})
 
     body = {"t1": t1, "t2": t2, "comparisons": comparisons}
     return _tool_success(json.dumps(body, default=str)), "allowed", "compare_states"
@@ -2863,25 +2866,36 @@ async def _tool_recent_activity(
     changes: list[dict] = []
     if accessible_ids:
         try:
-            result = await _history_states(hass, start, end, accessible_ids, include_start=False)
+            # The state at the window start lets a row that repeats the state, as
+            # Home Assistant writes at every restart, be told from a change.
+            result = await _history_states(hass, start, end, accessible_ids, include_start=True)
         except Exception:  # noqa: BLE001
             _LOGGER.warning("recent_activity history failed", exc_info=True)
             return _tool_error("History call failed."), "invalid_request", "recent_activity"
         for eid, states in result.items():
             dicts = [s.as_dict() if hasattr(s, "as_dict") else s for s in states]
-            if not dicts:
+            previous: Any = None
+            moments = []
+            for index, row in enumerate(dicts):
+                stamp = state_timestamp(row)
+                # The start row is the state already in effect, not a change; an
+                # entity first recorded inside the window does count.
+                if (row.get("state") != previous if index else stamp is not None and stamp > start):
+                    moments.append(stamp)
+                previous = row.get("state")
+            if not moments:
                 continue
-            last = dicts[-1]
             changes.append({
                 "entity_id": eid,
-                "state": last.get("state"),
-                "when": last.get("last_changed") or last.get("last_updated"),
-                "changes_in_window": len(dicts),
+                "state": previous,
+                "when": iso_utc(moments[-1]) if moments[-1] is not None else None,
+                "changes_in_window": len(moments),
             })
     changes.sort(key=lambda c: str(c["when"] or ""), reverse=True)
     body = {
         "window_minutes": minutes,
         "count": min(len(changes), limit),
+        "total": len(changes),
         "truncated": len(changes) > limit,
         "changes": changes[:limit],
     }

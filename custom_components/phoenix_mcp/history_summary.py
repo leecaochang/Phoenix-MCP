@@ -224,9 +224,14 @@ def _percent(duration: int, recorded: int) -> float | None:
 
 def summary_body(
     entity_id: str, requested: tuple[datetime, datetime], summary: StateSummary, *,
-    max_states: int, retention: dict[str, Any], warnings: list[str],
+    max_states: int, retention: dict[str, Any], warnings: list[str], continued: bool = False,
 ) -> dict[str, Any]:
-    """The summary response; durations and percentages cover recorded time only."""
+    """The summary response; durations and percentages cover recorded time only.
+
+    A page continued from a cursor totals only its own covered_range, and a page
+    that stopped at its budget names the unread rest, so neither page's totals
+    can be read as the requested range's.
+    """
     recorded_start = summary.recorded_start_us
     recorded = summary.end_us - recorded_start if recorded_start is not None else 0
     ranked = sorted(summary.totals.items(), key=lambda item: (-item[1].duration_us, item[0]))
@@ -242,7 +247,13 @@ def summary_body(
     if summary.next_cursor_us is not None:
         reasons.append("scan_limit")
         warnings.append(
-            "The scan stopped at its budget. Continue with next_cursor as cursor and add each page's durations and transitions."
+            "The scan stopped at its budget. Continue with next_cursor as cursor and add each page's durations and "
+            "transitions. state_at_end is the state at next_cursor."
+        )
+    if continued:
+        warnings.append(
+            "This page continues from cursor, so its durations, transitions and percentages cover only covered_range. "
+            "Add them to the earlier pages' totals for the requested range."
         )
     if summary.simultaneous:
         warnings.append(
@@ -267,6 +278,9 @@ def summary_body(
         "mode": "summary",
         "requested_range": {"start": requested[0].isoformat(), "end": requested[1].isoformat()},
         "covered_range": {"start": _iso(summary.start_us), "end": _iso(summary.end_us)},
+        **({"unread_range": {"start": _iso(summary.next_cursor_us), "end": requested[1].isoformat()}}
+           if summary.next_cursor_us is not None else {}),
+        "continuation": continued,
         "recorded_range": (
             {"start": _iso(recorded_start), "end": _iso(summary.end_us)} if recorded_start is not None else None
         ),
