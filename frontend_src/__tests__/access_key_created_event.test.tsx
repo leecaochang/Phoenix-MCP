@@ -71,6 +71,7 @@ describe("access key creation announces phx-access-keys-changed", () => {
 
   it("uses the access-key example when creating from the wizard", async () => {
     render(<OnboardingWizard onCancel={() => {}} onFinish={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Connect an External App/ }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     const input = screen.getByPlaceholderText("my_access_key");
     expect(input).toHaveValue("my_access_key");

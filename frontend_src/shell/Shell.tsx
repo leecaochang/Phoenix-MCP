@@ -25,7 +25,7 @@ import { LogSelection, LogSelectionContext } from "./logDetails";
 import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
-import { GuideWindow, PhoneGuide } from "./guide";
+import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
 import { DOCS_BASE_URL } from "../components/common";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
@@ -268,6 +268,15 @@ export function Shell() {
   const setGuideIn = useCallback((id: WorkspaceId, next: Partial<GuideState>) => {
     setGuide((prev) => ({ ...prev, [id]: { open: false, ...prev[id], ...next } }));
   }, []);
+
+  // The setup wizard runs in Access Keys and may open the Guide there; see useWizardGuide.
+  const wizard = useWizardGuide(() => !!guideRef.current.accessKeys?.open, (open) => setGuideIn("accessKeys", { open }));
+  const wizardStep = wizard.step;
+  const { userToggled: wizardUserToggled } = wizard;
+  const userSetGuide = useCallback((id: WorkspaceId, open: boolean) => {
+    if (id === "accessKeys") wizardUserToggled();
+    setGuideIn(id, { open });
+  }, [setGuideIn, wizardUserToggled]);
   const lastSeenWorkspace = useRef(d.workspace);
   useEffect(() => {
     if (lastSeenWorkspace.current === d.workspace) return;
@@ -290,10 +299,10 @@ export function Shell() {
     }
     const here = workspaceRef.current;
     const guideOpen = !!guideRef.current[here]?.open;
-    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, onSelect: () => setGuideIn(here, { open: !guideOpen }) });
+    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, onSelect: () => userSetGuide(here, !guideOpen) });
     items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
     return items;
-  }, [env, setGuideIn]);
+  }, [env, userSetGuide]);
 
   // Restore Panel Default Settings asks first, inside the workspace area.
   const [confirmDefaults, setConfirmDefaults] = useState(false);
@@ -375,6 +384,9 @@ export function Shell() {
   const active = d.workspace;
   const language = resolveLanguage(d.hass);
   const dock = env === "mobile" ? "top" : toolbar.dock;
+  // The wizard makes room for the Guide beside it on a desktop, while the Guide is open in Access Keys.
+  const guideBeside = env === "desktop" && active === "accessKeys" && !!guide.accessKeys?.open;
+  const wizardGuide = useMemo(() => ({ report: wizard.report, guideBeside }), [wizard.report, guideBeside]);
   return (
     <MenuRootContext.Provider value={rootEl}>
     <ContextMenuHost>
@@ -396,6 +408,7 @@ export function Shell() {
     >
     <ChangesProvider hass={d.hass} active={d.workspace === "changes"}>
     <WorkspaceActionsContext.Provider value={actions}>
+    <WizardGuideContext.Provider value={wizardGuide}>
     <AccessKeyDetailProvider
       accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
       onDeselect={d.goBack}
@@ -435,7 +448,8 @@ export function Shell() {
               </WorkspaceVisibleContext.Provider>
             ))
             : <PhoneStack workspace={active} showAttention={showAttention} settings={s}
-              guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => setGuideIn(active, { open: false })} /> : null} />}
+              guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => userSetGuide(active, false)}
+                topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
@@ -457,11 +471,15 @@ export function Shell() {
         )}
         {env === "desktop" && guide[active]?.open && (
           <GuideWindow key={active} workspace={active} controller={visited.has(active) ? controllerFor(active) : null} language={language}
-            rect={guide[active]?.rect} onRect={(rect) => setGuideIn(active, { rect })} onClose={() => setGuideIn(active, { open: false })} />
+            rect={guide[active]?.rect} onRect={(rect) => setGuideIn(active, { rect })} onClose={() => userSetGuide(active, false)}
+            topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null}
+            follow={active === "accessKeys" ? wizard.follow : null}
+            onMoved={wizard.onMoved} />
         )}
         <Toasts center={notifications} />
       </div>
     </AccessKeyDetailProvider>
+    </WizardGuideContext.Provider>
     </WorkspaceActionsContext.Provider>
     </ChangesProvider>
     </ApprovalsProvider>

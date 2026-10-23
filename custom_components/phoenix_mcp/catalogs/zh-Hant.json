@@ -2087,7 +2087,9 @@
       "harnessConfigTitle": "桌面應用程式：~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "僅限 CLI：將相同 YAML 儲存為工作目錄中的新檔案 phoenix.cordis.yml，安裝 Node.js，然後執行此命令。它會啟動網頁介面，而非桌面應用程式。",
       "harnessLaunchTitle": "CLI 替代方式",
-      "skillHarnessHint": "將指南安裝至 ~/.dsh/skills/phoenix/SKILL.md。如果自訂 DSH_HOME，請使用該目錄內的 skills 目錄。"
+      "skillHarnessHint": "將指南安裝至 ~/.dsh/skills/phoenix/SKILL.md。如果自訂 DSH_HOME，請使用該目錄內的 skills 目錄。",
+      "stepInstall": "安裝 Phoenix",
+      "stepCompleted": "已完成"
     },
     "routing": {
       "providerOptions": "決策供應商使用固定的路由選項，不使用思考層級等聊天選項。「重新整理模型」會檢查模型是否可用，不會執行命令，也不會測試路由準確性。",

@@ -791,7 +791,9 @@
       "harnessConfigTitle": "Application de bureau : ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "CLI uniquement : enregistrez le même YAML dans un nouveau fichier phoenix.cordis.yml de votre répertoire de travail, installez Node.js, puis exécutez cette commande. Elle lance l’interface web, pas l’application de bureau.",
       "harnessLaunchTitle": "Alternative en CLI",
-      "skillHarnessHint": "Installez le guide dans ~/.dsh/skills/phoenix/SKILL.md. Avec un DSH_HOME personnalisé, utilisez son dossier skills."
+      "skillHarnessHint": "Installez le guide dans ~/.dsh/skills/phoenix/SKILL.md. Avec un DSH_HOME personnalisé, utilisez son dossier skills.",
+      "stepInstall": "Installer Phoenix",
+      "stepCompleted": "Terminé"
     },
     "inject": {
       "profileSet": "Profil MESA défini pour {key} - cliquer pour modifier",

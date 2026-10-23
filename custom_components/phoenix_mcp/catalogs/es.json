@@ -594,7 +594,9 @@
       "harnessConfigTitle": "Aplicación de escritorio: ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "Solo CLI: guarda el mismo YAML en un archivo nuevo phoenix.cordis.yml en tu directorio de trabajo, instala Node.js y ejecuta este comando. Inicia la interfaz web, no la aplicación de escritorio.",
       "harnessLaunchTitle": "Alternativa con CLI",
-      "skillHarnessHint": "Instale la guía en ~/.dsh/skills/phoenix/SKILL.md. Si usa un DSH_HOME personalizado, utilice su directorio skills."
+      "skillHarnessHint": "Instale la guía en ~/.dsh/skills/phoenix/SKILL.md. Si usa un DSH_HOME personalizado, utilice su directorio skills.",
+      "stepInstall": "Instalar Phoenix",
+      "stepCompleted": "Completado"
     },
     "agentchat": {
       "announceApproval": "La acción {name} requiere aprobación.",

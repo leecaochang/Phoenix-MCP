@@ -797,7 +797,9 @@
       "harnessConfigTitle": "デスクトップアプリ: ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "CLI のみ: 同じ YAML を作業ディレクトリの新しい phoenix.cordis.yml ファイルに保存し、Node.js をインストールして、このコマンドを実行します。起動するのはウェブ画面で、デスクトップアプリではありません。",
       "harnessLaunchTitle": "CLI での代替方法",
-      "skillHarnessHint": "ガイドを ~/.dsh/skills/phoenix/SKILL.md にインストールします。独自の DSH_HOME を使う場合は、その中の skills ディレクトリを使ってください。"
+      "skillHarnessHint": "ガイドを ~/.dsh/skills/phoenix/SKILL.md にインストールします。独自の DSH_HOME を使う場合は、その中の skills ディレクトリを使ってください。",
+      "stepInstall": "Phoenix をインストール",
+      "stepCompleted": "完了"
     },
     "selectBy": {
       "area": "エリア",

@@ -231,7 +231,7 @@ function AccessKeysContent() {
   }, [wizard, controller]);
   return (
     <ErrorBoundary key={view.name}>
-      {wizard ? <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} /> : (
+      {wizard ? <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} firstRun={!d.loadingAccessKeys && d.accessKeys.length === 0} /> : (
         <AccessKeyListView
           accessKeys={d.accessKeys}
           loading={d.loadingAccessKeys}

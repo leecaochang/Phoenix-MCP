@@ -1178,7 +1178,9 @@
       "harnessConfigTitle": "Aplikacja komputerowa: ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "Tylko CLI: zapisz ten sam YAML jako nowy plik phoenix.cordis.yml w katalogu roboczym, zainstaluj Node.js i uruchom to polecenie. Otwiera interfejs WWW, a nie aplikację komputerową.",
       "harnessLaunchTitle": "Alternatywa z CLI",
-      "skillHarnessHint": "Zainstaluj przewodnik w ~/.dsh/skills/phoenix/SKILL.md. Przy własnym DSH_HOME użyj jego katalogu skills."
+      "skillHarnessHint": "Zainstaluj przewodnik w ~/.dsh/skills/phoenix/SKILL.md. Przy własnym DSH_HOME użyj jego katalogu skills.",
+      "stepInstall": "Zainstaluj Phoenix",
+      "stepCompleted": "Ukończono"
     },
     "accessKeys": {
       "announceAllHelp": "Pokaż każde narzędzie Phoenix MCP, w tym narzędzia, których ten klucz dostępu nie może używać. Pozostaw wyłączone, aby zmniejszyć zużycie modelu i uniknąć nieudanych wywołań. Włączaj tylko do diagnozowania problemów.",

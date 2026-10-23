@@ -2324,7 +2324,9 @@
       "urlHint": "Om agenten körs på en annan dator eller i ett annat nätverk använder du en Home Assistant-URL som den kan nå, till exempel din Nabu Casa- eller externa HTTPS-URL.",
       "waitingForAgent": "Väntar på att din agent ska ansluta...",
       "working": "Arbetar...",
-      "yourDevice": "din enhet"
+      "yourDevice": "din enhet",
+      "stepInstall": "Installera Phoenix",
+      "stepCompleted": "Slutfört"
     },
     "workspace": {
       "logs": "Loggar",

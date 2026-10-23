@@ -2343,15 +2343,17 @@ hui-card { display: block; min-width: 0; }
 .wizard-hero-sub { font-size: 14px; color: var(--phx-text-2); max-width: 520px; margin: 0 auto 20px; }
 .wizard-hero-actions { display: flex; justify-content: center; }
 
-/* Center the wizard both axes; margin:auto is scroll-safe for tall steps. */
+/* Center the wizard both axes; margin:auto is scroll-safe for tall steps.
+   With the Guide beside it, the wizard moves left to leave the Guide room. */
 .wizard-root { display: flex; min-height: 100%; }
 .wizard-center { margin: auto; width: 100%; max-width: 760px; }
+.wizard-root.is-guided .wizard-center { margin-left: 16px; margin-right: auto; }
 
 .wizard-stepper { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0 0 16px 0; flex-wrap: wrap; justify-content: center; }
 .wizard-step { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--phx-text-2); opacity: 0.7; }
 .wizard-step-num {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 600;
   background: var(--phx-border); color: var(--phx-text-2);
 }
 .wizard-step + .wizard-step::before { content: ""; }
@@ -2361,12 +2363,12 @@ hui-card { display: block; min-width: 0; }
 .wizard-step-done .wizard-step-num { background: var(--phx-success); color: var(--phx-accent-fg); }
 
 .wizard-body { max-width: 720px; }
-.wizard-title { font-size: 18px; font-weight: 700; margin: 0 0 6px 0; color: var(--phx-text); }
+.wizard-title { font-size: 18px; font-weight: 600; margin: 0 0 6px 0; color: var(--phx-text); }
 .wizard-sub { font-size: 13px; color: var(--phx-text-2); margin: 0 0 16px 0; }
 .wizard-hint { font-size: 12px; color: var(--phx-text-2); margin-top: 4px; }
 .wizard-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
 .wizard-connect-status { margin-top: 14px; font-size: 13px; color: var(--phx-text-2); }
-.wizard-connect-status-ok { color: var(--phx-accent); font-weight: 700; }
+.wizard-connect-status-ok { color: var(--phx-success); font-weight: 600; }
 /* Stable width so the label flip Copy -> Copied! never reflows the button. */
 .wizard-copy-btn { min-width: 78px; }
 
@@ -2395,6 +2397,7 @@ hui-card { display: block; min-width: 0; }
   background: var(--phx-surface); cursor: pointer;
 }
 .wizard-choice:hover { background: var(--phx-surface-2); border-color: var(--phx-accent); }
+.wizard-choice.is-chosen { border-color: var(--phx-accent); box-shadow: inset 0 0 0 1px var(--phx-accent); }
 .wizard-choice strong { display: block; margin-bottom: 4px; }
 .wizard-choice small { color: var(--phx-text-2); line-height: 1.4; }
 @media (max-width: 600px) {

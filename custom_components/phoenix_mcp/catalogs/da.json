@@ -2324,7 +2324,9 @@
       "urlHint": "Hvis agenten kører på en anden maskine eller et andet netværk, skal du bruge en Home Assistant-webadresse, den kan nå, for eksempel din Nabu Casa- eller eksterne HTTPS-webadresse.",
       "waitingForAgent": "Venter på, at din agent opretter forbindelse...",
       "working": "Arbejder...",
-      "yourDevice": "din enhed"
+      "yourDevice": "din enhed",
+      "stepInstall": "Installér Phoenix",
+      "stepCompleted": "Fuldført"
     },
     "workspace": {
       "logs": "Logge",

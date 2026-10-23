@@ -38,37 +38,11 @@
 
           <div class="step"><div class="step-body">
             <h3>Open the panel and launch the guided setup</h3>
-            <p>Open the <strong>Phoenix MCP</strong> panel from your Home Assistant sidebar. On the <strong>Access Keys</strong> tab, start the guided setup ("Connect Your First AI Agent"). The wizard takes you from an empty access key to a working agent without leaving the panel.</p>
+            <p>Open the <strong>Phoenix MCP</strong> panel from your Home Assistant sidebar. On the <strong>Access Keys</strong> tab, start the guided setup with <strong>Set Up an Agent</strong>. The wizard takes you from an empty access key to a working agent without leaving the panel. Its first step, installing Phoenix, is already marked done, so it opens on step 2. When you set up your first agent, the Guide opens beside the wizard and explains each step as you reach it; move it and it stays where you put it.</p>
 
             <figure class="screenshot">
               <img src="assets/access-keys-list.png" alt="The Access Keys tab with the Set Up an Agent button" loading="lazy" />
               <figcaption>The Access Keys tab. <strong>Set Up an Agent</strong> starts the guided setup.</figcaption>
-            </figure>
-          </div></div>
-
-          <div class="step"><div class="step-body">
-            <h3>Pick a persona</h3>
-            <p>A persona is a named preset that sets every capability at once: what the agent may read, what it may control, and what needs your approval. <strong>New User</strong> is preselected and is a safe starting point. It lets the agent read your home and control the devices you grant, while locks, alarms, covers, and valves ask for your confirmation.</p>
-            <p>Choosing a persona modifies the entire capability set, not just a label; you can fine-tune any single capability later. The personas are described on <a href="capabilities.html#personas">Capabilities</a>.</p>
-
-            <figure class="screenshot">
-              <img src="assets/wizard-persona.png" style="width: 85%; margin: 0 auto;" alt="Step 1 of the guided setup: choose a persona, with New user preselected" loading="lazy" />
-              <figcaption>Step 1: pick a persona. New user is preselected.</figcaption>
-            </figure>
-          </div></div>
-
-          <div class="step"><div class="step-body">
-            <h3>Name the test access key</h3>
-            <p>The wizard suggests <code>my_access_key</code> as an example; change it if you like, and set an optional expiry. The expiry is fixed once the access key is created, so set it here if you want one; the name can be changed later from the access key's detail page.</p>
-          </div></div>
-
-          <div class="step"><div class="step-body">
-            <h3>Grant access to one entity</h3>
-            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the access key's detail page.</p>
-
-            <figure class="screenshot">
-              <img src="assets/wizard-access.png" alt="Step 3 of the guided setup: the light domain set to W for write access" loading="lazy" />
-              <figcaption>Step 3: grant write access to the light domain, or expand it to choose one light.</figcaption>
             </figure>
           </div></div>
 
@@ -87,8 +61,34 @@
             </div>
 
             <figure class="screenshot">
-              <img src="assets/wizard-choose.png" alt="Step 4 of the guided setup: choose between Agent chat using HA and connecting an external app" loading="lazy" />
-              <figcaption>Step 4: choose how to connect.</figcaption>
+              <img src="assets/wizard-choose.png" alt="Choosing between Agent chat using HA and connecting an external app" loading="lazy" />
+              <figcaption>Step 2: choose how to connect.</figcaption>
+            </figure>
+          </div></div>
+
+          <div class="step"><div class="step-body">
+            <h3>Pick a persona</h3>
+            <p>A persona is a named preset that sets every capability at once: what the agent may read, what it may control, and what needs your approval. <strong>New User</strong> is preselected and is a safe starting point. It lets the agent read your home and control the devices you grant, while locks, alarms, covers, and valves ask for your confirmation.</p>
+            <p>Choosing a persona modifies the entire capability set, not just a label; you can fine-tune any single capability later. The personas are described on <a href="capabilities.html#personas">Capabilities</a>.</p>
+
+            <figure class="screenshot">
+              <img src="assets/wizard-persona.png" style="width: 85%; margin: 0 auto;" alt="Choosing a persona, with New user preselected" loading="lazy" />
+              <figcaption>Step 3: pick a persona. New user is preselected.</figcaption>
+            </figure>
+          </div></div>
+
+          <div class="step"><div class="step-body">
+            <h3>Name the test access key</h3>
+            <p>The wizard suggests <code>my_access_key</code> as an example; change it if you like, and set an optional expiry. The expiry is fixed once the access key is created, so set it here if you want one; the name can be changed later from the access key's detail page.</p>
+          </div></div>
+
+          <div class="step"><div class="step-body">
+            <h3>Grant access to one entity</h3>
+            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the access key's detail page.</p>
+
+            <figure class="screenshot">
+              <img src="assets/wizard-access.png" alt="The light domain set to W for write access" loading="lazy" />
+              <figcaption>Step 5: grant write access to the light domain, or expand it to choose one light.</figcaption>
             </figure>
           </div></div>
 

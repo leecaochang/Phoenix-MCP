@@ -2082,7 +2082,9 @@
       "harnessConfigTitle": "App desktop: ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "Solo CLI: salva lo stesso YAML in un nuovo file phoenix.cordis.yml nella directory di lavoro, installa Node.js ed esegui questo comando. Avvia l’interfaccia web, non l’app desktop.",
       "harnessLaunchTitle": "Alternativa con CLI",
-      "skillHarnessHint": "Installa la guida in ~/.dsh/skills/phoenix/SKILL.md. Con un DSH_HOME personalizzato, usa la sua directory skills."
+      "skillHarnessHint": "Installa la guida in ~/.dsh/skills/phoenix/SKILL.md. Con un DSH_HOME personalizzato, usa la sua directory skills.",
+      "stepInstall": "Installa Phoenix",
+      "stepCompleted": "Completato"
     },
     "routing": {
       "providerOptions": "I fornitori di decisioni usano opzioni di instradamento fisse, senza opzioni di Chat come i livelli di ragionamento. Aggiornare i modelli ne verifica la disponibilità senza eseguire comandi; non verifica la precisione dell’instradamento.",

@@ -1172,7 +1172,9 @@
       "harnessConfigTitle": "Desktopapp: ~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "Alleen CLI: sla dezelfde YAML op als een nieuw bestand phoenix.cordis.yml in je werkmap, installeer Node.js en voer deze opdracht uit. Deze start de webinterface, niet de desktopapp.",
       "harnessLaunchTitle": "Alternatief via CLI",
-      "skillHarnessHint": "Installeer de handleiding in ~/.dsh/skills/phoenix/SKILL.md. Gebruik bij een eigen DSH_HOME de skills-map daarbinnen."
+      "skillHarnessHint": "Installeer de handleiding in ~/.dsh/skills/phoenix/SKILL.md. Gebruik bij een eigen DSH_HOME de skills-map daarbinnen.",
+      "stepInstall": "Phoenix installeren",
+      "stepCompleted": "Voltooid"
     },
     "accessKeys": {
       "announceAllHelp": "Elke Phoenix MCP-tool weergeven, inclusief tools die deze toegangssleutel niet kan gebruiken. Laat dit uit staan om modelverbruik te verminderen en mislukte aanroepen te voorkomen. Alleen inschakelen voor probleemoplossing.",

@@ -2324,7 +2324,9 @@
       "urlHint": "Jos agentti toimii toisella koneella tai verkossa, käytä Home Assistant -URL-osoitetta, johon se pääsee, kuten Nabu Casa - tai ulkoista HTTPS-osoitetta.",
       "waitingForAgent": "Odotetaan, että agenttisi muodostaa yhteyden...",
       "working": "Käsitellään...",
-      "yourDevice": "laitettasi"
+      "yourDevice": "laitettasi",
+      "stepInstall": "Asenna Phoenix",
+      "stepCompleted": "Valmis"
     },
     "workspace": {
       "logs": "Lokit",

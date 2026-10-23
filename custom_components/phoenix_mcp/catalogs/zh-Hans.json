@@ -1783,7 +1783,9 @@
       "harnessConfigTitle": "桌面应用：~/.dsh/profiles/desktop/cordis.patch.yml",
       "harnessLaunchHint": "仅限 CLI：将相同 YAML 保存为工作目录中的新文件 phoenix.cordis.yml，安装 Node.js，然后运行此命令。它会启动网页界面，而非桌面应用。",
       "harnessLaunchTitle": "CLI 替代方式",
-      "skillHarnessHint": "将指南安装到 ~/.dsh/skills/phoenix/SKILL.md。如果自定义了 DSH_HOME，请使用该目录下的 skills 目录。"
+      "skillHarnessHint": "将指南安装到 ~/.dsh/skills/phoenix/SKILL.md。如果自定义了 DSH_HOME，请使用该目录下的 skills 目录。",
+      "stepInstall": "安装 Phoenix",
+      "stepCompleted": "已完成"
     },
     "mesaSuggestion": {
       "blast_radius.risky.one": "此 {noun} 会操作 {count} 个高风险实体（{shown}），且自身没有 MESA 策略；被允许触发它的智能体就能间接控制这些实体，从而绕过它们各自的策略。",

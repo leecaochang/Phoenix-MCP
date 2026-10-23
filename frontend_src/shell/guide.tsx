@@ -6,9 +6,12 @@
  * integration as compiled JSON (`guide/compile.ts`), are drawn by the
  * escape-first Markdown renderer, and link to each other inside the Guide;
  * links to the website open in a new tab. On phones it heads the stack.
+ *
+ * While the setup wizard runs, the Guide shows the current step's topic and,
+ * until the user moves it, sits beside the part of the step it explains.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow";
 import { GUIDE_FORMAT, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
 import { hasMessage, t } from "../i18n";
@@ -27,6 +30,8 @@ const SNAP = 56;
 const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
 
 const loaded = new Map<string, Promise<GuideBundle | null>>();
+/** Forget the fetched topics, so tests can serve their own. */
+export function clearGuideCache(): void { loaded.clear(); }
 
 function validBundle(raw: unknown): GuideBundle | null {
   const b = raw as Partial<GuideBundle> | null;
@@ -96,8 +101,73 @@ export function defaultGuideRect(vw: number, vh: number): GuideRect {
   return { x: Math.max(MARGIN, vw - w - 24), y: Math.min(120, Math.max(MARGIN, vh - h - MARGIN)), w, h };
 }
 
+/** The wizard step on screen: its id, the part of the step its topic explains, and the step's content. */
+export interface WizardGuideStep {
+  step: string;
+  part: HTMLElement;
+  content: HTMLElement;
+}
+
+/** How the setup wizard tells the shell its step, and whether the Guide sits beside it. */
+export const WizardGuideContext = createContext<{
+  /** A step, or null when the wizard closes; `firstRun` with the first step opens the Guide. */
+  report: (step: WizardGuideStep | null, firstRun?: boolean) => void;
+  guideBeside: boolean;
+} | null>(null);
+
+/**
+ * The wizard's hold on the Guide in Access Keys. A first-run wizard opens the
+ * Guide; the Guide follows the steps until the user moves it; a Guide the
+ * wizard opened closes again when the wizard ends, unless the user opened or
+ * closed it themselves in between.
+ */
+export function useWizardGuide(isOpen: () => boolean, setOpen: (open: boolean) => void) {
+  const [step, setStep] = useState<WizardGuideStep | null>(null);
+  const [moved, setMoved] = useState(false);
+  const run = useRef<{ openedGuide: boolean } | null>(null);
+  const latest = useRef({ isOpen, setOpen });
+  latest.current = { isOpen, setOpen };
+  const report = useCallback((next: WizardGuideStep | null, firstRun = false) => {
+    if (next && !run.current) {
+      const alreadyOpen = latest.current.isOpen();
+      run.current = { openedGuide: firstRun && !alreadyOpen };
+      setMoved(false);
+      if (firstRun && !alreadyOpen) latest.current.setOpen(true);
+    } else if (!next && run.current) {
+      if (run.current.openedGuide && latest.current.isOpen()) latest.current.setOpen(false);
+      run.current = null;
+    }
+    setStep(next);
+  }, []);
+  /** The user opened or closed the Guide: the wizard leaves it as they set it. */
+  const userToggled = useCallback(() => { if (run.current) run.current.openedGuide = false; }, []);
+  const onMoved = useCallback(() => { if (run.current) setMoved(true); }, []);
+  return { step, follow: moved ? null : step, report, userToggled, onMoved };
+}
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * Where the Guide sits during the wizard: to the right of the step's content,
+ * level with the part it explains, inside the workspace. Without room beside
+ * the content it keeps to the workspace's right edge. The size is kept where it fits.
+ */
+export function besideRect(content: Box, part: Box, frame: Box, size: { w: number; h: number }): GuideRect {
+  const GAP = 16;
+  const MIN_W = 280;
+  let x = content.right + GAP;
+  let w = Math.min(size.w, frame.right - MARGIN - x);
+  if (w < MIN_W) {
+    w = Math.min(size.w, frame.right - frame.left - 2 * MARGIN);
+    x = frame.right - MARGIN - w;
+  }
+  const h = Math.max(Math.min(240, frame.bottom - frame.top - 2 * MARGIN), Math.min(size.h, frame.bottom - frame.top - 2 * MARGIN));
+  const y = Math.max(frame.top + MARGIN, Math.min(part.top, frame.bottom - MARGIN - h));
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+}
+
 /** The topics and the chosen topic, shared by the floating Guide and the phone one. */
-function useGuideTopic(workspace: string, windowId: string | null, language: string) {
+function useGuideTopic(workspace: string, windowId: string | null, language: string, topicId: string | null = null) {
   const [bundles, setBundles] = useState<Array<GuideBundle | null> | null>(null);
   useEffect(() => {
     let live = true;
@@ -106,9 +176,12 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   }, [language]);
   // A topic opened from a link stays until another window gets focus or the workspace changes.
   const [trail, setTrail] = useState<string[]>([]);
-  useEffect(() => { setTrail([]); }, [workspace, windowId]);
+  useEffect(() => { setTrail([]); }, [workspace, windowId, topicId]);
   const followed = trail[trail.length - 1];
-  const topic = bundles ? (followed ? topicById(bundles, followed) : null) ?? findTopic(bundles, workspace, windowId) : null;
+  // A wizard step's topic comes before the focused window's.
+  const topic = bundles
+    ? (followed ? topicById(bundles, followed) : null) ?? (topicId ? topicById(bundles, topicId) : null) ?? findTopic(bundles, workspace, windowId)
+    : null;
   return {
     loading: bundles === null,
     failed: !!bundles && bundles.every((b) => !b),
@@ -149,18 +222,26 @@ function BackButton({ guide }: { guide: ReturnType<typeof useGuideTopic> }) {
 }
 
 /** The floating Guide for a desktop workspace. */
-export function GuideWindow({ workspace, controller, language, rect, onRect, onClose }: {
+export function GuideWindow({ workspace, controller, language, rect, onRect, onClose, topicId = null, follow = null, onMoved }: {
   workspace: string;
   controller: WorkspaceController | null;
   language: string;
   rect: GuideRect | undefined;
   onRect: (rect: GuideRect) => void;
   onClose: () => void;
+  /** A topic shown ahead of the focused window's, such as the wizard step's. */
+  topicId?: string | null;
+  /** The wizard step to sit beside, until the user moves the Guide. */
+  follow?: WizardGuideStep | null;
+  /** The user dragged or resized the Guide. */
+  onMoved?: () => void;
 }) {
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
-  const guide = useGuideTopic(workspace, controller?.activeWindow ?? null, language);
+  const guide = useGuideTopic(workspace, controller?.activeWindow ?? null, language, topicId);
   const [live, setLive] = useState<GuideRect>(() => rect ?? defaultGuideRect(window.innerWidth, window.innerHeight));
-  useEffect(() => { if (rect) setLive(rect); }, [rect]);
+  // A saved place applies unless the Guide is following the wizard.
+  const following = !!follow;
+  useEffect(() => { if (rect && !following) setLive(rect); }, [rect, following]);
   const liveRef = useRef(live);
   liveRef.current = live;
 
@@ -176,6 +257,24 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     return () => window.removeEventListener("resize", fit);
   }, []);
 
+  // Beside the wizard step: placed again when the step, its layout or the screen changes.
+  // The placement is not saved; only a move by the user is.
+  useLayoutEffect(() => {
+    if (!follow) return;
+    const place = () => {
+      const frame = follow.content.closest(".phx-workspace")?.getBoundingClientRect()
+        ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+      setLive((r) => besideRect(follow.content.getBoundingClientRect(), follow.part.getBoundingClientRect(), frame, r));
+    };
+    place();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(follow.content);
+    const root = follow.content.closest(".wizard-root");
+    if (root) observer?.observe(root);
+    window.addEventListener("resize", place);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", place); };
+  }, [follow]);
+
   const track = (move: (ev: PointerEvent) => GuideRect, settle: (r: GuideRect) => GuideRect) => {
     let latest = liveRef.current;
     const onMove = (ev: PointerEvent) => { latest = move(ev); setLive(latest); };
@@ -185,6 +284,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
       const final = settle(latest);
       setLive(final);
       onRect(final);
+      onMoved?.();
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -238,8 +338,8 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
 }
 
 /** The phone Guide, heading the workspace's stack. */
-export function PhoneGuide({ workspace, language, onClose }: { workspace: string; language: string; onClose: () => void }) {
-  const guide = useGuideTopic(workspace, null, language);
+export function PhoneGuide({ workspace, language, onClose, topicId = null }: { workspace: string; language: string; onClose: () => void; topicId?: string | null }) {
+  const guide = useGuideTopic(workspace, null, language, topicId);
   return (
     <section className="phx-phone-window phx-guide-phone" aria-label={t("guide.title")}>
       <header className="phx-phone-title">
