@@ -349,12 +349,47 @@
   white-space: nowrap;
 }
 .phx-toolbar[data-mode="icons"] .phx-toolbar-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; font-size: 10px; }
-/* Icons and text along the top or bottom, or floating: the buttons of a group share one width, set by the
-   widest label, so the row reads evenly. Phones keep plain wrapping; side docks already stack at full width. */
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) :is(.phx-toolbar-nav, .phx-toolbar-group, .phx-tool-group) {
+/* Icons and text along the top or bottom, or floating: each label sits under its icon, and the workspaces and
+   each window's tools share one width per group, set by the widest label, so the rows read evenly. Agent Chat,
+   Documentation and Workspace Options keep their own widths. Phones keep plain wrapping. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) :is(.phx-toolbar-nav, .phx-tool-group) {
   display: inline-grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-button {
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  min-height: 46px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 15px;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-handle { height: 46px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; font-size: 10px; }
+/* The fit rule (shell/toolbarFit.ts): the main row stays on one line by taking text away in steps,
+   phx-fit-1 first. The toolbar's data-fit holds the step. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2),
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3),
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4),
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="5"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4, .phx-fit-5) {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1 .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2) .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3) .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="5"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4, .phx-fit-5) .phx-toolbar-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* The second row: tools for the visible workspace, grouped with separator bars. */
@@ -379,6 +414,20 @@
 .phx-toolbar[data-dock="right"] .phx-tool-group { flex-direction: column; align-items: stretch; }
 .phx-toolbar[data-dock="left"] .phx-tool-group + .phx-tool-group,
 .phx-toolbar[data-dock="right"] .phx-tool-group + .phx-tool-group { padding: 6px 0 0; border-inline-start: none; border-top: 1px solid var(--phx-border); }
+/* Docked at a side with icons and text: every button in both columns shares one width, set by the widest
+   label, with icon and text from the start edge like Home Assistant's sidebar. The main column matches the
+   tools column's separator (6 px padding and a 1 px line) so the buttons come out equal. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: start;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) .phx-toolbar-main { align-items: stretch; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) .phx-toolbar-button { justify-content: flex-start; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="left"] .phx-toolbar-main:not(:only-child) { padding-inline-end: 7px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main { order: 2; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main:not(:only-child) { padding-inline-start: 7px; }
 
 .phx-env-mobile .phx-toolbar { margin: calc(4px + var(--phx-toolbar-safe-top)) 4px 0; padding: 4px; }
 

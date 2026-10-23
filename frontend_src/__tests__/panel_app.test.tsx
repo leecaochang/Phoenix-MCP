@@ -218,6 +218,12 @@ describe("phoenix-mcp-panel full app shell", () => {
       const el = mountWith(connection);
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icon-text"));
       expect(JSON.parse(localStorage.getItem("phx-ui:u1:desktop")!).rev).toBe(4);
+      // Icons and text at the top: the fit rule runs, and each main-row control says when it gives up its text.
+      await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-fit", "0"));
+      const main = el.shadowRoot!.querySelector(".phx-toolbar-main")!;
+      expect(main.querySelector('[aria-label="Collapse Toolbar"]')).toHaveClass("phx-fit-1");
+      expect(main.querySelector('[aria-label="Workspace Options"]')).toHaveClass("phx-fit-2");
+      expect([...main.querySelectorAll(".phx-toolbar-nav button")].every((b) => b.classList.contains("phx-fit-5"))).toBe(true);
     });
 
     it("sends this browser's arrangement when Home Assistant has none yet", async () => {
@@ -247,6 +253,8 @@ describe("phoenix-mcp-panel full app shell", () => {
       const { connection, sets } = userData({ "phoenix_mcp_ui:desktop": saved });
       const el = mountWith(connection);
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "left"));
+      // At a side the toolbar does not need the fit rule.
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).not.toHaveAttribute("data-fit");
       openOptions(el);
       act(() => { menuItem(el, "Restore Panel Default Settings")!.click(); });
       const confirm = el.shadowRoot!.querySelector(".phx-shell-confirm")!;
@@ -255,6 +263,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       act(() => { [...confirm.querySelectorAll("button")].find((b) => b.textContent === "Restore Defaults")!.click(); });
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "top"));
       expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icons");
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).not.toHaveAttribute("data-fit");
       await waitFor(() => expect(sets.length).toBeGreaterThan(0), { timeout: 4000 });
       const last = sets[sets.length - 1].value;
       expect((last.toolbar as { dock: string }).dock).toBe("top");

@@ -1,7 +1,7 @@
 /**
  * Shell services shared by windows: the toolbar's tool registry, the Logs
- * selection that fills Log Details, the saved toolbar placement, and the
- * right-click menus on panel chrome.
+ * selection that fills Log Details, the saved toolbar placement, the
+ * toolbar's fit rule, and the right-click menus on panel chrome.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { DEFAULT_TOOLBAR, readToolbar } from "../shell/storage";
+import { FIT_STEPS, chooseFit, rowFits } from "../shell/toolbarFit";
 import { auditEntryKey } from "../components/AuditEntry";
 import { ConfigTable } from "../ui/table/ConfigTable";
 import { ContextMenuHost, useContextMenu, type MenuEntry } from "../ui/Menu";
@@ -194,6 +195,43 @@ describe("saved toolbar placement", () => {
     expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" }))
       .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" });
     expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge" })).toEqual(DEFAULT_TOOLBAR);
+  });
+});
+
+describe("toolbar fit rule", () => {
+  /** A row whose items report the given boxes, as [top, height] pairs. */
+  function row(boxes: Array<[number, number]>): HTMLElement {
+    const el = document.createElement("div");
+    for (const [top, height] of boxes) {
+      const item = document.createElement("button");
+      item.getBoundingClientRect = () => ({ top, bottom: top + height, height, width: height ? 40 : 0, left: 0, right: 40, x: 0, y: top, toJSON: () => ({}) });
+      el.appendChild(item);
+    }
+    return el;
+  }
+
+  it("counts items of different heights centred on one line as fitting, and a second line as not", () => {
+    expect(rowFits(row([[5, 36], [0, 46], [5, 36]]))).toBe(true);
+    expect(rowFits(row([[5, 36], [0, 46], [50, 46]]))).toBe(false);
+  });
+
+  it("ignores items without a box, so a row it cannot measure counts as fitting", () => {
+    expect(rowFits(row([[0, 0], [0, 0]]))).toBe(true);
+    expect(rowFits(row([[0, 46], [80, 0]]))).toBe(true);
+  });
+
+  it("tries each step from full text and keeps the first that fits", () => {
+    const applied: number[] = [];
+    let step = -1;
+    expect(chooseFit((s) => { applied.push(s); step = s; }, () => step >= 2)).toBe(2);
+    expect(applied).toEqual([0, 1, 2]);
+  });
+
+  it("ends on the last step when nothing fits", () => {
+    const applied: number[] = [];
+    expect(chooseFit((s) => { applied.push(s); }, () => false)).toBe(FIT_STEPS);
+    expect(applied[applied.length - 1]).toBe(FIT_STEPS);
+    expect(applied).toHaveLength(FIT_STEPS + 1);
   });
 });
 

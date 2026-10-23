@@ -3,6 +3,9 @@
  * documentation and workspace options, plus a second row of tools for the
  * visible workspace. It docks to any edge or floats by its grip, collapses to
  * one icon, and shows icons only or icons with text (chosen by right-click).
+ * With icons and text along the top or bottom, or floating, labels sit under
+ * the icons and the main row keeps to one line (toolbarFit.ts); at a side,
+ * every button shares one width.
  */
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
@@ -12,6 +15,7 @@ import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { WorkspaceController } from "./dock/controller";
 import { usePanelData } from "./PanelData";
 import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState } from "./storage";
+import { chooseFit, fitClass, rowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
 import { WORKSPACES, windowTitle } from "./workspaces";
 
@@ -215,6 +219,34 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     return () => observer.disconnect();
   }, [effective.dock, state.x, state.y, state.mode, state.collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Icons and text along the top or bottom, or floating, keep the main row on one line (toolbarFit.ts).
+  // The step is set on the toolbar directly, only when the panel's width or the row's text changes.
+  const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && effective.dock !== "left" && effective.dock !== "right";
+  const fitKey = useRef("");
+  const refit = useRef<(force?: boolean) => void>(() => {});
+  useLayoutEffect(() => {
+    refit.current = (force = false) => {
+      const bar = self.current;
+      const main = bar?.querySelector<HTMLElement>(".phx-toolbar-main");
+      if (!bar || !main) return;
+      if (!fitOneLine) { delete bar.dataset.fit; fitKey.current = ""; return; }
+      const key = `${shellRoot.current?.clientWidth ?? 0}|${effective.dock}|${d.workspace}|${main.textContent}`;
+      if (!force && key === fitKey.current) return;
+      fitKey.current = key;
+      chooseFit((step) => { bar.dataset.fit = String(step); }, () => rowFits(main));
+    };
+    refit.current();
+  });
+  useEffect(() => {
+    const shellEl = shellRoot.current;
+    if (!shellEl || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => refit.current());
+    observer.observe(shellEl);
+    // Text measured before the panel font loads is narrower than it will be.
+    void document.fonts?.ready.then(() => refit.current(true));
+    return () => observer.disconnect();
+  }, [shellRoot]);
+
   const onContextMenu = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("input, textarea, select")) return;
     showMenu?.(e, t("workspace.toolbarMenu"), appearanceMenu(state, update, env));
@@ -222,7 +254,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
 
   const collapsed = effective.collapsed;
   const toolsToggle = (
-    <button type="button" className="phx-toolbar-button phx-toolbar-plain phx-toolbar-tools-toggle"
+    <button type="button" className={`phx-toolbar-button phx-toolbar-plain phx-toolbar-tools-toggle ${fitClass(1)}`}
       aria-label={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
       title={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
       data-help="help.tools"
@@ -265,7 +297,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
               const label = t(def.labelKey);
               return (
                 <button key={id} type="button"
-                  className={`phx-toolbar-button${active ? " is-current" : ""}`}
+                  className={`phx-toolbar-button ${fitClass(5)}${active ? " is-current" : ""}`}
                   aria-current={active ? "page" : undefined}
                   aria-label={count > 0 ? t("shell.approvalsTabAria", { count }) : undefined}
                   title={label}
@@ -287,18 +319,18 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
               </button>
             ) : d.accessKeys.length > 0 ? (
-              <button type="button" className="phx-toolbar-button" title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => d.openAgentCli()}>
+              <button type="button" className={`phx-toolbar-button ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => d.openAgentCli()}>
                 <Icon name="agentChat" size={16} />
                 <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
               </button>
             ) : null}
             <MenuButton label={t("shell.documentation")} help="help.documentation" icon={<Icon name="documentation" size={16} />}
-              items={documentation} className="phx-toolbar-button">
+              items={documentation} className={`phx-toolbar-button ${fitClass(3)}`}>
               <span className="phx-toolbar-label">{t("shell.documentation")}</span>
             </MenuButton>
             {controller && (
               <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}
-                items={() => workspaceMenu(controller, actions)} className="phx-toolbar-button">
+                items={() => workspaceMenu(controller, actions)} className={`phx-toolbar-button ${fitClass(2)}`}>
                 <span className="phx-toolbar-label">{t("workspace.options")}</span>
               </MenuButton>
             )}
@@ -306,7 +338,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
         )}
         {/* While the tools row is hidden, the control that shows it sits here; while shown, it ends the row. */}
         {!collapsed && groups.length > 0 && !effective.toolsShown && toolsToggle}
-        <button type="button" className="phx-toolbar-button phx-toolbar-plain"
+        <button type="button" className={`phx-toolbar-button phx-toolbar-plain ${fitClass(1)}`}
           aria-label={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
           title={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
           data-help="help.collapseToolbar"
