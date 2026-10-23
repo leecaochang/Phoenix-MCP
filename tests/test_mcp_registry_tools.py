@@ -616,8 +616,28 @@ class TestSearchEntities:
         content, outcome, _ = await _call(
             "search_entities", {"query": "kitchen", "stale_hours": 0}, _access_key(), hass)
         assert outcome == "allowed"
-        ids = [e["entity_id"] for e in _result_json(content)["entities"]]
+        body = _result_json(content)
+        ids = [e["entity_id"] for e in body["entities"]]
         assert ids == ["light.kitchen"]
+        # Each row shows the time it was judged by, and nothing is beyond the horizon.
+        assert body["entities"][0]["last_changed"] == hass.states.get("light.kitchen").last_changed.isoformat()
+        assert "warnings" not in body
+
+    async def test_stale_hours_past_every_last_changed_names_the_restart_horizon(self, hass, reg_env):
+        # Just after a restart every last_changed is recent, so an empty result must
+        # not read as "nothing has been quiet".
+        content, outcome, _ = await _call("search_entities", {"stale_hours": 72}, _access_key(), hass)
+        body = _result_json(content)
+        oldest = min(hass.states.get(eid).last_changed for eid in ("light.kitchen", "light.bedroom", "zone.home"))
+        assert outcome == "allowed" and body["entities"] == []
+        assert body["oldest_last_changed"] == oldest.isoformat()
+        assert "resets last_changed when it restarts" in body["warnings"][0]
+        assert "mode summary" in body["warnings"][0]
+
+    async def test_no_stale_hours_adds_no_stale_fields(self, hass, reg_env):
+        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _access_key(), hass)
+        body = _result_json(content)
+        assert "oldest_last_changed" not in body and "last_changed" not in body["entities"][0]
 
     async def test_control_mode_annotated_when_non_default(self, hass, reg_env):
         data = MagicMock()
@@ -875,7 +895,16 @@ class TestGetOverview:
         assert body["by_domain"] == {"light": 2, "zone": 1}
         assert body["by_area"] == {"(no area)": 1, "Bedroom": 1, "Kitchen": 1}
         assert body["unavailable_count"] == 0
+        assert body["unknown_count"] == 0
         assert "mesa_mode" not in body  # mesa disabled in this data mock
+
+    async def test_unknown_is_counted_apart_from_unavailable(self, hass, reg_env):
+        # A never-pressed button or an idle event entity reads unknown; that is not an outage.
+        hass.states.async_set("light.kitchen", "unknown", {})
+        hass.states.async_set("light.bedroom", "unavailable", {})
+        content, _, _ = await _call("get_overview", {}, _access_key(), hass)
+        body = _result_json(content)
+        assert body["unavailable_count"] == 1 and body["unknown_count"] == 1
 
     async def test_mesa_mode_present_when_active(self, hass, reg_env):
         data = MagicMock()

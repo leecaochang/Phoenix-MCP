@@ -1877,7 +1877,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "device_class": {"type": "string", "description": "Exact device_class attribute, e.g. motion, temperature."},
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},
                 "unavailable": {"type": "boolean", "description": "If true, only entities in state unavailable or unknown."},
-                "stale_hours": {"type": "number", "description": "Only entities unchanged for at least this many hours."},
+                "stale_hours": {"type": "number", "description": (
+                    "Only entities unchanged for at least this many hours, by last_changed, which Home Assistant "
+                    "resets at every restart."
+                )},
                 "registry_state": {
                     "type": "string",
                     "enum": ["enabled", "disabled", "all"],
@@ -1926,7 +1929,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_overview",
         "description": (
             "A compact summary of the home as this access key sees it: total accessible entities, "
-            "counts by domain and by area, how many are unavailable, and the deployment MESA mode "
+            "counts by domain and by area, how many are unavailable and how many unknown (normal for a "
+            "never-pressed button, a scene or an event), and the deployment MESA mode "
             "(off | advisory | enforced) so you know whether to expect confirm/read-only gates. "
             "When MESA is active it also lists the operator-set prohibited and read-only entities "
             "with reasons, so this is the fastest way to learn what is off-limits or must not be "
@@ -2876,8 +2880,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "watch_entity",
         "description": (
-            "Wait (up to timeout seconds, max 30) for an accessible entity to change state, then return "
-            "the new state. Returns changed=false if nothing changed within the window. Blocks the call until "
+            "Wait (up to timeout seconds, max 30) for an accessible entity to change state or attributes, then "
+            "return the new state. Returns changed=false if nothing changed within the window; state_changed "
+            "says whether the state itself changed, and when is the time of that update. Blocks the call until "
             "a change or the timeout. To verify an action you just took, pass until_state with the state you "
             "expect: it returns at once with reached=true when the entity is already there, so a change that "
             "landed before this call is not missed."

@@ -6028,12 +6028,16 @@ async def _tool_watch_entity(
         body = {"entity_id": entity_id, "changed": True, "removed": True}
     else:
         scrubbed = scrub_sensitive_attributes(new_state)
+        # Any state_changed event ends the wait, including an attribute-only
+        # update, so say which it was and time it by this update, not last_changed.
         body = {
             "entity_id": entity_id,
             "changed": new_state is not current,
+            "state_changed": current is None or new_state.state != current.state,
             "state": scrubbed.get("state"),
             "attributes": scrubbed.get("attributes"),
-            "when": getattr(new_state, "last_changed", None),
+            "when": new_state.last_updated.isoformat(),
+            "last_changed": new_state.last_changed.isoformat(),
         }
         if until_state is not None:
             body["reached"] = True

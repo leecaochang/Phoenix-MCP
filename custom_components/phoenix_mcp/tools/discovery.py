@@ -22,7 +22,7 @@ tool surface through _tool_gate_map, so it belongs with the registry that owns i
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 import dataclasses
 import difflib
@@ -1451,6 +1451,9 @@ async def _tool_search_entities(
     expose = assist_expose_check(access_key, hass)
     area_ids = _search_area_ids(hass, f.area) if f.area else None
     matches: list[dict] = []
+    # Oldest last_changed among readable candidates: a restart resets them all,
+    # which is the horizon a stale_hours search cannot see past.
+    oldest_change: datetime | None = None
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
@@ -1485,11 +1488,14 @@ async def _tool_search_entities(
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg)
         if area_ids is not None and _resolve_area_id(entry, dev_reg) not in area_ids:
             continue
+        last_changed = None
         if f.stale_threshold is not None:
             # State.as_dict() (scrub_sensitive_attributes' input) serializes
             # last_changed as an ISO string, not a datetime, so parse it before
             # subtracting.
             last_changed = parse_datetime(e.get("last_changed") or "")
+            if last_changed is not None and (oldest_change is None or last_changed < oldest_change):
+                oldest_change = last_changed
             if last_changed is None or (now - last_changed).total_seconds() < f.stale_threshold * 3600:
                 continue
         row = {
@@ -1500,6 +1506,8 @@ async def _tool_search_entities(
             "area": area_name,
             "device_class": device_class,
         }
+        if last_changed is not None:
+            row["last_changed"] = iso_utc(last_changed)
         if entry is not None and (entry.disabled_by is not None or state is None):
             row["registry_state"] = (
                 "disabled" if entry.disabled_by is not None else "enabled"
@@ -1549,6 +1557,14 @@ async def _tool_search_entities(
         # Signal that these are approximate (typo-tolerant) matches, not exact,
         # so the agent knows the query did not match any entity literally.
         body["fuzzy_fallback"] = True
+    if f.stale_threshold is not None:
+        body["oldest_last_changed"] = iso_utc(oldest_change) if oldest_change is not None else None
+        if oldest_change is not None and (now - oldest_change).total_seconds() < f.stale_threshold * 3600:
+            body["warnings"] = [
+                f"No entity searched has a last_changed before {iso_utc(oldest_change)}. Home Assistant resets "
+                "last_changed when it restarts, so entities unchanged since before then cannot be found this way. "
+                "Use get_history with mode summary to check a longer period."
+            ]
     return _tool_success(json.dumps(body, default=str)), "allowed", "search_entities"
 
 
@@ -1565,18 +1581,23 @@ async def _tool_get_overview(
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     by_domain: dict[str, int] = {}
     by_area: dict[str, int] = {}
-    unavailable = 0
+    unavailable = unknown = 0
     for e in accessible:
         eid = e["entity_id"]
         by_domain[eid.split(".")[0]] = by_domain.get(eid.split(".")[0], 0) + 1
-        if e.get("state") in ("unavailable", "unknown"):
+        # unknown is normal for a never-pressed button, a scene or an event, so
+        # it is counted apart from entities that are actually unavailable.
+        if e.get("state") == "unavailable":
             unavailable += 1
+        elif e.get("state") == "unknown":
+            unknown += 1
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg) or "(no area)"
         by_area[area_name] = by_area.get(area_name, 0) + 1
 
     body = {
         "total_accessible_entities": len(accessible),
         "unavailable_count": unavailable,
+        "unknown_count": unknown,
         "by_domain": dict(sorted(by_domain.items())),
         "by_area": dict(sorted(by_area.items())),
     }

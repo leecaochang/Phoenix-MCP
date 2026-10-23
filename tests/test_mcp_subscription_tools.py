@@ -11,6 +11,7 @@ import json
 import uuid
 from unittest.mock import patch
 
+import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
@@ -45,10 +46,13 @@ class TestWatchEntity:
         _, outcome, _ = await _call("watch_entity", {"entity_id": "sensor.secret"}, _access_key(), hass)
         assert outcome == "not_found"
 
-    async def test_returns_change(self, hass):
+    @pytest.mark.parametrize(("new_state", "attributes", "state_changed"), [
+        ("off", {}, True), ("on", {"brightness": 80}, False)])
+    async def test_returns_change(self, hass, new_state, attributes, state_changed):
         import custom_components.phoenix_mcp.mcp_view as mcp_view
 
         hass.states.async_set("light.kitchen", "on", {})
+        before = hass.states.get("light.kitchen")
         access_key = _access_key()
 
         # Deterministic readiness instead of a fixed sleep: wrap the real
@@ -67,13 +71,18 @@ class TestWatchEntity:
             task = asyncio.create_task(
                 _call("watch_entity", {"entity_id": "light.kitchen", "timeout": 5}, access_key, hass))
             await asyncio.wait_for(ready.wait(), timeout=2)
-            hass.states.async_set("light.kitchen", "off", {})
+            hass.states.async_set("light.kitchen", new_state, attributes)
             content, outcome, _ = await task
 
         assert outcome == "allowed"
         body = _json(content)
+        after = hass.states.get("light.kitchen")
         assert body["changed"] is True
-        assert body["state"] == "off"
+        assert body["state"] == new_state
+        # An attribute-only update ends the wait too; it says so and is timed by itself.
+        assert body["state_changed"] is state_changed
+        assert body["when"] == after.last_updated.isoformat()
+        assert body["last_changed"] == (after if state_changed else before).last_changed.isoformat()
 
     async def test_timeout_no_change(self, hass):
         hass.states.async_set("light.kitchen", "on", {})
