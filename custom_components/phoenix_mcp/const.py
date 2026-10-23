@@ -68,6 +68,14 @@ HISTORY_SUMMARY_PAGE_ROWS = 1000
 HISTORY_SUMMARY_MAX_ROWS = 20000
 HISTORY_SUMMARY_MAX_SECONDS = 10.0
 HISTORY_SUMMARY_MAX_STATES = 50
+# A summary of several entities: how many one call takes, and the wall-clock
+# seconds after which no further entity's scan starts (each scan keeps its own
+# row and time budget within that).
+HISTORY_SUMMARY_MAX_ENTITIES = 50
+HISTORY_SUMMARY_BATCH_SECONDS = 20.0
+# States listed per entity in that call; the rest are combined, so a numeric
+# sensor's hundreds of distinct values do not crowd out the other entities.
+HISTORY_SUMMARY_MANY_MAX_STATES = 5
 # Offset-paged registry and calendar reads.
 DEVICE_LIST_DEFAULT_LIMIT = 100
 DEVICE_LIST_MAX_LIMIT = 500
@@ -1426,6 +1434,11 @@ MAX_APPROVAL_RESULT_CHARS = 500
 # entity, so an unbounded query could stall the event loop; a real query is far
 # shorter than this.
 MAX_SEARCH_QUERY_LEN = 512
+# The radio types search_entities can filter by, each recognized from the device
+# registry rather than inferred from names: zigbee (ZHA or Zigbee2MQTT), zwave
+# (Z-Wave JS), matter (Matter over Thread or Wi-Fi) and bluetooth (devices
+# reached by a Bluetooth address).
+SEARCH_RADIO_TYPES = ("zigbee", "zwave", "matter", "bluetooth")
 # Bound opt-in membership normalization and disclosure across one search page.
 MAX_SEARCH_MEMBERS = 256
 MAX_SEARCH_MEMBER_CHECKS = 4096

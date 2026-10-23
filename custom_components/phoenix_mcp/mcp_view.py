@@ -63,7 +63,7 @@ from .device_semantics import (
 )
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
-from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ENTITIES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -75,7 +75,7 @@ from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
 from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
-from .history_summary import SummaryUnavailableError, read_state_change_page, scan_state_changes, summary_body
+from .history_summary import SummaryUnavailableError, compact_summary_row, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     RecorderWindow,
@@ -924,7 +924,9 @@ async def _tool_get_state(
 async def _tool_get_history(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: fetch one bounded page of state history."""
+    """MCP tool: fetch one bounded page of state history, or summarize several entities."""
+    if isinstance(args.get("entity_id"), list):
+        return await _history_summary_many(args["entity_id"], args, access_key, hass)
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_history"
@@ -1074,6 +1076,134 @@ async def _tool_get_history(
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
+async def _scan_summary(
+    instance: Any, hass: HomeAssistant, entity_id: str, start_us: int, end_us: int, max_seconds: float,
+) -> Any:
+    """Fold one entity's Recorder changes over [start_us, end_us) within the summary budgets."""
+    async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
+        return cast(list[tuple[int, str]], await instance.async_add_executor_job(
+            read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
+
+    return await scan_state_changes(
+        fetch, start_us, end_us, page_rows=HISTORY_SUMMARY_PAGE_ROWS,
+        max_rows=HISTORY_SUMMARY_MAX_ROWS, max_seconds=max_seconds,
+    )
+
+
+async def _history_summary_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """get_history summary mode for several entities: one compact row each.
+
+    "Which of these sensors did not trigger this week" then takes one call
+    instead of one per entity. Every entity is access-checked before any Recorder
+    read and again after the scans; inaccessible and missing ones share
+    not_found. One time budget bounds the call: entities it does not reach are
+    listed as unscanned, never dropped, and an entity whose own scan stops at its
+    budget keeps a next_cursor to continue alone.
+    """
+    tool = "get_history"
+    if str(args.get("mode") or "").strip().lower() != "summary":
+        return _tool_error(
+            "A list of entity_id is accepted only with mode summary, which returns one compact row per entity."
+        ), "invalid_request", tool
+    if any(key in args for key in ("limit", "order", "cursor")):
+        return _tool_error(
+            "limit, order and cursor do not apply to a summary of several entities; continue an entity that "
+            "returned next_cursor in a single-entity call."
+        ), "invalid_request", tool
+    if (not raw_ids or len(raw_ids) > HISTORY_SUMMARY_MAX_ENTITIES
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {HISTORY_SUMMARY_MAX_ENTITIES} entity ID strings."
+        ), "invalid_request", tool
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(hours=24))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+    now = utcnow()
+    end = min(window.end, now)
+    if window.start >= end:
+        return _tool_error("A summary needs a range that starts before the current time."), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    summaries: dict[str, Any] = {}
+    not_recorded: list[str] = []
+    unscanned: list[str] = []
+    unavailable: list[str] = []
+    try:
+        from homeassistant.components.recorder import get_instance, is_entity_recorded
+
+        instance = get_instance(hass)
+        keep_days = instance.keep_days
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        for entity_id in scan_ids:
+            if not is_entity_recorded(hass, entity_id):
+                not_recorded.append(entity_id)
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                unscanned.append(entity_id)
+                continue
+            try:
+                summaries[entity_id] = await _scan_summary(
+                    instance, hass, entity_id, to_us(window.start), to_us(end),
+                    min(HISTORY_SUMMARY_MAX_SECONDS, remaining))
+            except SummaryUnavailableError:
+                unavailable.append(entity_id)
+    except Exception:
+        _LOGGER.warning("MCP history summary of several entities failed", exc_info=True)
+        return _tool_error("History call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in scan_ids if readable(entity_id)}
+    rows = [
+        compact_summary_row(summary_body(
+            entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
+            retention={}, warnings=[],
+        ))
+        for entity_id, summary in summaries.items() if entity_id in still
+    ]
+    warnings = retention_warnings("short_term", window.start, keep_days, now)
+    if window.end > now:
+        warnings.append("end_time is in the future; the summary stops at the current time.")
+    if any("other_states" in row for row in rows):
+        warnings.append(
+            f"Rows list their {HISTORY_SUMMARY_MANY_MAX_STATES} longest states and combine the rest in other_states; "
+            "for a numeric sensor use get_statistics.")
+    if any("next_cursor" in row for row in rows):
+        warnings.append(
+            "An entity with next_cursor stopped at its scan budget: continue it in a single-entity call with that "
+            "cursor and add the totals.")
+    if unscanned:
+        warnings.append("The call's time budget ended before the unscanned entities; summarize them in another call.")
+    if unavailable:
+        warnings.append(
+            "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
+    body: dict[str, Any] = {
+        "mode": "summary",
+        "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+        "count": len(rows),
+        "entities": rows,
+    }
+    for key, values in (("not_found", [e for e in ids if e not in still]),
+                        ("not_recorded", [e for e in not_recorded if e in still]),
+                        ("unscanned", [e for e in unscanned if e in still]),
+                        ("unavailable", [e for e in unavailable if e in still])):
+        if values:
+            body[key] = values
+    body["retention"] = retention_metadata("short_term", keep_days)
+    body["warnings"] = warnings
+    return _tool_success(json.dumps(body)), "allowed", tool
+
+
 async def _history_summary(
     entity_id: str, window: RecorderWindow, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -1097,15 +1227,8 @@ async def _history_summary(
                 "Home Assistant's Recorder does not record this entity, so there is no history to summarize."
             ), "invalid_request", entity_id
         keep_days = instance.keep_days
-
-        async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
-            return cast(list[tuple[int, str]], await instance.async_add_executor_job(
-                read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
-
-        summary = await scan_state_changes(
-            fetch, to_us(window.page_start), to_us(end), page_rows=HISTORY_SUMMARY_PAGE_ROWS,
-            max_rows=HISTORY_SUMMARY_MAX_ROWS, max_seconds=HISTORY_SUMMARY_MAX_SECONDS,
-        )
+        summary = await _scan_summary(
+            instance, hass, entity_id, to_us(window.page_start), to_us(end), HISTORY_SUMMARY_MAX_SECONDS)
     except SummaryUnavailableError:
         return _tool_error(
             "Recorder holds too many changes for this entity within a few microseconds to summarize this range."

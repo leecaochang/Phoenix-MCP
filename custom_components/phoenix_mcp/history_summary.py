@@ -222,6 +222,32 @@ def _percent(duration: int, recorded: int) -> float | None:
     return round(duration * 100 / recorded, 2) if recorded else None
 
 
+def compact_summary_row(body: dict[str, Any]) -> dict[str, Any]:
+    """One entity of a multi-entity summary: its totals without the shared ranges.
+
+    The ranges are the same for every entity in the call, so they are stated once
+    by the caller. Durations, entry counts and the last entry per state are what
+    "which of these did not do X" needs; an incomplete row keeps its reasons, and
+    a scan that hit its budget keeps the cursor to continue that entity alone.
+    """
+    row: dict[str, Any] = {"entity_id": body["entity_id"], "complete": body["complete"]}
+    if body["incomplete_reasons"]:
+        row["incomplete_reasons"] = body["incomplete_reasons"]
+    row.update(
+        state_at_start=body["state_at_start"], state_at_end=body["state_at_end"],
+        transitions=body["transitions"], last_transition=body["last_transition"],
+        states=[{"state": item["state"], "entered": item["entered"], "last_entered": item["last_entered"],
+                 "duration_seconds": item["duration_seconds"]} for item in body["states"]],
+    )
+    if body["other_states"]:
+        row["other_states"] = {key: body["other_states"][key] for key in ("count", "entered", "duration_seconds")}
+    if body["unrecorded_seconds"]:
+        row["unrecorded_seconds"] = body["unrecorded_seconds"]
+    if body["has_more"]:
+        row["next_cursor"] = body["next_cursor"]
+    return row
+
+
 def summary_body(
     entity_id: str, requested: tuple[datetime, datetime], summary: StateSummary, *,
     max_states: int, retention: dict[str, Any], warnings: list[str], continued: bool = False,

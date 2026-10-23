@@ -48,12 +48,13 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
+    device_authority_chain,
     device_entry_value,
     device_registry_snapshot,
     entity_name_source,
@@ -69,6 +70,7 @@ from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_p
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
+from ..radio import device_radio_types
 from ..recorder_queries import iso_utc, state_timestamp
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
@@ -1242,7 +1244,9 @@ class _SearchFilters:
 
     query: str
     domains: set[str] | None
-    device_class: Any
+    device_classes: set[str] | None
+    integrations: set[str] | None
+    radios: set[str] | None
     state: Any
     area: str
     want_unavailable: bool
@@ -1250,6 +1254,41 @@ class _SearchFilters:
     limit: int
     offset: int
     registry_state: str
+
+
+def _entity_radio_types(entry: Any, cache: dict[str, set[str]], hass: HomeAssistant) -> set[str]:
+    """The radio types of an entity's device, or of its main parent for a child device."""
+    device_id = getattr(entry, "device_id", None)
+    if not device_id:
+        return set()
+    if device_id not in cache:
+        registry = dr.async_get(hass)
+        found: set[str] = set()
+        for chain_id in device_authority_chain(hass, device_id) or (device_id,):
+            device = registry.async_get(chain_id)
+            if device is not None:
+                found |= device_radio_types(device)
+        cache[device_id] = found
+    return cache[device_id]
+
+
+def _search_names(value: Any) -> set[str] | None:
+    """One name or several for a multi-valued filter, None when unset.
+
+    Several values are sometimes sent as one comma-separated string, or as a
+    JSON array inside a string, instead of an array.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("["):
+            try:
+                decoded = json.loads(text)
+            except ValueError:
+                decoded = None
+            if isinstance(decoded, list) and all(isinstance(item, str) for item in decoded):
+                return {item.strip() for item in decoded if item.strip()} or None
+        return {part.strip() for part in text.split(",") if part.strip()} or None
+    return set(str_list_arg(value)) or None
 
 
 def _parse_search_args(args: dict) -> _SearchFilters:
@@ -1260,13 +1299,7 @@ def _parse_search_args(args: dict) -> _SearchFilters:
     # event loop. A real query is short; the cap only clips a pathological one.
     query = str(args.get("query") or args.get("name") or "").strip().lower()[:MAX_SEARCH_QUERY_LEN]
 
-    raw_domains = args.get("domain")
-    if isinstance(raw_domains, str):
-        # Several domains are sometimes sent as one comma-separated string
-        # instead of an array.
-        domains = [d.strip() for d in raw_domains.split(",") if d.strip()]
-    else:
-        domains = str_list_arg(raw_domains)
+    domains = _search_names(args.get("domain"))
 
     stale_threshold: float | None = None
     stale_hours = args.get("stale_hours")
@@ -1287,8 +1320,10 @@ def _parse_search_args(args: dict) -> _SearchFilters:
 
     return _SearchFilters(
         query=query,
-        domains=set(domains) or None,
-        device_class=args.get("device_class") or None,
+        domains=domains,
+        device_classes=_search_names(args.get("device_class")),
+        integrations=_search_names(args.get("integration")),
+        radios=_search_names(args.get("radio")),
         state=args.get("state") or None,
         area=str(args.get("area") or "").strip().lower(),
         want_unavailable=bool(args.get("unavailable")),
@@ -1431,13 +1466,18 @@ async def _tool_search_entities(
     if not isinstance(include_membership, bool):
         return _tool_error("include_membership must be a boolean."), "invalid_request", "search_entities"
 
-    raw_domain = args.get("domain")
-    if raw_domain not in (None, "") and not isinstance(raw_domain, str) and not (
-        isinstance(raw_domain, list) and all(isinstance(item, str) for item in raw_domain)
-    ):
-        # Dropping a malformed filter would silently search every domain.
-        return _tool_error("domain must be a string or an array of strings."), "invalid_request", "search_entities"
+    for name in ("domain", "device_class", "integration", "radio"):
+        raw = args.get(name)
+        if raw not in (None, "") and not isinstance(raw, str) and not (
+            isinstance(raw, list) and all(isinstance(item, str) for item in raw)
+        ):
+            # Dropping a malformed filter would silently search everything.
+            return _tool_error(f"{name} must be a string or an array of strings."), "invalid_request", "search_entities"
     f = _parse_search_args(args)
+    if f.radios is not None and not f.radios <= set(SEARCH_RADIO_TYPES):
+        return _tool_error(
+            "radio must be one or more of: " + ", ".join(SEARCH_RADIO_TYPES) + "."
+        ), "invalid_request", "search_entities"
     if f.registry_state not in {"enabled", "disabled", "all"}:
         return _tool_error(
             "registry_state must be one of: enabled, disabled, all."
@@ -1454,6 +1494,7 @@ async def _tool_search_entities(
     # Oldest last_changed among readable candidates: a restart resets them all,
     # which is the horizon a stale_hours search cannot see past.
     oldest_change: datetime | None = None
+    radio_cache: dict[str, set[str]] = {}
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
@@ -1478,7 +1519,11 @@ async def _tool_search_entities(
         device_class = attrs.get("device_class") or (
             (entry.device_class or entry.original_device_class) if entry is not None else None
         )
-        if f.device_class is not None and device_class != f.device_class:
+        if f.device_classes is not None and device_class not in f.device_classes:
+            continue
+        if f.integrations is not None and (entry is None or entry.platform not in f.integrations):
+            continue
+        if f.radios is not None and not f.radios & _entity_radio_types(entry, radio_cache, hass):
             continue
         state_val = e.get("state")
         if f.state is not None and state_val != f.state:

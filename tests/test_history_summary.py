@@ -441,3 +441,87 @@ async def test_a_spent_budget_can_stop_just_before_a_page_without_a_cursor() -> 
     summary = await scan_state_changes(recorder.fetch, 0, 100, page_rows=4, max_rows=8, max_seconds=60)
     assert summary.next_cursor_us == 7 and summary.rows_scanned == 1
     assert summary.current == "a" and summary.totals["a"].duration_us == 2
+
+
+async def test_several_entities_summarize_in_one_call_with_the_single_entity_totals(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # "Which of these did not turn on" is one call; each row agrees with that
+    # entity's own summary, and unknown or hidden entities only say not_found.
+    _anchor(hass)
+    _alternate(hass, "light.desk", 6)
+    _set(hass, "light.porch", "off", -60)
+    _set(hass, "light.porch", "off", 30, force_update=True)  # a restart rewrite, not an entry
+    _set(hass, "switch.hidden", "on", 20)
+    await async_wait_recording_done(hass)
+    many = await _summary(hass, ["light.desk", "light.porch", "light.desk", "light.nowhere", "switch.hidden"], 0, 400)
+    assert "covered_range" not in many and many["requested_range"]["start"] == _at(0).isoformat()
+    assert [row["entity_id"] for row in many["entities"]] == ["light.desk", "light.porch"]
+    assert many["count"] == 2 and many["not_found"] == ["light.nowhere", "switch.hidden"]
+    for row in many["entities"]:
+        single = await _summary(hass, row["entity_id"], 0, 400)
+        assert row["complete"] is single["complete"] and row["transitions"] == single["transitions"]
+        assert {item["state"]: (item["duration_seconds"], item["entered"]) for item in row["states"]} == _states(single)
+        assert "covered_range" not in row and "next_cursor" not in row
+    porch = many["entities"][1]
+    assert porch["transitions"] == 0 and [item["state"] for item in porch["states"]] == ["off"]
+
+
+@pytest.mark.parametrize(("extra", "message"), [
+    ({"mode": "state_changes"}, "accepted only with mode summary"),
+    ({"cursor": "x"}, "do not apply to a summary of several entities"),
+])
+async def test_a_list_outside_plain_summary_is_refused(hass: HomeAssistant, extra, message) -> None:
+    args = {"entity_id": ["light.desk"], "mode": "summary", "start_time": "1h", **extra}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+
+
+@pytest.mark.parametrize("ids", [[], [f"light.l{index}" for index in range(51)], ["light.a", 3], [" "]])
+async def test_a_malformed_entity_list_is_refused(hass: HomeAssistant, ids) -> None:
+    content, outcome, _ = await _call_tool(
+        "get_history", {"entity_id": ids, "mode": "summary"}, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and "list of 1 to 50" in content["content"][0]["text"]
+
+
+async def test_entities_past_the_call_budget_are_listed_not_dropped(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _alternate(hass, "light.desk", 4)
+    _alternate(hass, "light.porch", 4)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "HISTORY_SUMMARY_BATCH_SECONDS", 0):
+        body = await _summary(hass, ["light.desk", "light.porch"], 0, 400)
+    assert body["entities"] == [] and body["unscanned"] == ["light.desk", "light.porch"]
+    assert any("summarize them in another call" in warning for warning in body["warnings"])
+
+
+async def test_an_entity_outside_scope_is_never_read_from_recorder(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _set(hass, "switch.hidden", "on", 20)
+    _set(hass, "light.desk", "on", 20)
+    await async_wait_recording_done(hass)
+    scanned: list[str] = []
+    real = mcp_view._scan_summary
+
+    async def recording(instance, hass_, entity_id, *rest):
+        scanned.append(entity_id)
+        return await real(instance, hass_, entity_id, *rest)
+
+    with patch.object(mcp_view, "_scan_summary", side_effect=recording):
+        body = await _summary(hass, ["switch.hidden", "light.desk"], 0, 400)
+    assert scanned == ["light.desk"] and body["not_found"] == ["switch.hidden"]
+
+
+async def test_a_numeric_sensor_lists_its_longest_states_in_a_many_entity_summary(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # Hundreds of distinct values would crowd out every other row; the rest are combined.
+    _anchor(hass)
+    _set(hass, "sensor.temperature", "20.0", -60)
+    for index in range(12):
+        _set(hass, "sensor.temperature", f"{20 + index / 10:.1f}", 10 + index * 10)
+    _alternate(hass, "light.desk", 2)
+    await async_wait_recording_done(hass)
+    body = await _summary(hass, ["sensor.temperature", "light.desk"], 0, 400)
+    temperature, desk = body["entities"]
+    assert len(temperature["states"]) == 5 and temperature["other_states"]["count"] == 7
+    assert "other_states" not in desk
+    assert any("use get_statistics" in warning for warning in body["warnings"])

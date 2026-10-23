@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, PATCH_DASHBOARD_MAX_CHANGES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, HISTORY_SUMMARY_MAX_ENTITIES, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -149,12 +149,18 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Follow has_more with next_cursor and the same order; there is intentionally no estimated total. "
             "covered_range and data_range describe only this page; with has_more, unread_range may hold "
             "more history, so neither shows where history begins. state_changes also lists the same-state row "
-            "Home Assistant records at each restart; use summary to learn whether something entered a state."
+            "Home Assistant records at each restart; use summary to learn whether something entered a state. "
+            "In summary mode entity_id may be a list of up to 50, one compact row each: the way to check "
+            "which of several entities entered a state in a period."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "Accessible entity whose Recorder history to read."},
+                "entity_id": {"oneOf": [
+                    {"type": "string", "description": "Accessible entity whose Recorder history to read."},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": HISTORY_SUMMARY_MAX_ENTITIES,
+                     "description": "Several entities, summary mode only."},
+                ], "description": "Entity ID, or in summary mode a list of entity IDs."},
                 "start_time": {
                     "type": "string",
                     "description": "ISO timestamp or relative string (24h, 7d, 2w, 1m). Defaults to 24h before end_time.",
@@ -1846,7 +1852,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_entities",
         "description": (
-            "Search the entities this access key can access by name, domain, area, device_class, or state. "
+            "Search the entities this access key can access by name, domain, area, device_class, state, integration, "
+            "or radio (zigbee, zwave, matter or bluetooth, read from the device registry). "
             "By default this searches live enabled entities. Set registry_state to disabled to find "
             "explicitly disabled registry entries, or all to also include enabled registry entries "
             "whose integration currently publishes no state. Registry-only access is inherited from "
@@ -1874,7 +1881,24 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Restrict to one or more domains, e.g. light or [light, switch].",
                 },
                 "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias, which matches every area on that floor (case-insensitive)."},
-                "device_class": {"type": "string", "description": "Exact device_class attribute, e.g. motion, temperature."},
+                "device_class": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "One or more exact device_class values, e.g. motion or [door, window].",
+                },
+                "integration": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "One or more integrations that provide the entity, e.g. esphome or [hue, zha].",
+                },
+                "radio": {
+                    "oneOf": [
+                        {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
+                        {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
+                    ],
+                    "description": (
+                        "Only entities whose device connects this way: zigbee (ZHA or Zigbee2MQTT), zwave, matter "
+                        "(Thread or Wi-Fi) or bluetooth."
+                    ),
+                },
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},
                 "unavailable": {"type": "boolean", "description": "If true, only entities in state unavailable or unknown."},
                 "stale_hours": {"type": "number", "description": (

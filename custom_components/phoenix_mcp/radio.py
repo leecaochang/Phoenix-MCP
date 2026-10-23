@@ -138,6 +138,29 @@ def zigbee_backend_for_device(device: Any) -> tuple[str, str] | None:
     return None
 
 
+def device_radio_types(device: Any) -> set[str]:
+    """Return the const.SEARCH_RADIO_TYPES a device registry entry connects through.
+
+    Read from what each integration records, never from names: Zigbee as above,
+    Z-Wave JS and Matter by their identifier domains, Bluetooth by a Bluetooth
+    address connection. A Matter device may run over Thread or Wi-Fi; the
+    registry does not say which, so matter is reported as a protocol.
+    """
+    found = set()
+    if zigbee_backend_for_device(device) is not None:
+        found.add("zigbee")
+    for ident in getattr(device, "identifiers", ()) or ():
+        if isinstance(ident, (list, tuple)) and len(ident) >= 2:
+            if ident[0] == "zwave_js":
+                found.add("zwave")
+            elif ident[0] == "matter":
+                found.add("matter")
+    for connection in getattr(device, "connections", ()) or ():
+        if isinstance(connection, (list, tuple)) and len(connection) >= 2 and connection[0] == dr.CONNECTION_BLUETOOTH:
+            found.add("bluetooth")
+    return found
+
+
 def z2m_present(hass: HomeAssistant) -> bool:
     """True when the mqtt integration is loaded and a Z2M bridge device exists."""
     if "mqtt" not in hass.config.components:

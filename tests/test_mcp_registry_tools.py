@@ -882,6 +882,80 @@ class TestDescribeRegistryOnlyEntity:
         assert outcome == "not_found"
 
 
+@pytest.fixture
+def radio_env(hass: HomeAssistant):
+    """One binary sensor per way a device connects, with identifiers as each integration records them."""
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    entries = {}
+    for domain in ("zha", "mqtt", "zwave_js", "matter", "xiaomi_ble", "esphome"):
+        entries[domain] = MockConfigEntry(domain=domain, entry_id=f"radio-{domain}")
+        entries[domain].add_to_hass(hass)
+    devices = {
+        "zha_leak": ("zha", {("zha", "00:11:22:33:44:55:66:77")}, set()),
+        "z2m_door": ("mqtt", {("mqtt", "zigbee2mqtt_0x00124b0012345678")}, set()),
+        "z2m_bridge": ("mqtt", {("mqtt", "zigbee2mqtt_bridge_0x00124b002e1e03c7")}, set()),
+        "mqtt_strimmer": ("mqtt", {("mqtt", "strimmer_1")}, set()),
+        "zwave_motion": ("zwave_js", {("zwave_js", "3967712345-12")}, set()),
+        "matter_contact": ("matter", {("matter", "deviceid_0000000000000001-0000000000000005-MatterNodeDevice")}, set()),
+        "ble_plant": ("xiaomi_ble", {("xiaomi_ble", "AA:BB:CC:DD:EE:FF")}, {(dr.CONNECTION_BLUETOOTH, "AA:BB:CC:DD:EE:FF")}),
+        "wifi_plug": ("esphome", {("esphome", "plug")}, {(dr.CONNECTION_NETWORK_MAC, "11:22:33:44:55:66")}),
+    }
+    for name, (domain, identifiers, connections) in devices.items():
+        device = dev_reg.async_get_or_create(config_entry_id=entries[domain].entry_id, identifiers=identifiers,
+                                             connections=connections, name=name)
+        entity = ent_reg.async_get_or_create("binary_sensor", domain, name, config_entry=entries[domain],
+                                             device_id=device.id, suggested_object_id=name)
+        hass.states.async_set(entity.entity_id, "off", {"device_class": "door" if "door" in name else "moisture"})
+        if name == "z2m_door":
+            # A child device takes its parent's radio.
+            child = dev_reg.async_get_or_create_child(config_entry_id=entries["mqtt"].entry_id,
+                                                      identifiers={("mqtt", "z2m_door_l2")}, parent_device_id=device.id)
+            part = ent_reg.async_get_or_create("binary_sensor", "mqtt", "z2m_door_l2", config_entry=entries["mqtt"],
+                                               device_id=child.id, suggested_object_id="z2m_door_l2")
+            hass.states.async_set(part.entity_id, "off", {"device_class": "door"})
+    return hass
+
+
+def _radio_key() -> AccessKeyRecord:
+    return _access_key(permissions=PermissionTree(domains={"binary_sensor": PermissionNode(state="GREEN")}))
+
+
+class TestSearchByRadioAndIntegration:
+    @pytest.mark.parametrize(("radio", "expected"), [
+        ("zigbee", {"zha_leak", "z2m_door", "z2m_door_l2"}),
+        ("zwave", {"zwave_motion"}),
+        ("matter", {"matter_contact"}),
+        ("bluetooth", {"ble_plant"}),
+        (["zwave", "bluetooth"], {"zwave_motion", "ble_plant"}),
+    ])
+    async def test_radio_reads_the_device_registry(self, hass, radio_env, radio, expected):
+        # Zigbee covers ZHA and Zigbee2MQTT but not the bridge or other MQTT devices.
+        content, outcome, _ = await _call("search_entities", {"radio": radio}, _radio_key(), hass)
+        assert outcome == "allowed"
+        assert {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]} == expected
+
+    async def test_integration_is_the_provider_not_the_radio(self, hass, radio_env):
+        content, _, _ = await _call("search_entities", {"integration": "mqtt"}, _radio_key(), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        assert ids == {"z2m_door", "z2m_door_l2", "z2m_bridge", "mqtt_strimmer"}
+
+    @pytest.mark.parametrize("device_class", [["door", "window"], "door,window", '["door", "window"]'])
+    async def test_device_class_accepts_several(self, hass, radio_env, device_class):
+        content, _, _ = await _call("search_entities", {"radio": "zigbee", "device_class": device_class}, _radio_key(), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        assert ids == {"z2m_door", "z2m_door_l2"}
+
+    @pytest.mark.parametrize(("args", "message"), [
+        ({"radio": "thread"}, "radio must be one or more of: zigbee, zwave, matter, bluetooth."),
+        ({"radio": ["zigbee", 7]}, "radio must be a string or an array of strings."),
+        ({"integration": {"name": "mqtt"}}, "integration must be a string or an array of strings."),
+        ({"device_class": 3}, "device_class must be a string or an array of strings."),
+    ])
+    async def test_a_malformed_filter_is_refused_not_dropped(self, hass, radio_env, args, message):
+        content, outcome, _ = await _call("search_entities", args, _radio_key(), hass)
+        assert outcome == "invalid_request" and content["content"][0]["text"] == message
+
+
 class TestGetOverview:
     async def test_deny_without_cap(self, hass, reg_env):
         _, outcome, _ = await _call("get_overview", {}, _access_key(cap_search="deny"), hass)
