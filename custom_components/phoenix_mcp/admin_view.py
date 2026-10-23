@@ -1452,6 +1452,10 @@ class PhoenixAdminPermissionIntegrationOptionsView(PhoenixView):
                 "title": selection["title"],
                 "device_count": len(selection["device_ids"]),
                 "deviceless_entity_count": len(selection["entity_ids"]),
+                # The members themselves, so the panel's Select By filter can
+                # narrow the permissions tree to this entry without a grant.
+                "device_ids": sorted(selection["device_ids"]),
+                "entity_ids": selection["entity_ids"],
                 "registry_only_deviceless_count": selection[
                     "registry_only_deviceless_count"
                 ],

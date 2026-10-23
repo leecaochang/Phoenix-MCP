@@ -6,7 +6,7 @@ import { TagInput } from "../components/TagInput";
 import { AuditView } from "../views/AuditView";
 import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { api } from "../api";
-import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { Loading } from "../components/common";
 import type { AuditEntry } from "../types";
 
@@ -163,7 +163,7 @@ describe("accessibility regressions", () => {
 
   it("associates the access-key-name validation error with the input", () => {
     render(
-      <AccessKeyCreateModal
+      <AccessKeyCreateForm
         existingNames={[]}
         onCreated={() => undefined}
         onClose={() => undefined}

@@ -553,7 +553,6 @@
       "clearPermsBody": "Dies entfernt jede Domänen-, Geräte- und Entitätsfreigabe. Der Zugriffsschlüssel hat keinen Entitätszugriff, bis Sie neue Berechtigungen hinzufügen.",
       "clearPermsFailed": "Berechtigungen konnten nicht entfernt werden.",
       "clearPermsTitle": "Alle Berechtigungen entfernen?",
-      "clearing": "Wird entfernt...",
       "closeCountdown": "Schließen (3s)",
       "colActions": "Aktionen",
       "colArchivedOn": "Archiviert am",
@@ -573,7 +572,6 @@
       "createPtUnderstand": "Ich verstehe, dass dieser Zugriffsschlüssel umfassenden Zugriff auf Home Assistant hat",
       "createPtWarning": "<strong>Dieser Zugriffsschlüssel erhält umfassenden Zugriff auf Entitäten und Dienste von Home Assistant.</strong> Konfigurationsänderungen, Systemaktionen, risikoreiche Fähigkeiten und der Zugriff auf das Systemprotokoll unterliegen weiterhin den Fähigkeitseinstellungen. MESA-Regeln, die Phoenix MCP-Blockliste, das Entfernen sensibler Attribute, Ratenlimits, der Widerruf und der Ablauf bleiben ebenfalls aktiv. Verwenden Sie ihn nur mit vertrauenswürdigen HTTP-basierten MCP-Clients.",
       "createAccessKey": "Zugriffsschlüssel erstellen",
-      "creating": "Wird erstellt...",
       "daysAgo": "vor {d} Tagen",
       "delete": "Löschen",
       "deletePermanently": "Endgültig löschen",
@@ -628,7 +626,6 @@
       "permissionSummary": "Berechtigungsübersicht",
       "permissionsTree": "Berechtigungsbaum",
       "personaApplyFailed": "Persona konnte nicht angewendet werden.",
-      "pleaseWait": "Bitte warten...",
       "postCreateChatSub": "Chatten Sie über dieses Panel mit Ihrem eigenen Modellanbieter. Öffnet die Einstellungen.",
       "postCreateChatTitle": "Agent Chat einrichten",
       "postCreateConnectSub": "Konfigurieren Sie einen MCP-Client wie Claude Code, Cursor, ChatGPT oder Gemini.",
@@ -696,7 +693,6 @@
       "scoped": "Beschränkt",
       "secondsOption": "{s} Sekunden",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Nach Bereich, Label oder Integration auswählen",
       "setUpAgent": "Agenten einrichten",
       "setUpFirstAgent": "Richten Sie Ihren ersten Agenten ein",
       "showArchived": "Archivierte anzeigen",
@@ -711,7 +707,6 @@
       "accessKeyRotatedTitle": "Zugriffsschlüssel rotiert: {name}",
       "updateFailed": "Zugriffsschlüssel konnte nicht aktualisiert werden.",
       "waitBeforeClose": "Warten Sie 3 Sekunden, bevor Sie schließen",
-      "working": "Wird verarbeitet...",
       "cardNotes": "Notizen",
       "notesCaution": "Notizen sind nur Hinweise: Sie gewähren nie Zugriff, ändern keine Fähigkeiten und umgehen keine Genehmigungen, und ein Modell kann sie ignorieren. Verbundene Clients und deren Modellanbieter erhalten sie, und wer mit einem Agenten sprechen kann, der diesen Zugriffsschlüssel verwendet, kann ihn dazu bringen, sie wiederzugeben. Tragen Sie hier keine Passwörter oder anderen Geheimnisse ein.",
       "notesCount": "{count} / {max} Zeichen",
@@ -1899,7 +1894,8 @@
       "unmatchedDeviceName": "Gerät nicht im aktuellen Baum",
       "unmatchedDevicesNote": "Diese expliziten Berechtigungen verweisen auf Geräte-IDs, die sich nicht im aktuellen Entitätsbaum befinden. Setzen Sie N, um eine veraltete Berechtigung zu entfernen.",
       "unmatchedDevicesTitle": "Nicht zugeordnete Geräteberechtigungen",
-      "hintCaution": "Wird an Agenten und deren Modellanbieter gesendet. Tragen Sie niemals Passwörter oder Codes ein."
+      "hintCaution": "Wird an Agenten und deren Modellanbieter gesendet. Tragen Sie niemals Passwörter oder Codes ein.",
+      "removeHint": "Hinweis entfernen"
     },
     "changes": {
       "added": "Hinzugefügt",
@@ -2019,51 +2015,27 @@
       "loadFailed": "Das Prüfprotokoll konnte nicht geladen werden. Aktualisieren Sie, um es erneut zu versuchen."
     },
     "selectBy": {
-      "apply": "Anwenden",
-      "applyFailed": "Berechtigungen konnten nicht angewendet werden.",
-      "applying": "Wird angewendet...",
       "area": "Bereich",
-      "cancel": "Abbrechen",
       "entities": {
         "one": "{count} Entität",
         "other": "{count} Entitäten"
       },
-      "grantNoteArea": "Dies gewährt Zugriff auf Entitäten, die sich derzeit im ausgewählten Bereich befinden. Neue Entitäten sind nicht automatisch enthalten. Gewähren Sie die Domäne, wenn zukünftige Entitäten den Zugriff erben sollen.",
-      "grantNoteIntegration": "Dies wendet eine Momentaufnahme-Berechtigung auf alle Geräte an, die derzeit exakt diesem Konfigurationseintrag gehören, sowie auf dessen aktive, aktivierte gerätlose Entitäten. Einschränkungen untergeordneter Entitäten werden nicht geändert.",
-      "grantNoteLabel": "Dies gewährt Zugriff auf Entitäten, die sich derzeit im ausgewählten Label befinden. Neue Entitäten sind nicht automatisch enthalten. Gewähren Sie die Domäne, wenn zukünftige Entitäten den Zugriff erben sollen.",
-      "groupBy": "Gruppieren nach",
       "integration": "Integration",
-      "integrationCoverage": "Dieser Eintrag wählt derzeit {devices} Geräte und {entities} aktive gerätlose Entitäten aus.",
-      "entryId": "Konfigurationseintrags-ID",
       "label": "Label",
       "loadIntegrationsFailed": "Integrationsauswahl konnte nicht geladen werden.",
       "loadingIntegrations": "Integrationen werden geladen…",
       "noAreas": "Auf keiner zugänglichen Entität sind Bereiche definiert.",
       "noIntegrations": "Derzeit besitzt keine Integration auswählbare Geräte oder aktive gerätlose Entitäten.",
       "noLabels": "Auf keiner zugänglichen Entität sind Labels definiert.",
-      "permissionToApply": "Anzuwendende Berechtigung",
       "selectArea": "-- Bereich auswählen --",
       "selectIntegration": "-- Integration auswählen --",
       "selectLabel": "-- Label auswählen --",
-      "registryOnlyWarning": "{count} gerätlose Entitäten, die nur in der Registrierung vorhanden sind, sind nicht ausgewählt. Gewähren Sie diese Domänen, wenn sie geerbten Zugriff benötigen: {domains}.",
       "resources": {
         "one": "{count} Ressource",
         "other": "{count} Ressourcen"
       },
-      "sharedDeviceWarning": {
-        "one": "{count} ausgewähltes Gerät wird gemeinsam genutzt. Seine Geräteberechtigung wirkt sich auf jede Entität auf diesem Gerät aus, einschließlich Entitäten, die anderen Konfigurationseinträgen gehören.",
-        "other": "{count} ausgewählte Geräte werden gemeinsam genutzt. Ihre Geräteberechtigungen wirken sich auf jede Entität auf diesen Geräten aus, einschließlich Entitäten, die anderen Konfigurationseinträgen gehören."
-      },
-      "stateDeny": "Verweigern",
-      "stateRead": "Lesen",
-      "stateRemoveGrant": "Berechtigung entfernen",
-      "stateWrite": "Schreiben",
-      "title": "Nach Bereich, Label oder Integration auswählen",
-      "willSetIntegration": "Berechtigung: {state}. Geräteknoten: {devices}; aktive Entitätsknoten ohne Gerät: {entities}.",
-      "willSet": {
-        "one": "Dies wendet {state} auf {count} Entität an.",
-        "other": "Dies wendet {state} auf {count} Entitäten an."
-      }
+      "menu": "Auswählen nach",
+      "reset": "Zurücksetzen"
     },
     "version": {
       "card.added": "{subject} hinzugefügt ({where})",
@@ -2444,7 +2416,10 @@
       "dockWindow": "Dieses Fenster wieder im Arbeitsbereich andocken.",
       "maximizeWindow": "Den sichtbaren Arbeitsbereich mit diesem Fenster füllen oder es wiederherstellen.",
       "closeWindow": "Dieses Fenster schließen. Über das Menü „Arbeitsbereich-Optionen“ lässt es sich wieder öffnen.",
-      "guideTitle": "Die Titelleiste ziehen, um den Leitfaden zu verschieben, oder an einer Kante oder Ecke ziehen, um die Größe zu ändern."
+      "guideTitle": "Die Titelleiste ziehen, um den Leitfaden zu verschieben, oder an einer Kante oder Ecke ziehen, um die Größe zu ändern.",
+      "selectBy": "Nur den Teil des Baums anzeigen, der zu einem Bereich, einem Label oder einer Integration gehört. Das ändert die Ansicht, nicht die Rechte des Schlüssels.",
+      "hintSave": "Den Hinweis für den gewählten Geltungsbereich speichern. Agenten erhalten ihn mit dieser Entität.",
+      "hintRemove": "Den für den gewählten Geltungsbereich gespeicherten Hinweis entfernen."
     },
     "guide": {
       "title": "Leitfaden",

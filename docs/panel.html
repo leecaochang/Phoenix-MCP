@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Panel guide &middot; Phoenix MCP docs</title>
-  <meta name="description" content="A tour of the Phoenix MCP panel: managing access keys, painting the permission tree, bulk select, the permission summary, entity hints, the approvals queue, MESA, audit, configuration history, and settings." />
+  <meta name="description" content="A tour of the Phoenix MCP panel: managing access keys, painting the permission tree, narrowing it by area, label, or integration, the permission summary, entity hints, the approvals queue, MESA, audit, configuration history, and settings." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -37,10 +37,10 @@
         </figure>
 
         <figure class="screenshot">
-          <img src="assets/create-access-key.png" style="width: 70%; margin: 0 auto;" alt="The Create Access Key dialog with a name, expiry, pass-through toggle and rate limits" loading="lazy" />
+          <img src="assets/create-access-key.png" style="width: 70%; margin: 0 auto;" alt="Create Access Key with a name, expiry, pass-through toggle and rate limits" loading="lazy" />
           <figcaption>Create Access Key: a name, an optional expiry, pass-through mode (off by default), and rate limits.</figcaption>
         </figure>
-        <p>Selecting an access key in the list shows its settings in the windows below the list: Persona, Capabilities, the Permissions Tree and its Permission Summary, and Key Settings. Pick a <a href="capabilities.html#personas">persona</a> in Persona, or set individual capabilities to deny, allow, or confirm in Capabilities. The toolbar's <strong>Key Actions</strong> menu holds the lifecycle actions: <strong>Rename</strong> edits the name in the list, <strong>Rotate</strong> replaces the raw value, <strong>Enable Pass-Through</strong> switches a scoped access key to pass-through, and <strong>Revoke</strong> ends the access key. Rotate, Enable Pass-Through and Revoke each ask for confirmation first.</p>
+        <p>Selecting an access key in the list shows its settings in the windows below the list: Persona, Capabilities, the Permissions Tree and its Permission Summary, and Key Settings. Pick a <a href="capabilities.html#personas">persona</a> in Persona, or set individual capabilities to deny, allow, or confirm in Capabilities. The toolbar's <strong>Key Actions</strong> menu holds the lifecycle actions: <strong>Rename</strong> edits the name in the list, <strong>Rotate</strong> replaces the raw value, <strong>Enable Pass-Through</strong> switches a scoped access key to pass-through, and <strong>Revoke</strong> ends the access key. Rotate, Enable Pass-Through and Revoke each ask for confirmation first, in place above the key list, and each needs its acknowledgement ticked before it can go ahead. A rotated access key's new value is shown once, in a dialog. <strong>Create Access Key</strong> on the toolbar opens its form at the top of the same window; the new access key's value then appears in a dialog with the ways to connect it.</p>
 
         <figure class="screenshot">
           <img src="assets/access-key-persona.png" style="width: 60%; margin: 0 auto;" alt="The persona picker on an access key's detail page with Automation builder selected" loading="lazy" />
@@ -52,7 +52,7 @@
           <div class="advanced-content">
         <h3 id="presets">Settings presets (optional)</h3>
         <p>With the <strong>Enable presets</strong> toggle on in Settings, the Access Keys workspace gains a Presets window: named snapshots of its complete configuration (capabilities, permissions, rate limits, pass-through) you can switch between, for example a locked-down daily preset and a broader maintenance one on the same access key. Enabling the toggle saves every access key's current settings as its first preset ("Default preset", renameable inline).</p>
-        <p>The access key is always "in" one preset, and edits you make are that preset's unsaved changes: switching to another preset first saves them into the outgoing preset (the dialog lists exactly what), then applies the target, so nothing is lost and there are no save prompts. Applying the preset you are already in does the opposite: it reverts the access key to the preset's saved state, discarding the listed unsaved changes. The active preset cannot be deleted, and applying a preset that would enable pass-through asks for the same confirmation as enabling it by hand. Switching is admin-only; a connected agent cannot change its own preset, and after a switch the agent is nudged in-band to refresh its tool list (see the audit log's preset column for per-request attribution).</p>
+        <p>The access key is always "in" one preset, and edits you make are that preset's unsaved changes: switching to another preset first saves them into the outgoing preset (the confirmation under the preset lists exactly what), then applies the target, so nothing is lost and there are no save prompts. Applying the preset you are already in does the opposite: it reverts the access key to the preset's saved state, discarding the listed unsaved changes. The active preset cannot be deleted, and applying a preset that would enable pass-through asks for the same confirmation as enabling it by hand. Switching is admin-only; a connected agent cannot change its own preset, and after a switch the agent is nudged in-band to refresh its tool list (see the audit log's preset column for per-request attribution).</p>
         <figure class="screenshot">
           <img src="assets/access-key-detail.png" alt="an access key detail page showing the capability matrix and persona" loading="lazy" />
           <figcaption>An access key's detail page: capabilities and persona.</figcaption>
@@ -79,15 +79,11 @@
         <p>Each row also carries a small MESA control, a <code>+</code> to create a profile or <code>MESA</code> when one already exists, which opens the profile editor over the workspace without losing your place. It writes at the level of the row you clicked: a domain group authors a domain profile, a device group authors a device profile covering every entity that device owns, and an entity row authors an entity profile. Permissions and MESA are independent, so a profile written here changes what any access key may do with that entity by nature, not just this one. The <a href="mesa.html">MESA</a> page covers what the levels mean.</p>
 
         <h3 id="select-by">Select by area, label, or integration</h3>
-        <p>The <strong>Select by Area, Label, or Integration</strong> tool on the toolbar applies one state to a server-resolved group. Pick a tab, choose the group or exact config entry, then choose Read, Write, Deny, or Remove grant. The integration tab shows <code>title - domain</code> and the full config-entry ID, then selects every currently owned device node and every live, enabled deviceless entity node. Existing child-entity restrictions stay unchanged.</p>
+        <p><strong>Select By</strong>, beside the tree's filter box, narrows the tree to one group. Choose <strong>Area</strong>, <strong>Label</strong>, or <strong>Integration</strong>, then pick the group in the selector that appears beside it. The tree then shows only that group's entities, under their devices and domains; an integration brings the devices its config entry owns, with their child devices, and its live, enabled entities without a device. The filter box still works on top of it. <strong>Reset</strong> shows the whole tree again.</p>
         <div class="callout warn">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
-          <div class="callout-body"><p class="callout-title">It is a snapshot, not a new permission level</p><p>Area, label, and integration selection all resolve current registry membership and save the affected nodes in one atomic update. Future members are <strong>not</strong> picked up automatically. Registry-only deviceless entities still need a domain grant, and the dialog reports those domains. A shared-device warning means its device grant also affects entities owned by other config entries.</p></div>
+          <div class="callout-body"><p class="callout-title">It filters; it does not grant</p><p>Select By changes only what the tree shows. Grant access with the states on the rows you can now see. A grant on a device or entity covers that node only, so entities added to the area, label, or integration later are not included; grant the domain when future entities should inherit access.</p></div>
         </div>
-        <figure class="screenshot">
-          <img src="assets/bulk-select-area.png" alt="The bulk permission dialog grouping entities by area" loading="lazy" />
-          <figcaption>The same bulk-apply dialog also supports labels and exact config entries.</figcaption>
-        </figure>
 
         <h3 id="summary">The permission summary</h3>
         <p>A compact, sortable table of every node set to something other than GREY. It lists the node type, friendly name, ID, and current state. Clicking a row shows that node in the permission tree. An empty summary means no grants exist and the access key has no access to anything.</p>
@@ -103,6 +99,7 @@
           <div class="kv-row"><dt>This access key only</dt><dd>A per-access-key hint, stored on the permission node. It is visible only to this access key and takes precedence over a global hint.</dd></div>
           <div class="kv-row"><dt>All access keys</dt><dd>A global hint for the entity, applied to every access key that can see it, pass-through access keys included. Useful when the clarification is about the entity itself, not one agent's view of it.</dd></div>
         </dl>
+        <p>The <strong>Add Hint</strong> button beside a granted entity becomes <strong>Edit Hint</strong> once the entity has a hint, and pointing at it shows the hint the access key gets. The editor opens under the entity's row and starts on <strong>All access keys</strong>; switch the scope to edit this access key's own hint. <strong>Save</strong> stores the text in the chosen scope, and <strong>Remove</strong>, offered when that scope has a hint, clears it. Escape or <strong>Cancel</strong> closes the editor without saving.</p>
         <p>Agents receive the hint where they look the entity up: every <code>search_entities</code> result for the entity and <code>describe_entity</code> carry it as <code>hint</code>, and the context documents list it next to each entity they include. An entity without a hint adds nothing to those results.</p>
         <div class="callout warn">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>

@@ -471,33 +471,22 @@
       "unmatchedDeviceName": "현재 트리에 없는 기기",
       "unmatchedDevicesNote": "이 명시적 권한은 현재 엔티티 트리에 없는 기기 ID를 참조합니다. N으로 설정하면 오래된 권한을 제거할 수 있습니다.",
       "unmatchedDevicesTitle": "일치하지 않는 기기 권한",
-      "hintCaution": "힌트는 에이전트와 해당 모델 공급자에게 전송됩니다. 비밀번호는 절대 입력하지 마세요."
+      "hintCaution": "힌트는 에이전트와 해당 모델 공급자에게 전송됩니다. 비밀번호는 절대 입력하지 마세요.",
+      "removeHint": "힌트 제거"
     },
     "selectBy": {
-      "apply": "적용",
-      "applyFailed": "권한을 적용하지 못했습니다.",
-      "applying": "적용 중...",
       "area": "영역",
-      "cancel": "취소",
       "entities": {
         "one": "{count}개 엔티티",
         "other": "{count}개 엔티티"
       },
-      "entryId": "구성 항목 ID",
-      "grantNoteArea": "선택한 영역에 현재 있는 엔티티에 대한 접근을 부여합니다. 새 엔티티는 자동으로 포함되지 않습니다. 향후 엔티티도 접근을 상속해야 한다면 도메인을 부여하세요.",
-      "grantNoteIntegration": "정확한 구성 항목이 현재 소유한 모든 기기와 활성화된 기기 없는 엔티티에 스냅샷 권한을 적용합니다. 하위 엔티티 제한은 변경되지 않습니다.",
-      "grantNoteLabel": "선택한 레이블에 현재 있는 엔티티에 대한 접근을 부여합니다. 새 엔티티는 자동으로 포함되지 않습니다. 향후 엔티티도 접근을 상속해야 한다면 도메인을 부여하세요.",
-      "groupBy": "그룹 기준",
       "integration": "통합 구성 요소",
-      "integrationCoverage": "이 항목은 현재 {devices}개 기기와 {entities}개 활성 기기 없는 엔티티를 선택합니다.",
       "label": "레이블",
       "loadIntegrationsFailed": "통합 구성 요소 선택 항목을 불러오지 못했습니다.",
       "loadingIntegrations": "통합 구성 요소 불러오는 중...",
       "noAreas": "접근 가능한 엔티티에 정의된 영역이 없습니다.",
       "noIntegrations": "현재 선택 가능한 기기나 활성 기기 없는 엔티티를 소유한 통합 구성 요소가 없습니다.",
       "noLabels": "접근 가능한 엔티티에 정의된 레이블이 없습니다.",
-      "permissionToApply": "적용할 권한",
-      "registryOnlyWarning": "{count}개 레지스트리 전용 기기 없는 엔티티가 선택되지 않았습니다. 상속된 접근이 필요하면 다음 도메인을 부여하세요: {domains}.",
       "resources": {
         "one": "{count}개 리소스",
         "other": "{count}개 리소스"
@@ -505,20 +494,8 @@
       "selectArea": "-- 영역 선택 --",
       "selectIntegration": "-- 통합 구성 요소 선택 --",
       "selectLabel": "-- 레이블 선택 --",
-      "sharedDeviceWarning": {
-        "one": "{count}개 선택된 기기가 공유되어 있습니다. 해당 기기의 기기 권한은 다른 구성 항목이 소유한 엔티티를 포함하여 그 기기의 모든 엔티티에 영향을 미칩니다.",
-        "other": "{count}개 선택된 기기가 공유되어 있습니다. 해당 기기들의 기기 권한은 다른 구성 항목이 소유한 엔티티를 포함하여 그 기기들의 모든 엔티티에 영향을 미칩니다."
-      },
-      "stateDeny": "거부",
-      "stateRead": "읽기",
-      "stateRemoveGrant": "권한 제거",
-      "stateWrite": "쓰기",
-      "title": "영역, 레이블 또는 통합 구성 요소로 선택",
-      "willSet": {
-        "one": "{state}를 {count}개 엔티티에 적용합니다.",
-        "other": "{state}를 {count}개 엔티티에 적용합니다."
-      },
-      "willSetIntegration": "권한: {state}. 기기 노드: {devices}; 기기에 속하지 않는 활성 엔티티 노드: {entities}."
+      "menu": "그룹으로 필터링",
+      "reset": "초기화"
     },
     "agentchat": {
       "announceApproval": "{name} 작업에 대한 승인이 필요합니다.",
@@ -1949,7 +1926,6 @@
       "clearPermsBody": "모든 도메인, 기기 및 엔티티 권한 부여가 제거됩니다. 새 권한을 추가할 때까지 이 액세스 키는 엔티티에 접근할 수 없습니다.",
       "clearPermsFailed": "권한을 지우지 못했습니다.",
       "clearPermsTitle": "모든 권한을 지우시겠습니까?",
-      "clearing": "지우는 중...",
       "closeCountdown": "닫기 (3초)",
       "colActions": "작업",
       "colArchivedOn": "보관일",
@@ -1969,7 +1945,6 @@
       "createPtUnderstand": "이 액세스 키가 Home Assistant에 광범위하게 접근할 수 있음을 이해합니다",
       "createPtWarning": "<strong>이 액세스 키는 Home Assistant 엔티티 및 서비스에 광범위하게 접근할 수 있습니다.</strong> 구성 변경, 시스템 작업, 고위험 기능 및 시스템 로그 접근은 여전히 기능 설정을 사용합니다. MESA 규칙, Phoenix MCP 차단 목록, 민감 속성 제거, 속도 제한, 철회 및 만료도 계속 적용됩니다. 신뢰할 수 있는 HTTP 기반 MCP 클라이언트에서만 사용하십시오.",
       "createAccessKey": "액세스 키 생성",
-      "creating": "생성 중...",
       "daysAgo": "{d}일 전",
       "delete": "삭제",
       "deletePermanently": "영구 삭제",
@@ -2024,7 +1999,6 @@
       "permissionSummary": "권한 요약",
       "permissionsTree": "권한 트리",
       "personaApplyFailed": "페르소나를 적용하지 못했습니다.",
-      "pleaseWait": "잠시 기다려 주십시오...",
       "postCreateChatSub": "자체 모델 공급자를 사용하여 이 패널에서 채팅합니다. 설정이 열립니다.",
       "postCreateChatTitle": "에이전트 채팅 설정",
       "postCreateConnectSub": "Claude Code, Cursor, ChatGPT 또는 Gemini와 같은 MCP 클라이언트를 구성합니다.",
@@ -2092,7 +2066,6 @@
       "scoped": "범위 제한",
       "secondsOption": "{s}초",
       "secondsShort": "{n}초",
-      "selectByAreaLabelIntegration": "영역, 레이블 또는 통합 구성 요소로 선택",
       "setUpAgent": "에이전트 설정",
       "setUpFirstAgent": "첫 번째 에이전트 설정",
       "showArchived": "보관 항목 표시",
@@ -2107,7 +2080,6 @@
       "accessKeyRotatedTitle": "액세스 키 회전됨: {name}",
       "updateFailed": "액세스 키를 업데이트하지 못했습니다.",
       "waitBeforeClose": "닫기 전에 3초간 기다리십시오",
-      "working": "처리 중...",
       "cardNotes": "메모",
       "notesCaution": "메모는 참고용입니다. 접근 권한을 부여하거나 기능을 변경하거나 승인을 우회하지 않으며, 모델이 무시할 수도 있습니다. 연결된 클라이언트와 해당 모델 공급자가 메모를 받으며, 이 액세스 키를 사용하는 에이전트와 대화할 수 있는 사람은 누구나 에이전트가 메모를 그대로 말하게 할 수 있습니다. 비밀번호나 기타 비밀 값은 입력하지 마세요.",
       "notesCount": "{count} / {max}자",
@@ -2449,7 +2421,10 @@
       "dockWindow": "이 창을 작업 공간에 다시 도킹합니다.",
       "maximizeWindow": "이 창으로 작업 공간의 보이는 영역을 채우거나 원래대로 되돌립니다.",
       "closeWindow": "이 창을 닫습니다. 작업 공간 옵션 메뉴에서 다시 열 수 있습니다.",
-      "guideTitle": "제목 표시줄을 끌어 가이드를 이동하거나, 가장자리나 모서리를 끌어 크기를 조정합니다."
+      "guideTitle": "제목 표시줄을 끌어 가이드를 이동하거나, 가장자리나 모서리를 끌어 크기를 조정합니다.",
+      "selectBy": "트리에서 하나의 영역, 레이블 또는 통합 구성 요소에 속한 부분만 표시합니다. 보이는 내용만 바뀌고 키의 권한은 바뀌지 않습니다.",
+      "hintSave": "선택한 범위에 힌트를 저장합니다. 에이전트는 이 엔티티와 함께 힌트를 받습니다.",
+      "hintRemove": "선택한 범위에 저장된 힌트를 제거합니다."
     },
     "guide": {
       "title": "가이드",

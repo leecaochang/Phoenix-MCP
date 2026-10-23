@@ -930,7 +930,8 @@
       "unmatchedDeviceName": "Dispositivo non presente nell'albero corrente",
       "unmatchedDevicesNote": "Queste autorizzazioni esplicite si riferiscono a ID dispositivo non presenti nell'albero delle entità corrente. Imposta N per rimuovere un'autorizzazione obsoleta.",
       "unmatchedDevicesTitle": "Autorizzazioni dei dispositivi non abbinati",
-      "hintCaution": "Questo suggerimento viene inviato agli agenti e ai loro provider di modelli. Non inserire mai password o codici."
+      "hintCaution": "Questo suggerimento viene inviato agli agenti e ai loro provider di modelli. Non inserire mai password o codici.",
+      "removeHint": "Rimuovi suggerimento"
     },
     "personas": {
       "automation_builder": {
@@ -1227,30 +1228,18 @@
       "scopeLabelParentDevice": "Dispositivo principale"
     },
     "selectBy": {
-      "apply": "Applica",
-      "applyFailed": "Impossibile applicare le autorizzazioni.",
-      "applying": "Applicazione...",
       "area": "Area",
-      "cancel": "Annulla",
       "entities": {
         "one": "{count} entità",
         "other": "{count} entità"
       },
-      "entryId": "ID voce di configurazione",
-      "grantNoteArea": "Questo concede l'accesso alle entità attualmente presenti nell'area selezionata. Le nuove entità non vengono incluse automaticamente. Concedi il dominio se le entità future devono ereditare l'accesso.",
-      "grantNoteIntegration": "Questo applica una concessione istantanea a tutti i dispositivi attualmente posseduti dalla voce di configurazione esatta e alle sue entità senza dispositivo attive e abilitate. Non modifica le restrizioni delle entità figlie.",
-      "grantNoteLabel": "Questo concede l'accesso alle entità attualmente presenti nell'etichetta selezionata. Le nuove entità non vengono incluse automaticamente. Concedi il dominio se le entità future devono ereditare l'accesso.",
-      "groupBy": "Raggruppa per",
       "integration": "Integrazione",
-      "integrationCoverage": "Questa voce attualmente seleziona {devices} dispositivi e {entities} entità senza dispositivo attive.",
       "label": "Etichetta",
       "loadIntegrationsFailed": "Impossibile caricare le scelte di integrazione.",
       "loadingIntegrations": "Caricamento integrazioni…",
       "noAreas": "Nessuna area è definita su alcuna entità accessibile.",
       "noIntegrations": "Nessuna integrazione possiede attualmente dispositivi selezionabili o entità senza dispositivo attive.",
       "noLabels": "Nessuna etichetta è definita su alcuna entità accessibile.",
-      "permissionToApply": "Autorizzazione da applicare",
-      "registryOnlyWarning": "{count} entità senza dispositivo presenti solo nel registro non sono selezionate. Concedi questi domini se devono avere accesso ereditato: {domains}.",
       "resources": {
         "one": "{count} risorsa",
         "other": "{count} risorse"
@@ -1258,20 +1247,8 @@
       "selectArea": "-- Seleziona area --",
       "selectIntegration": "-- Seleziona integrazione --",
       "selectLabel": "-- Seleziona etichetta --",
-      "sharedDeviceWarning": {
-        "one": "{count} dispositivo selezionato è condiviso. La sua concessione a livello di dispositivo riguarda ogni entità di quel dispositivo, comprese le entità possedute da altre voci di configurazione.",
-        "other": "{count} dispositivi selezionati sono condivisi. Le loro concessioni a livello di dispositivo riguardano ogni entità di quei dispositivi, comprese le entità possedute da altre voci di configurazione."
-      },
-      "stateDeny": "Nega",
-      "stateRead": "Lettura",
-      "stateRemoveGrant": "Rimuovi autorizzazione",
-      "stateWrite": "Scrittura",
-      "title": "Seleziona per area, etichetta o integrazione",
-      "willSet": {
-        "one": "Questa azione applicherà {state} a {count} entità.",
-        "other": "Questa azione applicherà {state} a {count} entità."
-      },
-      "willSetIntegration": "Permesso: {state}. Nodi dispositivo: {devices}; nodi entità attivi senza dispositivo: {entities}."
+      "menu": "Seleziona per",
+      "reset": "Reimposta"
     },
     "settings": {
       "addProviderFirst": "Aggiungi prima un account provider in Agent Chat.",
@@ -1700,7 +1677,6 @@
       "clearPermsBody": "Questo rimuove ogni autorizzazione su dominio, dispositivo ed entità. La chiave di accesso non avrà accesso alle entità finché non aggiungi nuove autorizzazioni.",
       "clearPermsFailed": "Impossibile cancellare le autorizzazioni.",
       "clearPermsTitle": "Cancellare tutte le autorizzazioni?",
-      "clearing": "Cancellazione...",
       "closeCountdown": "Chiudi (3s)",
       "colActions": "Azioni",
       "colArchivedOn": "Archiviato il",
@@ -1720,7 +1696,6 @@
       "createPtUnderstand": "Comprendo che questa chiave di accesso ha un accesso esteso a Home Assistant",
       "createPtWarning": "<strong>Questa chiave di accesso ottiene un accesso esteso alle entità e ai servizi di Home Assistant.</strong> Le modifiche di configurazione, le azioni di sistema, le capacità ad alto rischio e l'accesso ai registri di sistema usano comunque le impostazioni delle capacità. Anche le regole MESA, la blocklist di Phoenix MCP, la rimozione degli attributi sensibili, i limiti di frequenza, la revoca e la scadenza restano attivi. Usalo solo con client MCP basati su HTTP affidabili.",
       "createAccessKey": "Crea chiave di accesso",
-      "creating": "Creazione...",
       "daysAgo": "{d} g fa",
       "delete": "Elimina",
       "deletePermanently": "Elimina definitivamente",
@@ -1775,7 +1750,6 @@
       "permissionSummary": "Riepilogo autorizzazioni",
       "permissionsTree": "Albero delle autorizzazioni",
       "personaApplyFailed": "Impossibile applicare la persona.",
-      "pleaseWait": "Attendere...",
       "postCreateChatSub": "Chatta da questo pannello usando il tuo provider di modelli. Apre le Impostazioni.",
       "postCreateChatTitle": "Configura Agent Chat",
       "postCreateConnectSub": "Configura un client MCP come Claude Code, Cursor, ChatGPT o Gemini.",
@@ -1843,7 +1817,6 @@
       "scoped": "Limitato",
       "secondsOption": "{s} secondi",
       "secondsShort": "{n} s",
-      "selectByAreaLabelIntegration": "Seleziona per area, etichetta o integrazione",
       "setUpAgent": "Configura un agente",
       "setUpFirstAgent": "Configura il tuo primo agente",
       "showArchived": "Mostra archiviati",
@@ -1858,7 +1831,6 @@
       "accessKeyRotatedTitle": "Chiave di accesso ruotata: {name}",
       "updateFailed": "Impossibile aggiornare la chiave di accesso.",
       "waitBeforeClose": "Attendi 3 secondi prima di chiudere",
-      "working": "In corso...",
       "cardNotes": "Note",
       "notesCaution": "Le note sono solo indicative: non concedono mai l'accesso, non modificano le capacità né aggirano le approvazioni, e un modello può ignorarle. I client connessi e i loro provider di modelli le ricevono, e chiunque possa parlare con un agente che usa questa chiave di accesso può fargliele ripetere. Non inserire password o altri segreti.",
       "notesCount": "{count} / {max} caratteri",
@@ -2444,7 +2416,10 @@
       "dockWindow": "Riaggancia questa finestra all'area di lavoro.",
       "maximizeWindow": "Fai occupare a questa finestra la parte visibile dell'area di lavoro, oppure ripristinala.",
       "closeWindow": "Chiudi questa finestra. Puoi riaprirla dal menu Opzioni dell'area di lavoro.",
-      "guideTitle": "Trascina la barra del titolo per spostare la guida, oppure trascina un bordo o un angolo per ridimensionarla."
+      "guideTitle": "Trascina la barra del titolo per spostare la guida, oppure trascina un bordo o un angolo per ridimensionarla.",
+      "selectBy": "Mostra solo la parte dell'albero di un'area, un'etichetta o un'integrazione. Cambia ciò che vedi, non ciò che la chiave può fare.",
+      "hintSave": "Salva il suggerimento per l'ambito scelto. Gli agenti lo ricevono insieme a questa entità.",
+      "hintRemove": "Rimuovi il suggerimento salvato per l'ambito scelto."
     },
     "guide": {
       "title": "Guida",

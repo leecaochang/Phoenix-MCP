@@ -28,7 +28,6 @@
       "clearPermsBody": "Detta tar bort alla beviljanden för domäner, enheter och entiteter. Åtkomstnyckeln kommer inte att ha någon entitetsåtkomst förrän du lägger till nya behörigheter.",
       "clearPermsFailed": "Det gick inte att rensa behörigheterna.",
       "clearPermsTitle": "Rensa alla behörigheter?",
-      "clearing": "Rensar...",
       "closeCountdown": "Stäng (3 s)",
       "colActions": "Åtgärder",
       "colArchivedOn": "Arkiverad",
@@ -48,7 +47,6 @@
       "createFailed": "Det gick inte att skapa åtkomstnyckeln.",
       "createPtUnderstand": "Jag förstår att denna åtkomstnyckel har bred åtkomst till Home Assistant",
       "createPtWarning": "<strong>Denna åtkomstnyckel får bred åtkomst till Home Assistant-entiteter och tjänster.</strong> Konfigurationsändringar, systemåtgärder, högriskfunktioner och åtkomst till systemloggen använder fortfarande inställningarna under Funktioner. MESA-regler, Phoenix MCP-blocklistan, borttagning av känsliga attribut, hastighetsbegränsningar, återkallande och utgång gäller fortfarande. Använd den endast med betrodda HTTP-baserade MCP-klienter.",
-      "creating": "Skapar...",
       "daysAgo": "{d} d sedan",
       "delete": "Radera",
       "deletePermanently": "Radera permanent",
@@ -103,7 +101,6 @@
       "permissionSummary": "Behörighetssammanfattning",
       "permissionsTree": "Behörighetsträd",
       "personaApplyFailed": "Det gick inte att tillämpa personan.",
-      "pleaseWait": "Vänta...",
       "postCreateChatSub": "Chatta från den här panelen med din egen modellleverantör. Öppnar Inställningar.",
       "postCreateChatTitle": "Konfigurera Agent Chat",
       "postCreateConnectSub": "Konfigurera en MCP-klient som Claude Code, Cursor, ChatGPT eller Gemini.",
@@ -171,7 +168,6 @@
       "scoped": "Avgränsad",
       "secondsOption": "{s} sekunder",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Välj efter område, etikett eller integration",
       "setUpAgent": "Konfigurera en agent",
       "setUpFirstAgent": "Konfigurera din första agent",
       "showArchived": "Visa arkiverade",
@@ -182,7 +178,6 @@
       "switching": "Byter...",
       "updateFailed": "Det gick inte att uppdatera åtkomstnyckeln.",
       "waitBeforeClose": "Vänta 3 sekunder innan du stänger",
-      "working": "Arbetar...",
       "cardNotes": "Anteckningar",
       "notesCaution": "Anteckningar är endast rådgivande: de ger aldrig åtkomst, ändrar inte funktioner och kringgår inte godkännanden, och en modell kan ignorera dem. Anslutna klienter och deras modellleverantörer tar emot dem, och alla som kan prata med en agent som använder den här åtkomstnyckeln kan få den att upprepa dem. Skriv inte lösenord eller andra hemligheter här.",
       "notesCount": "{count} / {max} tecken",
@@ -1776,7 +1771,8 @@
       "unmatchedDeviceName": "Enhet som inte finns i det aktuella trädet",
       "unmatchedDevicesNote": "De här uttryckliga beviljandena avser enhets-ID:n som inte finns i det aktuella entitetsträdet. Ange N för att ta bort ett inaktuellt beviljande.",
       "unmatchedDevicesTitle": "Omatchade enhetsbehörigheter",
-      "hintCaution": "Skickas till agenter och deras modellleverantörer. Skriv aldrig lösenord eller koder här."
+      "hintCaution": "Skickas till agenter och deras modellleverantörer. Skriv aldrig lösenord eller koder här.",
+      "removeHint": "Ta bort tips"
     },
     "personas": {
       "automation_builder": {
@@ -1869,30 +1865,18 @@
       "unavailable": "Otillgänglig"
     },
     "selectBy": {
-      "apply": "Tillämpa",
-      "applyFailed": "Det gick inte att tillämpa behörigheterna.",
-      "applying": "Tillämpar...",
       "area": "Område",
-      "cancel": "Avbryt",
       "entities": {
         "one": "{count} entitet",
         "other": "{count} entiteter"
       },
-      "entryId": "Konfigurationspost-ID",
-      "grantNoteArea": "Detta ger åtkomst till entiteter som för närvarande finns i det valda området. Nya entiteter inkluderas inte automatiskt. Bevilja domänen om framtida entiteter ska ärva åtkomst.",
-      "grantNoteIntegration": "Detta tillämpar ett ögonblicksbeviljande på alla enheter som för närvarande ägs av den exakta konfigurationsposten och dess aktuella, aktiverade entiteter utan enhet. Det ändrar inte begränsningar för underentiteter.",
-      "grantNoteLabel": "Detta ger åtkomst till entiteter som för närvarande har den valda etiketten. Nya entiteter inkluderas inte automatiskt. Bevilja domänen om framtida entiteter ska ärva åtkomst.",
-      "groupBy": "Gruppera efter",
       "integration": "Integration",
-      "integrationCoverage": "Den här konfigurationsposten väljer för närvarande {devices} enheter och {entities} aktuella entiteter utan enhet.",
       "label": "Etikett",
       "loadIntegrationsFailed": "Det gick inte att läsa in integrationsvalen.",
       "loadingIntegrations": "Läser in integrationer...",
       "noAreas": "Inga områden har definierats på någon tillgänglig entitet.",
       "noIntegrations": "Inga integrationer äger för närvarande valbara enheter eller aktuella entiteter utan enhet.",
       "noLabels": "Inga etiketter har definierats på någon tillgänglig entitet.",
-      "permissionToApply": "Behörighet att tillämpa",
-      "registryOnlyWarning": "{count} entiteter utan enhet som endast finns i registret är inte valda. Bevilja dessa domäner om de behöver ärvd åtkomst: {domains}.",
       "resources": {
         "one": "{count} resurs",
         "other": "{count} resurser"
@@ -1900,20 +1884,8 @@
       "selectArea": "-- Välj område --",
       "selectIntegration": "-- Välj integration --",
       "selectLabel": "-- Välj etikett --",
-      "sharedDeviceWarning": {
-        "one": "{count} vald enhet delas. Dess enhetsbeviljande påverkar varje entitet på den enheten, inklusive entiteter som ägs av andra konfigurationsposter.",
-        "other": "{count} valda enheter delas. Deras enhetsbeviljanden påverkar varje entitet på dessa enheter, inklusive entiteter som ägs av andra konfigurationsposter."
-      },
-      "stateDeny": "Neka",
-      "stateRead": "Läs",
-      "stateRemoveGrant": "Ta bort beviljande",
-      "stateWrite": "Skriv",
-      "title": "Välj efter område, etikett eller integration",
-      "willSet": {
-        "one": "Detta tillämpar {state} för {count} entitet.",
-        "other": "Detta tillämpar {state} för {count} entiteter."
-      },
-      "willSetIntegration": "Behörighet: {state}. Enhetsnoder: {devices}; aktuella entitetsnoder utan enhet: {entities}."
+      "menu": "Välj efter",
+      "reset": "Återställ"
     },
     "settings": {
       "accessKey": "Åtkomstnyckel",
@@ -2449,7 +2421,10 @@
       "dockWindow": "Docka fönstret i arbetsytan igen.",
       "maximizeWindow": "Låt fönstret fylla den synliga delen av arbetsytan, eller återställ det.",
       "closeWindow": "Stäng fönstret. Öppna det igen från menyn Alternativ för arbetsytan.",
-      "guideTitle": "Dra i namnlisten för att flytta guiden, eller dra i en kant eller ett hörn för att ändra storleken."
+      "guideTitle": "Dra i namnlisten för att flytta guiden, eller dra i en kant eller ett hörn för att ändra storleken.",
+      "selectBy": "Visa bara den del av trädet som hör till ett område, en etikett eller en integration. Det ändrar vad du ser, inte vad nyckeln får göra.",
+      "hintSave": "Spara tipset för det valda omfånget. Agenter får det tillsammans med den här entiteten.",
+      "hintRemove": "Ta bort tipset som sparats för det valda omfånget."
     },
     "guide": {
       "title": "Guide",

@@ -258,7 +258,8 @@
       "unmatchedDeviceName": "Dispositivo no presente en el árbol actual",
       "unmatchedDevicesNote": "Estos permisos explícitos hacen referencia a IDs de dispositivo que no están en el árbol de entidades actual. Establezca N para eliminar un permiso obsoleto.",
       "unmatchedDevicesTitle": "Permisos de dispositivo sin coincidencia",
-      "hintCaution": "Se envía a los agentes y a sus proveedores de modelos. No incluya nunca contraseñas ni códigos."
+      "hintCaution": "Se envía a los agentes y a sus proveedores de modelos. No incluya nunca contraseñas ni códigos.",
+      "removeHint": "Eliminar sugerencia"
     },
     "changes": {
       "added": "Añadido",
@@ -337,51 +338,27 @@
       "colSummary": "Resumen"
     },
     "selectBy": {
-      "apply": "Aplicar",
-      "applyFailed": "No se pudieron aplicar los permisos.",
-      "applying": "Aplicando...",
       "area": "Área",
-      "cancel": "Cancelar",
       "entities": {
         "one": "{count} entidad",
         "other": "{count} entidades"
       },
-      "grantNoteArea": "Esto concede acceso a las entidades que están actualmente en el área seleccionada. Las nuevas entidades no se incluyen automáticamente. Concede el dominio si las entidades futuras deben heredar el acceso.",
-      "grantNoteIntegration": "Esto aplica un permiso instantáneo a todos los dispositivos que pertenecen actualmente a la entrada de configuración exacta y a sus entidades sin dispositivo activas y habilitadas. No modifica las restricciones de entidades secundarias.",
-      "grantNoteLabel": "Esto concede acceso a las entidades que están actualmente en la etiqueta seleccionada. Las nuevas entidades no se incluyen automáticamente. Concede el dominio si las entidades futuras deben heredar el acceso.",
-      "groupBy": "Agrupar por",
       "integration": "Integración",
-      "integrationCoverage": "Esta entrada selecciona actualmente {devices} dispositivos y {entities} entidades sin dispositivo activas.",
-      "entryId": "ID de entrada de configuración",
       "label": "Etiqueta",
       "loadIntegrationsFailed": "No se pudieron cargar las opciones de integración.",
       "loadingIntegrations": "Cargando integraciones…",
       "noAreas": "No hay áreas definidas en ninguna entidad accesible.",
       "noIntegrations": "Actualmente no hay integraciones que posean dispositivos seleccionables o entidades sin dispositivo activas.",
       "noLabels": "No hay etiquetas definidas en ninguna entidad accesible.",
-      "permissionToApply": "Permiso a aplicar",
       "selectArea": "-- Seleccionar área --",
       "selectIntegration": "-- Seleccionar integración --",
       "selectLabel": "-- Seleccionar etiqueta --",
-      "registryOnlyWarning": "{count} entidades sin dispositivo que solo existen en el registro no están seleccionadas. Concede estos dominios si necesitan acceso heredado: {domains}.",
       "resources": {
         "one": "{count} recurso",
         "other": "{count} recursos"
       },
-      "sharedDeviceWarning": {
-        "one": "{count} dispositivo seleccionado está compartido. Su permiso de dispositivo afecta a todas las entidades de ese dispositivo, incluidas las entidades que pertenecen a otras entradas de configuración.",
-        "other": "{count} dispositivos seleccionados están compartidos. Sus permisos de dispositivo afectan a todas las entidades de esos dispositivos, incluidas las entidades que pertenecen a otras entradas de configuración."
-      },
-      "stateDeny": "Denegar",
-      "stateRead": "Lectura",
-      "stateRemoveGrant": "Eliminar permiso",
-      "stateWrite": "Escritura",
-      "title": "Seleccionar por área, etiqueta o integración",
-      "willSetIntegration": "Permiso: {state}. Nodos de dispositivo: {devices}; nodos de entidad activos sin dispositivo: {entities}.",
-      "willSet": {
-        "one": "Esto aplicará {state} a {count} entidad.",
-        "other": "Esto aplicará {state} a {count} entidades."
-      }
+      "menu": "Seleccionar por",
+      "reset": "Restablecer"
     },
     "audit": {
       "outcomeAllowed": "Permitido",
@@ -1047,7 +1024,6 @@
       "clearPermsBody": "Esto elimina todas las concesiones de dominios, dispositivos y entidades. La clave de acceso no tendrá acceso a entidades hasta que añada nuevos permisos.",
       "clearPermsFailed": "No se pudieron borrar los permisos.",
       "clearPermsTitle": "¿Borrar todos los permisos?",
-      "clearing": "Borrando...",
       "closeCountdown": "Cerrar (3 s)",
       "colActions": "Acciones",
       "colArchivedOn": "Archivado el",
@@ -1067,7 +1043,6 @@
       "createPtUnderstand": "Entiendo que esta clave de acceso tiene un acceso amplio a Home Assistant",
       "createPtWarning": "<strong>Esta clave de acceso obtiene un acceso amplio a las entidades y los servicios de Home Assistant.</strong> Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo y el acceso al registro del sistema siguen usando la configuración de Capacidades. Las reglas de MESA, la lista de bloqueo de Phoenix MCP, la eliminación de atributos sensibles, los límites de velocidad, la revocación y la expiración también permanecen activos. Úselo solo con clientes MCP de confianza basados en HTTP.",
       "createAccessKey": "Crear clave de acceso",
-      "creating": "Creando...",
       "daysAgo": "hace {d} d",
       "delete": "Eliminar",
       "deletePermanently": "Eliminar permanentemente",
@@ -1122,7 +1097,6 @@
       "permissionSummary": "Resumen de permisos",
       "permissionsTree": "Árbol de permisos",
       "personaApplyFailed": "No se pudo aplicar la persona.",
-      "pleaseWait": "Espere, por favor...",
       "postCreateChatSub": "Chatee desde este panel usando su propio proveedor de modelos. Abra Configuración.",
       "postCreateChatTitle": "Configurar Chat de agente",
       "postCreateConnectSub": "Configure un cliente MCP como Claude Code, Cursor, ChatGPT o Gemini.",
@@ -1190,7 +1164,6 @@
       "scoped": "Con ámbito",
       "secondsOption": "{s} segundos",
       "secondsShort": "{n} s",
-      "selectByAreaLabelIntegration": "Seleccionar por área, etiqueta o integración",
       "setUpAgent": "Configurar un agente",
       "setUpFirstAgent": "Configure su primer agente",
       "showArchived": "Mostrar archivados",
@@ -1205,7 +1178,6 @@
       "accessKeyRotatedTitle": "Clave de acceso rotada: {name}",
       "updateFailed": "No se pudo actualizar la clave de acceso.",
       "waitBeforeClose": "Espere 3 segundos antes de cerrar",
-      "working": "Trabajando...",
       "cardNotes": "Notas",
       "notesCaution": "Las notas son solo orientativas: nunca conceden acceso, cambian capacidades ni omiten aprobaciones, y un modelo puede ignorarlas. Los clientes conectados y sus proveedores de modelos las reciben, y cualquiera que pueda hablar con un agente que use esta clave de acceso puede conseguir que las repita. No incluya contraseñas ni otros secretos.",
       "notesCount": "{count} / {max} caracteres",
@@ -2444,7 +2416,10 @@
       "dockWindow": "Vuelva a acoplar esta ventana en el espacio de trabajo.",
       "maximizeWindow": "Haga que esta ventana ocupe la parte visible del espacio de trabajo, o restáurela.",
       "closeWindow": "Cierre esta ventana. Puede volver a abrirla desde el menú Opciones del espacio de trabajo.",
-      "guideTitle": "Arrastre la barra de título para mover la guía, o arrastre un borde o una esquina para cambiar su tamaño."
+      "guideTitle": "Arrastre la barra de título para mover la guía, o arrastre un borde o una esquina para cambiar su tamaño.",
+      "selectBy": "Muestre solo la parte del árbol de un área, una etiqueta o una integración. Cambia lo que ve, no lo que la clave puede hacer.",
+      "hintSave": "Guarde la sugerencia para el ámbito elegido. Los agentes la reciben con esta entidad.",
+      "hintRemove": "Elimine la sugerencia guardada para el ámbito elegido."
     },
     "guide": {
       "title": "Guía",

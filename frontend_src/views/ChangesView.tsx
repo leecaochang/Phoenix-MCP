@@ -19,6 +19,7 @@ import { ControllerContext } from "../shell/dock/TitleBar";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
+import { InlineConfirm } from "../ui/InlineConfirm";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { formatDateTime } from "../utils";
@@ -254,16 +255,13 @@ function RestoreConfirmation({ c }: { c: ChangesState }) {
   const record = c.record!;
   const side = t(c.confirm!.side === "before" ? "common.before" : "common.after");
   return (
-    <div className="phx-restore-confirm" role="group" aria-label={t("changes.restore")}>
+    <InlineConfirm label={t("changes.restore")} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
+      cancelLabel={t("changes.cancelRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
       <p>
         <strong>{t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })}</strong>{" "}
         <span>{t("changes.restoreReplaces")}</span>
       </p>
-      <div className="phx-restore-confirm-actions">
-        <ActionButton icon="check" label={t("changes.confirmRestoreButton")} busy={c.restoring} onClick={() => { void c.restore(); }} className="btn btn-sm phx-decision-approve" />
-        <ActionButton icon="undo" label={t("changes.cancelRestore")} busy={c.restoring} onClick={c.cancelRestore} className="btn btn-outline btn-sm" />
-      </div>
-    </div>
+    </InlineConfirm>
   );
 }
 

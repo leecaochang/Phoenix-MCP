@@ -125,9 +125,9 @@ describe("panel stylesheet", () => {
     // Each line under an item's name stays in its cell instead of widening the column.
     expect(CSS).toMatch(/\.change-item\s*\{[^}]*min-width:\s*0;/s);
     expect(CSS).toMatch(/\.change-item\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
-    // The restore confirmation wraps in a narrow Comparison.
-    expect(CSS).toMatch(/\.phx-restore-confirm\s*\{[^}]*flex-wrap:\s*wrap;/s);
-    expect(CSS).toMatch(/\.phx-restore-confirm-actions\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    // Inline confirmations, such as Restore in a narrow Comparison, wrap.
+    expect(CSS).toMatch(/\.phx-inline-confirm\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.phx-inline-confirm-actions\s*\{[^}]*flex-wrap:\s*wrap;/s);
   });
 
   it("keeps long localized approval text inside the Approvals windows", () => {

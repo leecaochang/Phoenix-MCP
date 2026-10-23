@@ -28,7 +28,6 @@
       "clearPermsBody": "Dette fjerner alle tildelinger for domene, enhet og entitet. Tilgangsnøkkelen har ingen entitetstilgang før du legger til nye tillatelser.",
       "clearPermsFailed": "Kunne ikke tømme tillatelsene.",
       "clearPermsTitle": "Tømme alle tillatelser?",
-      "clearing": "Tømmer...",
       "closeCountdown": "Lukk (3s)",
       "colActions": "Handlinger",
       "colArchivedOn": "Arkivert den",
@@ -48,7 +47,6 @@
       "createFailed": "Kunne ikke opprette tilgangsnøkkel.",
       "createPtUnderstand": "Jeg forstår at denne tilgangsnøkkelen har bred tilgang til Home Assistant",
       "createPtWarning": "<strong>Denne tilgangsnøkkelen får bred tilgang til Home Assistant-entiteter og -tjenester.</strong> Konfigurasjonsendringer, systemhandlinger, høyrisikokapabiliteter og tilgang til systemloggen bruker fortsatt innstillingene under Kapabiliteter. MESA-regler, Phoenix MCP-blokkeringslisten, fjerning av sensitive attributter, hastighetsgrenser, tilbakekalling og utløp er også fortsatt aktive. Bruk den bare med klarerte HTTP-baserte MCP-klienter.",
-      "creating": "Oppretter...",
       "daysAgo": "{d}d siden",
       "delete": "Slett",
       "deletePermanently": "Slett permanent",
@@ -103,7 +101,6 @@
       "permissionSummary": "Tillatelsesoversikt",
       "permissionsTree": "Tillatelsestre",
       "personaApplyFailed": "Kunne ikke bruke personaen.",
-      "pleaseWait": "Vennligst vent...",
       "postCreateChatSub": "Chat fra dette panelet med din egen modellleverandør. Åpner Innstillinger.",
       "postCreateChatTitle": "Sett opp Agent Chat",
       "postCreateConnectSub": "Konfigurer en MCP-klient som Claude Code, Cursor, ChatGPT eller Gemini.",
@@ -171,7 +168,6 @@
       "scoped": "Avgrenset",
       "secondsOption": "{s} sekunder",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Velg etter område, etikett eller integrasjon",
       "setUpAgent": "Sett opp en agent",
       "setUpFirstAgent": "Sett opp din første agent",
       "showArchived": "Vis arkiverte",
@@ -182,7 +178,6 @@
       "switching": "Bytter...",
       "updateFailed": "Kunne ikke oppdatere tilgangsnøkkelen.",
       "waitBeforeClose": "Vent 3 sekunder før du lukker",
-      "working": "Arbeider...",
       "cardNotes": "Notater",
       "notesCaution": "Notater er bare rådgivende: De gir aldri tilgang, endrer ikke kapabiliteter og omgår ikke godkjenninger, og en modell kan ignorere dem. Tilkoblede klienter og modellleverandørene deres mottar dem, og alle som kan snakke med en agent som bruker denne tilgangsnøkkelen, kan få den til å gjenta dem. Ikke skriv passord eller andre hemmeligheter her.",
       "notesCount": "{count} / {max} tegn",
@@ -1776,7 +1771,8 @@
       "unmatchedDeviceName": "Enhet som ikke finnes i gjeldende tre",
       "unmatchedDevicesNote": "Disse eksplisitte tildelingene viser til enhets-ID-er som ikke finnes i det gjeldende entitetstreet. Sett N for å fjerne en utdatert tildeling.",
       "unmatchedDevicesTitle": "Tillatelser for enheter uten samsvar",
-      "hintCaution": "Sendes til agenter og modellleverandørene deres. Skriv aldri passord eller koder her."
+      "hintCaution": "Sendes til agenter og modellleverandørene deres. Skriv aldri passord eller koder her.",
+      "removeHint": "Fjern tips"
     },
     "personas": {
       "automation_builder": {
@@ -1869,30 +1865,18 @@
       "unavailable": "Utilgjengelig"
     },
     "selectBy": {
-      "apply": "Bruk",
-      "applyFailed": "Kunne ikke bruke tillatelsene.",
-      "applying": "Bruker...",
       "area": "Område",
-      "cancel": "Avbryt",
       "entities": {
         "one": "{count} entitet",
         "other": "{count} entiteter"
       },
-      "entryId": "Id for konfigurasjonsoppføring",
-      "grantNoteArea": "Dette gir tilgang til entiteter som ligger i det valgte området nå. Nye entiteter tas ikke med automatisk. Gi tilgang til domenet hvis framtidige entiteter skal arve tilgangen.",
-      "grantNoteIntegration": "Dette bruker en øyeblikksbasert tildeling på alle enheter som den nøyaktige konfigurasjonsoppføringen eier nå, og på dens aktive entiteter uten enhet. Det endrer ikke begrensninger på underentiteter.",
-      "grantNoteLabel": "Dette gir tilgang til entiteter som har den valgte etiketten nå. Nye entiteter tas ikke med automatisk. Gi tilgang til domenet hvis framtidige entiteter skal arve tilgangen.",
-      "groupBy": "Grupper etter",
       "integration": "Integrasjon",
-      "integrationCoverage": "Denne oppføringen velger nå {devices} enheter og {entities} aktive entiteter uten enhet.",
       "label": "Etikett",
       "loadIntegrationsFailed": "Kunne ikke laste inn integrasjonsvalg.",
       "loadingIntegrations": "Laster inn integrasjoner…",
       "noAreas": "Ingen områder er definert på noen tilgjengelig entitet.",
       "noIntegrations": "Ingen integrasjoner eier valgbare enheter eller aktive entiteter uten enhet nå.",
       "noLabels": "Ingen etiketter er definert på noen tilgjengelig entitet.",
-      "permissionToApply": "Tillatelse som skal brukes",
-      "registryOnlyWarning": "{count} entiteter uten enhet som bare finnes i registeret, er ikke valgt. Gi tilgang til disse domenene hvis de trenger arvet tilgang: {domains}.",
       "resources": {
         "one": "{count} ressurs",
         "other": "{count} ressurser"
@@ -1900,20 +1884,8 @@
       "selectArea": "-- Velg område --",
       "selectIntegration": "-- Velg integrasjon --",
       "selectLabel": "-- Velg etikett --",
-      "sharedDeviceWarning": {
-        "one": "{count} valgt enhet er delt. Enhetstillatelsen gjelder for alle entiteter på den enheten, også entiteter som eies av andre konfigurasjonsoppføringer.",
-        "other": "{count} valgte enheter er delt. Enhetstillatelsene gjelder for alle entiteter på disse enhetene, også entiteter som eies av andre konfigurasjonsoppføringer."
-      },
-      "stateDeny": "Nekt",
-      "stateRead": "Les",
-      "stateRemoveGrant": "Fjern tildeling",
-      "stateWrite": "Skriv",
-      "title": "Velg etter område, etikett eller integrasjon",
-      "willSet": {
-        "one": "Dette bruker {state} på {count} entitet.",
-        "other": "Dette bruker {state} på {count} entiteter."
-      },
-      "willSetIntegration": "Tillatelse: {state}. Enhetsnoder: {devices}; aktive entitetsnoder uten en enhet: {entities}."
+      "menu": "Velg etter",
+      "reset": "Tilbakestill"
     },
     "settings": {
       "accessKey": "Tilgangsnøkkel",
@@ -2449,7 +2421,10 @@
       "dockWindow": "Fest vinduet i arbeidsområdet igjen.",
       "maximizeWindow": "La vinduet fylle den synlige delen av arbeidsområdet, eller gjenopprett det.",
       "closeWindow": "Lukk vinduet. Åpne det igjen fra menyen Alternativer for arbeidsområdet.",
-      "guideTitle": "Dra i tittellinjen for å flytte veiledningen, eller dra i en kant eller et hjørne for å endre størrelsen."
+      "guideTitle": "Dra i tittellinjen for å flytte veiledningen, eller dra i en kant eller et hjørne for å endre størrelsen.",
+      "selectBy": "Vis bare den delen av treet som hører til ett område, én etikett eller én integrasjon. Det endrer det du ser, ikke hva nøkkelen får gjøre.",
+      "hintSave": "Lagre tipset for det valgte omfanget. Agenter får det sammen med denne entiteten.",
+      "hintRemove": "Fjern tipset som er lagret for det valgte omfanget."
     },
     "guide": {
       "title": "Veiledning",

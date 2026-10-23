@@ -195,32 +195,20 @@
       "shown.more": "{shown} + {extra} więcej"
     },
     "selectBy": {
-      "apply": "Zastosuj",
-      "applyFailed": "Nie udało się zastosować uprawnień.",
-      "applying": "Stosowanie...",
       "area": "Obszar",
-      "cancel": "Anuluj",
       "entities": {
         "one": "{count} encja",
         "few": "{count} encje",
         "many": "{count} encji",
         "other": "{count} encji"
       },
-      "entryId": "ID wpisu konfiguracji",
-      "grantNoteArea": "Przyznaje to dostęp do encji znajdujących się obecnie w wybranym obszarze. Nowe encje nie są uwzględniane automatycznie. Przyznaj domenę, jeśli przyszłe encje mają dziedziczyć dostęp.",
-      "grantNoteIntegration": "Stosuje to migawkowe uprawnienie do wszystkich urządzeń należących obecnie do dokładnego wpisu konfiguracji i jego aktywnych, włączonych encji bez urządzenia. Nie zmienia to ograniczeń encji podrzędnych.",
-      "grantNoteLabel": "Przyznaje to dostęp do encji znajdujących się obecnie w wybranej etykiecie. Nowe encje nie są uwzględniane automatycznie. Przyznaj domenę, jeśli przyszłe encje mają dziedziczyć dostęp.",
-      "groupBy": "Grupuj według",
       "integration": "Integracja",
-      "integrationCoverage": "Ten wpis wybiera obecnie {devices} urządzeń i {entities} aktywnych encji bez urządzenia.",
       "label": "Etykieta",
       "loadIntegrationsFailed": "Nie udało się wczytać opcji integracji.",
       "loadingIntegrations": "Wczytywanie integracji…",
       "noAreas": "Nie zdefiniowano obszarów dla żadnej dostępnej encji.",
       "noIntegrations": "Żadna integracja nie posiada obecnie wybieralnych urządzeń ani aktywnych encji bez urządzenia.",
       "noLabels": "Nie zdefiniowano etykiet dla żadnej dostępnej encji.",
-      "permissionToApply": "Uprawnienie do zastosowania",
-      "registryOnlyWarning": "{count} encji bez urządzenia istniejących tylko w rejestrze nie zostało wybranych. Przyznaj te domeny, jeśli potrzebują dziedziczonego dostępu: {domains}.",
       "resources": {
         "one": "{count} zasób",
         "few": "{count} zasoby",
@@ -230,24 +218,8 @@
       "selectArea": "-- Wybierz obszar --",
       "selectIntegration": "-- Wybierz integrację --",
       "selectLabel": "-- Wybierz etykietę --",
-      "sharedDeviceWarning": {
-        "one": "{count} wybrane urządzenie jest współdzielone. Jego uprawnienie urządzenia wpływa na każdą encję na tym urządzeniu, w tym encje należące do innych wpisów konfiguracji.",
-        "few": "{count} wybrane urządzenia są współdzielone. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji.",
-        "many": "{count} wybranych urządzeń jest współdzielonych. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji.",
-        "other": "{count} wybranych urządzeń jest współdzielonych. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji."
-      },
-      "stateDeny": "Odmów",
-      "stateRead": "Odczyt",
-      "stateRemoveGrant": "Usuń uprawnienie",
-      "stateWrite": "Zapis",
-      "title": "Wybierz według obszaru, etykiety lub integracji",
-      "willSet": {
-        "one": "Spowoduje to zastosowanie {state} do {count} encji.",
-        "few": "Spowoduje to zastosowanie {state} do {count} encji.",
-        "many": "Spowoduje to zastosowanie {state} do {count} encji.",
-        "other": "Spowoduje to zastosowanie {state} do {count} encji."
-      },
-      "willSetIntegration": "Uprawnienie: {state}. Węzły urządzeń: {devices}; aktywne węzły encji bez urządzenia: {entities}."
+      "menu": "Wybierz według",
+      "reset": "Resetuj"
     },
     "version": {
       "card.added": "dodano {subject} ({where})",
@@ -599,7 +571,8 @@
       "unmatchedDeviceName": "Urządzenie nie znajduje się w bieżącym drzewie",
       "unmatchedDevicesNote": "Te jawne uprawnienia odwołują się do ID urządzeń, których nie ma w bieżącym drzewie encji. Ustaw N, aby usunąć nieaktualne uprawnienie.",
       "unmatchedDevicesTitle": "Niedopasowane uprawnienia urządzeń",
-      "hintCaution": "Podpowiedź jest wysyłana do agentów i ich dostawców modeli. Nigdy nie wpisuj tu haseł ani kodów."
+      "hintCaution": "Podpowiedź jest wysyłana do agentów i ich dostawców modeli. Nigdy nie wpisuj tu haseł ani kodów.",
+      "removeHint": "Usuń podpowiedź"
     },
     "diff": {
       "blueprint.create": "Utwórz schemat '{rel}' ({domain})",
@@ -1226,7 +1199,6 @@
       "clearPermsBody": "Usuwa to wszystkie uprawnienia domen, urządzeń i encji. Klucz dostępu nie będzie miał dostępu do encji, dopóki nie dodasz nowych uprawnień.",
       "clearPermsFailed": "Nie udało się wyczyścić uprawnień.",
       "clearPermsTitle": "Wyczyścić wszystkie uprawnienia?",
-      "clearing": "Czyszczenie...",
       "closeCountdown": "Zamknij (3 s)",
       "colActions": "Akcje",
       "colArchivedOn": "Zarchiwizowano",
@@ -1246,7 +1218,6 @@
       "createPtUnderstand": "Rozumiem, że ten klucz dostępu ma szeroki dostęp do Home Assistant",
       "createPtWarning": "<strong>Ten klucz dostępu uzyskuje szeroki dostęp do encji i usług Home Assistant.</strong> Zmiany konfiguracji, akcje systemowe, możliwości wysokiego ryzyka i dostęp do dziennika systemowego nadal korzystają z ustawień Możliwości. Reguły MESA, lista blokowanych Phoenix MCP, usuwanie wrażliwych atrybutów, limity szybkości, unieważnienie i wygaśnięcie również pozostają aktywne. Używaj go tylko z zaufanymi klientami MCP opartymi na HTTP.",
       "createAccessKey": "Utwórz klucz dostępu",
-      "creating": "Tworzenie...",
       "daysAgo": "{d} dn. temu",
       "delete": "Usuń",
       "deletePermanently": "Usuń trwale",
@@ -1301,7 +1272,6 @@
       "permissionSummary": "Podsumowanie uprawnień",
       "permissionsTree": "Drzewo uprawnień",
       "personaApplyFailed": "Nie udało się zastosować persony.",
-      "pleaseWait": "Proszę czekać...",
       "postCreateChatSub": "Czatuj z tego panelu przy użyciu własnego dostawcy modelu. Otwiera Ustawienia.",
       "postCreateChatTitle": "Skonfiguruj Czat agenta",
       "postCreateConnectSub": "Skonfiguruj klienta MCP, takiego jak Claude Code, Cursor, ChatGPT lub Gemini.",
@@ -1369,7 +1339,6 @@
       "scoped": "Ograniczony",
       "secondsOption": "{s} sekund",
       "secondsShort": "{n} s",
-      "selectByAreaLabelIntegration": "Wybierz według obszaru, etykiety lub integracji",
       "setUpAgent": "Skonfiguruj agenta",
       "setUpFirstAgent": "Skonfiguruj swojego pierwszego agenta",
       "showArchived": "Pokaż zarchiwizowane",
@@ -1384,7 +1353,6 @@
       "accessKeyRotatedTitle": "Klucz dostępu zrotowany: {name}",
       "updateFailed": "Nie udało się zaktualizować klucza dostępu.",
       "waitBeforeClose": "Poczekaj 3 sekundy przed zamknięciem",
-      "working": "Praca...",
       "cardNotes": "Notatki",
       "notesCaution": "Notatki mają charakter wyłącznie doradczy: nigdy nie przyznają dostępu, nie zmieniają możliwości ani nie omijają zatwierdzeń, a model może je zignorować. Otrzymują je połączeni klienci i ich dostawcy modeli, a każdy, kto może rozmawiać z agentem używającym tego klucza dostępu, może skłonić go do ich powtórzenia. Nie wpisuj tu haseł ani innych sekretów.",
       "notesCount": "{count} / {max} znaków",
@@ -2552,7 +2520,10 @@
       "dockWindow": "Zadokuj to okno z powrotem w obszarze roboczym.",
       "maximizeWindow": "Wypełnij tym oknem widoczną część obszaru roboczego lub przywróć je.",
       "closeWindow": "Zamknij to okno. Możesz otworzyć je ponownie z menu Opcje obszaru roboczego.",
-      "guideTitle": "Przeciągnij pasek tytułu, aby przenieść przewodnik, albo przeciągnij krawędź lub róg, aby zmienić jego rozmiar."
+      "guideTitle": "Przeciągnij pasek tytułu, aby przenieść przewodnik, albo przeciągnij krawędź lub róg, aby zmienić jego rozmiar.",
+      "selectBy": "Pokaż tylko tę część drzewa, która należy do jednego obszaru, etykiety lub integracji. Zmienia to widok, a nie uprawnienia klucza.",
+      "hintSave": "Zapisz podpowiedź dla wybranego zakresu. Agenci otrzymują ją razem z tą encją.",
+      "hintRemove": "Usuń podpowiedź zapisaną dla wybranego zakresu."
     },
     "guide": {
       "title": "Przewodnik",

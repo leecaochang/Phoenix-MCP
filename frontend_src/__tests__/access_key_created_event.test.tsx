@@ -25,7 +25,7 @@ vi.mock("../api", () => ({
 vi.mock("../components/EntityTree", () => ({ EntityTree: () => null }));
 
 import { OnboardingWizard } from "../views/OnboardingWizard";
-import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 
 const RECORD = {
   id: "t1",
@@ -51,7 +51,7 @@ describe("access key creation announces phx-access-keys-changed", () => {
 
   it("dispatches once the access key exists, so every host refreshes its list", async () => {
     render(
-      <AccessKeyCreateModal
+      <AccessKeyCreateForm
         existingNames={[]}
         onCreated={() => {}}
         onClose={() => {}}

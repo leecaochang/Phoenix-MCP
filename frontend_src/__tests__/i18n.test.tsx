@@ -399,9 +399,10 @@ it("backs off failed catalog requests across repeated HA updates, then retries",
   vi.useRealTimers();
 });
 
-it("covers Polish few and many categories in selection warnings", () => {
+it("covers Polish few and many categories in Select By group counts", () => {
   primeTranslations(pl.panel, "pl");
-  expect(tn("selectBy.sharedDeviceWarning", 2)).toContain("2 wybrane urządzenia są współdzielone");
-  expect(tn("selectBy.sharedDeviceWarning", 5)).toContain("5 wybranych urządzeń jest współdzielonych");
-  expect(tn("selectBy.willSet", 3, { state: "Odczyt" })).not.toContain("selectBy");
+  expect(tn("selectBy.entities", 2)).toBe("2 encje");
+  expect(tn("selectBy.entities", 5)).toBe("5 encji");
+  expect(tn("selectBy.resources", 3)).toBe("3 zasoby");
+  expect(tn("selectBy.resources", 12)).toBe("12 zasobów");
 });

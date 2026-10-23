@@ -28,7 +28,6 @@
       "clearPermsBody": "Tämä poistaa kaikki verkkotunnuksille, laitteille ja entiteeteille myönnetyt oikeudet. Käyttöavaimella ei ole entiteettikäyttöoikeuksia, ennen kuin lisäät uusia oikeuksia.",
       "clearPermsFailed": "Käyttöoikeuksien tyhjennys epäonnistui.",
       "clearPermsTitle": "Tyhjennetäänkö kaikki käyttöoikeudet?",
-      "clearing": "Tyhjennetään...",
       "closeCountdown": "Sulje (3 s)",
       "colActions": "Toiminnot",
       "colArchivedOn": "Arkistoitu",
@@ -48,7 +47,6 @@
       "createFailed": "Käyttöavaimen luonti epäonnistui.",
       "createPtUnderstand": "Ymmärrän, että tällä käyttöavaimella on laajat oikeudet Home Assistant -järjestelmään",
       "createPtWarning": "<strong>Tämä käyttöavain saa laajat oikeudet Home Assistant -entiteetteihin ja -palveluihin.</strong> Kokoonpanomuutokset, järjestelmätoiminnot, korkean riskin ominaisuudet ja järjestelmälokin käyttö määräytyvät edelleen Ominaisuudet-asetusten mukaan. Myös MESA-säännöt, Phoenix MCP -estolista, arkaluontoisten attribuuttien poisto, pyyntörajat, mitätöinti ja vanheneminen ovat edelleen voimassa. Käytä sitä vain luotettujen HTTP-pohjaisten MCP-asiakkaiden kanssa.",
-      "creating": "Luodaan...",
       "daysAgo": "{d} pv sitten",
       "delete": "Poista",
       "deletePermanently": "Poista pysyvästi",
@@ -103,7 +101,6 @@
       "permissionSummary": "Käyttöoikeusyhteenveto",
       "permissionsTree": "Käyttöoikeuspuu",
       "personaApplyFailed": "Personan käyttöönotto epäonnistui.",
-      "pleaseWait": "Odota hetki...",
       "postCreateChatSub": "Keskustele tästä paneelista omalla mallipalveluntarjoajallasi. Avaa Asetukset.",
       "postCreateChatTitle": "Määritä Agent Chat",
       "postCreateConnectSub": "Määritä MCP-asiakasohjelma, kuten Claude Code, Cursor, ChatGPT tai Gemini.",
@@ -171,7 +168,6 @@
       "scoped": "Rajattu",
       "secondsOption": "{s} sekuntia",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Valitse huoneen, tunnisteen tai integraation mukaan",
       "setUpAgent": "Määritä agentti",
       "setUpFirstAgent": "Määritä ensimmäinen agenttisi",
       "showArchived": "Näytä arkistoidut",
@@ -182,7 +178,6 @@
       "switching": "Vaihdetaan...",
       "updateFailed": "Käyttöavaimen päivitys epäonnistui.",
       "waitBeforeClose": "Odota 3 sekuntia ennen sulkemista",
-      "working": "Käsitellään...",
       "cardNotes": "Muistiinpanot",
       "notesCaution": "Muistiinpanot ovat vain ohjeellisia: ne eivät koskaan myönnä käyttöoikeutta, muuta ominaisuuksia tai ohita hyväksyntöjä, ja malli voi jättää ne huomiotta. Yhdistetyt asiakkaat ja niiden mallipalveluntarjoajat saavat ne, ja kuka tahansa, joka voi keskustella tätä käyttöavainta käyttävän agentin kanssa, voi saada sen toistamaan ne. Älä kirjoita tähän salasanoja tai muita salaisuuksia.",
       "notesCount": "{count} / {max} merkkiä",
@@ -1724,7 +1719,7 @@
       "dynamicBadge": "Dynaaminen",
       "dynamicDomainTitle": "Uudet tähän verkkotunnukseen lisätyt entiteetit perivät tämän käyttöoikeuden automaattisesti.",
       "dynamicTitle": "Uudet tähän laitteeseen lisätyt entiteetit perivät tämän käyttöoikeuden automaattisesti.",
-      "editHint": "Muokkausvihje",
+      "editHint": "Muokkaa vihjettä",
       "effectiveTitle": "Voimassa: {state}",
       "filterAria": "Suodata verkkotunnuksia, laitteita ja entiteettejä",
       "filterEmpty": "Yksikään verkkotunnus, laite, entiteetti tai tallennettu käyttöoikeus ei vastaa tätä suodatinta.",
@@ -1776,7 +1771,8 @@
       "unmatchedDeviceName": "Laite ei ole nykyisessä puussa",
       "unmatchedDevicesNote": "Nämä erilliset käyttöoikeudet viittaavat laitetunnuksiin, joita ei ole nykyisessä entiteettipuussa. Poista vanhentunut käyttöoikeus valitsemalla N.",
       "unmatchedDevicesTitle": "Laitteiden käyttöoikeudet, joilla ei ole vastaavuutta",
-      "hintCaution": "Lähetetään agenteille ja niiden mallipalveluntarjoajille. Älä koskaan kirjoita salasanoja tai koodeja."
+      "hintCaution": "Lähetetään agenteille ja niiden mallipalveluntarjoajille. Älä koskaan kirjoita salasanoja tai koodeja.",
+      "removeHint": "Poista vihje"
     },
     "personas": {
       "automation_builder": {
@@ -1869,30 +1865,18 @@
       "unavailable": "Ei saatavissa"
     },
     "selectBy": {
-      "apply": "Käytä",
-      "applyFailed": "Käyttöoikeuksien käyttäminen ei onnistunut.",
-      "applying": "Käytetään...",
       "area": "Huone",
-      "cancel": "Peruuta",
       "entities": {
         "one": "{count} entiteetti",
         "other": "{count} entiteettiä"
       },
-      "entryId": "Kokoonpanomerkinnän tunnus",
-      "grantNoteArea": "Tämä myöntää käyttöoikeuden entiteetteihin, jotka ovat tällä hetkellä valitussa huoneessa. Uudet entiteetit eivät sisälly automaattisesti. Myönnä käyttöoikeus verkkotunnukselle, jos tulevien entiteettien pitäisi periä käyttöoikeus.",
-      "grantNoteIntegration": "Tämä kohdistaa tilannekuvan mukaisen käyttöoikeuden kaikkiin laitteisiin, jotka tarkka kokoonpanomerkintä omistaa tällä hetkellä, sekä sen aktiivisiin, käytössä oleviin laitteettomiin entiteetteihin. Se ei muuta alientiteettien rajoituksia.",
-      "grantNoteLabel": "Tämä myöntää käyttöoikeuden entiteetteihin, jotka ovat tällä hetkellä valitussa tunnisteessa. Uudet entiteetit eivät sisälly automaattisesti. Myönnä käyttöoikeus verkkotunnukselle, jos tulevien entiteettien pitäisi periä käyttöoikeus.",
-      "groupBy": "Ryhmittelyperuste",
       "integration": "Integraatio",
-      "integrationCoverage": "Tämä merkintä valitsee tällä hetkellä {devices} laitetta ja {entities} käytössä olevaa laitteetonta entiteettiä.",
       "label": "Tunniste",
       "loadIntegrationsFailed": "Integraatiovaihtoehtojen lataaminen ei onnistunut.",
       "loadingIntegrations": "Ladataan integraatioita…",
       "noAreas": "Yhdellekään käytettävissä olevalle entiteetille ei ole määritetty huonetta.",
       "noIntegrations": "Yksikään integraatio ei omista tällä hetkellä valittavissa olevia laitteita tai käytössä olevia laitteettomia entiteettejä.",
       "noLabels": "Yhdellekään käytettävissä olevalle entiteetille ei ole määritetty tunnistetta.",
-      "permissionToApply": "Käytettävä käyttöoikeus",
-      "registryOnlyWarning": "{count} vain rekisterissä olevaa laitteetonta entiteettiä ei ole valittuna. Myönnä käyttöoikeus näille verkkotunnuksille, jos ne tarvitsevat perityn käyttöoikeuden: {domains}.",
       "resources": {
         "one": "{count} resurssi",
         "other": "{count} resurssia"
@@ -1900,20 +1884,8 @@
       "selectArea": "-- Valitse huone --",
       "selectIntegration": "-- Valitse integraatio --",
       "selectLabel": "-- Valitse tunniste --",
-      "sharedDeviceWarning": {
-        "one": "{count} valittu laite on jaettu. Sen laitekohtainen käyttöoikeus vaikuttaa kaikkiin kyseisen laitteen entiteetteihin, myös entiteetteihin, jotka kuuluvat muille kokoonpanomerkinnöille.",
-        "other": "{count} valittua laitetta on jaettu. Niiden laitekohtaiset käyttöoikeudet vaikuttavat kaikkiin kyseisten laitteiden entiteetteihin, myös entiteetteihin, jotka kuuluvat muille kokoonpanomerkinnöille."
-      },
-      "stateDeny": "Kiellä",
-      "stateRead": "Lue",
-      "stateRemoveGrant": "Poista käyttöoikeus",
-      "stateWrite": "Kirjoita",
-      "title": "Valitse huoneen, tunnisteen tai integraation mukaan",
-      "willSet": {
-        "one": "Tämä kohdistaa tilan {state} {count} entiteettiin.",
-        "other": "Tämä kohdistaa tilan {state} {count} entiteetteihin."
-      },
-      "willSetIntegration": "Käyttöoikeus: {state}. Laitesolmut: {devices}; käytössä olevat entiteettisolmut ilman laitetta: {entities}."
+      "menu": "Rajaa ryhmän mukaan",
+      "reset": "Palauta"
     },
     "settings": {
       "accessKey": "Käyttöavain",
@@ -2449,7 +2421,10 @@
       "dockWindow": "Kiinnitä tämä ikkuna takaisin työtilaan.",
       "maximizeWindow": "Täytä työtilan näkyvä osa tällä ikkunalla tai palauta se.",
       "closeWindow": "Sulje tämä ikkuna. Voit avata sen uudelleen Työtilan asetukset -valikosta.",
-      "guideTitle": "Siirrä opasta vetämällä otsikkoriviä tai muuta sen kokoa vetämällä reunaa tai kulmaa."
+      "guideTitle": "Siirrä opasta vetämällä otsikkoriviä tai muuta sen kokoa vetämällä reunaa tai kulmaa.",
+      "selectBy": "Näytä vain se osa puusta, joka kuuluu yhteen huoneeseen, tunnisteeseen tai integraatioon. Se muuttaa näkymää, ei avaimen oikeuksia.",
+      "hintSave": "Tallenna vihje valitulle laajuudelle. Agentit saavat sen tämän entiteetin mukana.",
+      "hintRemove": "Poista valitulle laajuudelle tallennettu vihje."
     },
     "guide": {
       "title": "Opas",

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
-import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
 import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
@@ -125,6 +125,7 @@ export function AccessKeyListView({
       tools: [
         { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
         { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived((v) => !v) },
+        // Not a toggle: closing the form from here while a key is being created would lose its one-time secret.
         { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", onSelect: onOpenCreate },
         { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAccessKeys") }), short: t("common.refresh"), icon: "refresh", onSelect: onRefresh },
       ],
@@ -155,12 +156,23 @@ export function AccessKeyListView({
     );
   }
 
+  // Create Access Key opens its form in place, at the top of the window.
+  const createForm = showCreate && (
+    <AccessKeyCreateForm
+      existingNames={accessKeys.map((t) => t.name)}
+      onCreated={handleCreated}
+      onClose={onCloseCreate}
+      onOpenSettings={onOpenSettings}
+    />
+  );
+
   // First run: no access keys and no filter. Show an onboarding hero that launches
-  // the wizard instead of the empty table. The create modal is still mounted
-  // here so the header "Create access key" button works in the empty state.
+  // the wizard instead of the empty table. The create form still opens here so
+  // the Create Access Key tool works in the empty state.
   if (!loading && !error && accessKeys.length === 0 && !filter && !showArchived) {
     return (
       <div className="view-root">
+        {createForm}
         <div className="card wizard-hero">
           <div className="wizard-hero-title">{t("accessKeys.heroTitle")}</div>
           <p className="wizard-hero-sub">
@@ -170,14 +182,6 @@ export function AccessKeyListView({
             <button className="btn btn-primary" onClick={onLaunchWizard}>{t("accessKeys.setUpFirstAgent")}</button>
           </div>
         </div>
-        {showCreate && (
-          <AccessKeyCreateModal
-            existingNames={accessKeys.map((t) => t.name)}
-            onCreated={handleCreated}
-            onClose={onCloseCreate}
-            onOpenSettings={onOpenSettings}
-          />
-        )}
       </div>
     );
   }
@@ -191,6 +195,7 @@ export function AccessKeyListView({
       )}
 
       {notices}
+      {createForm}
 
       <div className="card">
         <div className="filter-row">
@@ -326,14 +331,6 @@ export function AccessKeyListView({
         </div>
       )}
 
-      {showCreate && (
-        <AccessKeyCreateModal
-          existingNames={accessKeys.map((t) => t.name)}
-          onCreated={handleCreated}
-          onClose={onCloseCreate}
-          onOpenSettings={onOpenSettings}
-        />
-      )}
     </div>
   );
 }

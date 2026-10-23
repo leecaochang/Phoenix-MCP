@@ -487,22 +487,10 @@ export interface IntegrationPermissionOption {
   registry_only_deviceless_count: number;
   required_domain_ids: string[];
   shared_device_count: number;
-}
-
-export interface BulkPermissionSummary {
-  selector_type: "area" | "label" | "integration";
-  selector_id: string;
-  state: NodeState;
-  device_count: number;
-  entity_count: number;
-  registry_only_deviceless_count: number;
-  required_domain_ids: string[];
-  shared_device_count: number;
-}
-
-export interface BulkPermissionResult {
-  permissions: PermissionTree;
-  summary: BulkPermissionSummary;
+  /** The devices the entry owns. */
+  device_ids: string[];
+  /** The entry's live, enabled entities without a device. */
+  entity_ids: string[];
 }
 
 export interface ResolutionStep {

@@ -195,30 +195,18 @@
       "shown.more": "{shown} + {extra} meer"
     },
     "selectBy": {
-      "apply": "Toepassen",
-      "applyFailed": "Machtigingen toepassen is mislukt.",
-      "applying": "Toepassen...",
       "area": "Ruimte",
-      "cancel": "Annuleren",
       "entities": {
         "one": "{count} entiteit",
         "other": "{count} entiteiten"
       },
-      "entryId": "Configuratie-item-ID",
-      "grantNoteArea": "Dit verleent toegang tot entiteiten die zich momenteel in de geselecteerde ruimte bevinden. Nieuwe entiteiten worden niet automatisch opgenomen. Ken het domein toe als toekomstige entiteiten toegang moeten overerven.",
-      "grantNoteIntegration": "Dit past een momentopname-toekenning toe op alle apparaten die momenteel eigendom zijn van het exacte configuratie-item en zijn actieve, ingeschakelde entiteiten zonder apparaat. Het wijzigt geen beperkingen van onderliggende entiteiten.",
-      "grantNoteLabel": "Dit verleent toegang tot entiteiten die zich momenteel in het geselecteerde label bevinden. Nieuwe entiteiten worden niet automatisch opgenomen. Ken het domein toe als toekomstige entiteiten toegang moeten overerven.",
-      "groupBy": "Groepeer op",
       "integration": "Integratie",
-      "integrationCoverage": "Dit item selecteert momenteel {devices} apparaten en {entities} actieve entiteiten zonder apparaat.",
       "label": "Label",
       "loadIntegrationsFailed": "Integratie-opties laden is mislukt.",
       "loadingIntegrations": "Integraties laden…",
       "noAreas": "Er zijn geen ruimtes gedefinieerd voor een toegankelijke entiteit.",
       "noIntegrations": "Geen integraties bezitten momenteel selecteerbare apparaten of actieve entiteiten zonder apparaat.",
       "noLabels": "Er zijn geen labels gedefinieerd voor een toegankelijke entiteit.",
-      "permissionToApply": "Toe te passen machtiging",
-      "registryOnlyWarning": "{count} alleen-register-entiteiten zonder apparaat zijn niet geselecteerd. Ken deze domeinen toe als ze geërfde toegang nodig hebben: {domains}.",
       "resources": {
         "one": "{count} bron",
         "other": "{count} bronnen"
@@ -226,20 +214,8 @@
       "selectArea": "-- Selecteer ruimte --",
       "selectIntegration": "-- Selecteer integratie --",
       "selectLabel": "-- Selecteer label --",
-      "sharedDeviceWarning": {
-        "one": "{count} geselecteerd apparaat wordt gedeeld. De apparaattoekenning beïnvloedt elke entiteit op dat apparaat, inclusief entiteiten van andere configuratie-items.",
-        "other": "{count} geselecteerde apparaten worden gedeeld. Hun apparaattoekenningen beïnvloeden elke entiteit op die apparaten, inclusief entiteiten van andere configuratie-items."
-      },
-      "stateDeny": "Weigeren",
-      "stateRead": "Lezen",
-      "stateRemoveGrant": "Toekenning verwijderen",
-      "stateWrite": "Schrijven",
-      "title": "Selecteer op ruimte, label of integratie",
-      "willSet": {
-        "one": "Dit past {state} toe op {count} entiteit.",
-        "other": "Dit past {state} toe op {count} entiteiten."
-      },
-      "willSetIntegration": "Machtiging: {state}. Apparaatknooppunten: {devices}; actieve entiteitsknooppunten zonder apparaat: {entities}."
+      "menu": "Selecteer op",
+      "reset": "Herstellen"
     },
     "version": {
       "card.added": "toegevoegd {subject} ({where})",
@@ -591,7 +567,8 @@
       "unmatchedDeviceName": "Apparaat niet in huidige boom",
       "unmatchedDevicesNote": "Deze expliciete toekenningen verwijzen naar apparaat-ID's die niet in de huidige entiteitenboom staan. Zet N om een verouderde toekenning te verwijderen.",
       "unmatchedDevicesTitle": "Niet-gekoppelde apparaatmachtigingen",
-      "hintCaution": "Wordt verzonden naar agents en hun modelproviders. Zet hier nooit wachtwoorden of codes in."
+      "hintCaution": "Wordt verzonden naar agents en hun modelproviders. Zet hier nooit wachtwoorden of codes in.",
+      "removeHint": "Hint verwijderen"
     },
     "diff": {
       "blueprint.create": "Blueprint '{rel}' maken ({domain})",
@@ -1216,7 +1193,6 @@
       "clearPermsBody": "Hiermee worden alle domein-, apparaat- en entiteitstoekenningen verwijderd. De toegangssleutel heeft geen entiteitstoegang totdat je nieuwe machtigingen toevoegt.",
       "clearPermsFailed": "Machtigingen wissen is mislukt.",
       "clearPermsTitle": "Alle machtigingen wissen?",
-      "clearing": "Wissen...",
       "closeCountdown": "Sluiten (3 s)",
       "colActions": "Acties",
       "colArchivedOn": "Gearchiveerd op",
@@ -1236,7 +1212,6 @@
       "createPtUnderstand": "Ik begrijp dat deze toegangssleutel brede toegang tot Home Assistant heeft",
       "createPtWarning": "<strong>Deze toegangssleutel krijgt brede toegang tot Home Assistant-entiteiten en -services.</strong> Configuratiewijzigingen, systeemacties, risicovolle mogelijkheden en systeemlogboektoegang gebruiken nog steeds de instellingen voor Mogelijkheden. MESA-regels, de Phoenix MCP-blokkeerlijst, het verwijderen van gevoelige attributen, snelheidslimieten, intrekking en verloop blijven ook actief. Gebruik deze alleen met vertrouwde HTTP-gebaseerde MCP-clients.",
       "createAccessKey": "Toegangssleutel maken",
-      "creating": "Maken...",
       "daysAgo": "{d} d geleden",
       "delete": "Verwijderen",
       "deletePermanently": "Permanent verwijderen",
@@ -1291,7 +1266,6 @@
       "permissionSummary": "Machtigingsoverzicht",
       "permissionsTree": "Machtigingsboom",
       "personaApplyFailed": "Persona toepassen is mislukt.",
-      "pleaseWait": "Even geduld...",
       "postCreateChatSub": "Chat vanuit dit paneel met je eigen modelprovider. Opent Instellingen.",
       "postCreateChatTitle": "Agent Chat instellen",
       "postCreateConnectSub": "Configureer een MCP-client zoals Claude Code, Cursor, ChatGPT of Gemini.",
@@ -1359,7 +1333,6 @@
       "scoped": "Afgebakend",
       "secondsOption": "{s} seconden",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Selecteer op ruimte, label of integratie",
       "setUpAgent": "Een agent instellen",
       "setUpFirstAgent": "Je eerste agent instellen",
       "showArchived": "Gearchiveerde weergeven",
@@ -1374,7 +1347,6 @@
       "accessKeyRotatedTitle": "Toegangssleutel geroteerd: {name}",
       "updateFailed": "Toegangssleutel bijwerken is mislukt.",
       "waitBeforeClose": "Wacht 3 seconden voordat je sluit",
-      "working": "Bezig...",
       "cardNotes": "Notities",
       "notesCaution": "Notities zijn alleen een advies: ze verlenen nooit toegang, wijzigen geen mogelijkheden en omzeilen geen goedkeuringen, en een model kan ze negeren. Verbonden clients en hun modelproviders ontvangen ze, en iedereen die kan praten met een agent die deze toegangssleutel gebruikt, kan die agent ze laten herhalen. Zet hier geen wachtwoorden of andere geheimen in.",
       "notesCount": "{count} / {max} tekens",
@@ -2522,7 +2494,10 @@
       "dockWindow": "Koppel dit venster weer vast in de werkruimte.",
       "maximizeWindow": "Laat dit venster het zichtbare deel van de werkruimte vullen, of zet het terug.",
       "closeWindow": "Sluit dit venster. U kunt het opnieuw openen via het menu Werkruimte-opties.",
-      "guideTitle": "Sleep de titelbalk om de gids te verplaatsen, of sleep een rand of hoek om het formaat te wijzigen."
+      "guideTitle": "Sleep de titelbalk om de gids te verplaatsen, of sleep een rand of hoek om het formaat te wijzigen.",
+      "selectBy": "Toon alleen het deel van de boom in één ruimte, label of integratie. Dit verandert wat u ziet, niet wat de sleutel mag.",
+      "hintSave": "Sla de hint op voor het gekozen bereik. Agents krijgen hem bij deze entiteit.",
+      "hintRemove": "Verwijder de hint die voor het gekozen bereik is opgeslagen."
     },
     "guide": {
       "title": "Gids",

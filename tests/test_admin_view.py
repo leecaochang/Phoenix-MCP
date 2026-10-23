@@ -847,6 +847,9 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
     assert option["registry_only_deviceless_count"] == 1
     assert option["required_domain_ids"] == ["sensor"]
     assert option["shared_device_count"] == 1
+    # Members are listed for the panel's filter: owned devices and live deviceless entities only.
+    assert option["device_ids"] == [device.id]
+    assert option["entity_ids"] == [live.entity_id]
     assert disabled.entity_id not in json.dumps(option)
 
 

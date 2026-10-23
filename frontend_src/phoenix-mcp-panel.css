@@ -666,12 +666,19 @@
 .phx-request-section-body { padding: 0 12px 12px; }
 .phx-request-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 
-/* Changes: the list's compact item cell, the restore confirmation in Comparison, and change actions. */
+/* Changes: the list's compact item cell and change actions. */
 .change-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .change-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.phx-restore-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--phx-warning); border-radius: var(--phx-radius-sm); background: var(--phx-warning-bg); }
-.phx-restore-confirm > p { flex: 1 1 260px; margin: 0; line-height: 1.5; }
-.phx-restore-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Inline confirmations: what the action does, an optional acknowledgement, then
+   Confirm and Cancel. They wrap inside narrow windows. */
+.phx-inline-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--phx-warning); border-radius: var(--phx-radius-sm); background: var(--phx-warning-bg); }
+.phx-inline-confirm.is-danger { border-color: var(--phx-error); background: var(--phx-error-bg); }
+.phx-inline-confirm-body { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.5; }
+.phx-inline-confirm-body p { margin: 0; }
+.phx-inline-confirm-body > * + * { margin-top: 6px; }
+.phx-inline-confirm-ack { flex: 1 1 100%; padding: 8px 0 0; border-top: 1px solid var(--phx-divider); border-bottom: none; }
+.phx-inline-confirm > .banner { flex: 1 1 100%; margin: 0; }
+.phx-inline-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .change-action-create { color: var(--phx-success); }
 .change-action-delete { color: var(--phx-error); }
 .change-action-rollback { color: var(--phx-warning); }
@@ -1432,7 +1439,7 @@ select.input {
   }
   .mesa-toolbar-add .btn { width: 100%; }
 
-  .tree-badge, .tree-effective, .tree-hint-link { display: none; }
+  .tree-badge, .tree-effective, .tree-hint-btn { display: none; }
   .tree-children { margin-left: 9px; padding-left: 6px; }
   .tree-node { gap: 6px; }
 
@@ -1510,7 +1517,11 @@ select.input {
 /* ============================================================
    Entity tree
    ============================================================ */
-.tree-filter { margin-bottom: 12px; display: flex; gap: 8px; }
+/* The tree's filter row: Select By and its value selector, the text filter, Reload. */
+.tree-filter { margin-bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tree-filter > .input:not(.tree-filter-select) { flex: 1 1 200px; min-width: 0; }
+.tree-filter-select { flex: 0 1 260px; width: auto; min-width: 140px; max-width: 100%; }
+.tree-filter-note { flex: 1 1 100%; font-size: 12px; color: var(--phx-text-2); }
 .tree-node { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--phx-radius-xs); transition: background 0.12s; }
 .tree-node:hover { background: var(--phx-hover); }
 .tree-node-revealed { background: var(--phx-accent-lt); box-shadow: 0 0 0 1.5px var(--phx-accent); animation: tree-reveal-flash 1.2s ease-out; }
@@ -1566,14 +1577,21 @@ select.input {
 .tree-stale-note { color: var(--phx-text-2); margin: 0 6px 8px; font-size: 12px; }
 .tree-stale-device-row { background: var(--phx-surface-2); }
 .tree-empty { color: var(--phx-text-2); margin: 20px 6px; text-align: center; font-size: 13px; }
-.tree-hint-link { font-size: 11px; color: var(--phx-accent); cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; white-space: nowrap; }
+/* The hint button: muted while the entity has no hint, accented once it has one. */
+.tree-hint-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--phx-radius-xs); background: none; color: var(--phx-text-2); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tree-hint-btn:hover, .tree-hint-btn[aria-expanded="true"] { border-color: var(--phx-border); color: var(--phx-text); }
+.tree-hint-btn.has-hint { color: var(--phx-accent); }
+/* The hint editor opens under its entity's row, inside the tree. */
+.tree-hint-editor { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px 24px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface-2); }
+.tree-hint-editor-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.tree-hint-editor-head code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.tree-hint-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tree-hint-caution { font-size: 12px; color: var(--phx-text-2); margin: 0; line-height: 1.4; }
+.tree-hint-error { color: var(--phx-error); font-size: 12px; margin: 0; }
 .tree-perm-error { font-size: 11px; font-weight: 700; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
-.hint-modal-entity { font-family: var(--phx-mono, monospace); font-size: 12px; color: var(--phx-text-2); margin: 0 0 12px; }
-.hint-modal-error { color: var(--phx-error); font-size: 12px; margin: 8px 0 0; text-align: center; }
-.hint-modal-caution { font-size: 12px; color: var(--phx-text-2); margin: 6px 0 0; line-height: 1.4; }
-.hint-scope { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 6px; font-size: 13px; color: var(--phx-text-2); }
+.hint-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
-.hint-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px; text-align: center; }
+.hint-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0; }
 
 /* ============================================================
    Loading spinner
@@ -1769,6 +1787,9 @@ select.input {
 /* ============================================================
    Access key create modal
    ============================================================ */
+/* Create Access Key, in place at the top of the Access Keys window. */
+.phx-inline-form { margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); }
+.phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .access-key-create-expiry-row { display: flex; gap: 8px; }
 .access-key-create-expiry-value { width: 80px; }
 .access-key-create-rate-section { margin-top: 14px; }
@@ -1871,8 +1892,7 @@ select.input {
 .preset-create-row .input { flex: 1; }
 .preset-empty { font-size: 13px; color: var(--phx-text-2); margin: 0; }
 .preset-hint { font-size: 12px; color: var(--phx-text-2); }
-.preset-modal-section { margin-bottom: 12px; }
-.preset-modal-section p { margin: 0 0 6px; font-size: 13px; }
+.preset-confirm-section p { margin: 0 0 4px; }
 .preset-diff-list {
   margin: 0;
   padding-left: 18px;
@@ -1881,15 +1901,6 @@ select.input {
   color: var(--phx-text-2);
 }
 .preset-diff-list li { margin: 2px 0; }
-.modal-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin: 10px 0 4px;
-  cursor: pointer;
-}
-
 /* MESA profile suggestions (Suggested profiles card on the MESA tab) */
 .mesa-suggestions { margin-bottom: 16px; }
 .mesa-suggest-toolbar { display: flex; align-items: center; gap: 8px; }
@@ -1997,13 +2008,6 @@ select.input {
 /* ============================================================
    Area picker
    ============================================================ */
-.area-picker-summary { font-size: 13px; color: var(--phx-text-2); margin: 0 0 12px; }
-.area-picker-progress { font-size: 13px; margin: 0; }
-.integration-selection-details { margin: 0 0 14px; color: var(--phx-text-2); font-size: 13px; }
-.integration-selection-details > span { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; }
-.integration-selection-details > p { margin: 8px 0 12px; }
-.integration-entry-id { display: block; overflow-wrap: anywhere; user-select: text; color: var(--phx-text); font-family: var(--phx-mono, ui-monospace, monospace); font-size: 12px; }
-.integration-selection-details .banner { margin-bottom: 10px; }
 
 /* ============================================================
    Rate limit config

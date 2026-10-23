@@ -1,7 +1,8 @@
 /**
  * The Access Keys workspace: the key list on top selects a key, and the
  * windows below share that key's state through one provider. Key actions keep
- * their confirmations, and the list's buttons move to the toolbar in the shell.
+ * their confirmations, now shown in place in the window they belong to, and
+ * the list's buttons move to the toolbar in the shell.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,9 +11,9 @@ import { useState } from "react";
 import { api } from "../api";
 import { CAP_NAMES } from "../components/CapabilityMatrix";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext } from "../shell/tools";
-import type { AccessKeyRecord } from "../types";
+import type { AccessKeyPreset, AccessKeyRecord } from "../types";
 import {
-  AccessKeyDetailProvider, AccessKeyNotices, PermissionSummaryWindow, PersonaWindow, useAccessKeyDetail, useKeyActionsTool,
+  AccessKeyDetailProvider, AccessKeyNotices, PermissionSummaryWindow, PermissionsWindow, PersonaWindow, PresetsWindow, useAccessKeyDetail, useKeyActionsTool,
 } from "../views/AccessKeyDetail";
 import { AccessKeyListView } from "../views/AccessKeyList";
 
@@ -21,7 +22,11 @@ vi.mock("../api", () => ({
     getAccessKey: vi.fn(),
     patchAccessKey: vi.fn(),
     revokeAccessKey: vi.fn(),
+    rotateAccessKey: vi.fn(),
+    setPermissions: vi.fn(),
+    applyPreset: vi.fn(),
     getEntityTree: vi.fn(),
+    getEntityHints: vi.fn(),
     listMesaProfiles: vi.fn(),
     listMesaDevices: vi.fn(),
     listMesaDomains: vi.fn(),
@@ -60,6 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getAccessKey).mockImplementation(async (id: string) => KEYS.find((k) => k.id === id)!);
   vi.mocked(api.getEntityTree).mockResolvedValue({} as never);
+  vi.mocked(api.getEntityHints).mockResolvedValue({ entity_hints: {} } as never);
   vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: [] } as never);
   vi.mocked(api.listMesaDevices).mockResolvedValue({ devices: [] } as never);
   vi.mocked(api.listMesaDomains).mockResolvedValue({ domains: [] } as never);
@@ -79,6 +85,10 @@ function Workspace({ registry, onDeselect = vi.fn(), onReveal = vi.fn(), initial
         </WindowPlaceContext.Provider>
         <section aria-label="Persona window"><PersonaWindow /></section>
         <section aria-label="Summary window"><PermissionSummaryWindow /></section>
+        <WindowPlaceContext.Provider value={{ workspace: "accessKeys", window: "permissions" }}>
+          <section aria-label="Permissions window"><PermissionsWindow /></section>
+        </WindowPlaceContext.Provider>
+        <section aria-label="Presets window"><PresetsWindow /></section>
       </AccessKeyDetailProvider>
     </ToolRegistryContext.Provider>
   );
@@ -103,6 +113,20 @@ function List({ selected, onSelect }: { selected: string | null; onSelect: (id: 
 
 const persona = () => within(screen.getByRole("region", { name: "Persona window" }));
 const tool = (registry: ToolRegistry, group: string, id: string) => registry.latest("accessKeys", group, id);
+
+/** Choose an entry of the selected key's Key Actions menu. */
+async function keyAction(registry: ToolRegistry, id: string) {
+  await waitFor(() => expect(tool(registry, "selectedKey", "keyActions")).toBeDefined());
+  const entry = tool(registry, "selectedKey", "keyActions")!.menu!().find((e) => e !== "separator" && e.id === id) as { onSelect: () => void };
+  act(() => entry.onSelect());
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
 
 describe("Access Keys workspace", () => {
   it("asks for a selection, then fills the windows below the list without leaving it", async () => {
@@ -171,11 +195,14 @@ describe("Access Keys workspace", () => {
     expect(entries.find((e) => e.id === "passThrough")?.disabled).toBe(false);
 
     act(() => entries.find((e) => e.id === "revoke")!.onSelect());
-    const dialog = await screen.findByRole("dialog");
-    const confirm = within(dialog).getByRole("button", { name: "Revoke Access Key" });
+    // Confirmed in place, above the key list, rather than in a dialog.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const inline = await screen.findByRole("group", { name: "Revoke Access Key" });
+    const confirm = within(inline).getByRole("button", { name: "Revoke Access Key" });
     expect(confirm).toBeDisabled();
+    expect(within(inline).getByRole("checkbox")).toHaveFocus();
     expect(api.revokeAccessKey).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(confirm);
     await waitFor(() => expect(api.revokeAccessKey).toHaveBeenCalledWith("k1"));
     await waitFor(() => expect(onDeselect).toHaveBeenCalledOnce());
@@ -204,5 +231,119 @@ describe("Access Keys workspace", () => {
     const summary = within(screen.getByRole("region", { name: "Summary window" }));
     fireEvent.click(await summary.findByRole("button", { name: "light.kitchen" }));
     expect(onReveal).toHaveBeenCalledOnce();
+  });
+
+  it("rotates only after acknowledgement, then shows the new key once in a dialog", async () => {
+    const registry = new ToolRegistry();
+    vi.mocked(api.rotateAccessKey).mockResolvedValue({ ...KEYS[0], access_key: "phx_" + "b".repeat(64) } as never);
+    render(<Workspace registry={registry} initial="k1" />);
+    await keyAction(registry, "rotate");
+    const inline = await screen.findByRole("group", { name: "Rotate Access Key" });
+    const confirm = within(inline).getByRole("button", { name: "Rotate Access Key" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(within(inline).getByRole("checkbox"));
+    fireEvent.click(confirm);
+    await waitFor(() => expect(api.rotateAccessKey).toHaveBeenCalledWith("k1"));
+    // The one-time secret stays in a dialog.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Access Key Rotated: kitchen_agent")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Rotate Access Key" })).toBeNull();
+  });
+
+  it("Escape closes a confirmation, but a running action can be neither dismissed nor replaced", async () => {
+    const registry = new ToolRegistry();
+    const pending = deferred<AccessKeyRecord>();
+    vi.mocked(api.patchAccessKey).mockReturnValue(pending.promise);
+    render(<Workspace registry={registry} initial="k1" />);
+
+    await keyAction(registry, "rotate");
+    fireEvent.keyDown(await screen.findByRole("group", { name: "Rotate Access Key" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Rotate Access Key" })).toBeNull();
+    expect(api.rotateAccessKey).not.toHaveBeenCalled();
+
+    await keyAction(registry, "passThrough");
+    const inline = await screen.findByRole("group", { name: "Enable Pass-Through Mode" });
+    fireEvent.click(within(inline).getByRole("checkbox"));
+    fireEvent.click(within(inline).getByRole("button", { name: "Enable Pass-Through" }));
+    expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { pass_through: true, confirm_pass_through: true });
+
+    await keyAction(registry, "revoke");
+    fireEvent.keyDown(inline, { key: "Escape" });
+    expect(screen.getByRole("group", { name: "Enable Pass-Through Mode" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Revoke Access Key" })).toBeNull();
+
+    await act(async () => pending.resolve({ ...KEYS[0], pass_through: true }));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Enable Pass-Through Mode" })).toBeNull());
+    expect(api.revokeAccessKey).not.toHaveBeenCalled();
+  });
+
+  it("confirms Clear All Permissions in the Permissions window and keeps it open with the reason when it fails", async () => {
+    const registry = new ToolRegistry();
+    vi.mocked(api.setPermissions)
+      .mockRejectedValueOnce(new Error("Storage is busy."))
+      .mockResolvedValueOnce({ domains: {}, devices: {}, entities: {} });
+    render(<Workspace registry={registry} initial="k1" />);
+    await waitFor(() => expect(tool(registry, "permissions", "clearAll")).toBeDefined());
+    // Select By narrows the tree beside its filter; it is not a toolbar tool any more.
+    expect(tool(registry, "permissions", "selectBy")).toBeUndefined();
+
+    act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
+    const permissions = within(screen.getByRole("region", { name: "Permissions window" }));
+    const inline = await permissions.findByRole("group", { name: "Clear All Permissions" });
+    fireEvent.click(within(inline).getByRole("button", { name: "Clear All" }));
+    expect(await within(inline).findByRole("alert")).toHaveTextContent("Storage is busy.");
+    expect(permissions.getByRole("group", { name: "Clear All Permissions" })).toBeInTheDocument();
+
+    fireEvent.click(within(inline).getByRole("button", { name: "Clear All" }));
+    await waitFor(() => expect(permissions.queryByRole("group", { name: "Clear All Permissions" })).toBeNull());
+    expect(api.setPermissions).toHaveBeenCalledTimes(2);
+    expect(api.setPermissions).toHaveBeenLastCalledWith("k1", { domains: {}, devices: {}, entities: {} });
+  });
+
+  it("confirms a preset under its row and asks for the pass-through acknowledgement it needs", async () => {
+    const preset: AccessKeyPreset = {
+      id: "p1", name: "Evening", created_at: null, persona: "automation_builder",
+      caps: Object.fromEntries(CAP_NAMES.map((c) => [c, "deny"])) as AccessKeyPreset["caps"],
+      permissions: { domains: {}, devices: {}, entities: {} },
+      pass_through: true, use_assist_exposure: false, announce_all_tools: false,
+      confirm_inline_wait_seconds: 0, rate_limit_requests: 60, rate_limit_burst: 10,
+    };
+    KEYS.push(accessKey({ id: "k4", name: "preset_agent", presets: [preset] }));
+    vi.mocked(api.applyPreset).mockResolvedValue(KEYS[2]);
+    try {
+      const registry = new ToolRegistry();
+      render(<Workspace registry={registry} initial="k4" />);
+      const presets = within(screen.getByRole("region", { name: "Presets window" }));
+      fireEvent.click(await presets.findByRole("button", { name: "Switch To" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      const inline = presets.getByRole("group", { name: "Switch to Preset: Evening" });
+      // It opens directly under the preset's row.
+      expect(inline.previousElementSibling).toHaveClass("preset-row");
+      const confirm = within(inline).getByRole("button", { name: "Switch" });
+      expect(confirm).toBeDisabled();
+      fireEvent.click(within(inline).getByRole("checkbox", { name: "I understand this preset enables pass-through" }));
+      fireEvent.click(confirm);
+      await waitFor(() => expect(api.applyPreset).toHaveBeenCalledWith("k4", "p1", true));
+      await waitFor(() => expect(presets.queryByRole("group", { name: "Switch to Preset: Evening" })).toBeNull());
+    } finally {
+      KEYS.pop();
+    }
+  });
+
+  it("opens Create Access Key in place, above the list, and Escape closes it", () => {
+    const onCloseCreate = vi.fn();
+    render(
+      <AccessKeyListView
+        accessKeys={KEYS} loading={false} error={null} showCreate
+        onRefresh={vi.fn()} onOpenDetail={vi.fn()} onLaunchWizard={vi.fn()} onOpenCreate={vi.fn()} onCloseCreate={onCloseCreate} onOpenSettings={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const form = screen.getByRole("region", { name: "Create Access Key" });
+    expect(form.compareDocumentPosition(screen.getByRole("table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const name = within(form).getByLabelText("Name (required)");
+    expect(name).toHaveFocus();
+    fireEvent.keyDown(name, { key: "Escape" });
+    expect(onCloseCreate).toHaveBeenCalledOnce();
   });
 });

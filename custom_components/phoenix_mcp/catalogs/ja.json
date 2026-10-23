@@ -384,7 +384,8 @@
       "unmatchedDeviceName": "現在のツリーにないデバイス",
       "unmatchedDevicesNote": "これらの明示的な権限は、現在のエンティティツリーにないデバイス ID を参照しています。古い権限を削除するには N を設定してください。",
       "unmatchedDevicesTitle": "一致しないデバイス権限",
-      "hintCaution": "ヒントはエージェントとそのモデルプロバイダーに送信されます。パスワードやコードは絶対に入力しないでください。"
+      "hintCaution": "ヒントはエージェントとそのモデルプロバイダーに送信されます。パスワードやコードは絶対に入力しないでください。",
+      "removeHint": "ヒントを削除"
     },
     "changes": {
       "added": "追加",
@@ -528,7 +529,6 @@
       "clearPermsBody": "すべてのドメイン、デバイス、エンティティの許可を削除します。新しい権限を追加するまで、このアクセスキーはどのエンティティにもアクセスできません。",
       "clearPermsFailed": "権限をクリアできませんでした。",
       "clearPermsTitle": "すべての権限をクリアしますか？",
-      "clearing": "クリア中...",
       "closeCountdown": "閉じる（3秒）",
       "colActions": "アクション",
       "colArchivedOn": "アーカイブ日時",
@@ -548,7 +548,6 @@
       "createPtUnderstand": "このアクセスキーが Home Assistant に幅広くアクセスできることを理解しました",
       "createPtWarning": "<strong>このアクセスキーには Home Assistant のエンティティとサービスへの幅広いアクセス権が付与されます。</strong>設定変更、システムアクション、高リスク機能、システムログアクセスには引き続き機能設定が適用されます。MESA ルール、Phoenix MCP ブロックリスト、機密属性の削除、レート制限、取り消し、有効期限も有効なままです。信頼できる HTTP ベースの MCP クライアントでのみ使用してください。",
       "createAccessKey": "アクセスキーを作成",
-      "creating": "作成中...",
       "daysAgo": "{d}日前",
       "delete": "削除",
       "deletePermanently": "完全に削除",
@@ -603,7 +602,6 @@
       "permissionSummary": "権限の概要",
       "permissionsTree": "権限ツリー",
       "personaApplyFailed": "ペルソナを適用できませんでした。",
-      "pleaseWait": "お待ちください...",
       "postCreateChatSub": "このパネルから自分のモデルプロバイダーを使ってチャットします。設定を開きます。",
       "postCreateChatTitle": "Agent Chat を設定",
       "postCreateConnectSub": "Claude Code、Cursor、ChatGPT、Gemini などの MCP クライアントを設定します。",
@@ -671,7 +669,6 @@
       "scoped": "スコープ付き",
       "secondsOption": "{s} 秒",
       "secondsShort": "{n}秒",
-      "selectByAreaLabelIntegration": "エリア、ラベル、インテグレーションで選択",
       "setUpAgent": "エージェントを設定",
       "setUpFirstAgent": "最初のエージェントを設定",
       "showArchived": "アーカイブを表示",
@@ -686,7 +683,6 @@
       "accessKeyRotatedTitle": "アクセスキーをローテーションしました: {name}",
       "updateFailed": "アクセスキーを更新できませんでした。",
       "waitBeforeClose": "閉じるまで 3 秒お待ちください",
-      "working": "処理中...",
       "cardNotes": "メモ",
       "notesCaution": "メモは参考情報です。アクセスを許可したり、機能を変更したり、承認を回避したりすることはなく、モデルが無視する場合もあります。接続されたクライアントとそのモデルプロバイダーがメモを受け取り、このアクセスキーを使うエージェントと会話できる人は誰でも、エージェントにメモを繰り返させることができます。パスワードなどのシークレットは記入しないでください。",
       "notesCount": "{count} / {max} 文字",
@@ -804,51 +800,27 @@
       "skillHarnessHint": "ガイドを ~/.dsh/skills/phoenix/SKILL.md にインストールします。独自の DSH_HOME を使う場合は、その中の skills ディレクトリを使ってください。"
     },
     "selectBy": {
-      "apply": "適用",
-      "applyFailed": "権限を適用できませんでした。",
-      "applying": "適用中...",
       "area": "エリア",
-      "cancel": "キャンセル",
       "entities": {
         "one": "{count} 個のエンティティ",
         "other": "{count} 個のエンティティ"
       },
-      "grantNoteArea": "選択したエリアに現在あるエンティティへのアクセスを許可します。新しいエンティティは自動的には含まれません。将来のエンティティにも継承させる場合はドメインを許可してください。",
-      "grantNoteIntegration": "正確な設定エントリが現在所有するすべてのデバイスと、有効でデバイスのないライブエンティティにスナップショット権限を適用します。子エンティティの制限は変更しません。",
-      "grantNoteLabel": "選択したラベルが現在付いているエンティティへのアクセスを許可します。新しいエンティティは自動的には含まれません。将来のエンティティにも継承させる場合はドメインを許可してください。",
-      "groupBy": "グループ化",
       "integration": "インテグレーション",
-      "integrationCoverage": "このエントリは現在、{devices} 台のデバイスと {entities} 個のデバイスのないライブエンティティを選択します。",
-      "entryId": "設定エントリ ID",
       "label": "ラベル",
       "loadIntegrationsFailed": "インテグレーションの選択肢を読み込めませんでした。",
       "loadingIntegrations": "インテグレーションを読み込み中...",
       "noAreas": "アクセス可能なエンティティに定義されたエリアはありません。",
       "noIntegrations": "選択可能なデバイスまたはデバイスのないライブエンティティを現在所有するインテグレーションはありません。",
       "noLabels": "アクセス可能なエンティティに定義されたラベルはありません。",
-      "permissionToApply": "適用する権限",
       "selectArea": "-- エリアを選択 --",
       "selectIntegration": "-- インテグレーションを選択 --",
       "selectLabel": "-- ラベルを選択 --",
-      "registryOnlyWarning": "レジストリだけに存在するデバイスのないエンティティ {count} 個は選択されません。継承アクセスが必要な場合は次のドメインを許可してください: {domains}。",
       "resources": {
         "one": "{count} 個のリソース",
         "other": "{count} 個のリソース"
       },
-      "sharedDeviceWarning": {
-        "one": "選択したデバイスのうち {count} 台が共有されています。そのデバイス権限は、ほかの設定エントリが所有するものを含め、そのデバイス上のすべてのエンティティに影響します。",
-        "other": "選択したデバイスのうち {count} 台が共有されています。それらのデバイス権限は、ほかの設定エントリが所有するものを含め、それらのデバイス上のすべてのエンティティに影響します。"
-      },
-      "stateDeny": "拒否",
-      "stateRead": "読み取り",
-      "stateRemoveGrant": "権限を削除",
-      "stateWrite": "書き込み",
-      "title": "エリア、ラベル、インテグレーションで選択",
-      "willSetIntegration": "権限: {state}。デバイスノード: {devices}、デバイスに属さない有効なエンティティノード: {entities}。",
-      "willSet": {
-        "one": "{count} 個のエンティティに {state} を適用します。",
-        "other": "{count} 個のエンティティに {state} を適用します。"
-      }
+      "menu": "グループで絞り込む",
+      "reset": "リセット"
     },
     "version": {
       "card.added": "{subject} を追加（{where}）",
@@ -2444,7 +2416,10 @@
       "dockWindow": "このウィンドウをワークスペースに戻してドッキングします。",
       "maximizeWindow": "このウィンドウでワークスペースの表示部分を埋めるか、元に戻します。",
       "closeWindow": "このウィンドウを閉じます。ワークスペースのオプションのメニューから再び開けます。",
-      "guideTitle": "タイトルバーをドラッグしてガイドを移動するか、端や角をドラッグしてサイズを変更します。"
+      "guideTitle": "タイトルバーをドラッグしてガイドを移動するか、端や角をドラッグしてサイズを変更します。",
+      "selectBy": "ツリーのうち、ひとつのエリア、ラベル、またはインテグレーションに属する部分だけを表示します。変わるのは表示だけで、キーの権限は変わりません。",
+      "hintSave": "選択した範囲のヒントを保存します。エージェントはこのエンティティと一緒にヒントを受け取ります。",
+      "hintRemove": "選択した範囲に保存されたヒントを削除します。"
     },
     "guide": {
       "title": "ガイド",

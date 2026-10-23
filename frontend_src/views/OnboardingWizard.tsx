@@ -5,7 +5,7 @@ import type { AgentCliInstance, AgentCliProviderType, CreateAccessKeyBody, Entit
 import { api, ApiError } from "../api";
 import { PersonaPicker } from "../components/PersonaPicker";
 import { EntityTree } from "../components/EntityTree";
-import { CopyButton } from "../components/AccessKeyCreateModal";
+import { CopyButton } from "../components/AccessKeyCreate";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";

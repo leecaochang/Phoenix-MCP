@@ -1,12 +1,12 @@
 import { BusyInput, BusySelect } from "../components/BusyButton";
 import { BusyButton } from "../components/BusyButton";
-import React, { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AccessKeyRecord, EntityTree as EntityTreeData, PatchAccessKeyBody, PermissionTree } from "../types";
 import { api } from "../api";
 import { Loading, ErrorMsg } from "../components/common";
 import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";
-import { RawAccessKeyDisplay } from "../components/AccessKeyCreateModal";
+import { RawAccessKeyDisplay } from "../components/AccessKeyCreate";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { CapabilityMatrix, CAP_NAMES } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
@@ -16,12 +16,12 @@ import { RateLimitConfig } from "../components/RateLimitConfig";
 import { PassThroughNotice } from "../components/PassThroughNotice";
 import { EntityTree } from "../components/EntityTree";
 import { PermissionSummary } from "../components/PermissionSummary";
-import { SelectByPicker } from "../components/SelectByPicker";
 import { ProfileEditor } from "./MesaView";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
 import type { MenuEntry } from "../ui/Menu";
+import { InlineConfirm } from "../ui/InlineConfirm";
 
 // Whether an access key change alters which tools the MCP client is shown (tools/list),
 // which is the only kind of change that requires a connected agent to reconnect.
@@ -35,49 +35,9 @@ function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
   return capCrossedDeny || a.pass_through !== b.pass_through || a.announce_all_tools !== b.announce_all_tools;
 }
 
-// The destructive actions on this page, each behind its own confirm modal.
-// Exactly one can be in flight at a time; see the `action` state below.
+// The destructive actions on a key, each behind its own inline confirmation.
+// Exactly one can be open or in flight at a time; see the `action` state below.
 type AccessKeyAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
-
-interface ConfirmModalProps {
-  title: string;
-  body: React.ReactNode;
-  checkLabel: string;
-  confirmLabel: string;
-  confirmClass: string;
-  loading: boolean;
-  onConfirm: () => void;
-  onClose: () => void;
-}
-
-function ConfirmModal({ title, body, checkLabel, confirmLabel, confirmClass, loading, onConfirm, onClose }: ConfirmModalProps) {
-  const [checked, setChecked] = useState(false);
-  const titleId = `confirm-modal-${title.replace(/\s+/g, "-").toLowerCase()}`;
-  return (
-    <Modal titleId={titleId} onClose={loading ? undefined : onClose}>
-      <h3 className="modal-title" id={titleId}>{title}</h3>
-      {body}
-      <div className="toggle-row mt-12" style={{ borderTop: "1px solid var(--phx-border)", paddingTop: 12 }}>
-        <div className="toggle-label"><span>{checkLabel}</span></div>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            aria-label={checkLabel}
-            checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-          />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
-      <div className="modal-actions">
-        <BusyButton className={`btn ${confirmClass}`} onClick={onConfirm} busy={loading} disabled={!checked}>
-          {loading ? t("accessKeys.pleaseWait") : confirmLabel}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={loading}>{t("accessKeys.cancel")}</BusyButton>
-      </div>
-    </Modal>
-  );
-}
 
 function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAccessKey: string; accessKeyName: string; onClose: () => void }) {
   const [closeEnabled, setCloseEnabled] = useState(false);
@@ -375,7 +335,6 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [ptConfirmed, setPtConfirmed] = useState(false);
 
   const active = accessKey.presets.find((p) => p.id === accessKey.active_preset_id) ?? null;
   const liveSnap = snapOfAccessKey(accessKey);
@@ -396,7 +355,6 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
         onUpdate(await api.applyPreset(accessKey.id, action.preset.id, needsPtConfirm));
       }
       setAction(null);
-      setPtConfirmed(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.presetActionFailed"));
     } finally {
@@ -425,73 +383,72 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
     ? snapDiffLines(liveSnap, snapOfPreset(action.preset))
     : [];
 
-  return (
-    <div className="preset-list">
-      {action && (
-        <Modal titleId="preset-action-title" onClose={busy ? undefined : () => { setAction(null); setPtConfirmed(false); setError(null); }}>
-          <h3 className="modal-title" id="preset-action-title">
-            {action.kind === "switch" && t("accessKeys.presetSwitchTitle", { name: action.preset.name })}
-            {action.kind === "revert" && t("accessKeys.presetRevertTitle", { name: action.preset.name })}
-            {action.kind === "delete" && t("accessKeys.presetDeleteTitle", { name: action.preset.name })}
-          </h3>
-          {action.kind === "switch" && (
-            <>
-              {dirty && active && (
-                <div className="preset-modal-section">
-                  <p>{tRich("accessKeys.presetSwitchSaveInto", { strong: (c) => <strong>{c}</strong> }, { name: active.name })}</p>
-                  <ul className="preset-diff-list">{dirtyLines.map((l) => <li key={l}>{l}</li>)}</ul>
-                </div>
-              )}
-              <div className="preset-modal-section">
-                {applyLines.length > 0
-                  ? (
-                    <>
-                      <p>{tRich("accessKeys.presetApplying", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
-                      <ul className="preset-diff-list">{applyLines.map((l) => <li key={l}>{l}</li>)}</ul>
-                    </>
-                  )
-                  : <p>{t("accessKeys.presetNoChange")}</p>}
-              </div>
-            </>
-          )}
-          {action.kind === "revert" && (
-            <div className="preset-modal-section">
-              <p>{tRich("accessKeys.presetRevertBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+  const cancel = () => { setAction(null); setError(null); };
+  // The confirmation opens under the row of the preset it acts on.
+  const confirmation = action && (
+    <InlineConfirm
+      key={`${action.kind}:${action.preset.id}`}
+      label={action.kind === "switch" ? t("accessKeys.presetSwitchTitle", { name: action.preset.name })
+        : action.kind === "revert" ? t("accessKeys.presetRevertTitle", { name: action.preset.name })
+        : t("accessKeys.presetDeleteTitle", { name: action.preset.name })}
+      tone={action.kind === "delete" ? "danger" : "warning"}
+      acknowledge={needsPtConfirm ? t("accessKeys.presetPtUnderstand") : undefined}
+      confirmLabel={action.kind === "switch" ? t("accessKeys.presetSwitch") : action.kind === "revert" ? t("accessKeys.presetRevert") : t("accessKeys.delete")}
+      confirmIcon={action.kind === "delete" ? "delete" : "check"}
+      confirmClassName={`btn btn-sm ${action.kind === "delete" ? "btn-danger" : action.kind === "revert" ? "btn-warning" : "btn-primary"}`}
+      cancelLabel={t("accessKeys.cancel")}
+      busy={busy}
+      error={error}
+      onConfirm={runAction}
+      onCancel={cancel}
+    >
+      <p>
+        <strong>
+          {action.kind === "switch" && t("accessKeys.presetSwitchTitle", { name: action.preset.name })}
+          {action.kind === "revert" && t("accessKeys.presetRevertTitle", { name: action.preset.name })}
+          {action.kind === "delete" && t("accessKeys.presetDeleteTitle", { name: action.preset.name })}
+        </strong>
+      </p>
+      {action.kind === "switch" && (
+        <>
+          {dirty && active && (
+            <div className="preset-confirm-section">
+              <p>{tRich("accessKeys.presetSwitchSaveInto", { strong: (c) => <strong>{c}</strong> }, { name: active.name })}</p>
               <ul className="preset-diff-list">{dirtyLines.map((l) => <li key={l}>{l}</li>)}</ul>
             </div>
           )}
-          {action.kind === "delete" && (
-            <p>{tRich("accessKeys.presetDeleteBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
-          )}
-          {needsPtConfirm && (
-            <>
-              <div className="amber-block">
-                <p>{tRich("accessKeys.presetPtWarning", { strong: (c) => <strong>{c}</strong> })}</p>
-              </div>
-              <label className="modal-check">
-                <input type="checkbox" checked={ptConfirmed} onChange={(e) => setPtConfirmed(e.target.checked)} />
-                {t("accessKeys.presetPtUnderstand")}
-              </label>
-            </>
-          )}
-          {error && <ErrorMsg msg={error} />}
-          <div className="modal-actions">
-            <BusyButton className="btn btn-text" onClick={() => { setAction(null); setPtConfirmed(false); setError(null); }} busy={busy}>{t("accessKeys.cancel")}</BusyButton>
-            <BusyButton
-              className={`btn ${action.kind === "delete" ? "btn-danger" : action.kind === "revert" ? "btn-warning" : "btn-primary"}`}
-              onClick={runAction}
-              busy={busy} disabled={(needsPtConfirm && !ptConfirmed)}
-            >
-              {busy ? t("accessKeys.working") : action.kind === "switch" ? t("accessKeys.presetSwitch") : action.kind === "revert" ? t("accessKeys.presetRevert") : t("accessKeys.delete")}
-            </BusyButton>
+          <div className="preset-confirm-section">
+            {applyLines.length > 0
+              ? (
+                <>
+                  <p>{tRich("accessKeys.presetApplying", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+                  <ul className="preset-diff-list">{applyLines.map((l) => <li key={l}>{l}</li>)}</ul>
+                </>
+              )
+              : <p>{t("accessKeys.presetNoChange")}</p>}
           </div>
-        </Modal>
+        </>
       )}
+      {action.kind === "revert" && (
+        <div className="preset-confirm-section">
+          <p>{tRich("accessKeys.presetRevertBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+          <ul className="preset-diff-list">{dirtyLines.map((l) => <li key={l}>{l}</li>)}</ul>
+        </div>
+      )}
+      {action.kind === "delete" && (
+        <p>{tRich("accessKeys.presetDeleteBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+      )}
+      {needsPtConfirm && <p>{tRich("accessKeys.presetPtWarning", { strong: (c) => <strong>{c}</strong> })}</p>}
+    </InlineConfirm>
+  );
 
+  return (
+    <div className="preset-list">
       {accessKey.presets.map((p) => {
         const isActive = p.id === accessKey.active_preset_id;
         return (
-          <div key={p.id} className={`preset-row${isActive ? " preset-row-active" : ""}`}>
+          <Fragment key={p.id}>
+          <div className={`preset-row${isActive ? " preset-row-active" : ""}`}>
             <EditablePresetName accessKeyId={accessKey.id} preset={p} onUpdate={onUpdate} />
             {isActive && <span className="badge badge-green">{t("accessKeys.presetActive")}</span>}
             {isActive && dirty && <span className="badge badge-amber" title={t("accessKeys.presetModifiedTitle")}>{t("accessKeys.presetModified")}</span>}
@@ -513,6 +470,8 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
               )}
             </span>
           </div>
+          {action?.preset.id === p.id && confirmation}
+          </Fragment>
         );
       })}
       {accessKey.presets.length === 0 && (
@@ -634,7 +593,13 @@ export interface AccessKeyDetail {
   setAccessKey: (updated: AccessKeyRecord) => void;
   reconnectNeeded: boolean;
   dismissReconnect: () => void;
+  /** The key action awaiting confirmation, whether it is running, and why it last failed when it stays open. */
+  action: { kind: AccessKeyAction; busy: boolean; error?: string } | null;
   openAction: (kind: AccessKeyAction) => void;
+  /** Run the confirmed action. */
+  runAction: () => void;
+  /** Close the confirmation, unless its action is running. */
+  cancelAction: () => void;
   /** Whether the key list shows this key's name as an editable field. */
   renaming: boolean;
   setRenaming: (on: boolean) => void;
@@ -649,7 +614,6 @@ export interface AccessKeyDetail {
   revealNode: (eid: string, depth?: Depth, opts?: { reveal?: boolean }) => void;
   collapseTreeKey: number;
   onPermissionsChange: (tree: PermissionTree) => void;
-  openSelectBy: () => void;
 }
 
 const AccessKeyDetailContext = createContext<AccessKeyDetail | null>(null);
@@ -703,15 +667,13 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // One destructive action at a time, by construction: a single state makes
-  // "two modals open at once" unrepresentable.
-  const [action, setAction] = useState<{ kind: AccessKeyAction; busy: boolean } | null>(null);
-  const openAction = useCallback((kind: AccessKeyAction) => setAction({ kind, busy: false }), []);
-  const closeAction = () => setAction(null);
-  const setActionBusy = (busy: boolean) => setAction((a) => (a ? { ...a, busy } : a));
-  const isOpen = (kind: AccessKeyAction) => action?.kind === kind;
-  const isBusy = (kind: AccessKeyAction) => action?.kind === kind && action.busy;
+  // "two confirmations open at once" unrepresentable, and a running action
+  // cannot be replaced or dismissed.
+  const [action, setAction] = useState<AccessKeyDetail["action"]>(null);
+  const openAction = useCallback((kind: AccessKeyAction) => setAction((a) => (a?.busy ? a : { kind, busy: false })), []);
+  const cancelAction = useCallback(() => setAction((a) => (a?.busy ? a : null)), []);
+  const endAction = () => setAction(null);
   const [rotatedRawAccessKey, setRotatedRawAccessKey] = useState<string | null>(null);
-  const [showSelectByPicker, setShowSelectByPicker] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [entityTree, setEntityTree] = useState<EntityTreeData | null>(null);
   // Set when a change alters the announced tool list, to remind the operator to
@@ -800,7 +762,6 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
   }, [mesaProfileEntities, mesaProfileDevices, mesaProfileDomains]);
 
   async function revoke() {
-    setActionBusy(true);
     try {
       await api.revokeAccessKey(accessKeyId);
       // Any open Agent Chat window (panel or floating) drops the revoked access key
@@ -810,12 +771,11 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
       onDeselect();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.revokeFailed"));
-      closeAction();
+      endAction();
     }
   }
 
   async function rotate() {
-    setActionBusy(true);
     try {
       const resp = await api.rotateAccessKey(accessKeyId);
       const { access_key: rawAccessKey } = resp;
@@ -825,27 +785,25 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
       setError(e instanceof Error ? e.message : t("accessKeys.rotateFailed"));
     } finally {
       // Closed on success and on failure alike.
-      closeAction();
+      endAction();
     }
   }
 
   async function clearPermissions() {
-    setActionBusy(true);
     try {
       const updatedTree = await api.setPermissions(accessKeyId, { domains: {}, devices: {}, entities: {} });
       setAccessKey((prev) => prev ? { ...prev, permissions: updatedTree } : prev);
       setCollapseTreeKey((k) => k + 1);
-      closeAction();
+      endAction();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("accessKeys.clearPermsFailed"));
-      // Unlike the others, this modal stays open on failure so the operator can
-      // retry without reopening it.
-      setActionBusy(false);
+      // Unlike the others, this confirmation stays open on failure, showing why,
+      // so the operator can retry without reopening it.
+      const error = e instanceof Error ? e.message : t("accessKeys.clearPermsFailed");
+      setAction((a) => (a ? { ...a, busy: false, error } : a));
     }
   }
 
   async function enablePassThrough() {
-    setActionBusy(true);
     try {
       const body: PatchAccessKeyBody = { pass_through: true, confirm_pass_through: true };
       const updated = await api.patchAccessKey(accessKeyId, body);
@@ -853,9 +811,21 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.enablePtFailed"));
     } finally {
-      closeAction();
+      endAction();
     }
   }
+
+  // The handlers read this render's props; runAction stays stable for the windows.
+  const handlers = useRef<Record<AccessKeyAction, () => Promise<void>>>(null!);
+  handlers.current = { revoke, rotate, clearPerms: clearPermissions, passThrough: enablePassThrough };
+  const actionRef = useRef(action);
+  actionRef.current = action;
+  const runAction = useCallback(() => {
+    const a = actionRef.current;
+    if (!a || a.busy) return;
+    setAction({ kind: a.kind, busy: true });
+    void handlers.current[a.kind]();
+  }, []);
 
   const onPermissionsChange = useCallback((tree: PermissionTree) => {
     setAccessKey((current) => (current?.id === accessKeyId ? { ...current, permissions: tree } : current));
@@ -872,7 +842,10 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
     setAccessKey,
     reconnectNeeded,
     dismissReconnect: () => setReconnectNeeded(false),
+    action,
     openAction,
+    runAction,
+    cancelAction,
     renaming,
     setRenaming,
     entityTree,
@@ -886,9 +859,8 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
     revealNode,
     collapseTreeKey,
     onPermissionsChange,
-    openSelectBy: () => setShowSelectByPicker(true),
-  }), [accessKeyId, accessKey, loading, error, presetsEnabled, esphomeIntegration, esphomeBuilder, applyUpdate, reconnectNeeded, openAction,
-    renaming, entityTree, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, openMesa, selectedEntityId, selectedDepth, revealNonce,
+  }), [accessKeyId, accessKey, loading, error, presetsEnabled, esphomeIntegration, esphomeBuilder, applyUpdate, reconnectNeeded, action, openAction,
+    runAction, cancelAction, renaming, entityTree, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, openMesa, selectedEntityId, selectedDepth, revealNonce,
     revealNode, collapseTreeKey, onPermissionsChange]);
 
   useLayoutEffect(() => { publish(value); }, [publish, value]);
@@ -898,86 +870,6 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
     <>
       {rotatedRawAccessKey && accessKey && (
         <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} onClose={() => setRotatedRawAccessKey(null)} />
-      )}
-
-      {isOpen("rotate") && (
-        <ConfirmModal
-          title={t("accessKeys.rotateAccessKeyTitle")}
-          body={
-            <div className="amber-block">
-              <p>{t("accessKeys.rotateBody")}</p>
-            </div>
-          }
-          checkLabel={t("accessKeys.rotateCheck")}
-          confirmLabel={t("accessKeys.rotateAccessKeyTitle")}
-          confirmClass="btn-primary"
-          loading={isBusy("rotate")}
-          onConfirm={rotate}
-          onClose={closeAction}
-        />
-      )}
-
-      {isOpen("revoke") && (
-        <ConfirmModal
-          title={t("accessKeys.revokeAccessKeyTitle")}
-          body={
-            <div className="amber-block">
-              <p>{t("accessKeys.revokeBody")}</p>
-            </div>
-          }
-          checkLabel={t("accessKeys.revokeCheck")}
-          confirmLabel={t("accessKeys.revokeAccessKeyTitle")}
-          confirmClass="btn-danger"
-          loading={isBusy("revoke")}
-          onConfirm={revoke}
-          onClose={closeAction}
-        />
-      )}
-
-      {isOpen("passThrough") && (
-        <ConfirmModal
-          title={t("accessKeys.enablePtTitle")}
-          body={
-            <div className="amber-block">
-              <p>{tRich("accessKeys.enablePtBody", { strong: (c) => <strong>{c}</strong> })}</p>
-            </div>
-          }
-          checkLabel={t("accessKeys.enablePtCheck")}
-          confirmLabel={t("accessKeys.enablePtLabel")}
-          confirmClass="btn-warning"
-          loading={isBusy("passThrough")}
-          onConfirm={enablePassThrough}
-          onClose={closeAction}
-        />
-      )}
-
-      {showSelectByPicker && entityTree && (
-        <SelectByPicker
-          accessKeyId={accessKeyId}
-          entityTree={entityTree}
-          onDone={() => {
-            setShowSelectByPicker(false);
-            load();
-          }}
-          onClose={() => setShowSelectByPicker(false)}
-        />
-      )}
-
-      {isOpen("clearPerms") && (
-        <Modal titleId="clear-perms-title" onClose={isBusy("clearPerms") ? undefined : closeAction}>
-          <h3 className="modal-title" id="clear-perms-title">{t("accessKeys.clearPermsTitle")}</h3>
-          <p className="clear-perms-body">
-            {t("accessKeys.clearPermsBody")}
-          </p>
-          <div className="modal-actions">
-            <button className="btn btn-danger" onClick={clearPermissions} disabled={isBusy("clearPerms")}>
-              {isBusy("clearPerms") ? t("accessKeys.clearing") : t("accessKeys.clearAll")}
-            </button>
-            <button className="btn btn-text" onClick={closeAction} disabled={isBusy("clearPerms")}>
-              {t("accessKeys.cancel")}
-            </button>
-          </div>
-        </Modal>
       )}
 
       {mesaEdit && (
@@ -1016,13 +908,52 @@ function useLoadedKey(): { detail: AccessKeyDetail; accessKey: AccessKeyRecord }
   return { detail, accessKey: detail.accessKey };
 }
 
-/** Notices about the selected key, shown above the key list. */
+/** Rotate, Revoke or Enable Pass-Through awaiting confirmation, shown above the key list. */
+function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
+  const a = detail.action;
+  if (!a || a.kind === "clearPerms") return null;
+  const text = a.kind === "rotate" ? {
+    title: t("accessKeys.rotateAccessKeyTitle"), body: t("accessKeys.rotateBody"), check: t("accessKeys.rotateCheck"),
+    confirm: t("accessKeys.rotateAccessKeyTitle"), icon: "check" as const, className: "btn btn-primary btn-sm", tone: "warning" as const,
+  } : a.kind === "revoke" ? {
+    title: t("accessKeys.revokeAccessKeyTitle"), body: t("accessKeys.revokeBody"), check: t("accessKeys.revokeCheck"),
+    confirm: t("accessKeys.revokeAccessKeyTitle"), icon: "denied" as const, className: "btn btn-danger btn-sm", tone: "danger" as const,
+  } : {
+    title: t("accessKeys.enablePtTitle"), body: tRich("accessKeys.enablePtBody", { strong: (c) => <strong>{c}</strong> }), check: t("accessKeys.enablePtCheck"),
+    confirm: t("accessKeys.enablePtLabel"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
+  };
+  return (
+    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check}
+      confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
+      cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction}>
+      <p><strong>{text.title}</strong></p>
+      <p>{text.body}</p>
+    </InlineConfirm>
+  );
+}
+
+/** Clear All Permissions awaiting confirmation, shown above the Permissions tree. */
+function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
+  const a = detail.action;
+  if (a?.kind !== "clearPerms") return null;
+  return (
+    <InlineConfirm label={t("workspace.clearAllPermissions")} tone="danger" confirmLabel={t("accessKeys.clearAll")} confirmIcon="delete"
+      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("accessKeys.cancel")} busy={a.busy} error={a.error}
+      onConfirm={detail.runAction} onCancel={detail.cancelAction}>
+      <p><strong>{t("accessKeys.clearPermsTitle")}</strong></p>
+      <p>{t("accessKeys.clearPermsBody")}</p>
+    </InlineConfirm>
+  );
+}
+
+/** Notices about the selected key, and its action awaiting confirmation, shown above the key list. */
 export function AccessKeyNotices() {
   const detail = useAccessKeyDetail();
   const accessKey = detail?.accessKey;
   if (!detail || !accessKey) return null;
   return (
     <>
+      <KeyActionConfirmation detail={detail} />
       {detail.error && <ErrorMsg msg={detail.error} />}
       {detail.reconnectNeeded && (
         <div className="banner banner-info reconnect-banner" role="status">
@@ -1118,12 +1049,12 @@ export function PermissionsWindow() {
   const k = useLoadedKey();
   const detail = "detail" in k ? k.detail : null;
   const scoped = "accessKey" in k && !k.accessKey.pass_through;
-  // Select By and Clear All act on the tree, so they sit on the toolbar while it is shown.
+  // Clear All acts on the whole tree, so it sits on the toolbar while the tree is shown.
+  // Select By only narrows what the tree shows, so it sits beside the tree's own filter.
   const onToolbar = useToolbarTools(detail && scoped ? [{
     id: "permissions",
     label: t("accessKeys.permissionsTree"),
     tools: [
-      { id: "selectBy", label: t("accessKeys.selectByAreaLabelIntegration"), icon: "selectBy", disabled: !detail.entityTree, onSelect: detail.openSelectBy },
       { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "delete", tone: "danger", onSelect: () => detail.openAction("clearPerms") },
     ],
   }] : []);
@@ -1134,20 +1065,17 @@ export function PermissionsWindow() {
   }
   return (
     <div className="phx-window-pad">
-      {!onToolbar && (
+      {!onToolbar && k.detail.action?.kind !== "clearPerms" && (
         <div className="tree-header-actions">
-          {k.detail.entityTree && (
-            <button className="btn btn-outline btn-sm" onClick={k.detail.openSelectBy}>
-              {t("accessKeys.selectByAreaLabelIntegration")}
-            </button>
-          )}
           <button className="btn btn-danger btn-sm" onClick={() => k.detail.openAction("clearPerms")}>
             {t("accessKeys.clearAll")}
           </button>
         </div>
       )}
+      <ClearPermissionsConfirmation detail={k.detail} />
       <EntityTree
         accessKeyId={accessKey.id}
+        selectBy
         permissions={accessKey.permissions}
         onPermissionsChange={k.detail.onPermissionsChange}
         onEntityClick={k.detail.revealNode}

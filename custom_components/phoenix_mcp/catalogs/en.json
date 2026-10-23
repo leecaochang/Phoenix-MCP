@@ -325,7 +325,6 @@
       "clearPermsBody": "This removes every domain, device, and entity grant. The access key will have no entity access until you add new permissions.",
       "clearPermsFailed": "Failed to clear permissions.",
       "clearPermsTitle": "Clear all permissions?",
-      "clearing": "Clearing...",
       "closeCountdown": "Close (3s)",
       "colActions": "Actions",
       "colArchivedOn": "Archived On",
@@ -345,7 +344,6 @@
       "createPtUnderstand": "I understand this access key has broad Home Assistant access",
       "createPtWarning": "<strong>This access key gets broad access to Home Assistant entities and services.</strong> Configuration changes, system actions, high-risk capabilities, and system log access still use the Capabilities settings. MESA rules, the Phoenix MCP blocklist, sensitive attribute removal, rate limits, revocation, and expiry also remain active. Use it only with trusted HTTP-based MCP clients.",
       "createAccessKey": "Create Access Key",
-      "creating": "Creating...",
       "daysAgo": "{d}d ago",
       "delete": "Delete",
       "deletePermanently": "Delete Permanently",
@@ -407,7 +405,6 @@
       "permissionSummary": "Permission Summary",
       "permissionsTree": "Permissions Tree",
       "personaApplyFailed": "Failed to apply persona.",
-      "pleaseWait": "Please wait...",
       "postCreateChatSub": "Chat from this panel using your own model provider. Opens Settings.",
       "postCreateChatTitle": "Set Up Agent Chat",
       "postCreateConnectSub": "Configure an MCP client such as Claude Code, Cursor, ChatGPT, or Gemini.",
@@ -475,7 +472,6 @@
       "scoped": "Scoped",
       "secondsOption": "{s} Seconds",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Select by Area, Label, or Integration",
       "setUpAgent": "Set Up an Agent",
       "setUpFirstAgent": "Set Up Your First Agent",
       "showArchived": "Show Archived",
@@ -489,8 +485,7 @@
       "accessKeyRenameTitle": "Rename this access key; saves when you click away",
       "accessKeyRotatedTitle": "Access Key Rotated: {name}",
       "updateFailed": "Failed to update access key.",
-      "waitBeforeClose": "Wait 3 seconds before closing",
-      "working": "Working..."
+      "waitBeforeClose": "Wait 3 seconds before closing"
     },
     "shell": {
       "tabAccessKeys": "Access Keys",
@@ -605,7 +600,10 @@
       "dockWindow": "Dock this window back into the workspace.",
       "maximizeWindow": "Fill the visible workspace with this window, or restore it.",
       "closeWindow": "Close this window. Reopen it from the workspace options menu.",
-      "guideTitle": "Drag the title bar to move the Guide, or drag an edge or corner to resize it."
+      "guideTitle": "Drag the title bar to move the Guide, or drag an edge or corner to resize it.",
+      "selectBy": "Show only the part of the tree in one area, label, or integration. It changes what you see, not what the key may do.",
+      "hintSave": "Save the hint for the chosen scope. Agents receive it with this entity.",
+      "hintRemove": "Remove the hint saved for the chosen scope."
     },
     "guide": {
       "title": "Guide",
@@ -645,6 +643,7 @@
       "dynamicDomainTitle": "New entities added to this domain will automatically inherit this permission.",
       "dynamicTitle": "New entities added to this device will automatically inherit this permission.",
       "editHint": "Edit Hint",
+      "removeHint": "Remove Hint",
       "effectiveTitle": "Effective: {state}",
       "filterAria": "Filter domains, devices, and entities",
       "filterEmpty": "No domains, devices, entities, or stored grants match this filter.",
@@ -1169,50 +1168,26 @@
       "yes": "Yes"
     },
     "selectBy": {
-      "apply": "Apply",
-      "applyFailed": "Failed to apply permissions.",
-      "applying": "Applying...",
       "area": "Area",
-      "cancel": "Cancel",
       "entities": {
         "one": "{count} entity",
         "other": "{count} entities"
       },
-      "grantNoteArea": "This grants access to entities currently in the selected area. New entities are not included automatically. Grant the domain if future entities should inherit access.",
-      "grantNoteIntegration": "This applies a snapshot grant to all devices currently owned by the exact config entry and its live, enabled deviceless entities. It does not change child-entity restrictions.",
-      "grantNoteLabel": "This grants access to entities currently in the selected label. New entities are not included automatically. Grant the domain if future entities should inherit access.",
-      "groupBy": "Group by",
       "integration": "Integration",
-      "integrationCoverage": "This entry currently selects {devices} devices and {entities} live deviceless entities.",
-      "entryId": "Config entry ID",
       "label": "Label",
+      "menu": "Select By",
+      "reset": "Reset",
       "loadIntegrationsFailed": "Failed to load integration choices.",
       "loadingIntegrations": "Loading Integrations…",
       "noAreas": "No areas are defined on any accessible entity.",
       "noIntegrations": "No integrations currently own selectable devices or live deviceless entities.",
       "noLabels": "No labels are defined on any accessible entity.",
-      "permissionToApply": "Permission to apply",
       "selectArea": "-- Select area --",
       "selectIntegration": "-- Select integration --",
       "selectLabel": "-- Select label --",
-      "registryOnlyWarning": "{count} registry-only deviceless entities are not selected. Grant these domains if they need inherited access: {domains}.",
       "resources": {
         "one": "{count} resource",
         "other": "{count} resources"
-      },
-      "sharedDeviceWarning": {
-        "one": "{count} selected device is shared. Its device grant affects every entity on that device, including entities owned by other config entries.",
-        "other": "{count} selected devices are shared. Their device grants affect every entity on those devices, including entities owned by other config entries."
-      },
-      "stateDeny": "Deny",
-      "stateRead": "Read",
-      "stateRemoveGrant": "Remove grant",
-      "stateWrite": "Write",
-      "title": "Select by Area, Label, or Integration",
-      "willSetIntegration": "Permission: {state}. Device nodes: {devices}; live entity nodes without a device: {entities}.",
-      "willSet": {
-        "one": "This will apply {state} to {count} entity.",
-        "other": "This will apply {state} to {count} entities."
       }
     },
     "settings": {

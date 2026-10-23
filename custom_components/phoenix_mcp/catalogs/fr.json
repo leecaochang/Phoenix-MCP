@@ -324,7 +324,6 @@
       "clearPermsBody": "Cela supprime chaque autorisation de domaine, d'appareil et d'entité. La clé d’accès n'aura aucun accès aux entités tant que vous n'aurez pas ajouté de nouvelles autorisations.",
       "clearPermsFailed": "Échec de l'effacement des autorisations.",
       "clearPermsTitle": "Effacer toutes les autorisations ?",
-      "clearing": "Effacement...",
       "closeCountdown": "Fermer (3 s)",
       "colActions": "Opérations",
       "colArchivedOn": "Archivé le",
@@ -344,7 +343,6 @@
       "createPtUnderstand": "Je comprends que cette clé d’accès dispose d'un large accès à Home Assistant",
       "createPtWarning": "<strong>Cette clé d’accès obtient un large accès aux entités et aux services de Home Assistant.</strong> Les modifications de configuration, les actions système, les capacités à risque élevé et l'accès au journal système utilisent toujours les paramètres de capacités. Les règles MESA, la liste de blocage Phoenix MCP, la suppression des attributs sensibles, les limites de débit, la révocation et l'expiration restent également actives. Utilisez-le uniquement avec des clients MCP HTTP de confiance.",
       "createAccessKey": "Créer une clé d’accès",
-      "creating": "Création...",
       "daysAgo": "il y a {d} j",
       "delete": "Supprimer",
       "deletePermanently": "Supprimer définitivement",
@@ -399,7 +397,6 @@
       "permissionSummary": "Résumé des autorisations",
       "permissionsTree": "Arbre des autorisations",
       "personaApplyFailed": "Échec de l'application de la personnalité.",
-      "pleaseWait": "Veuillez patienter...",
       "postCreateChatSub": "Discutez depuis ce panneau avec votre propre fournisseur de modèle. Ouvre les paramètres.",
       "postCreateChatTitle": "Configurer le Chat de l'agent",
       "postCreateConnectSub": "Configurez un client MCP tel que Claude Code, Cursor, ChatGPT ou Gemini.",
@@ -467,7 +464,6 @@
       "scoped": "Limité",
       "secondsOption": "{s} secondes",
       "secondsShort": "{n} s",
-      "selectByAreaLabelIntegration": "Sélectionner par pièce, étiquette ou intégration",
       "setUpAgent": "Configurer un agent",
       "setUpFirstAgent": "Configurer votre premier agent",
       "showArchived": "Afficher les archivés",
@@ -482,7 +478,6 @@
       "accessKeyRotatedTitle": "Clé d’accès renouvelée : {name}",
       "updateFailed": "Échec de la mise à jour de la clé d’accès.",
       "waitBeforeClose": "Attendez 3 secondes avant de fermer",
-      "working": "Traitement...",
       "cardNotes": "Notes",
       "notesCaution": "Les notes sont uniquement indicatives : elles n’accordent jamais d’accès, ne modifient pas les capacités et ne contournent pas les approbations, et un modèle peut les ignorer. Les clients connectés et leurs fournisseurs de modèle les reçoivent, et toute personne pouvant parler à un agent qui utilise cette clé d’accès peut l’amener à les répéter. N’y mettez ni mots de passe ni autres secrets.",
       "notesCount": "{count} / {max} caractères",
@@ -571,7 +566,8 @@
       "unmatchedDeviceName": "Appareil absent de l'arbre actuel",
       "unmatchedDevicesNote": "Ces autorisations explicites font référence à des ID d'appareil absents de l'arbre des entités actuel. Appuyez sur N pour supprimer une autorisation obsolète.",
       "unmatchedDevicesTitle": "Autorisations d'appareil non associées",
-      "hintCaution": "Cette indication est envoyée aux agents et à leurs fournisseurs de modèle. N’y mettez jamais de mots de passe ni de codes."
+      "hintCaution": "Cette indication est envoyée aux agents et à leurs fournisseurs de modèle. N’y mettez jamais de mots de passe ni de codes.",
+      "removeHint": "Supprimer l’indication"
     },
     "changes": {
       "added": "Ajouté",
@@ -1043,51 +1039,27 @@
       "scopeLabelParentDevice": "Appareil principal"
     },
     "selectBy": {
-      "apply": "Appliquer",
-      "applyFailed": "Échec de l'application des autorisations.",
-      "applying": "Application...",
       "area": "Pièce",
-      "cancel": "Annuler",
       "entities": {
         "one": "{count} entité",
         "other": "{count} entités"
       },
-      "grantNoteArea": "Cela accorde l'accès aux entités actuellement dans la pièce sélectionnée. Les nouvelles entités ne sont pas incluses automatiquement. Accordez le domaine si les futures entités doivent hériter de l'accès.",
-      "grantNoteIntegration": "Cela applique une autorisation instantanée à tous les appareils actuellement possédés par l'entrée de configuration exacte et à ses entités actives sans appareil. Cela ne modifie pas les restrictions des entités enfants.",
-      "grantNoteLabel": "Cela accorde l'accès aux entités actuellement dans l'étiquette sélectionnée. Les nouvelles entités ne sont pas incluses automatiquement. Accordez le domaine si les futures entités doivent hériter de l'accès.",
-      "groupBy": "Regrouper par",
       "integration": "Intégration",
-      "integrationCoverage": "Cette entrée sélectionne actuellement {devices} appareils et {entities} entités actives sans appareil.",
-      "entryId": "ID d'entrée de configuration",
       "label": "Étiquette",
       "loadIntegrationsFailed": "Échec du chargement des choix d'intégration.",
       "loadingIntegrations": "Chargement des intégrations…",
       "noAreas": "Aucune pièce n'est définie sur une entité accessible.",
       "noIntegrations": "Aucune intégration ne possède actuellement d'appareils sélectionnables ou d'entités actives sans appareil.",
       "noLabels": "Aucune étiquette n'est définie sur une entité accessible.",
-      "permissionToApply": "Autorisation à appliquer",
       "selectArea": "-- Sélectionner une pièce --",
       "selectIntegration": "-- Sélectionner une intégration --",
       "selectLabel": "-- Sélectionner une étiquette --",
-      "registryOnlyWarning": "{count} entités sans appareil uniquement dans le registre ne sont pas sélectionnées. Accordez ces domaines s'ils ont besoin d'un accès hérité : {domains}.",
       "resources": {
         "one": "{count} ressource",
         "other": "{count} ressources"
       },
-      "sharedDeviceWarning": {
-        "one": "{count} appareil sélectionné est partagé. Son autorisation d'appareil affecte chaque entité de cet appareil, y compris les entités possédées par d'autres entrées de configuration.",
-        "other": "{count} appareils sélectionnés sont partagés. Leurs autorisations d'appareil affectent chaque entité de ces appareils, y compris les entités possédées par d'autres entrées de configuration."
-      },
-      "stateDeny": "Refuser",
-      "stateRead": "Lecture",
-      "stateRemoveGrant": "Supprimer l'autorisation",
-      "stateWrite": "Écriture",
-      "title": "Sélectionner par pièce, étiquette ou intégration",
-      "willSetIntegration": "Autorisation : {state}. Nœuds d’appareil : {devices} ; nœuds d’entité actifs sans appareil : {entities}.",
-      "willSet": {
-        "one": "Cela appliquera {state} à {count} entité.",
-        "other": "Cela appliquera {state} à {count} entités."
-      }
+      "menu": "Sélectionner par",
+      "reset": "Réinitialiser"
     },
     "settings": {
       "addProviderFirst": "Ajoutez d'abord un compte de fournisseur dans le Chat de l'agent.",
@@ -2444,7 +2416,10 @@
       "dockWindow": "Ancrez de nouveau cette fenêtre dans l’espace de travail.",
       "maximizeWindow": "Faites occuper à cette fenêtre la partie visible de l’espace de travail, ou rétablissez-la.",
       "closeWindow": "Fermez cette fenêtre. Vous pouvez la rouvrir depuis le menu Réglages de l’espace de travail.",
-      "guideTitle": "Faites glisser la barre de titre pour déplacer le guide, ou faites glisser un bord ou un coin pour le redimensionner."
+      "guideTitle": "Faites glisser la barre de titre pour déplacer le guide, ou faites glisser un bord ou un coin pour le redimensionner.",
+      "selectBy": "Affichez seulement la partie de l’arbre qui appartient à une pièce, une étiquette ou une intégration. Cela change ce que vous voyez, pas ce que la clé peut faire.",
+      "hintSave": "Enregistrez l’indication pour la portée choisie. Les agents la reçoivent avec cette entité.",
+      "hintRemove": "Supprimez l’indication enregistrée pour la portée choisie."
     },
     "guide": {
       "title": "Guide",

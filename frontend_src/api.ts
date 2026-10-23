@@ -10,7 +10,6 @@ import type {
   ApprovalListParams,
   ApprovalListResponse,
   ApprovalRecord,
-  BulkPermissionResult,
   BatchApproveResult,
   AuditEntry,
   AuditListResponse,
@@ -208,17 +207,6 @@ export const api = {
     req<{ integrations: IntegrationPermissionOption[] }>(
       "GET", `/access-keys/${accessKeyId}/permissions/integration-options`,
     ),
-  bulkSelectPermissions: (
-    accessKeyId: string,
-    selectorType: "area" | "label" | "integration",
-    selectorId: string,
-    state: PermissionPatchBody["state"],
-  ) => req<BulkPermissionResult>(
-    "POST",
-    `/access-keys/${accessKeyId}/permissions/bulk-select`,
-    { selector_type: selectorType, selector_id: selectorId, state },
-  ),
-
   resolve: (accessKeyId: string, entityId: string) =>
     req<ResolveResult>("GET", `/access-keys/${accessKeyId}/resolve/${encodeURIComponent(entityId)}`),
   getScope: (accessKeyId: string) => req<ScopeResult>("GET", `/access-keys/${accessKeyId}/scope`),

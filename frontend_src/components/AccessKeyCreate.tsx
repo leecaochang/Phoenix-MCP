@@ -1,4 +1,10 @@
-import { BusyButton } from "./BusyButton";
+/**
+ * Creating an access key: the form shown in place at the top of the Access Keys
+ * window, then a dialog with the new key's one-time secret and the ways to use
+ * it. The secret stays in a dialog so it cannot be scrolled past or lost by
+ * moving a window.
+ */
+
 import React, { useEffect, useRef, useState } from "react";
 import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
@@ -7,6 +13,7 @@ import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { Modal } from "./Modal";
 import { ConnectInstructions, CopyCodeBox } from "./ConnectInstructions";
+import { ActionButton } from "../ui/ActionButton";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -142,7 +149,7 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
   );
 }
 
-export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpenSettings }: Props) {
+export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenSettings }: Props) {
   const [name, setName] = useState("");
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
@@ -221,8 +228,14 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
   }
 
   return (
-    <Modal titleId="create-access-key-title" onClose={saving ? undefined : onClose}>
-      <h3 className="modal-title" id="create-access-key-title">{t("accessKeys.createAccessKey")}</h3>
+    <section className="phx-inline-form" aria-labelledby="create-access-key-title"
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || saving) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}>
+      <h3 className="phx-section-title" id="create-access-key-title">{t("accessKeys.createAccessKey")}</h3>
 
       <div className="field">
         <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
@@ -334,12 +347,11 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
 
         {error && <div className="banner banner-error mt-12">{error}</div>}
 
-      <div className="modal-actions">
-        <BusyButton className="btn btn-primary" onClick={submit} disabled={!canSubmit} busy={saving}>
-          {saving ? t("accessKeys.creating") : t("accessKeys.create")}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={saving}>{t("accessKeys.cancel")}</BusyButton>
+      <div className="phx-inline-form-actions">
+        <ActionButton icon="add" label={t("accessKeys.create")} busy={saving} disabled={!canSubmit}
+          onClick={() => { void submit(); }} className="btn btn-primary btn-sm" />
+        <ActionButton icon="undo" label={t("accessKeys.cancel")} busy={saving} onClick={onClose} className="btn btn-outline btn-sm" />
       </div>
-    </Modal>
+    </section>
   );
 }

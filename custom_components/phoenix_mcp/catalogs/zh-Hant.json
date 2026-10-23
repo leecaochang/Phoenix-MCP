@@ -1393,7 +1393,8 @@
       "unmatchedDeviceName": "裝置不在目前實體樹中",
       "unmatchedDevicesNote": "這些顯式授權引用了目前實體樹中沒有的裝置 ID。選擇 N 可移除失效授權。",
       "unmatchedDevicesTitle": "未匹配的裝置權限",
-      "hintCaution": "提示會傳送給智慧體及其模型提供者。切勿在此填寫密碼。"
+      "hintCaution": "提示會傳送給智慧體及其模型提供者。切勿在此填寫密碼。",
+      "removeHint": "移除提示"
     },
     "personas": {
       "automation_builder": {
@@ -1445,30 +1446,18 @@
       }
     },
     "selectBy": {
-      "apply": "套用",
-      "applyFailed": "套用權限失敗。",
-      "applying": "套用中…",
       "area": "分區",
-      "cancel": "取消",
       "entities": {
         "one": "{count} 個實體",
         "other": "{count} 個實體"
       },
-      "entryId": "設定條目 ID",
-      "grantNoteArea": "這將授予對目前處於所選分區內的實體的存取權限。新增實體不會自動包含在內。如果希望將來的實體也繼承存取權限，請授權整個域。",
-      "grantNoteIntegration": "這會將一次快照授權套用到該設定條目目前擁有的全部裝置，以及其已啟用且線上的無裝置實體；不會更改子實體限制。",
-      "grantNoteLabel": "這將授予對目前帶有所選分類的實體的存取權限。新增實體不會自動包含在內。如果希望將來的實體也繼承存取權限，請授權整個域。",
-      "groupBy": "分組方式",
       "integration": "整合",
-      "integrationCoverage": "此條目目前會選擇 {devices} 個裝置和 {entities} 個線上無裝置實體。",
       "label": "分類",
       "loadIntegrationsFailed": "載入整合選項失敗。",
       "loadingIntegrations": "正在載入整合…",
       "noAreas": "沒有任何可存取的實體定義了分區。",
       "noIntegrations": "目前沒有擁有可選裝置或線上無裝置實體的整合。",
       "noLabels": "沒有任何可存取的實體定義了分類。",
-      "permissionToApply": "要套用的權限",
-      "registryOnlyWarning": "有 {count} 個僅登錄檔中的無裝置實體未被選擇。如需讓它們繼承存取權限，請授權這些域：{domains}。",
       "resources": {
         "one": "{count} 個資源",
         "other": "{count} 個資源"
@@ -1476,20 +1465,8 @@
       "selectArea": "-- 選擇分區 --",
       "selectIntegration": "-- 選擇整合 --",
       "selectLabel": "-- 選擇分類 --",
-      "sharedDeviceWarning": {
-        "one": "所選裝置中有 {count} 個為共享裝置。其裝置授權會影響該裝置上的所有實體，包括其他設定條目擁有的實體。",
-        "other": "所選裝置中有 {count} 個為共享裝置。其裝置授權會影響這些裝置上的所有實體，包括其他設定條目擁有的實體。"
-      },
-      "stateDeny": "拒絕",
-      "stateRead": "唯讀",
-      "stateRemoveGrant": "移除授權",
-      "stateWrite": "讀寫",
-      "title": "按分區、分類或整合選擇",
-      "willSet": {
-        "one": "這將對 {count} 個實體套用 {state}。",
-        "other": "這將對 {count} 個實體套用 {state}。"
-      },
-      "willSetIntegration": "權限：{state}。裝置節點：{devices}；無所屬裝置的活動實體節點：{entities}。"
+      "menu": "按群組篩選",
+      "reset": "重設"
     },
     "settings": {
       "addProviderFirst": "請先在「智慧體對話」中新增提供者帳戶。",
@@ -1814,7 +1791,6 @@
       "clearPermsBody": "這會移除所有域、裝置和實體授權。在您新增新權限之前，此存取金鑰將沒有任何實體存取權限。",
       "clearPermsFailed": "清除權限失敗。",
       "clearPermsTitle": "清除所有權限？",
-      "clearing": "清除中…",
       "closeCountdown": "關閉（3 秒）",
       "colActions": "操作",
       "colArchivedOn": "歸檔時間",
@@ -1834,7 +1810,6 @@
       "createPtUnderstand": "我瞭解此存取金鑰擁有廣泛的 Home Assistant 存取權限",
       "createPtWarning": "<strong>此存取金鑰將獲得對 Home Assistant 實體和服務的廣泛存取權限。</strong>設定變更、系統操作、高風險能力和系統日誌存取仍按「能力」設定執行。MESA 規則、Phoenix MCP 遮蔽列表、敏感屬性移除、速率限制、撤銷和過期同樣繼續生效。請僅在受信任的基於 HTTP 的 MCP 用戶端上使用。",
       "createAccessKey": "建立存取金鑰",
-      "creating": "建立中…",
       "daysAgo": "{d} 天前",
       "delete": "刪除",
       "deletePermanently": "永久刪除",
@@ -1889,7 +1864,6 @@
       "permissionSummary": "權限摘要",
       "permissionsTree": "權限樹",
       "personaApplyFailed": "套用角色失敗。",
-      "pleaseWait": "請稍候…",
       "postCreateChatSub": "使用您自己的模型提供者，在本面板中對話。將開啟「設定」。",
       "postCreateChatTitle": "設定智慧體對話",
       "postCreateConnectSub": "設定 Claude Code、Cursor、ChatGPT 或 Gemini 等 MCP 用戶端。",
@@ -1957,7 +1931,6 @@
       "scoped": "限定範圍",
       "secondsOption": "{s} 秒",
       "secondsShort": "{n} 秒",
-      "selectByAreaLabelIntegration": "按分區、標籤或整合選擇",
       "setUpAgent": "設定智慧體",
       "setUpFirstAgent": "設定您的第一個智慧體",
       "showArchived": "顯示已歸檔",
@@ -1972,7 +1945,6 @@
       "accessKeyRotatedTitle": "存取金鑰已輪換：{name}",
       "updateFailed": "更新存取金鑰失敗。",
       "waitBeforeClose": "請等待 3 秒後再關閉",
-      "working": "處理中…",
       "cardNotes": "備註",
       "notesCaution": "備註僅供參考：它們不會授予存取權限、變更能力或繞過核准，模型也可能忽略它們。已連線的用戶端及其模型提供者會收到備註，任何能與使用此存取金鑰的智慧體對話的人都可能讓它複述備註。請勿在此填寫密碼或其他敏感資訊。",
       "notesCount": "{count} / {max} 個字元",
@@ -2449,7 +2421,10 @@
       "dockWindow": "將此視窗重新停駐到工作區中。",
       "maximizeWindow": "讓此視窗填滿工作區的可見部分，或將其還原。",
       "closeWindow": "關閉此視窗。可從「工作區選項」選單重新開啟。",
-      "guideTitle": "拖曳標題列可移動指南，拖曳邊緣或角落可調整其大小。"
+      "guideTitle": "拖曳標題列可移動指南，拖曳邊緣或角落可調整其大小。",
+      "selectBy": "只顯示樹中屬於某個分區、分類或整合的部分。只改變顯示內容，不改變金鑰的權限。",
+      "hintSave": "為所選範圍儲存提示。智慧體會隨此實體一起收到它。",
+      "hintRemove": "移除為所選範圍儲存的提示。"
     },
     "guide": {
       "title": "指南",

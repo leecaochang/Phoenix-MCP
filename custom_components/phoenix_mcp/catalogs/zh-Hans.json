@@ -480,51 +480,27 @@
       "scopeLabelParentDevice": "主设备"
     },
     "selectBy": {
-      "apply": "应用",
-      "applyFailed": "应用权限失败。",
-      "applying": "应用中…",
       "area": "区域",
-      "cancel": "取消",
       "entities": {
         "one": "{count} 个实体",
         "other": "{count} 个实体"
       },
-      "grantNoteArea": "这将授予对当前处于所选区域内的实体的访问权限。新增实体不会自动包含在内。如果希望将来的实体也继承访问权限，请授权整个域。",
-      "grantNoteIntegration": "这会将一次快照授权应用到该配置条目当前拥有的全部设备，以及其已启用且在线的无设备实体；不会更改子实体限制。",
-      "grantNoteLabel": "这将授予对当前带有所选标签的实体的访问权限。新增实体不会自动包含在内。如果希望将来的实体也继承访问权限，请授权整个域。",
-      "groupBy": "分组方式",
       "integration": "集成",
-      "integrationCoverage": "此条目当前会选择 {devices} 个设备和 {entities} 个在线无设备实体。",
-      "entryId": "配置条目 ID",
       "label": "标签",
       "loadIntegrationsFailed": "加载集成选项失败。",
       "loadingIntegrations": "正在加载集成…",
       "noAreas": "没有任何可访问的实体定义了区域。",
       "noIntegrations": "当前没有拥有可选设备或在线无设备实体的集成。",
       "noLabels": "没有任何可访问的实体定义了标签。",
-      "permissionToApply": "要应用的权限",
       "selectArea": "-- 选择区域 --",
       "selectIntegration": "-- 选择集成 --",
       "selectLabel": "-- 选择标签 --",
-      "registryOnlyWarning": "有 {count} 个仅注册表中的无设备实体未被选择。如需让它们继承访问权限，请授权这些域：{domains}。",
       "resources": {
         "one": "{count} 个资源",
         "other": "{count} 个资源"
       },
-      "sharedDeviceWarning": {
-        "one": "所选设备中有 {count} 个为共享设备。其设备授权会影响该设备上的所有实体，包括其他配置条目拥有的实体。",
-        "other": "所选设备中有 {count} 个为共享设备。其设备授权会影响这些设备上的所有实体，包括其他配置条目拥有的实体。"
-      },
-      "stateRemoveGrant": "移除授权",
-      "title": "按区域、标签或集成选择",
-      "willSetIntegration": "权限：{state}。设备节点：{devices}；无所属设备的活动实体节点：{entities}。",
-      "willSet": {
-        "one": "这将对 {count} 个实体应用 {state}。",
-        "other": "这将对 {count} 个实体应用 {state}。"
-      },
-      "stateRead": "只读",
-      "stateWrite": "读写",
-      "stateDeny": "拒绝"
+      "menu": "按组筛选",
+      "reset": "重置"
     },
     "adminError": {
       "adminRequired": "需要管理员权限。",
@@ -861,7 +837,8 @@
       "effectiveTitle": "生效权限：{state}",
       "treeCollapse": "收起 {name}",
       "treeExpand": "展开 {name}",
-      "hintCaution": "提示会发送给智能体及其模型提供商。切勿在此填写密码或代码。"
+      "hintCaution": "提示会发送给智能体及其模型提供商。切勿在此填写密码或代码。",
+      "removeHint": "移除提示"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",
@@ -1110,7 +1087,6 @@
       "clearPermsBody": "这会移除所有域、设备和实体授权。在您添加新权限之前，此访问密钥将没有任何实体访问权限。",
       "clearPermsFailed": "清除权限失败。",
       "clearPermsTitle": "清除所有权限？",
-      "clearing": "清除中…",
       "closeCountdown": "关闭（3 秒）",
       "colActions": "操作",
       "colArchivedOn": "归档时间",
@@ -1130,7 +1106,6 @@
       "createPtUnderstand": "我了解此访问密钥拥有广泛的 Home Assistant 访问权限",
       "createPtWarning": "<strong>此访问密钥将获得对 Home Assistant 实体和服务的广泛访问权限。</strong>配置变更、系统操作、高风险能力和系统日志访问仍按“能力”设置执行。MESA 规则、Phoenix MCP 屏蔽列表、敏感属性移除、速率限制、吊销和过期同样继续生效。请仅在受信任的基于 HTTP 的 MCP 客户端上使用。",
       "createAccessKey": "创建访问密钥",
-      "creating": "创建中…",
       "daysAgo": "{d} 天前",
       "delete": "删除",
       "deletePermanently": "永久删除",
@@ -1184,7 +1159,6 @@
       "permissionSummary": "权限摘要",
       "permissionsTree": "权限树",
       "personaApplyFailed": "应用角色失败。",
-      "pleaseWait": "请稍候…",
       "postCreateChatSub": "使用您自己的模型提供商，在本面板中对话。将打开“设置”。",
       "postCreateChatTitle": "设置智能体对话",
       "postCreateConnectSub": "配置 Claude Code、Cursor、ChatGPT 或 Gemini 等 MCP 客户端。",
@@ -1252,7 +1226,6 @@
       "scoped": "限定范围",
       "secondsOption": "{s} 秒",
       "secondsShort": "{n} 秒",
-      "selectByAreaLabelIntegration": "按区域、标签或集成选择",
       "setUpAgent": "设置智能体",
       "setUpFirstAgent": "设置您的第一个智能体",
       "showArchived": "显示已归档",
@@ -1267,7 +1240,6 @@
       "accessKeyRotatedTitle": "访问密钥已轮换：{name}",
       "updateFailed": "更新访问密钥失败。",
       "waitBeforeClose": "请等待 3 秒后再关闭",
-      "working": "处理中…",
       "inlineWaitOff": "关闭（审批立即进入队列）",
       "cardNotes": "备注",
       "notesCaution": "备注仅供参考：它们不会授予访问权限、更改能力或绕过审批，模型也可能忽略它们。已连接的客户端及其模型提供商会收到备注，任何能与使用此访问密钥的智能体对话的人都可能让它复述备注。请勿在此填写密码或其他敏感信息。",
@@ -2444,7 +2416,10 @@
       "dockWindow": "将此窗口重新停靠到工作区中。",
       "maximizeWindow": "让此窗口填满工作区的可见部分，或将其还原。",
       "closeWindow": "关闭此窗口。可从“工作区选项”菜单重新打开。",
-      "guideTitle": "拖动标题栏可移动指南，拖动边缘或角可调整其大小。"
+      "guideTitle": "拖动标题栏可移动指南，拖动边缘或角可调整其大小。",
+      "selectBy": "只显示树中属于某个区域、标签或集成的部分。只改变显示内容，不改变密钥的权限。",
+      "hintSave": "为所选范围保存提示。智能体会随此实体一起收到它。",
+      "hintRemove": "移除为所选范围保存的提示。"
     },
     "guide": {
       "title": "指南",

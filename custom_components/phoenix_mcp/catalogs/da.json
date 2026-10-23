@@ -28,7 +28,6 @@
       "clearPermsBody": "Dette fjerner alle tildelinger for domæner, enheder og entiteter. Adgangsnøglen har ingen entitetsadgang, før du tilføjer nye tilladelser.",
       "clearPermsFailed": "Kunne ikke rydde tilladelser.",
       "clearPermsTitle": "Vil du rydde alle tilladelser?",
-      "clearing": "Rydder...",
       "closeCountdown": "Luk (3s)",
       "colActions": "Handlinger",
       "colArchivedOn": "Arkiveret den",
@@ -48,7 +47,6 @@
       "createFailed": "Kunne ikke oprette adgangsnøgle.",
       "createPtUnderstand": "Jeg forstår, at denne adgangsnøgle har bred adgang til Home Assistant",
       "createPtWarning": "<strong>Denne adgangsnøgle får bred adgang til Home Assistant-entiteter og -tjenester.</strong> Konfigurationsændringer, systemhandlinger, højrisikofunktioner og adgang til systemloggen bruger stadig indstillingerne under Funktioner. MESA-regler, bloklisten i Phoenix MCP, fjernelse af følsomme attributter, hastighedsgrænser, tilbagekaldelse og udløb er også stadig aktive. Brug den kun sammen med betroede HTTP-baserede MCP-klienter.",
-      "creating": "Opretter...",
       "daysAgo": "{d} d siden",
       "delete": "Slet",
       "deletePermanently": "Slet permanent",
@@ -103,7 +101,6 @@
       "permissionSummary": "Tilladelsesoversigt",
       "permissionsTree": "Tilladelsestræ",
       "personaApplyFailed": "Kunne ikke anvende persona.",
-      "pleaseWait": "Vent venligst...",
       "postCreateChatSub": "Chat fra dette panel med din egen modeludbyder. Åbner Indstillinger.",
       "postCreateChatTitle": "Opsæt Agent Chat",
       "postCreateConnectSub": "Konfigurer en MCP-klient som for eksempel Claude Code, Cursor, ChatGPT eller Gemini.",
@@ -171,7 +168,6 @@
       "scoped": "Afgrænset",
       "secondsOption": "{s} sekunder",
       "secondsShort": "{n}s",
-      "selectByAreaLabelIntegration": "Vælg efter område, label eller integration",
       "setUpAgent": "Opsæt en agent",
       "setUpFirstAgent": "Opsæt din første agent",
       "showArchived": "Vis arkiverede",
@@ -182,7 +178,6 @@
       "switching": "Skifter...",
       "updateFailed": "Kunne ikke opdatere adgangsnøglen.",
       "waitBeforeClose": "Vent 3 sekunder, før du lukker",
-      "working": "Arbejder...",
       "cardNotes": "Noter",
       "notesCaution": "Noter er kun vejledende: De giver aldrig adgang, ændrer ikke funktioner og omgår ikke godkendelser, og en model kan ignorere dem. Tilsluttede klienter og deres modeludbydere modtager dem, og alle, der kan tale med en agent, som bruger denne adgangsnøgle, kan få den til at gentage dem. Skriv ikke adgangskoder eller andre hemmeligheder her.",
       "notesCount": "{count} / {max} tegn",
@@ -1776,7 +1771,8 @@
       "unmatchedDeviceName": "Enhed findes ikke i det aktuelle træ",
       "unmatchedDevicesNote": "Disse eksplicitte tildelinger henviser til enheds-ID'er, der ikke findes i det aktuelle entitetstræ. Angiv N for at fjerne en forældet tildeling.",
       "unmatchedDevicesTitle": "Ikke matchede enhedstilladelser",
-      "hintCaution": "Sendes til agenter og deres modeludbydere. Medtag aldrig adgangskoder eller koder."
+      "hintCaution": "Sendes til agenter og deres modeludbydere. Medtag aldrig adgangskoder eller koder.",
+      "removeHint": "Fjern vink"
     },
     "personas": {
       "automation_builder": {
@@ -1869,30 +1865,18 @@
       "unavailable": "Utilgængelig"
     },
     "selectBy": {
-      "apply": "Anvend",
-      "applyFailed": "Kunne ikke anvende tilladelser.",
-      "applying": "Anvender...",
       "area": "Område",
-      "cancel": "Annullér",
       "entities": {
         "one": "{count} entitet",
         "other": "{count} entiteter"
       },
-      "entryId": "Konfigurationspost-ID",
-      "grantNoteArea": "Dette giver adgang til de entiteter, der aktuelt findes i det valgte område. Nye entiteter medtages ikke automatisk. Tildel domænet, hvis fremtidige entiteter skal arve adgangen.",
-      "grantNoteIntegration": "Dette anvender en øjebliksbillede-tildeling på alle enheder, der aktuelt ejes af den præcise konfigurationspost, og på dens aktive, aktiverede enhedsløse entiteter. Det ændrer ikke begrænsninger for underentiteter.",
-      "grantNoteLabel": "Dette giver adgang til de entiteter, der aktuelt har det valgte label. Nye entiteter medtages ikke automatisk. Tildel domænet, hvis fremtidige entiteter skal arve adgangen.",
-      "groupBy": "Gruppér efter",
       "integration": "Integration",
-      "integrationCoverage": "Denne post vælger aktuelt {devices} enheder og {entities} aktive enhedsløse entiteter.",
       "label": "Label",
       "loadIntegrationsFailed": "Kunne ikke indlæse integrationsvalgmuligheder.",
       "loadingIntegrations": "Indlæser integrationer…",
       "noAreas": "Der er ikke defineret nogen områder på nogen tilgængelig entitet.",
       "noIntegrations": "Ingen integrationer ejer aktuelt valgbare enheder eller aktive enhedsløse entiteter.",
       "noLabels": "Der er ikke defineret nogen labels på nogen tilgængelig entitet.",
-      "permissionToApply": "Tilladelse, der skal anvendes",
-      "registryOnlyWarning": "{count} enhedsløse entiteter, der kun findes i registret, er ikke valgt. Tildel disse domæner, hvis de skal have arvet adgang: {domains}.",
       "resources": {
         "one": "{count} ressource",
         "other": "{count} ressourcer"
@@ -1900,20 +1884,8 @@
       "selectArea": "-- Vælg område --",
       "selectIntegration": "-- Vælg integration --",
       "selectLabel": "-- Vælg label --",
-      "sharedDeviceWarning": {
-        "one": "{count} valgt enhed er delt. Dens enhedstildeling påvirker alle entiteter på den enhed, herunder entiteter, der ejes af andre konfigurationsposter.",
-        "other": "{count} valgte enheder er delte. Deres enhedstildelinger påvirker alle entiteter på disse enheder, herunder entiteter, der ejes af andre konfigurationsposter."
-      },
-      "stateDeny": "Nægt",
-      "stateRead": "Læs",
-      "stateRemoveGrant": "Fjern tildeling",
-      "stateWrite": "Skriv",
-      "title": "Vælg efter område, label eller integration",
-      "willSet": {
-        "one": "Dette anvender {state} på {count} entitet.",
-        "other": "Dette anvender {state} på {count} entiteter."
-      },
-      "willSetIntegration": "Tilladelse: {state}. Enhedsnoder: {devices}; aktive entitetsnoder uden enhed: {entities}."
+      "menu": "Vælg efter",
+      "reset": "Nulstil"
     },
     "settings": {
       "accessKey": "Adgangsnøgle",
@@ -2449,7 +2421,10 @@
       "dockWindow": "Fastgør vinduet i arbejdsområdet igen.",
       "maximizeWindow": "Lad vinduet fylde den synlige del af arbejdsområdet, eller gendan det.",
       "closeWindow": "Luk vinduet. Genåbn det fra menuen Indstillinger for arbejdsområde.",
-      "guideTitle": "Træk i titellinjen for at flytte guiden, eller træk i en kant eller et hjørne for at ændre størrelsen."
+      "guideTitle": "Træk i titellinjen for at flytte guiden, eller træk i en kant eller et hjørne for at ændre størrelsen.",
+      "selectBy": "Vis kun den del af træet, der hører til ét område, én label eller én integration. Det ændrer det, du ser, ikke hvad nøglen må.",
+      "hintSave": "Gem vinket for det valgte omfang. Agenter modtager det sammen med denne entitet.",
+      "hintRemove": "Fjern vinket, der er gemt for det valgte omfang."
     },
     "guide": {
       "title": "Guide",
