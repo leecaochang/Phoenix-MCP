@@ -665,6 +665,16 @@
 .phx-request-section > summary { padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; }
 .phx-request-section-body { padding: 0 12px 12px; }
 .phx-request-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Changes: the list's compact item cell, the restore confirmation in Comparison, and change actions. */
+.change-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.change-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-restore-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--phx-warning); border-radius: var(--phx-radius-sm); background: var(--phx-warning-bg); }
+.phx-restore-confirm > p { flex: 1 1 260px; margin: 0; line-height: 1.5; }
+.phx-restore-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.change-action-create { color: var(--phx-success); }
+.change-action-delete { color: var(--phx-error); }
+.change-action-rollback { color: var(--phx-warning); }
 .phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Column headers stay at the top of their window while the rows scroll under them. */
 .phx-table th {
@@ -2152,62 +2162,8 @@ select.input {
 .raw-diff .diff-add { background: rgba(67, 160, 71, 0.20); }
 .approval-diff-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
 
-/* Configuration changes (version history) tab */
-.changes-toolbar input[type="search"] { min-width: 180px; }
-.changes-table { table-layout: fixed; font-size: 13px; }
-.changes-table th:first-child { width: 108px; }
-.changes-table .changes-col-type { width: 180px; }
-.changes-table .changes-col-who { width: 130px; }
-.changes-table .changes-col-when { width: 150px; }
-.changes-table tbody tr:nth-child(even) { background: var(--phx-surface-2); }
-.changes-table tbody tr.clickable:hover { background: var(--phx-hover); }
-.changes-name { font-weight: 600; overflow-wrap: anywhere; }
-/* One-line what-changed description under the resource name in the list, and
-   inline in the detail head. */
-.changes-summary { display: block; font-size: 12px; font-weight: 400; color: var(--phx-text-2); overflow-wrap: anywhere; }
-.change-detail-summary { font-size: 12px; color: var(--phx-text-2); }
-.changes-col-type { overflow-wrap: anywhere; }
-.changes-col-who { color: var(--phx-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.changes-col-when { font-size: 12px; color: var(--phx-text-2); }
-@media (max-width: 860px) and (min-width: 641px) {
-  .changes-col-who { display: none; }
-  .changes-table .changes-col-type { width: 150px; }
-}
-@media (max-width: 640px) {
-  .changes-col-type, .changes-col-who { display: none; }
-  .changes-table .changes-col-when { width: 120px; }
-  .changes-table th, .changes-table td { padding: 10px 8px; }
-  .changes-table th:first-child { width: 90px; }
-  .changes-toolbar.filter-row input[type="search"] { flex: 1 1 100%; min-width: 0; }
-  .changes-toolbar .input.input-auto { flex: 1 1 30%; min-width: 0; }
-}
-@media (max-width: 480px) {
-  .changes-col-when { display: none; }
-}
-
-.change-detail-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.change-restore-note code { font-size: 12px; }
-.change-detail-head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--phx-border);
-}
-.change-detail-name { font-size: 15px; }
-.change-detail-type { font-size: 12px; color: var(--phx-text-2); }
-.change-detail-when, .change-detail-by { font-size: 12px; color: var(--phx-text-2); }
-.change-detail-by { margin-left: auto; }
-
-.change-detail-body { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
-.change-timeline { display: flex; flex-direction: column; gap: 2px; }
-.change-timeline-row {
-  display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 10px; background: none; border: 1px solid transparent;
-  border-radius: var(--phx-radius-xs); cursor: pointer; text-align: left;
-  font-size: 12px; color: var(--phx-text); font-family: inherit;
-}
-.change-timeline-row:hover { background: var(--phx-surface-2); }
-.change-timeline-row.active { background: var(--phx-surface-2); border-color: var(--phx-border); cursor: default; }
-.change-timeline-row .badge { justify-self: start; }
-.change-timeline-when { color: var(--phx-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Comparison: the saved Before and After fill the window, which scrolls as one. */
+.change-detail-body { min-width: 0; }
 
 .change-diff-wrap { min-width: 0; }
 .change-diff-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
@@ -2215,7 +2171,7 @@ select.input {
    (Diff|Preview switch, layout toggle) clusters together at the right edge
    instead of space-between spreading them across the row. */
 .change-diff-hint { font-size: 12px; color: var(--phx-text-2); min-width: 0; flex: 1 1 auto; }
-.change-restore-actions { display: flex; gap: 8px; margin-top: 10px; }
+
 .yaml-diff-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
 .yaml-diff-cols.stacked { grid-template-columns: 1fr; }
 .yaml-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; min-height: 28px; }
@@ -2303,8 +2259,6 @@ select.input {
    how a pane renders, which a narrow viewport does not settle for you. */
 .diff-code-toggle[aria-pressed="true"] { color: var(--phx-accent); background: var(--phx-surface-2); }
 @media (max-width: 800px) {
-  .change-detail-body { grid-template-columns: 1fr; }
-  .change-timeline { flex-direction: row; flex-wrap: wrap; }
   .yaml-diff-cols { grid-template-columns: 1fr; }
 
   /* Below this width .yaml-diff-cols is always forced to one column above,

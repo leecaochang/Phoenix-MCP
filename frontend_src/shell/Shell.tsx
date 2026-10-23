@@ -23,6 +23,7 @@ import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions 
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
 import { ApprovalsProvider } from "./approvals";
+import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { GuideWindow, PhoneGuide } from "./guide";
 import { DOCS_BASE_URL } from "../components/common";
@@ -393,6 +394,7 @@ export function Shell() {
       active={d.workspace === "approvals"}
       onReveal={revealReview}
     >
+    <ChangesProvider hass={d.hass} active={d.workspace === "changes"}>
     <WorkspaceActionsContext.Provider value={actions}>
     <AccessKeyDetailProvider
       accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
@@ -461,6 +463,7 @@ export function Shell() {
       </div>
     </AccessKeyDetailProvider>
     </WorkspaceActionsContext.Provider>
+    </ChangesProvider>
     </ApprovalsProvider>
     </LogSelectionContext.Provider>
     </HelpContext.Provider>

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor, within } from "@testing-library/react";
-import { ChangesView } from "../views/ChangesView";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
-import type { VersionListResponse, VersionSummary } from "../types";
+import type { VersionListResponse, VersionRecord, VersionSummary } from "../types";
+import { Notifications } from "../ui/notify";
+import { comparisonWindow, historyWindow, listWindow, renderChanges, rowsOf } from "./changes_harness";
 
 vi.mock("../api", () => ({
   api: {
@@ -31,6 +32,12 @@ function version(over: Partial<VersionSummary> = {}): VersionSummary {
   };
 }
 
+function record(summary: VersionSummary, sides: Partial<Pick<VersionRecord, "before" | "after">> = {}): VersionRecord {
+  return { ...summary, request_id: "r1", before: { alias: "Before" }, after: { alias: "After" }, ...sides };
+}
+
+const page = (versions: VersionSummary[], total = versions.length): VersionListResponse => ({ resource_type: null, resource_id: null, versions, total });
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => { resolve = r; });
@@ -46,16 +53,27 @@ function stubMatchMedia() {
   }));
 }
 
-describe("ChangesView", () => {
-  beforeEach(() => vi.clearAllMocks());
+/** Show a change in Comparison by choosing it in the list. */
+async function choose(text: string) {
+  fireEvent.click(await within(listWindow()).findByText(text));
+  await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeTruthy());
+}
+
+/** Open the Restore menu and return its items. */
+function openRestore(): HTMLElement[] {
+  fireEvent.click(within(comparisonWindow()).getByRole("button", { name: "Restore" }));
+  return screen.getAllByRole("menuitem");
+}
+
+describe("the Changes list", () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 
   it("fuzzy-filters loaded changes, sorts names, and keeps pagination reachable", async () => {
-    vi.mocked(api.listVersions).mockResolvedValue({ resource_type: null, resource_id: null,
-      versions: [version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], total: 3 });
-    const view = render(<ChangesView hass={null} />);
+    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], 3));
+    const view = renderChanges();
     await view.findByText("Zebra lamp");
     fireEvent.click(view.getByRole("button", { name: "Name" }));
-    expect(within(view.getByRole("table")).getAllByRole("row")[1]).toHaveTextContent("Alpha lamp");
+    expect(rowsOf(listWindow())[0]).toHaveTextContent("Alpha lamp");
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
     expect(view.queryByText("Alpha lamp")).toBeNull();
     expect(view.getByText("Zebra lamp")).toBeVisible();
@@ -66,127 +84,172 @@ describe("ChangesView", () => {
     expect(view.getByText("Load More")).toBeVisible();
   });
 
-  it("loads the first page and shows Load more only while more rows remain", async () => {
-    vi.mocked(api.listVersions).mockResolvedValue({
-      resource_type: null, resource_id: null,
-      versions: [version({ id: "v1", alias: "First change" })],
-      total: 2,
-    });
-
-    const { findByText, queryByText } = render(<ChangesView hass={null} />);
+  it("loads the first page and shows Load More only while more rows remain", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "First change" })], 2));
+    const { findByText, queryByText } = renderChanges();
     await findByText("First change");
-
     expect(api.listVersions).toHaveBeenCalledWith({ limit: 100, offset: 0 });
     expect(queryByText("Load More")).toBeTruthy();
   });
 
-  it("Load more appends the next page at the accumulated offset", async () => {
+  it("Load More appends the next page at the accumulated offset", async () => {
     vi.mocked(api.listVersions)
-      .mockResolvedValueOnce({
-        resource_type: null, resource_id: null,
-        versions: [version({ id: "v1", alias: "First change" })], total: 2,
-      })
-      .mockResolvedValueOnce({
-        resource_type: null, resource_id: null,
-        versions: [version({ id: "v2", alias: "Second change" })], total: 2,
-      });
-
-    const { findByText, getByText, queryByText } = render(<ChangesView hass={null} />);
+      .mockResolvedValueOnce(page([version({ id: "v1", alias: "First change" })], 2))
+      .mockResolvedValueOnce(page([version({ id: "v2", alias: "Second change" })], 2));
+    const { findByText, getByText, queryByText } = renderChanges();
     await findByText("First change");
-
     fireEvent.click(getByText("Load More"));
     await findByText("Second change");
-
     expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 100, offset: 1 });
     expect(queryByText("Load More")).toBeNull();
   });
 
-  it("a manual refresh reloads from offset 0, replacing the loaded feed", async () => {
-    vi.mocked(api.listVersions).mockResolvedValue({
-      resource_type: null, resource_id: null,
-      versions: [version({ id: "v1", alias: "First change" })], total: 1,
-    });
-    const { findByText, getByLabelText } = render(<ChangesView hass={null} />);
+  it("Refresh reloads from offset 0, replacing the loaded feed", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "First change" })]));
+    const { findByText, getByRole } = renderChanges();
     await findByText("First change");
-
-    fireEvent.click(getByLabelText("Refresh changes"));
-
-    await waitFor(() =>
-      expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 100, offset: 0 }),
-    );
+    fireEvent.click(getByRole("button", { name: "Refresh Changes" }));
+    await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(2));
+    expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 100, offset: 0 });
   });
 
-  it("returns from a completed rollback only after one authoritative feed reload", async () => {
-    stubMatchMedia();
-    const original = version({ action: "edit", has_before: true });
-    const rollback = version({ id: "v2", action: "rollback", has_before: true });
-    const refreshed = deferred<VersionListResponse>();
-    vi.mocked(api.listVersions)
-      .mockResolvedValueOnce({ resource_type: null, resource_id: null, versions: [original], total: 1 })
-      .mockResolvedValueOnce({ resource_type: "automation", resource_id: "aid1", versions: [original], total: 1 })
-      .mockReturnValueOnce(refreshed.promise);
-    vi.mocked(api.getVersion).mockResolvedValue({
-      ...original,
-      request_id: "r1",
-      before: { alias: "Before" },
-      after: { alias: "After" },
-    });
-    vi.mocked(api.restoreVersion).mockResolvedValue({
-      restored: true,
-      version_id: "v1",
-      resource_type: "automation",
-      resource_id: "aid1",
-    });
-
-    const view = render(<ChangesView hass={null} />);
-    fireEvent.click((await view.findByText("My automation")).closest("button")!);
-    await waitFor(() => expect(api.getVersion).toHaveBeenCalledWith("v1"));
-    fireEvent.click((await view.findAllByText("Restore This Configuration"))[0]);
-    fireEvent.click(view.container.querySelector<HTMLButtonElement>(".change-restore-actions .btn-primary")!);
-
-    await waitFor(() => expect(api.restoreVersion).toHaveBeenCalledWith("v1", "before"));
-    await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(3));
-    expect(view.getByText("Back to Changes")).toBeTruthy();
-
-    refreshed.resolve({ resource_type: null, resource_id: null, versions: [rollback, original], total: 2 });
-    await waitFor(() => expect(view.queryByText("Back to Changes")).toBeNull());
-    expect(await within(view.getByRole("table")).findByText("Rollback")).toBeTruthy();
-    expect(api.listVersions).toHaveBeenCalledTimes(3);
-  });
-
-  it("lets a newer config-change refresh release an older foreground loading state", async () => {
+  it("lets a newer config-change refresh release an older foreground load", async () => {
     const foreground = deferred<VersionListResponse>();
     const background = deferred<VersionListResponse>();
     let configChanged: (() => void) | undefined;
-    const hass = {
-      connection: {
-        subscribeEvents: vi.fn(async (cb: () => void) => {
-          configChanged = cb;
-          return () => {};
-        }),
-      },
-    };
+    const hass = { connection: { subscribeEvents: vi.fn(async (cb: () => void) => { configChanged = cb; return () => {}; }) } };
     vi.mocked(api.listVersions)
-      .mockResolvedValueOnce({ resource_type: null, resource_id: null, versions: [version()], total: 1 })
+      .mockResolvedValueOnce(page([version()]))
       .mockReturnValueOnce(foreground.promise)
       .mockReturnValueOnce(background.promise);
-
-    const view = render(<ChangesView hass={hass} />);
+    const view = renderChanges({ hass });
     await view.findByText("My automation");
     await waitFor(() => expect(configChanged).toBeTypeOf("function"));
-    fireEvent.click(view.getByLabelText("Refresh changes"));
-    await waitFor(() => expect(view.getByRole("status")).toBeTruthy());
+    fireEvent.click(view.getByRole("button", { name: "Refresh Changes" }));
     configChanged!();
     await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(3));
+    // The newer, event-driven reload answers first with nothing: its answer stands, and loading ends.
+    background.resolve(page([]));
+    expect(await view.findByText(/No agent configuration changes yet/)).toBeTruthy();
+    foreground.resolve(page([version({ id: "v9", alias: "Stale foreground" })]));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(view.queryByText("Stale foreground")).toBeNull();
+  });
+});
 
-    background.resolve({
-      resource_type: null,
-      resource_id: null,
-      versions: [version({ id: "v2", alias: "Fresh after event" })],
-      total: 1,
-    });
-    expect(await view.findByText("Fresh after event")).toBeTruthy();
-    expect(view.queryByRole("status")).toBeNull();
+describe("Comparison and Restore", () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); stubMatchMedia(); });
+
+  it("choosing a change shows it in Comparison and keeps focus in the list", async () => {
+    const edit = version({ action: "edit", has_before: true });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([edit])).mockResolvedValue(page([edit]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(edit));
+    renderChanges();
+    const row = await within(listWindow()).findByText("My automation");
+    row.closest("tr")!.focus();
+    fireEvent.click(row);
+    await waitFor(() => expect(within(comparisonWindow()).getByRole("heading", { name: "My automation" })).toBeTruthy());
+    expect(listWindow().contains(document.activeElement)).toBe(true);
+    expect(comparisonWindow().textContent).toContain("Before");
+  });
+
+  it("offers each side in one Restore menu and explains the ones it cannot restore", async () => {
+    const created = version({ id: "v1", action: "create" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([created])).mockResolvedValue(page([created]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(created, { before: null }));
+    renderChanges();
+    await choose("My automation");
+    const [before, after] = openRestore();
+    // A creation has no Before; the latest change's After is the item's current state.
+    expect(before).toHaveAttribute("aria-disabled", "true");
+    expect(before).toHaveAttribute("title", "There is no saved state from before this item was created.");
+    expect(after).toHaveAttribute("aria-disabled", "true");
+    expect(after).toHaveAttribute("title", "This is already the item's current state.");
+  });
+
+  it("refuses a side whose snapshot was too large to store", async () => {
+    const yaml = version({ id: "v1", resource_type: "yaml_config", resource_id: "configuration.yaml", alias: "configuration.yaml", action: "edit", has_before: true });
+    const newer = version({ id: "v2", resource_type: "yaml_config", resource_id: "configuration.yaml", alias: "configuration.yaml", action: "edit" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([yaml])).mockResolvedValue(page([newer, yaml]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(yaml, { before: { content: null, bytes: 900000 }, after: { content: "a: 1\n" } }));
+    renderChanges();
+    await choose("configuration.yaml");
+    const [before, after] = openRestore();
+    expect(before).toHaveAttribute("title", "This snapshot was too large to store, so it cannot be restored.");
+    expect(after).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("confirms inline, restores, announces it, and shows the new record", async () => {
+    const center = new Notifications();
+    const original = version({ action: "edit", has_before: true });
+    const rollback = version({ id: "v2", action: "rollback", has_before: true });
+    vi.mocked(api.listVersions)
+      .mockResolvedValueOnce(page([original]))          // feed
+      .mockResolvedValueOnce(page([original]))          // item history
+      .mockResolvedValueOnce(page([original]))          // the stale check
+      .mockResolvedValueOnce(page([rollback, original])) // feed after the restore
+      .mockResolvedValue(page([rollback, original]));    // item history after the restore
+    vi.mocked(api.getVersion).mockImplementation(async (id: string) => record(id === "v2" ? rollback : original));
+    vi.mocked(api.restoreVersion).mockResolvedValue({ restored: true, version_id: "v1", resource_type: "automation", resource_id: "aid1" });
+    renderChanges({ center });
+    await choose("My automation");
+    fireEvent.click(openRestore()[0]);
+    const confirm = within(comparisonWindow()).getByRole("group", { name: "Restore" });
+    expect(confirm.textContent).toMatch(/Restore My automation to its Before state from .+\?/);
+    expect(confirm.textContent).toContain("including any later edits");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Confirm Restore" }));
+    await waitFor(() => expect(api.restoreVersion).toHaveBeenCalledWith("v1", "before"));
+    await waitFor(() => expect(api.getVersion).toHaveBeenCalledWith("v2"));
+    expect(center.history[0].text).toMatch(/^Restored My automation to its Before state from /);
+    expect(within(comparisonWindow()).queryByRole("group", { name: "Restore" })).toBeNull();
+  });
+
+  it("refuses a restore when the item changed after Restore was chosen", async () => {
+    const center = new Notifications();
+    const original = version({ action: "edit", has_before: true });
+    const newer = version({ id: "v3", action: "edit", has_before: true });
+    vi.mocked(api.listVersions)
+      .mockResolvedValueOnce(page([original]))        // feed
+      .mockResolvedValueOnce(page([original]))        // item history
+      .mockResolvedValue(page([newer, original]));    // the stale check sees a newer change
+    vi.mocked(api.getVersion).mockResolvedValue(record(original));
+    renderChanges({ center });
+    await choose("My automation");
+    fireEvent.click(openRestore()[0]);
+    fireEvent.click(within(comparisonWindow()).getByRole("button", { name: "Confirm Restore" }));
+    await waitFor(() => expect(center.history[0]?.text).toBe("My automation has changed since you chose to restore it. Review the comparison and try again."));
+    expect(api.restoreVersion).not.toHaveBeenCalled();
+    expect(within(comparisonWindow()).queryByRole("group", { name: "Restore" })).toBeNull();
+  });
+
+  it("closes a pending confirmation when another change is chosen", async () => {
+    const a = version({ id: "v1", alias: "Hall lights", action: "edit", has_before: true });
+    const b = version({ id: "v2", resource_id: "aid2", alias: "Porch lights", action: "edit", has_before: true });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([a, b])).mockResolvedValue(page([a]));
+    vi.mocked(api.getVersion).mockImplementation(async (id: string) => record(id === "v2" ? b : a));
+    renderChanges();
+    await choose("Hall lights");
+    fireEvent.click(openRestore()[0]);
+    expect(within(comparisonWindow()).getByRole("group", { name: "Restore" })).toBeTruthy();
+    fireEvent.click(within(listWindow()).getByText("Porch lights"));
+    await waitFor(() => expect(within(comparisonWindow()).getByRole("heading", { name: "Porch lights" })).toBeTruthy());
+    expect(within(comparisonWindow()).queryByRole("group", { name: "Restore" })).toBeNull();
+    expect(api.restoreVersion).not.toHaveBeenCalled();
+  });
+
+  it("Item History moves Comparison through the item's changes with focus staying in it", async () => {
+    const latest = version({ id: "v2", action: "edit", has_before: true, timestamp: "2026-01-02T00:00:00Z" });
+    const first = version({ id: "v1", action: "create" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([latest])).mockResolvedValue(page([latest, first]));
+    vi.mocked(api.getVersion).mockImplementation(async (id: string) => record(id === "v1" ? first : latest, id === "v1" ? { before: null } : {}));
+    renderChanges();
+    await choose("My automation");
+    await waitFor(() => expect(rowsOf(historyWindow())).toHaveLength(2));
+    rowsOf(historyWindow())[0].focus();
+    fireEvent.keyDown(rowsOf(historyWindow())[0], { key: "ArrowDown" });
+    await waitFor(() => expect(api.getVersion).toHaveBeenLastCalledWith("v1"));
+    expect(historyWindow().contains(document.activeElement)).toBe(true);
+    await waitFor(() => expect(within(comparisonWindow()).getByText("Create")).toBeTruthy());
   });
 });
 
@@ -194,15 +257,13 @@ describe("ChangesView", () => {
 // yaml_config and file. Rendering it through the structured path would dump
 // {content, path} as YAML, burying the file inside a "content: |-" block with
 // every line re-indented.
-describe("ChangesView device YAML detail", () => {
+describe("Comparison of device YAML", () => {
   const DEVICE = 'esphome:\n  name: rf-blaster2\nlogger:\n  level: WARN\n';
 
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // jsdom does not implement matchMedia, and the detail view reads it to pick
-    // its default layout. Stubbed locally rather than globally: nothing else in
-    // the suite renders this component.
+    // jsdom does not implement matchMedia, and Comparison reads it to pick its default layout.
     stubMatchMedia();
   });
 
@@ -211,26 +272,18 @@ describe("ChangesView device YAML detail", () => {
       id: "v9", resource_type: "esphome_yaml", resource_id: "rf-blaster-2.yaml",
       alias: "rf-blaster-2.yaml", action: "edit", has_before: true, has_after: true,
     });
-    vi.mocked(api.listVersions).mockResolvedValue({
-      resource_type: null, resource_id: null, versions: [summary], total: 1,
-    });
-    vi.mocked(api.getVersion).mockResolvedValue({
-      ...summary,
-      before: { content: DEVICE },
-      after: { content: after },
-    } as never);
-
-    const view = render(<ChangesView hass={null} />);
-    const row = await view.findByText("rf-blaster-2.yaml");
-    fireEvent.click(row);
+    vi.mocked(api.listVersions).mockResolvedValue(page([summary]));
+    vi.mocked(api.getVersion).mockResolvedValue({ ...summary, request_id: "r1", before: { content: DEVICE }, after: { content: after } } as never);
+    const view = renderChanges();
+    fireEvent.click(await within(listWindow()).findByText("rf-blaster-2.yaml"));
     await waitFor(() => expect(api.getVersion).toHaveBeenCalledWith("v9"));
     await waitFor(() => expect(view.container.querySelector(".yaml-diff-cols")).toBeTruthy());
     return view;
   }
 
   it("renders the file itself, not a config: block wrapping it", async () => {
-    const { container } = await openDetail();
-    const text = container.textContent ?? "";
+    await openDetail();
+    const text = comparisonWindow().textContent ?? "";
     expect(text).toContain("name: rf-blaster2");
     // The structured path would have produced this wrapper.
     expect(text).not.toContain("content: |");
@@ -239,13 +292,10 @@ describe("ChangesView device YAML detail", () => {
   it("offers the code view and switches the panes out of the line diff", async () => {
     const view = await openDetail(DEVICE.replace("WARN", "DEBUG"));
     expect(view.container.querySelectorAll(".diff-line").length).toBeGreaterThan(0);
-
     fireEvent.click(view.getByRole("button", { name: /code editor view/i }));
-
     expect(view.container.querySelectorAll(".diff-line").length).toBe(0);
-    expect(view.container.textContent).toContain("name: rf-blaster2");
-    expect(view.container.querySelector(".change-diff-hint")?.textContent)
-      .toContain("not marked");
+    expect(comparisonWindow().textContent).toContain("name: rf-blaster2");
+    expect(view.container.querySelector(".change-diff-hint")?.textContent).toContain("not marked");
   });
 
   it("shares the choice with the approval diff rather than keeping its own", async () => {

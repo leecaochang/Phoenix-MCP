@@ -14,7 +14,7 @@ import {
 } from "../views/AccessKeyDetail";
 import { ApprovalsListWindow, RequestDetailsWindow, ReviewWindow } from "../views/ApprovalsView";
 import { AuditView } from "../views/AuditView";
-import { ChangesView } from "../views/ChangesView";
+import { ChangesListWindow, ComparisonWindow, ItemHistoryWindow } from "../views/ChangesView";
 import { ConversationsView } from "../views/ConversationsView";
 import { MesaView } from "../views/MesaView";
 import { OnboardingWizard } from "../views/OnboardingWizard";
@@ -46,6 +46,8 @@ export const WINDOW_TITLE_KEYS = {
   review: "workspace.review",
   requestDetails: "workspace.requestDetails",
   changes: "shell.tabChanges",
+  comparison: "workspace.comparison",
+  itemHistory: "workspace.itemHistory",
   mesa: "shell.tabMesa",
   auditLog: "shell.tabAudit",
   conversationLog: "conversations.title",
@@ -134,7 +136,23 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     // 2: the three windows replaced the single Approvals window.
     layoutVersion: 2,
   },
-  changes: { labelKey: "shell.tabChanges", helpKey: "help.wsChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
+  changes: {
+    labelKey: "shell.tabChanges",
+    helpKey: "help.wsChanges",
+    icon: "changes",
+    windows: ["changes", "comparison", "itemHistory", "attention"],
+    // The list beside a larger Comparison, as accepted for Changes. Item History starts
+    // closed and opens below the list from its toolbar tool.
+    arrange: (api, add) => {
+      add("changes");
+      add("comparison", { referencePanel: "changes", direction: "right" });
+      size(api, "changes", { width: Math.round(api.width * 0.34) });
+    },
+    closedAt: { itemHistory: { neighbor: "changes", side: "bottom" } },
+    heights: { itemHistory: 280 },
+    // 2: the three windows replaced the single Changes window.
+    layoutVersion: 2,
+  },
   mesa: { labelKey: "shell.tabMesa", helpKey: "help.wsMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
   logs: {
     labelKey: "workspace.logs",
@@ -237,7 +255,6 @@ function AccessKeysContent() {
   );
 }
 
-function ChangesContent() { return <ChangesView hass={usePanelData().hass} />; }
 function MesaContent() { return <MesaView />; }
 function AuditLogContent() { return <AuditView accessKeys={usePanelData().accessKeys} />; }
 function ConversationLogContent() { return <ConversationsView accessKeys={usePanelData().accessKeys} />; }
@@ -273,7 +290,9 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   approvals: ApprovalsListWindow,
   review: ReviewWindow,
   requestDetails: RequestDetailsWindow,
-  changes: ChangesContent,
+  changes: ChangesListWindow,
+  comparison: ComparisonWindow,
+  itemHistory: ItemHistoryWindow,
   mesa: MesaContent,
   auditLog: AuditLogContent,
   conversationLog: ConversationLogContent,

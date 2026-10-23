@@ -121,11 +121,13 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.agentcli-settings-model-edit\s*>\s*select,\s*\.agentcli-settings-model-row\s+select\s*\{[^}]*width:\s*100%;/s);
   });
 
-  it("keeps long localized change types inside their own column", () => {
-    expect(CSS).toMatch(/\.changes-table\s*\{[^}]*table-layout:\s*fixed;/s);
-    expect(CSS).toMatch(/\.changes-table\s+\.changes-col-type\s*\{[^}]*width:\s*180px;/s);
-    expect(CSS).toMatch(/\.changes-col-type\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*860px\)\s*and\s*\(min-width:\s*641px\)[\s\S]*?\.changes-col-who\s*\{[^}]*display:\s*none;/);
+  it("keeps long localized change text inside the Changes windows", () => {
+    // Each line under an item's name stays in its cell instead of widening the column.
+    expect(CSS).toMatch(/\.change-item\s*\{[^}]*min-width:\s*0;/s);
+    expect(CSS).toMatch(/\.change-item\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+    // The restore confirmation wraps in a narrow Comparison.
+    expect(CSS).toMatch(/\.phx-restore-confirm\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.phx-restore-confirm-actions\s*\{[^}]*flex-wrap:\s*wrap;/s);
   });
 
   it("keeps long localized approval text inside the Approvals windows", () => {

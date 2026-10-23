@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 
 const listApprovals = vi.fn();
 const getApproval = vi.fn();
@@ -30,7 +30,7 @@ vi.mock("../api", () => ({
 }));
 
 import { renderApprovals } from "./approvals_harness";
-import { ChangesView } from "../views/ChangesView";
+import { renderChanges } from "./changes_harness";
 
 /** A promise whose resolution this test controls. */
 function deferred<T>() {
@@ -115,7 +115,7 @@ describe("the Approvals list discards a superseded response", () => {
   });
 });
 
-describe("ChangesView discards a superseded response", () => {
+describe("the Changes list discards a superseded response", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listAccessKeys.mockResolvedValue([]);
@@ -135,7 +135,7 @@ describe("ChangesView discards a superseded response", () => {
       onChange.mockImplementation(callback);
       return () => {};
     });
-    render(<ChangesView hass={{ connection: { subscribeEvents } }} />);
+    renderChanges({ hass: { connection: { subscribeEvents } } });
     await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(1));
 
     await waitFor(() => expect(subscribeEvents).toHaveBeenCalled());

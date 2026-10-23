@@ -3,5 +3,5 @@
 ---
 Changes keeps a version history of the configuration agents change: automations, scripts, scenes, integrations, helpers and dashboards.
 
-- Select a change to compare the configuration before and after it.
-- **{{label:changes.restoreThis}}** puts that version back. The restore is recorded too, so it can be undone the same way.
+- Choose a change to see the configuration before and after it in **{{label:workspace.comparison}}**. **{{label:workspace.itemHistory}}**, from the toolbar, lists the item's other changes.
+- **{{label:changes.restore}}** puts a saved Before or After back after you confirm. The restore is recorded too, so it can be undone the same way.
