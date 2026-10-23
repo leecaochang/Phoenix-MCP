@@ -1239,7 +1239,8 @@
       "vendorTitle": "Fornito dall'integrazione (mesa_profile.json). Salvando crei la tua versione.",
       "warningRow": "{recommendation} (automazione {automationId}, {role})",
       "working": "In corso...",
-      "yes": "Sì"
+      "yes": "Sì",
+      "scopeLabelParentDevice": "Dispositivo principale"
     },
     "selectBy": {
       "apply": "Applica",

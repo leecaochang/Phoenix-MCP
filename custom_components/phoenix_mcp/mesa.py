@@ -41,7 +41,7 @@ from homeassistant.util.yaml import load_yaml as _load_yaml
 from homeassistant.util import dt as dt_util
 
 from . import mesa_audit
-from .device_semantics import device_registry_snapshot, effective_entity_area_id
+from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
 from .helpers import diff_summary_fields
 from .const import (
     MESA_APPROVED_EXECUTOR,
@@ -213,6 +213,24 @@ def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]
         return entry.device_id if entry is not None else None
 
     return _get_entity_device
+
+
+def _build_get_device_parent(hass: HomeAssistant) -> Callable[[str], str | None]:
+    """Return a sync callback mapping a device to the main device it is part of.
+
+    This is the MESA "parent_device" level, between device and area: since HA
+    2026.9 a multi-part product is a main device plus one child device per part,
+    and the main device's profile governs every part. Only a child device's
+    parent_device_id counts; a via_device hub link is connectivity, not
+    composition. Malformed ancestry, which Core forbids, reports no parent: the
+    permission tree already refuses access to such entities.
+    """
+
+    def _get_device_parent(device_id: str) -> str | None:
+        chain = device_authority_chain(hass, device_id)
+        return chain[1] if chain is not None and len(chain) == 2 else None
+
+    return _get_device_parent
 
 
 def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -525,17 +543,20 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     get_entity_area = _build_get_entity_area(hass)
     get_entity_integration = _build_get_entity_integration(hass)
     get_entity_device = _build_get_entity_device(hass)
+    get_device_parent = _build_get_device_parent(hass)
     store = ProfileStore(
         backend=backend,
         get_entity_area=get_entity_area,
         get_entity_integration=get_entity_integration,
         get_entity_device=get_entity_device,
+        get_device_parent=get_device_parent,
     )
     resolver = InheritanceResolver(
         store=store,
         get_entity_area=get_entity_area,
         get_entity_integration=get_entity_integration,
         get_entity_device=get_entity_device,
+        get_device_parent=get_device_parent,
     )
     store.attach_resolver(resolver)
     # The enforcer resolves through whatever store it is handed, so it takes the

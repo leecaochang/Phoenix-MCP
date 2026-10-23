@@ -476,7 +476,8 @@
       "vendorTitle": "由集成提供（mesa_profile.json）。保存后会创建您自己的覆盖策略。",
       "warningRow": "{recommendation}（自动化 {automationId}，{role}）",
       "working": "处理中…",
-      "yes": "是"
+      "yes": "是",
+      "scopeLabelParentDevice": "主设备"
     },
     "selectBy": {
       "apply": "应用",

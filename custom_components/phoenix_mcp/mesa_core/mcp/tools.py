@@ -43,7 +43,7 @@ _CALLER: contextvars.ContextVar[CallerContext | None] = contextvars.ContextVar(
     "mesa_caller", default=None
 )
 
-MESA_VERSION = "1.1"
+MESA_VERSION = "1.2"
 
 # component_type values derivable from an entity ID's domain (Spec 9.3).
 # Results are always entity-keyed, so scoped component types never occur.

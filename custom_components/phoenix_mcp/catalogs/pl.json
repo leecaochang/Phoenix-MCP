@@ -1651,7 +1651,8 @@
       "vendorTitle": "Dostarczone przez integrację (mesa_profile.json). Zapisanie tworzy własne zastąpienie.",
       "warningRow": "{recommendation} (automatyzacja {automationId}, {role})",
       "working": "Praca...",
-      "yes": "Tak"
+      "yes": "Tak",
+      "scopeLabelParentDevice": "Urządzenie główne"
     },
     "settings": {
       "addProviderFirst": "Najpierw dodaj konto dostawcy w Czacie agenta.",

@@ -1454,7 +1454,8 @@
       "vendorTitle": "Proporcionado por la integración (mesa_profile.json). Al guardar se crea su propia anulación.",
       "warningRow": "{recommendation} (automatización {automationId}, {role})",
       "working": "Trabajando...",
-      "yes": "Sí"
+      "yes": "Sí",
+      "scopeLabelParentDevice": "Dispositivo principal"
     },
     "settings": {
       "addProviderFirst": "Añadir primero una cuenta de proveedor en Chat de agente.",

@@ -1122,6 +1122,7 @@
       "scopeLabelDomain": "Domain",
       "scopeLabelEntity": "Entity",
       "scopeLabelIntegration": "Integration",
+      "scopeLabelParentDevice": "Main Device",
       "scopeNote": "Device, area, integration, and domain profiles apply to multiple entities unless a more specific profile overrides them. Select a profile name to edit it. <badge>Vendor</badge> marks a profile supplied by an integration; saving creates your own override.",
       "scopeRoomLocalized": "Room-Localized",
       "scopeZoneWide": "Zone-Wide",

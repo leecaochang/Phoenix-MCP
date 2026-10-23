@@ -224,6 +224,10 @@ class ScopedProfileStore:
         return self._inner.get_entity_device
 
     @property
+    def get_device_parent(self) -> Any:
+        return self._inner.get_device_parent
+
+    @property
     def get_entity_domain(self) -> Any:
         return self._inner.get_entity_domain
 

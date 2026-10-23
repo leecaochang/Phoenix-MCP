@@ -1,9 +1,10 @@
-"""Inheritance resolution: defaults, then domain, integration, area, device, entity (Spec 5.6, 5.8).
+"""Inheritance resolution: defaults, then domain up to entity (Spec 5.6, 5.8).
 
-The InheritanceResolver gathers the declared layers for an entity, merges them
-through the ConflictResolver (Rules A-E), and fills undeclared kernel fields
-from deployment defaults or the built-in domain safety baseline (Rule E:
-defaults apply only when no profile at any level declares the field).
+The levels, broadest first: domain, integration, area, parent device, device,
+entity. The InheritanceResolver gathers the declared layers for an entity,
+merges them through the ConflictResolver (Rules A-E), and fills undeclared
+kernel fields from deployment defaults or the built-in domain safety baseline
+(Rule E: defaults apply only when no profile at any level declares the field).
 """
 
 from __future__ import annotations
@@ -70,7 +71,11 @@ class InheritanceResolver:
     ``get_entity_device`` maps an entity ID to the HA device registry ID of the
     physical device that owns it (None when the entity belongs to no device);
     when absent there is no fallback and device-scope profiles are inert
-    (Spec 5.6).
+    (Spec 5.6). ``get_device_parent`` maps a device registry ID to the main
+    device it is a child of (HA child devices; None for a main device, and
+    never a ``via_device`` hub link), adding that device's profile as the
+    parent-device level. It is called only on the entity's own device, never on
+    the parent, so nesting is one level by construction.
     """
 
     def __init__(
@@ -80,6 +85,7 @@ class InheritanceResolver:
         get_entity_domain: Callable[[str], str] | None = None,
         get_entity_integration: Callable[[str], str | None] | None = None,
         get_entity_device: Callable[[str], str | None] | None = None,
+        get_device_parent: Callable[[str], str | None] | None = None,
     ) -> None:
         self.store = store
         if get_entity_area is not None:
@@ -90,6 +96,8 @@ class InheritanceResolver:
             store.get_entity_integration = get_entity_integration
         if get_entity_device is not None:
             store.get_entity_device = get_entity_device
+        if get_device_parent is not None:
+            store.get_device_parent = get_device_parent
         self._conflicts = ConflictResolver()
 
     @property
@@ -97,21 +105,33 @@ class InheritanceResolver:
         return self.store.get_entity_domain or (lambda eid: eid.split(".", 1)[0])
 
     def lookup(self, kind: str, entity_id: str) -> str | None:
-        callback = getattr(self, f"get_entity_{kind}")
+        return self._call_host(f"get_entity_{kind}", entity_id, nullable=kind != "domain")
+
+    def parent_device(self, device_id: str) -> str | None:
+        """The main device that ``device_id`` is a child of, or None.
+
+        A callback naming the device itself reports no parent, so the same
+        profile is never applied twice.
+        """
+        parent = self._call_host("get_device_parent", device_id, nullable=True)
+        return None if parent == device_id else parent
+
+    def _call_host(self, name: str, key: str, *, nullable: bool) -> str | None:
+        callback = getattr(self, name)
         if callback is None:
             return None
         try:
-            value = callback(entity_id)
+            value = callback(key)
         except Exception as err:
-            raise HostCallbackError(f"get_entity_{kind} callback failed") from err
+            raise HostCallbackError(f"{name} callback failed") from err
         if inspect.isawaitable(value):
             if inspect.iscoroutine(value):
                 value.close()
-            raise HostCallbackError(f"get_entity_{kind} must be synchronous")
-        if value is None and kind != "domain":
+            raise HostCallbackError(f"{name} must be synchronous")
+        if value is None and nullable:
             return None
         if not isinstance(value, str) or not value.strip():
-            raise HostCallbackError(f"get_entity_{kind} must return a non-empty identifier")
+            raise HostCallbackError(f"{name} must return a non-empty identifier")
         return value
 
     @property
@@ -125,6 +145,10 @@ class InheritanceResolver:
     @property
     def get_entity_device(self) -> Callable[[str], str | None] | None:
         return self.store.get_entity_device
+
+    @property
+    def get_device_parent(self) -> Callable[[str], str | None] | None:
+        return self.store.get_device_parent
 
     def _gather_layers(
         self, entity_id: str, entity_profile: SemanticProfile | None = None
@@ -144,6 +168,13 @@ class InheritanceResolver:
                 device_profile = self.store.get_device_profile(device_id)
                 if device_profile is not None:
                     layers.append(Layer("device", device_profile))
+                # Parent device level: the main device of an HA child device,
+                # applied whether or not the child has a profile of its own.
+                parent_id = self.parent_device(device_id)
+                if parent_id is not None:
+                    parent_profile = self.store.get_device_profile(parent_id)
+                    if parent_profile is not None:
+                        layers.append(Layer("parent_device", parent_profile))
         if self.get_entity_area is not None:
             area_id = self.lookup("area", entity_id)
             if area_id is not None:

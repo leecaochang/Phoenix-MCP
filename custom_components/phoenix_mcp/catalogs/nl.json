@@ -1623,7 +1623,8 @@
       "vendorTitle": "Geleverd door de integratie (mesa_profile.json). Opslaan maakt je eigen overschrijving aan.",
       "warningRow": "{recommendation} (automatisering {automationId}, {role})",
       "working": "Bezig...",
-      "yes": "Ja"
+      "yes": "Ja",
+      "scopeLabelParentDevice": "Hoofdapparaat"
     },
     "settings": {
       "addProviderFirst": "Voeg eerst een provideraccount toe in Agent Chat.",

@@ -568,7 +568,7 @@
 
           <article class="tool" data-cap="read mesa" data-search="mesa_query_profiles list filter profiles domain tag area">
             <div class="tool-head"><span class="tool-name">mesa_query_profiles</span><span class="badge badge-cap">Configuration read</span></div>
-            <p class="tool-desc">List the profiles in scope, with array filters for domains, tags, areas, devices, integrations, and intents. <code>tags_match</code> selects any-tag or all-tags matching. Tag and intent filters use the effective resolved profile. Counts and cursors are relative to the access key's scope.</p>
+            <p class="tool-desc">List the profiles in scope, with array filters for domains, tags, areas, devices, integrations, and intents. A device filter also matches entities on the child devices of a listed main device. <code>tags_match</code> selects any-tag or all-tags matching. Tag and intent filters use the effective resolved profile. Counts and cursors are relative to the access key's scope.</p>
             <dl><dt>params</dt><dd><code>domains</code>, <code>tags</code>, <code>tags_match</code> (<code>any</code> or <code>all</code>, default <code>any</code>), <code>areas</code>, <code>devices</code>, <code>integrations</code>, <code>intents</code>, <code>min_origin_authority</code> (<code>inferred_ai</code>, <code>hybrid</code>, <code>user</code>, or <code>developer</code>), <code>include_inferred</code> (default <code>false</code>), <code>include_fields</code>, <code>limit</code> (1-200, default 50), <code>cursor</code></dd></dl>
           </article>
 

@@ -1320,7 +1320,8 @@
       "vendorTitle": "由整合提供（mesa_profile.json）。儲存後會建立您自己的覆蓋策略。",
       "warningRow": "{recommendation}（自動化 {automationId}，{role}）",
       "working": "處理中…",
-      "yes": "是"
+      "yes": "是",
+      "scopeLabelParentDevice": "主裝置"
     },
     "mesaSuggestion": {
       "baseline_note": "「禁止」與該域的內建基線一致，因此顯式編寫策略只是把這一意圖寫明；如果希望智慧體在核准後仍可控制，請在「檢視」中改選「確認」。",

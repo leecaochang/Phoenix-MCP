@@ -965,7 +965,8 @@
       "vendorTitle": "Von der Integration bereitgestellt (mesa_profile.json). Durch Speichern erstellen Sie Ihre eigene Überschreibung.",
       "warningRow": "{recommendation} (Automatisierung {automationId}, {role})",
       "working": "Wird verarbeitet...",
-      "yes": "Ja"
+      "yes": "Ja",
+      "scopeLabelParentDevice": "Hauptgerät"
     },
     "settings": {
       "addProviderFirst": "Fügen Sie zuerst ein Anbieterkonto im Agent-Chat hinzu.",

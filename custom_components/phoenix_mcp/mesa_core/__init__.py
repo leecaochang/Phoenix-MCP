@@ -47,7 +47,7 @@ from custom_components.phoenix_mcp.mesa_core.trigger_validator import (
 )
 from custom_components.phoenix_mcp.mesa_core.validation import ValidationReport, validate_document, validate_or_raise
 
-__version__ = "1.3.3"
+__version__ = "1.4.0"
 
 __all__ = [
     "DOMAIN_SAFETY_BASELINE",

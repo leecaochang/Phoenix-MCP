@@ -1832,7 +1832,8 @@
       "vendorTitle": "インテグレーションから提供されています (mesa_profile.json)。保存すると独自の上書きが作成されます。",
       "warningRow": "{recommendation} (オートメーション {automationId}、{role})",
       "working": "処理中...",
-      "yes": "はい"
+      "yes": "はい",
+      "scopeLabelParentDevice": "メインデバイス"
     },
     "approvalSummary": {
       "action.approve": "承認して実行",

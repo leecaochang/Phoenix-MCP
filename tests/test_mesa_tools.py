@@ -962,3 +962,100 @@ async def test_releasing_leases_is_safe_when_mesa_is_not_loaded(env):
 
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
     assert release_access_key_leases(data, "tok") == 0
+
+
+@pytest.fixture
+def strip_env(hass: HomeAssistant):
+    """A main device with one outlet part and one hub-connected dependent."""
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain="test_integration", entry_id="strip")
+    entry.add_to_hass(hass)
+    devices = dr.async_get(hass)
+    strip = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test_integration", "strip")}, name="Strip",
+    )
+    outlet = devices.async_get_or_create_child(
+        config_entry_id=entry.entry_id,
+        identifiers={("test_integration", "outlet")},
+        name="Outlet",
+        parent_device_id=strip.id,
+    )
+    dependent = devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={("test_integration", "dependent")},
+        name="Dependent",
+        via_device_id=strip.id,
+    )
+    entities = {}
+    for name, device in (("outlet", outlet), ("dependent", dependent)):
+        entity = er.async_get(hass).async_get_or_create(
+            "switch", "test_integration", f"{name}-switch",
+            config_entry=entry, device_id=device.id, suggested_object_id=name,
+        )
+        hass.states.async_set(entity.entity_id, "on")
+        entities[name] = entity.entity_id
+    return {"strip": strip.id, "outlet": outlet.id, **entities}
+
+
+def _mode_profile(key: str, mode: str) -> SemanticProfile:
+    return SemanticProfile.from_dict(
+        key,
+        {"semantic_profile": {"operational_boundaries": {"control_mode": mode}}},
+        default_origin=MetadataOrigin.USER,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_main_device_profile_governs_its_parts_not_hub_dependents(hass, strip_env):
+    runtime = await async_setup_mesa(hass, "enforced")
+    runtime.store.set_device_profile(strip_env["strip"], _mode_profile(strip_env["strip"], "prohibited"))
+
+    assert runtime.store.get_effective(
+        "switch.outlet"
+    ).operational_boundaries.control_mode == ControlMode.PROHIBITED
+    assert runtime.store.get_effective(
+        "switch.dependent"
+    ).operational_boundaries.control_mode != ControlMode.PROHIBITED
+
+    # The child device's own confirm cannot loosen the parent's prohibition.
+    runtime.store.set_device_profile(strip_env["outlet"], _mode_profile(strip_env["outlet"], "confirm"))
+    assert runtime.store.get_effective(
+        "switch.outlet"
+    ).operational_boundaries.control_mode == ControlMode.PROHIBITED
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_scoped_tools_explain_and_query_the_parent_device_level(hass, strip_env):
+    from custom_components.phoenix_mcp.mesa_tools import ScopedProfileStore
+
+    runtime = await async_setup_mesa(hass, "advisory")
+    runtime.store.set_device_profile(strip_env["strip"], _mode_profile(strip_env["strip"], "read_only"))
+    runtime.store.set(
+        "switch.outlet",
+        SemanticProfile.from_dict(
+            "switch.outlet",
+            {"semantic_profile": {"semantic_tags": ["power.outlet"]}},
+            default_origin=MetadataOrigin.USER,
+        ),
+    )
+    data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=runtime)
+    access_key = _access_key(domains={"switch": "GREEN"})
+    scoped = ScopedProfileStore(runtime.store, access_key, hass)
+    assert scoped.get_device_parent is runtime.store.get_device_parent
+
+    explained, outcome, _ = await _call(
+        "mesa_explain_profile", {"entity_id": "switch.outlet"}, access_key, hass, data
+    )
+    assert outcome == "allowed"
+    assert "parent_device" in json.dumps(explained)
+
+    queried, outcome, _ = await _call(
+        "mesa_query_profiles", {"devices": [strip_env["strip"]]}, access_key, hass, data
+    )
+    assert outcome == "allowed"
+    assert [row["entity_id"] for row in queried["results"]] == ["switch.outlet"]

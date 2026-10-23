@@ -1703,7 +1703,8 @@
       "viewAutomationDetails": "Visa automatiseringar",
       "warningRow": "{recommendation} (automatisering {automationId}, {role})",
       "working": "Arbetar...",
-      "yes": "Ja"
+      "yes": "Ja",
+      "scopeLabelParentDevice": "Huvudenhet"
     },
     "mesaSuggestion": {
       "baseline_note": " Förbjudet matchar den inbyggda baslinjen för denna domän, så den skapade profilen tydliggör den avsikten; välj Bekräfta i Granska för att i stället tillåta agentstyrning bakom godkännanden.",

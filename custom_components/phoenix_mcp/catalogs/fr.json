@@ -1042,7 +1042,8 @@
       "vendorTitle": "Fourni par l'intégration (mesa_profile.json). L'enregistrement crée votre propre remplacement.",
       "warningRow": "{recommendation} (automatisation {automationId}, {role})",
       "working": "Traitement...",
-      "yes": "Oui"
+      "yes": "Oui",
+      "scopeLabelParentDevice": "Appareil principal"
     },
     "selectBy": {
       "apply": "Appliquer",

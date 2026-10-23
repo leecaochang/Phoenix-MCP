@@ -1703,7 +1703,8 @@
       "viewAutomationDetails": "Vis automatiseringer",
       "warningRow": "{recommendation} (automatisering {automationId}, {role})",
       "working": "Arbejder...",
-      "yes": "Ja"
+      "yes": "Ja",
+      "scopeLabelParentDevice": "Hovedenhed"
     },
     "mesaSuggestion": {
       "baseline_note": " Forbudt matcher den indbyggede basislinje for dette domæne, så den udarbejdede profil gør denne hensigt eksplicit; vælg Bekræft i Gennemgå for i stedet at tillade agentkontrol bag godkendelser.",

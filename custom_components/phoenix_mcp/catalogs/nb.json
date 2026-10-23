@@ -1703,7 +1703,8 @@
       "viewAutomationDetails": "Vis automasjoner",
       "warningRow": "{recommendation} (automasjon {automationId}, {role})",
       "working": "Arbeider...",
-      "yes": "Ja"
+      "yes": "Ja",
+      "scopeLabelParentDevice": "Hovedenhet"
     },
     "mesaSuggestion": {
       "baseline_note": " Forbudt samsvarer med den innebygde basislinjen for dette domenet, så den opprettede profilen gjør denne intensjonen eksplisitt; velg Bekreft i gjennomgangen for å tillate agentkontroll bak godkjenninger i stedet.",

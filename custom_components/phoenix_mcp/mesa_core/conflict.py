@@ -28,7 +28,14 @@ from custom_components.phoenix_mcp.mesa_core.profile import (
     path_segment,
 )
 
-SCOPE_RANK = {"entity": 5, "device": 4, "area": 3, "integration": 2, "domain": 1}
+SCOPE_RANK = {
+    "entity": 6,
+    "device": 5,
+    "parent_device": 4,
+    "area": 3,
+    "integration": 2,
+    "domain": 1,
+}
 
 # Rule D fields on operational_boundaries (everything not covered by Rules A/B).
 _OB_RULE_D_FIELDS = (
@@ -94,7 +101,8 @@ _ACCESS_DECISION_FIELDS = frozenset(
 class Layer:
     """One inheritance level's profile.
 
-    ``level`` is 'entity', 'device', 'area', 'integration', or 'domain'.
+    ``level`` is 'entity', 'device', 'parent_device', 'area', 'integration', or
+    'domain'.
     """
 
     level: str

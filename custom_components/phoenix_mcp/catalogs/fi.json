@@ -1703,7 +1703,8 @@
       "viewAutomationDetails": "Näytä automaatiot",
       "warningRow": "{recommendation} (automaatio {automationId}, {role})",
       "working": "Käsitellään...",
-      "yes": "Kyllä"
+      "yes": "Kyllä",
+      "scopeLabelParentDevice": "Päälaite"
     },
     "mesaSuggestion": {
       "baseline_note": " Estetty vastaa tämän verkkotunnuksen sisäänrakennettua turvatasoa, joten laadittu profiili tekee tarkoituksesta eksplisiittisen; valitse Tarkista-vaiheessa Vahvista, jos haluat sallia agentin ohjauksen hyväksyntöjen takana.",

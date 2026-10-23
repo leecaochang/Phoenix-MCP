@@ -200,6 +200,8 @@ const DELETE_BUTTON: Record<CascadingScope, string> = {
 const LEVEL_LABEL: Record<string, string> = {
   entity: "mesa.scopeLabelEntity",
   device: "mesa.scopeLabelDevice",
+  // The main device of an HA child device; its profile applies to the parts.
+  parent_device: "mesa.scopeLabelParentDevice",
   area: "mesa.scopeLabelArea",
   integration: "mesa.scopeLabelIntegration",
   domain: "mesa.scopeLabelDomain",
