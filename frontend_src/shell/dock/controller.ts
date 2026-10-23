@@ -45,6 +45,8 @@ export interface WorkspaceLayout {
   floats?: SerializedDockview;
   /** Column order, widths, hidden columns and sort of the workspace's tables, by table id. */
   tables?: Record<string, TableSettings>;
+  /** The workspace's layout version when saved; an arrangement saved under another version loads the default. */
+  version?: number;
 }
 
 interface Host {
@@ -87,6 +89,10 @@ export interface WorkspaceExtras {
   heights?: Readonly<Record<string, number>>;
   /** Windows the default arrangement pins along the top or bottom. */
   pinned?: Readonly<Partial<Record<Band, readonly string[]>>>;
+  /** Windows the default arrangement leaves closed, with where each opens. */
+  closedAt?: Readonly<Record<string, Slot>>;
+  /** Raised when the default arrangement changes so much that older saved ones should not load. */
+  layoutVersion?: number;
 }
 
 export class WorkspaceController {
@@ -237,7 +243,8 @@ export class WorkspaceController {
     const api = this.api;
     if (!api) return;
     const known = new Set(this.windows);
-    const dock = saved ? sanitizeLayout(saved.dock, known) : null;
+    const current = (saved?.version ?? 0) === (this.extras.layoutVersion ?? 0);
+    const dock = saved && current ? sanitizeLayout(saved.dock, known) : null;
     if (dock) {
       try {
         this.batch(() => {
@@ -324,6 +331,7 @@ export class WorkspaceController {
         host.canvas.setCanvas(0);
       }
       this.arrange(api, this.add);
+      for (const [id, slot] of Object.entries(this.extras.closedAt ?? {})) if (!api.getPanel(id)) this.closed.set(id, slot);
       this.canvas?.apply({ ...this.extras.heights });
       for (const band of BANDS) {
         for (const id of this.extras.pinned?.[band] ?? []) {
@@ -411,7 +419,8 @@ export class WorkspaceController {
     if (!dock) return null;
     const heights = this.canvas ? { ...this.canvas.intended } : undefined;
     const tables = this.tables.snapshot();
-    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}) };
+    const version = this.extras.layoutVersion;
+    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}) };
     const bands: Partial<Record<Band, BandLayout>> = {};
     for (const band of BANDS) {
       const bandApi = this.apiOf(band);

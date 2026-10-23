@@ -29,7 +29,7 @@ vi.mock("../api", () => ({
   },
 }));
 
-import { ApprovalsView } from "../views/ApprovalsView";
+import { renderApprovals } from "./approvals_harness";
 import { ChangesView } from "../views/ChangesView";
 
 /** A promise whose resolution this test controls. */
@@ -80,7 +80,7 @@ function version(alias: string) {
   };
 }
 
-describe("ApprovalsView discards a superseded response", () => {
+describe("the Approvals list discards a superseded response", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getApproval.mockResolvedValue(approval("a1", "pending"));
@@ -97,13 +97,12 @@ describe("ApprovalsView discards a superseded response", () => {
       .mockReturnValueOnce(slowOld.promise)
       .mockReturnValueOnce(fastNew.promise);
 
-    const { rerender } = render(
-      <ApprovalsView tab="history" onTabChange={() => {}} refreshSignal={0} />);
+    const { update } = renderApprovals({ scope: "history", refreshSignal: 0 });
     await waitFor(() => expect(listApprovals).toHaveBeenCalledTimes(1));
 
-    rerender(<ApprovalsView tab="history" onTabChange={() => {}} refreshSignal={1} />);
+    update({ refreshSignal: 1 });
     await waitFor(() => expect(listApprovals).toHaveBeenCalledTimes(2));
-    rerender(<ApprovalsView tab="history" onTabChange={() => {}} refreshSignal={2} />);
+    update({ refreshSignal: 2 });
     await waitFor(() => expect(listApprovals).toHaveBeenCalledTimes(3));
 
     // The NEWER request answers first, then the older one lands.

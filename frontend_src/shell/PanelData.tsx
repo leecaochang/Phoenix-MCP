@@ -18,6 +18,7 @@ import { syncCardCatalog } from "../utils/card_harvest";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import { t } from "../i18n";
 import type { WorkspaceId } from "./storage";
+import { APPROVALS_SCOPES, type ApprovalsScope } from "./approvals";
 
 export type Theme = "light" | "dark" | "auto";
 
@@ -26,7 +27,8 @@ export type AccessKeyView =
   | { name: "detail"; accessKeyId: string }
   | { name: "wizard" };
 
-export type ApprovalsTab = "pending" | "history";
+/** Which requests the Approvals list shows. */
+export type ApprovalsTab = ApprovalsScope;
 
 // Persist the selected access key so a reload selects it again; with none stored,
 // the Access Keys windows wait for a selection.
@@ -52,7 +54,7 @@ const APPROVALS_TAB_STORAGE_KEY = "phx-approvals-tab";
 function readStoredApprovalsTab(): ApprovalsTab {
   try {
     const v = localStorage.getItem(APPROVALS_TAB_STORAGE_KEY);
-    if (v === "pending" || v === "history") return v;
+    if (v && (APPROVALS_SCOPES as readonly string[]).includes(v)) return v as ApprovalsScope;
   } catch {
     // localStorage unavailable: default to Pending.
   }
@@ -497,7 +499,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     // which is true often enough that it would otherwise defeat the
     // persisted-sub-tab restore on almost every visit).
     if (
-      next === "approvals" && approvalsTab === "history" &&
+      next === "approvals" && approvalsTab !== "pending" && approvalsTab !== "all" &&
       lastSeenPendingCountRef.current !== null && pendingCount > lastSeenPendingCountRef.current
     ) {
       setApprovalsTab("pending");

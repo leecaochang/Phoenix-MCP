@@ -14,19 +14,21 @@ export type DisplayMode = "icons" | "icon-text";
 /** The toolbar's display mode, provided by the shell. */
 export const DisplayModeContext = createContext<DisplayMode>("icon-text");
 
-export function ActionButton({ icon, label, onClick, busy = false, disabled, className = "btn btn-ghost btn-sm" }: {
+export function ActionButton({ icon, label, onClick, busy = false, disabled, pressed, className = "btn btn-ghost btn-sm" }: {
   icon: IconName;
   label: string;
   onClick: () => void;
   /** A request it started is running: it stays focusable but does nothing. */
   busy?: boolean;
   disabled?: boolean;
+  /** A toggle that is currently on. */
+  pressed?: boolean;
   className?: string;
 }) {
   const iconsOnly = useContext(DisplayModeContext) === "icons";
   return (
     <BusyButton type="button" className={`${className} phx-action${iconsOnly ? " is-icon-only" : ""}`} busy={busy} disabled={disabled}
-      aria-label={iconsOnly ? label : undefined} title={label} onClick={onClick}>
+      aria-label={iconsOnly ? label : undefined} aria-pressed={pressed} title={label} onClick={onClick}>
       <Icon name={icon} size={16} />
       {!iconsOnly && <span>{label}</span>}
     </BusyButton>

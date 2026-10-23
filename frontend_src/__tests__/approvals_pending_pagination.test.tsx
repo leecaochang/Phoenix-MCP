@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
+import { renderApprovals, reviewWindow } from "./approvals_harness";
 import type { ApprovalRecord } from "../types";
 
 vi.mock("../api", () => ({
@@ -30,11 +30,10 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   };
 }
 
-describe("ApprovalsView pending pagination", () => {
+describe("Approvals pending pagination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    localStorage.setItem("phx-approval-default-view", "details");
   });
 
   it("loads the first pending page with limit/offset and shows Load more when more remain", async () => {
@@ -43,7 +42,7 @@ describe("ApprovalsView pending pagination", () => {
       total: 2, limit: 50, offset: 0,
     });
 
-    const { findByText, queryByText } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+    const { findByText, queryByText } = renderApprovals();
     await findByText("First pending");
 
     expect(api.listApprovals).toHaveBeenCalledWith({ status: "pending", limit: 50, offset: 0 });
@@ -56,7 +55,7 @@ describe("ApprovalsView pending pagination", () => {
       total: 2, limit: 50, offset,
     }));
 
-    const { findByText, getByText, queryByText } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+    const { findByText, getByText, queryByText } = renderApprovals();
     await findByText("First pending");
 
     fireEvent.click(getByText("Load More"));
@@ -66,56 +65,70 @@ describe("ApprovalsView pending pagination", () => {
     expect(queryByText("Load More")).toBeNull();
   });
 
-  it("closes an open detail modal when its approval is resolved elsewhere", async () => {
+  it("shows a request in Review as decided once it is approved elsewhere", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record({ id: "appr_1", diff: { summary: "Front door notify" } })],
       total: 1, limit: 50, offset: 0,
     });
     const onCountChange = vi.fn();
-    const { rerender, findByText, container } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} onCountChange={onCountChange} refreshSignal={0} />,
-    );
+    const { update, findByText, findByRole, queryByRole } = renderApprovals({ onCountChange, refreshSignal: 0 });
 
-    // Open the detail modal (the "Review..." deep-link lands here too).
+    // Choose it for review (a deep link lands here too).
     fireEvent.click(await findByText("Front door notify"));
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
+    expect(await findByRole("button", { name: "Approve and Execute" })).toBeTruthy();
 
-    // The approval is approved elsewhere (inline Approve in Agent Chat): the list
-    // now returns nothing and getApproval reports it resolved. The event bumps
-    // refreshSignal, which must close the now-stale modal.
+    // It is approved elsewhere (inline Approve in Agent Chat): the list now
+    // returns nothing and getApproval reports it resolved. The event bumps
+    // refreshSignal, which must stop Review offering a decision on it.
     vi.mocked(api.getApproval).mockResolvedValue(
-      record({ id: "appr_1", status: "approved", resolved_at: "2026-01-01T00:30:00Z" }),
+      record({ id: "appr_1", status: "approved", resolved_at: "2026-01-01T00:30:00Z", diff: { summary: "Front door notify" } }),
     );
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
-    rerender(<ApprovalsView tab="pending" onTabChange={() => {}} onCountChange={onCountChange} refreshSignal={1} />);
+    update({ onCountChange, refreshSignal: 1 });
 
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeNull());
+    await waitFor(() => expect(queryByRole("button", { name: "Approve and Execute" })).toBeNull());
     expect(api.getApproval).toHaveBeenCalledWith("appr_1");
     expect(onCountChange).toHaveBeenCalled();
+    // Review keeps the request, now with its outcome.
+    expect(within(reviewWindow()).getByRole("heading", { name: "Front door notify" })).toBeTruthy();
+    expect(within(reviewWindow()).getByText("Approved")).toBeTruthy();
   });
 
-  it("closes an open detail modal when its approval is rejected elsewhere", async () => {
+  it("shows a request in Review as decided once it is rejected elsewhere", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record({ id: "appr_1", diff: { summary: "Front door notify" } })],
       total: 1, limit: 50, offset: 0,
     });
-    const { rerender, findByText, container } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} refreshSignal={0} />,
-    );
+    const { update, findByText, findByRole, queryByRole } = renderApprovals({ refreshSignal: 0 });
     fireEvent.click(await findByText("Front door notify"));
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
+    expect(await findByRole("button", { name: "Reject" })).toBeTruthy();
 
     // Rejected elsewhere (e.g. inline Reject in Agent Chat) fires the same
-    // resolved event; the non-pending status must close the stale modal too.
+    // resolved event; the non-pending status must retire the decision buttons too.
     vi.mocked(api.getApproval).mockResolvedValue(
       record({ id: "appr_1", status: "rejected", resolved_at: "2026-01-01T00:30:00Z",
-               rejected_reason: "not now" }),
+               rejected_reason: "not now", diff: { summary: "Front door notify" } }),
     );
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
-    rerender(<ApprovalsView tab="pending" onTabChange={() => {}} refreshSignal={1} />);
+    update({ refreshSignal: 1 });
 
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeNull());
+    await waitFor(() => expect(queryByRole("button", { name: "Reject" })).toBeNull());
     expect(api.getApproval).toHaveBeenCalledWith("appr_1");
+    expect(within(reviewWindow()).getByText(/not now/)).toBeTruthy();
+  });
+
+  it("clears Review when its request is gone", async () => {
+    vi.mocked(api.listApprovals).mockResolvedValue({
+      approvals: [record({ id: "appr_1", diff: { summary: "Front door notify" } })],
+      total: 1, limit: 50, offset: 0,
+    });
+    const { update, findByText, findByRole } = renderApprovals({ refreshSignal: 0 });
+    fireEvent.click(await findByText("Front door notify"));
+    await findByRole("button", { name: "Reject" });
+    vi.mocked(api.getApproval).mockRejectedValue(new Error("Not found"));
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
+    update({ refreshSignal: 1 });
+    expect(await findByText("Select a request to review.")).toBeTruthy();
   });
 });
 
@@ -125,12 +138,11 @@ it("refreshes every loaded pending page on the polling callback", async () => {
     approvals: Array.from({ length: 50 }, (_, i) => record({ id: `page-${offset + i}`, diff: { summary: `Pending ${offset + i}` } })),
     total: 100, limit: 50, offset,
   }));
-  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  const view = renderApprovals();
   await view.findByText("Pending 0");
   fireEvent.click(view.getByText("Load More"));
   await view.findByText("Pending 99");
   const poll = timer.mock.calls.find(([, delay]) => delay === 10_000)![0] as () => Promise<void>;
-  const { act } = await import("@testing-library/react");
   await act(async () => { await poll(); });
   expect(view.getByText("Pending 99")).toBeInTheDocument();
   expect(view.queryByText("Load More")).toBeNull();
@@ -138,33 +150,32 @@ it("refreshes every loaded pending page on the polling callback", async () => {
   timer.mockRestore();
 });
 
-it("keeps the toolbar but withholds the empty message while the queue is loading", async () => {
+it("keeps the Show menu but withholds the empty message while the queue is loading", async () => {
   let finish!: (value: { approvals: ApprovalRecord[]; total: number; limit: number; offset: number }) => void;
   vi.mocked(api.listApprovals).mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-  expect(view.getByRole("tab", { name: "Pending" })).toBeInTheDocument();
-  expect(view.container.querySelector(".approvals-empty")).toBeNull();
-  const { act } = await import("@testing-library/react");
+  const view = renderApprovals();
+  expect(view.getByRole("combobox", { name: "Show" })).toBeInTheDocument();
+  expect(view.container.querySelector(".phx-table-empty")).toBeNull();
   await act(async () => finish({ approvals: [], total: 0, limit: 50, offset: 0 }));
-  expect(view.container.querySelector(".approvals-empty")).toBeInTheDocument();
+  expect(view.container.querySelector(".phx-table-empty")).toHaveTextContent(/No pending approvals/);
 });
 
 it("shows the server's pending total before all pages are loaded", async () => {
   vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 60, limit: 50, offset: 0 });
-  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-  expect(await view.findByRole("tab", { name: "Pending (60)" })).toBeInTheDocument();
+  const view = renderApprovals();
+  expect(await view.findByRole("option", { name: "Pending (60)" })).toBeInTheDocument();
 });
 
 
-it("keeps approval navigation mounted and focusable during its initial read", async () => {
+it("keeps the Show menu mounted and focusable during its initial read", async () => {
   let complete!: (value: { approvals: ApprovalRecord[]; total: number; limit: number; offset: number }) => void;
   vi.mocked(api.listApprovals).mockReturnValue(new Promise((resolve) => { complete = resolve; }));
-  const { getByRole } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-  const pending = getByRole("tab", { name: /Pending/i });
-  pending.focus();
-  expect(pending).toHaveFocus();
-  expect(pending).not.toBeDisabled();
+  const { getByRole } = renderApprovals();
+  const show = getByRole("combobox", { name: "Show" });
+  show.focus();
+  expect(show).toHaveFocus();
+  expect(show).not.toBeDisabled();
   await act(async () => complete({ approvals: [], total: 0, limit: 50, offset: 0 }));
-  expect(getByRole("tab", { name: /Pending/i })).toBe(pending);
-  expect(pending).toHaveFocus();
+  expect(getByRole("combobox", { name: "Show" })).toBe(show);
+  expect(show).toHaveFocus();
 });

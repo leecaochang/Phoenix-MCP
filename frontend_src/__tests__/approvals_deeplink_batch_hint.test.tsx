@@ -1,21 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
-import { AGENTCHAT_REVIEW_CLOSED_EVENT } from "../utils/agentchat_review";
+import { AGENTCHAT_REVIEW_CLOSED_EVENT, AGENTCHAT_REVIEW_DECIDED_EVENT } from "../utils/agentchat_review";
 import type { ApprovalRecord } from "../types";
+import { listRows, renderApprovals, reviewWindow, type HarnessProps } from "./approvals_harness";
 
-// A persistent notification links to ONE approval, so an operator who works from
-// notifications lands in the detail modal and never meets the pending list, where
-// the tick boxes and the batch bar live. These cover the hint that points such
-// an operator at the list: what it says, and when it must stay quiet.
-//
-// It routes to the list rather than offering approve-all from the modal, and that
-// is the point rather than an omission: everything else in the queue is unreviewed,
-// and approval is the operator's intent to look at each change.
+// A notification or Agent Chat links to ONE request. It opens in Review with
+// the queue beside it in Approvals, so no banner has to point at the list.
+// Agent Chat may have stepped aside for the review (on a narrow screen), so it
+// must hear when the review ends: "decided" after a decision, "closed" when the
+// operator leaves the request undecided, exactly once.
 
 vi.mock("../api", () => ({
-  api: { listApprovals: vi.fn(), getApproval: vi.fn(), batchApproveApprovals: vi.fn() },
+  api: { listApprovals: vi.fn(), getApproval: vi.fn(), approveApproval: vi.fn(), batchApproveApprovals: vi.fn() },
   currentHass: () => ({}),
 }));
 
@@ -41,133 +38,111 @@ function record(id: string, over: Partial<ApprovalRecord> = {}): ApprovalRecord 
   };
 }
 
-/** Render as if arriving from a notification deep-link onto `openId`. */
-async function renderDeepLink(
-  records: ApprovalRecord[],
-  openId: string,
-  props: Record<string, unknown> = {},
-  total = records.length,
-) {
+/** Render as if arriving from a link onto `openId`. */
+async function renderDeepLink(records: ApprovalRecord[], openId: string, props: HarnessProps = {}) {
   vi.mocked(api.listApprovals).mockResolvedValue({
-    approvals: records, total, limit: 50, offset: 0,
+    approvals: records, total: records.length, limit: 50, offset: 0,
   });
   const opened = records.find((r) => r.id === openId);
   vi.mocked(api.getApproval).mockResolvedValue(opened as ApprovalRecord);
-  const utils = render(
-    <ApprovalsView tab="pending" onTabChange={() => {}} openApprovalId={openId} {...props} />,
-  );
-  await waitFor(() => expect(api.getApproval).toHaveBeenCalled());
+  const utils = renderApprovals({ openApprovalId: openId, ...props });
+  await waitFor(() => expect(within(reviewWindow()).queryByRole("heading", { name: `Edit ${openId}` })).toBeTruthy());
   return utils;
 }
 
-describe("deep-link batch hint", () => {
-  beforeEach(() => vi.clearAllMocks());
+const closed = vi.fn();
+const decided = vi.fn();
 
-  it("tells the operator how many others are waiting", async () => {
-    const { findByText } = await renderDeepLink(
-      [record("a"), record("b"), record("c")], "a",
-    );
-    expect(await findByText("2 other approvals are waiting for review.")).toBeTruthy();
-  });
-
-  it("counts the whole queue, not just the loaded page", async () => {
-    // The pending list pages, so counting rendered rows would under-report a
-    // long queue to the operator deciding whether it is worth opening.
-    const { findByText } = await renderDeepLink(
-      [record("a"), record("b")], "a", {}, 12,
-    );
-    expect(await findByText("11 other approvals are waiting for review.")).toBeTruthy();
-  });
-
-  it("uses the singular form for exactly one other", async () => {
-    const { findByText } = await renderDeepLink([record("a"), record("b")], "a");
-    expect(await findByText("1 other approval is waiting for review.")).toBeTruthy();
-  });
-
-  it("says nothing when this is the only approval", async () => {
-    const { findByRole, queryByText } = await renderDeepLink([record("a")], "a");
-    await findByRole("dialog");
-    expect(queryByText(/waiting for review/)).toBeNull();
-  });
-
-  it("Review all closes the modal and leaves the queue on screen", async () => {
-    const closed = vi.fn();
+describe("a request opened from a link", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
     window.addEventListener(AGENTCHAT_REVIEW_CLOSED_EVENT, closed);
-    const { findByText, queryByRole, getAllByText } = await renderDeepLink(
-      [record("a"), record("b"), record("c")], "a",
-    );
-    try {
-      fireEvent.click(await findByText("Review All"));
-      await waitFor(() => expect(queryByRole("dialog")).toBeNull());
-      expect(closed).toHaveBeenCalledOnce();
-      expect((closed.mock.calls[0][0] as CustomEvent).detail)
-        .toEqual({ approvalId: "a" });
-      // The batch bar only renders from two selectable rows up, so its presence
-      // is the actual proof the operator has now met batching.
-      expect(getAllByText("Select all").length).toBeGreaterThan(0);
-    } finally {
-      window.removeEventListener(AGENTCHAT_REVIEW_CLOSED_EVENT, closed);
-    }
+    window.addEventListener(AGENTCHAT_REVIEW_DECIDED_EVENT, decided);
+  });
+  afterEach(() => {
+    window.removeEventListener(AGENTCHAT_REVIEW_CLOSED_EVENT, closed);
+    window.removeEventListener(AGENTCHAT_REVIEW_DECIDED_EVENT, decided);
   });
 
-  it("stays quiet when the modal was opened from the list", async () => {
-    // Not a redundancy nicety: from the list the batch bar is already on screen
-    // behind the modal, and a banner that is always there is one that is skipped.
-    vi.mocked(api.listApprovals).mockResolvedValue({
-      approvals: [record("a"), record("b"), record("c")], total: 3, limit: 50, offset: 0,
-    });
-    const { findAllByText, findByRole, queryByText } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
-    fireEvent.click((await findAllByText("Edit a"))[0]);
-    await findByRole("dialog");
-    expect(queryByText(/waiting for review/)).toBeNull();
+  it("opens in Review, brings Review into view, and marks its row in the queue", async () => {
+    const onReveal = vi.fn();
+    await renderDeepLink([record("a"), record("b"), record("c")], "a", { onReveal });
+    expect(onReveal).toHaveBeenCalledOnce();
+    await waitFor(() => expect(listRows()[0]).toHaveAttribute("aria-selected", "true"));
+    expect(listRows()).toHaveLength(3);
   });
 
-  it("stays quiet for a resolved record even before the tab catches up", async () => {
-    // The parent moves the sub-tab to History for a resolved deep-link, but that
-    // is a round trip: for the render in between, the tab is still Pending while
-    // the open record is not, and without the status check the banner flashes a
-    // count onto an approval that is already decided.
+  it("clears the route only once the request is in Review", async () => {
+    const onConsumedDeepLink = vi.fn();
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record("a")], total: 1, limit: 50, offset: 0 });
+    let resolveApproval!: (value: ApprovalRecord) => void;
+    vi.mocked(api.getApproval).mockReturnValue(new Promise((resolve) => { resolveApproval = resolve; }));
+    renderApprovals({ openApprovalId: "a", onConsumedDeepLink });
+    await waitFor(() => expect(api.getApproval).toHaveBeenCalledWith("a"));
+    expect(onConsumedDeepLink).not.toHaveBeenCalled();
+    await act(async () => { resolveApproval(record("a")); });
+    await waitFor(() => expect(onConsumedDeepLink).toHaveBeenCalledOnce());
+    expect(within(reviewWindow()).getByRole("heading", { name: "Edit a" })).toBeTruthy();
+  });
+
+  it("switches Show to History for a request already decided", async () => {
+    const onScopeChange = vi.fn();
     const resolved = record("a", { status: "approved", resolved_at: "2026-01-01T00:05:00Z" });
-    vi.mocked(api.listApprovals).mockResolvedValue({
-      approvals: [record("b"), record("c")], total: 2, limit: 50, offset: 0,
-    });
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record("b")], total: 1, limit: 50, offset: 0 });
     vi.mocked(api.getApproval).mockResolvedValue(resolved);
-    const { findByRole, queryByText } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} openApprovalId="a" />,
-    );
-    await findByRole("dialog");
-    expect(queryByText(/waiting for review/)).toBeNull();
+    const { findByRole } = renderApprovals({ openApprovalId: "a", onScopeChange });
+    await waitFor(() => expect(onScopeChange).toHaveBeenCalledWith("history"));
+    expect((await findByRole("combobox", { name: "Show" }) as HTMLSelectElement).value).toBe("history");
+    expect(within(reviewWindow()).queryByRole("button", { name: "Approve and Execute" })).toBeNull();
   });
 
-  it("forgets the deep-link once the modal is closed", async () => {
-    // Reopening the SAME approval from the list is an operator who is looking at
-    // the queue, so the banner must not linger from how they first arrived.
-    const { findByText, findAllByText, findByRole, queryByText } = await renderDeepLink(
-      [record("a"), record("b"), record("c")], "a",
-    );
-    await findByText("2 other approvals are waiting for review.");
-    fireEvent.click(await findByText("Review All"));
-    await waitFor(() => expect(queryByText(/waiting for review/)).toBeNull());
-    fireEvent.click((await findAllByText("Edit a"))[0]);
-    await findByRole("dialog");
-    expect(queryByText(/waiting for review/)).toBeNull();
+  it("tells Agent Chat the review closed when the link cannot be opened, and clears the route", async () => {
+    const onConsumedDeepLink = vi.fn();
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
+    vi.mocked(api.getApproval).mockRejectedValue(new Error("Not found"));
+    renderApprovals({ openApprovalId: "gone", onConsumedDeepLink });
+    await waitFor(() => expect(onConsumedDeepLink).toHaveBeenCalledOnce());
+    expect(closed).toHaveBeenCalledOnce();
+    expect((closed.mock.calls[0][0] as CustomEvent).detail).toEqual({ approvalId: "gone" });
   });
 
-  it("stays quiet for an already-resolved deep-linked approval", async () => {
-    // That link lands on History, where pendingTotal is not refreshed, so a count
-    // shown there would be whatever the last pending fetch happened to leave.
-    const resolved = record("a", { status: "approved", resolved_at: "2026-01-01T00:05:00Z" });
+  it("tells Agent Chat the review closed, once, when the operator moves to another request", async () => {
+    await renderDeepLink([record("a"), record("b"), record("c")], "a");
+    expect(closed).not.toHaveBeenCalled();
+    fireEvent.click(listRows()[1]);
+    await waitFor(() => expect(closed).toHaveBeenCalledOnce());
+    expect((closed.mock.calls[0][0] as CustomEvent).detail).toEqual({ approvalId: "a" });
+    fireEvent.click(listRows()[2]);
+    fireEvent.click(listRows()[0]);
+    expect(closed).toHaveBeenCalledOnce();
+  });
+
+  it("tells Agent Chat the review closed when the operator leaves the workspace", async () => {
+    const { update } = await renderDeepLink([record("a"), record("b")], "a", { active: true });
+    update({ active: false });
+    await waitFor(() => expect(closed).toHaveBeenCalledOnce());
+    expect((closed.mock.calls[0][0] as CustomEvent).detail).toEqual({ approvalId: "a" });
+  });
+
+  it("tells Agent Chat it was decided, and not closed, after a decision", async () => {
+    vi.mocked(api.approveApproval).mockResolvedValue(record("a", { status: "approved", resolved_at: "2026-01-01T00:05:00Z" }));
+    const { getByRole } = await renderDeepLink([record("a"), record("b")], "a");
+    fireEvent.click(getByRole("button", { name: "Approve and Execute" }));
+    await waitFor(() => expect(decided).toHaveBeenCalledOnce());
+    expect((decided.mock.calls[0][0] as CustomEvent).detail).toEqual({ approvalId: "a" });
+    fireEvent.click(listRows()[0]);
+    expect(closed).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when a request chosen from the list is left", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({
-      approvals: [record("b"), record("c")], total: 2, limit: 50, offset: 0,
+      approvals: [record("a"), record("b")], total: 2, limit: 50, offset: 0,
     });
-    vi.mocked(api.getApproval).mockResolvedValue(resolved);
-    const { findByRole, queryByText } = render(
-      <ApprovalsView tab="history" onTabChange={() => {}} openApprovalId="a" />,
-    );
-    await findByRole("dialog");
-    expect(queryByText(/waiting for review/)).toBeNull();
+    const { findByText } = renderApprovals();
+    await findByText("Edit a");
+    fireEvent.click(listRows()[0]);
+    fireEvent.click(listRows()[1]);
+    expect(closed).not.toHaveBeenCalled();
   });
 
   it("leaves an unconsumed deep-link intact when the panel unmounts mid-fetch", async () => {
@@ -179,14 +154,7 @@ describe("deep-link batch hint", () => {
       resolveApproval = resolve;
     }));
     const onConsumedDeepLink = vi.fn();
-    const { unmount } = render(
-      <ApprovalsView
-        tab="pending"
-        onTabChange={() => {}}
-        openApprovalId="a"
-        onConsumedDeepLink={onConsumedDeepLink}
-      />,
-    );
+    const { unmount } = renderApprovals({ openApprovalId: "a", onConsumedDeepLink });
     await waitFor(() => expect(api.getApproval).toHaveBeenCalledWith("a"));
 
     unmount();

@@ -2,7 +2,7 @@
  * An approval whose saved action is already executing offers no actions.
  *
  * Approve runs its tool INLINE in the admin's request, so nothing resolves for
- * seconds. During that window the tab must not offer Approve and Reject on an
+ * seconds. During that window Review must not offer Approve and Reject on an
  * approval already being acted on from Agent Chat or a notification, because the
  * server could only answer the second click with a 409.
  *
@@ -13,9 +13,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
+import { renderApprovals, reviewWindow } from "./approvals_harness";
 import type { ApprovalRecord } from "../types";
 
 vi.mock("../api", () => ({
@@ -56,15 +56,13 @@ describe("an approval claimed for execution", () => {
       approvals: [record()], total: 1, limit: 50, offset: 0,
     });
 
-    const { findByText, findByRole } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}}
-                     claimedApprovals={new Set(["appr_1"])} />,
-    );
+    const { findByText, findByRole } = renderApprovals({ claimedApprovals: new Set(["appr_1"]) });
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    // The accessible name reports why the stable visible button is locked.
-    const approve = await findByRole("button", { name: "Approving..." });
+    // The stable visible button reports that it is busy, and does nothing.
+    const approve = await findByRole("button", { name: "Approve and Execute" });
     expect(approve).toHaveAttribute("aria-disabled", "true");
+    expect(approve).toHaveAttribute("aria-busy", "true");
     expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(approve);
     expect(api.approveApproval).not.toHaveBeenCalled();
@@ -75,13 +73,12 @@ describe("an approval claimed for execution", () => {
       approvals: [record({ in_progress: true })], total: 1, limit: 50, offset: 0,
     });
 
-    const { findByText, findByRole } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
+    const { findByText, findByRole } = renderApprovals();
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    expect(await findByRole("button", { name: "Approving..." })).toHaveAttribute("aria-disabled", "true");
+    expect(await findByRole("button", { name: "Approve and Execute" })).toHaveAttribute("aria-disabled", "true");
     expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(reviewWindow()).getByText("Being processed")).toBeInTheDocument();
   });
 
   it("leaves an unclaimed approval fully actionable", async () => {
@@ -92,9 +89,7 @@ describe("an approval claimed for execution", () => {
     });
     vi.mocked(api.approveApproval).mockResolvedValue(record({ status: "approved" }));
 
-    const { findByText, findByRole } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
+    const { findByText, findByRole } = renderApprovals();
     fireEvent.click(await findByText("Restart Home Assistant"));
 
     const approve = await findByRole("button", { name: "Approve and Execute" });
@@ -103,14 +98,22 @@ describe("an approval claimed for execution", () => {
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith("appr_1"));
   });
 
+  it("shows a decided request's outcome even while its claim is still held", async () => {
+    // The release can arrive after the decision, or not at all for this panel.
+    vi.mocked(api.listApprovals).mockResolvedValue({
+      approvals: [record({ status: "approved", resolved_at: "2026-01-01T00:10:00Z" })], total: 1, limit: 50, offset: 0,
+    });
+    const { findByText, queryByText } = renderApprovals({ scope: "history", claimedApprovals: new Set(["appr_1"]) });
+    expect(await findByText("Approved")).toBeInTheDocument();
+    expect(queryByText("Being processed")).toBeNull();
+  });
+
   it("marks the pending row itself, so it reads as busy without opening it", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record({ in_progress: true })], total: 1, limit: 50, offset: 0,
     });
 
-    const { findByText } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
+    const { findByText } = renderApprovals();
     expect(await findByText("Being processed")).toBeInTheDocument();
   });
 });

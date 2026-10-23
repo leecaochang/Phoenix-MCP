@@ -635,9 +635,36 @@
 .phx-table-wrap { position: relative; overflow-x: auto; }
 /* A log fills its window: filters and search on top, the table scrolling in both directions with its
    headers held at the top, and the count and Load More always in view below it. */
-.phx-window-body > .phx-log-view { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
+.phx-window-body > :is(.phx-log-view, .phx-list-view) { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
 .phx-log-view > .conversation-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
-.phx-log-view .phx-table-wrap { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+:is(.phx-log-view, .phx-list-view) .phx-table-wrap { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+
+/* Approvals: the list with its Show menu and search, Review, and Request Details. */
+.phx-window-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.approvals-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.approvals-filter-row > input[type="search"] { flex: 1 1 180px; min-width: 0; }
+.approvals-scope { display: inline-flex; align-items: center; gap: 6px; color: var(--phx-text-2); font-size: 13px; }
+.phx-table th.phx-table-pick,
+.phx-table td.phx-table-pick { width: 36px; padding: 0; text-align: center; }
+.phx-table-pick input { margin: 0; cursor: pointer; }
+.approval-status-pending { color: var(--phx-warning); }
+.approval-status-approved { color: var(--phx-success); }
+:is(.approval-status-rejected, .approval-status-failed) { color: var(--phx-error); }
+:is(.approval-status-expired, .approval-status-cancelled, .approval-status-processing) { color: var(--phx-text-2); }
+.phx-review { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.phx-review-title { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-review-context { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 4px 0 0; color: var(--phx-text-2); font-size: 13px; }
+.phx-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.phx-review .approval-reject-row.phx-review-reason { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.phx-review-reason .approval-reason-input { flex: 1 1 220px; min-width: 0; }
+.phx-review-body { margin: 0; color: var(--phx-text-2); line-height: 1.5; }
+.phx-review-outcome { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); line-height: 1.5; }
+.phx-review-outcome > span { color: var(--phx-text); }
+.phx-request-details { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.phx-request-section { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); }
+.phx-request-section > summary { padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.phx-request-section-body { padding: 0 12px 12px; }
+.phx-request-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Column headers stay at the top of their window while the rows scroll under them. */
 .phx-table th {
@@ -1218,29 +1245,6 @@ select.input {
 .modal-title-error { color: var(--phx-error); }
 .modal-body-text { margin: 0 0 16px; color: var(--phx-text-2); line-height: 1.5; }
 .modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-/* Keep approval execution inside one stable button box. On iOS a label-width
-   change plus the disabled opacity transition can leave the old button tile
-   painted beside the new one inside a fixed modal. The spinner slot exists in
-   both states, so neither the text nor geometry changes when execution starts. */
-.approval-approve-btn { min-width: 124px; white-space: nowrap; }
-.approval-approve-btn::after {
-  content: "";
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  opacity: 0;
-}
-.approval-approve-btn[aria-busy="true"] { opacity: 1; cursor: wait; }
-.approval-approve-btn[aria-busy="true"]::after {
-  opacity: 1;
-  animation: agentcli-spin 0.8s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .approval-approve-btn[aria-busy="true"]::after { animation: none; }
-}
 
 /* ============================================================
    Warning / info blocks
@@ -2111,44 +2115,9 @@ select.input {
 .mode-radio-checked .mode-radio-dot { background: currentColor; }
 .mode-radio-label { line-height: 1; }
 
-/* ============================================================
-   Approvals View
-   ============================================================ */
-.approvals-view { display: flex; flex-direction: column; gap: 12px; }
-.approvals-toolbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  flex-wrap: wrap; margin-bottom: 14px;
-}
-.approvals-tabs { display: flex; gap: 4px; }
-.approvals-toolbar > .diff-mode-toggle { margin: 0; }
-.approvals-tab {
-  background: none; border: none; padding: 8px 16px; cursor: pointer;
-  font-size: 13px; color: var(--phx-text-2); border-bottom: 2px solid transparent;
-  font-family: inherit;
-}
-.approvals-tab:hover { color: var(--phx-text); }
-.approvals-tab.active { color: var(--phx-text); border-bottom-color: var(--phx-accent); font-weight: 600; }
 .approvals-empty { padding: 32px; text-align: center; color: var(--phx-text-2); font-size: 13px; }
-.approvals-list { display: flex; flex-direction: column; border-top: 1px solid var(--phx-border); }
-.approvals-list > :nth-child(even), .approval-history-row:nth-child(even) { background: var(--phx-surface-2); }
-.approvals-list > :not(:last-child) { border-bottom: 1px solid var(--phx-divider); }
-.approvals-filters input[type="search"] { min-width: 180px; }
 
-/* Batch approve: the tick column plus the select-all / run bar above the list. */
-/* "N others are waiting" inside the detail modal, shown only on the notification
-   deep-link path. Wraps rather than shrinking the button, since the sentence
-   grows with the count and translations run longer than the English. */
-.approval-others-banner {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.approvals-batch-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 12px; margin-bottom: 8px;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface-2);
-}
-.approvals-batch-all { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+/* Batch approval: what one run did, above the list. */
 .approvals-batch-result {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px;
@@ -2157,135 +2126,24 @@ select.input {
 .approvals-batch-result.is-ok { border-color: var(--phx-green, var(--phx-accent)); }
 .approvals-batch-result.is-error { border-color: var(--phx-red, var(--phx-border)); }
 .approvals-batch-result-text { display: flex; flex-direction: column; gap: 2px; }
-/* The checkbox sits OUTSIDE the card button (a checkbox inside a <button> is
-   invalid and its click would also open the detail modal), so the row is the
-   flex parent and the card takes the remaining width. */
-.approval-card-row { display: flex; align-items: flex-start; gap: 10px; padding-left: 12px; }
-.approval-card-check { margin-top: 14px; flex: 0 0 auto; cursor: pointer; }
-.approval-card-check:disabled { cursor: default; opacity: 0.4; }
-.approval-card-row .approval-card { flex: 1 1 auto; min-width: 0; }
+
 @media (max-width: 600px) {
-  .approvals-batch-bar { flex-direction: column; align-items: stretch; }
-  .approvals-toolbar { align-items: flex-start; gap: 10px; }
-  .approvals-toolbar > .diff-mode-toggle { align-self: flex-start; margin: 0; }
-  .approvals-filters.filter-row input[type="search"] { min-width: 0; }
-  .approvals-filters-history.filter-row input[type="search"] { flex: 1 1 100%; }
-  .approvals-filters .input-auto { flex: 1; }
-  /* The normal pending review has exactly three actions. Keep those together
-     as one touch row and use the established short-label span for Approve.
-     Card previews can add a fourth error-rejection action, so that variant
-     deliberately retains the generic wrapping behavior. */
   .modal-wide { padding: 20px; }
-  .approval-modal-actions-compact {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 0.85fr);
-    gap: 4px;
-    width: 100%;
-  }
-  .approval-modal-actions-compact .btn { min-width: 0; width: 100%; padding-inline: 8px; overflow: hidden; }
-  .approval-modal-actions-compact .approval-action-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* A desktop card puts title and status metadata on one line. The timestamp is
-     intentionally non-shrinking there, so on a phone it collides with a long
-     tool name. Give each group its own row and let both wrap within the card. */
-  .approval-card-header { align-items: stretch; flex-direction: column; gap: 6px; }
-  .approval-card-title { width: 100%; flex-wrap: wrap; row-gap: 2px; }
-  .approval-card-tool { min-width: 0; overflow-wrap: anywhere; }
-  .approval-card-meta { width: 100%; justify-content: space-between; flex-wrap: wrap; row-gap: 4px; }
-  .approval-card-time { margin-left: auto; text-align: right; }
 }
 
-.approval-card {
-  text-align: left; padding: 10px 12px; border: none;
-  border-radius: 0; background: none;
-  cursor: pointer; transition: background 0.12s;
-  font-family: inherit; color: inherit; width: 100%;
-}
-.approval-card:hover { background: var(--phx-hover); }
-.approval-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.approval-card-title { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.approval-card-access-key { font-weight: 600; font-size: 13px; }
-.approval-card-tool { font-family: monospace; font-size: 12px; color: var(--phx-text-2); }
-.approval-card-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--phx-text-2); flex-shrink: 0; }
-.approval-card-summary { font-size: 13px; color: var(--phx-text); margin-top: 6px; }
-.approval-card-reason { font-size: 11px; color: var(--phx-text-2); margin-top: 4px; font-style: italic; }
-.approval-card-time { font-size: 11px; }
-
-/* Compact history rows (resolved approvals are read-only records) */
-.approval-history { border-top: 1px solid var(--phx-border); }
-.approval-history-row {
-  display: grid; grid-template-columns: 190px 250px 150px minmax(0, 1fr) max-content;
-  align-items: center; gap: 10px; width: 100%;
-  padding: 8px 12px; background: none; border: none;
-  border-bottom: 1px solid var(--phx-border); cursor: pointer; text-align: left;
-  font-size: 13px; color: var(--phx-text);
-}
-.approval-history-row:last-child { border-bottom: none; }
-.approval-history-row:hover { background: var(--phx-hover); }
-.approval-history-row > .badge { justify-self: start; }
-.approval-history-tool { font-size: 12px; color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-access-key { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-note { color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-time { font-size: 11px; color: var(--phx-text-2); white-space: nowrap; }
 .approval-history-more { display: flex; justify-content: center; margin-top: 10px; }
-@media (max-width: 760px) {
-  .approval-history-row { grid-template-columns: 180px minmax(0, 1fr) 140px minmax(0, 1.4fr); }
-  .approval-history-time { display: none; }
-}
-@media (max-width: 600px) {
-  .approval-history-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
-  .approval-history-access-key, .approval-history-tool { display: none; }
-}
 
 .approval-detail-meta {
   display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px;
   margin: 12px 0; font-size: 12px;
 }
-.approval-detail-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--phx-border); margin-top: 12px; }
+
 .approval-detail-tab {
   background: none; border: none; padding: 6px 12px; cursor: pointer;
   font-size: 13px; color: var(--phx-text-2); border-bottom: 2px solid transparent;
   font-family: inherit;
 }
 .approval-detail-tab.active { color: var(--phx-text); border-bottom-color: var(--phx-accent); font-weight: 600; }
-.approval-detail-body { padding: 12px 0; min-height: 120px; max-height: 50vh; overflow: auto; }
-.approval-detail-viewbar { display: flex; justify-content: flex-end; margin: -8px -8px 4px 0; }
-
-/* Friendly approval Summary. The border-only nodes read as one decision flow,
-   not a stack of dashboard cards, while the connector preserves sequence. */
-.approval-summary-timeline { display: flex; flex-direction: column; }
-.approval-summary-node {
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface); padding: 18px 20px;
-}
-.approval-summary-proposal { background: var(--phx-surface-2); }
-.approval-summary-title { margin: 0 0 8px; line-height: 1.3; text-wrap: balance; }
-.approval-summary-body { margin: 0; color: var(--phx-text-2); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
-.approval-summary-connector { width: 2px; height: 24px; margin-inline: auto; background: var(--phx-border); }
-.approval-summary-command { display: flex; flex-direction: column; gap: 14px; }
-.approval-summary-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.approval-summary-actions .btn-text:first-child { margin-right: auto; }
-.approval-summary-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.approval-summary-status.is-approved { background: var(--phx-success-bg); }
-.approval-summary-status.is-failed,
-.approval-summary-status.is-rejected { background: var(--phx-error-bg); }
-.approval-summary-status-text { display: flex; align-items: center; gap: 10px; color: var(--phx-text-2); font-size: 12px; flex-wrap: wrap; }
-.approval-summary-result { padding-block: 16px; }
-.approval-summary-close { margin-top: 12px; }
-.approval-summary-timeline > .approval-others-banner { margin: 12px 0 0; }
-.approval-summary-command .approval-reject-row { margin: 0; }
-@media (max-width: 520px) {
-  .approval-summary-node { padding: 16px; }
-  .approval-summary-actions { align-items: stretch; flex-direction: column; }
-  .approval-summary-actions .btn { width: 100%; }
-  .approval-summary-actions .btn-text:first-child { margin-right: 0; }
-  .approval-summary-status { align-items: flex-start; flex-direction: column; }
-  .approval-summary-status .btn { align-self: flex-end; }
-}
 
 /* Raw-text line diff (configuration.yaml / scoped file version snapshots). */
 .raw-diff { white-space: pre; }
@@ -2368,7 +2226,7 @@ select.input {
   overflow: auto; white-space: pre; margin: 0; max-height: 60vh; border: 1px solid var(--phx-border);
 }
 .yaml-pre-empty { color: var(--phx-text-2); font-style: italic; }
-/* Changes > Review ONLY, never the approval modal (which owns its own scroll
+/* Changes > Review ONLY, never a dialog (which owns its own scroll
    container and would grow past the viewport). Both panes give up their own
    max-height so the PAGE is the single scroller: with each pane scrolling
    internally, comparing side-by-side means dragging two boxes into alignment by
@@ -2448,12 +2306,7 @@ select.input {
   .change-detail-body { grid-template-columns: 1fr; }
   .change-timeline { flex-direction: row; flex-wrap: wrap; }
   .yaml-diff-cols { grid-template-columns: 1fr; }
-  /* Pending approvals stack Before and After on mobile. Let both panes and the
-     detail tab grow to their full content height so the review modal is the
-     only vertical scroller, matching the already-expanded History review. */
-  .approval-detail-body-pending { max-height: none; overflow: visible; }
-  .approval-detail-body-pending .yaml-pre { max-height: none; }
-  .approval-detail-body-pending .yaml-editor { --code-mirror-max-height: none; }
+
   /* Below this width .yaml-diff-cols is always forced to one column above,
      so the side-by-side/stacked toggle has nothing left to switch. */
   .diff-layout-toggle { display: none; }
@@ -3140,11 +2993,14 @@ hui-card { display: block; min-width: 0; }
   font-size: var(--phx-agentcli-text-size, 13px);
 }
 /* Approve is green and Reject red, as on the request in Approvals. */
-.agentcli-approve, .agentcli-reject { gap: 4px; border: 1px solid; }
-.agentcli-approve { background: var(--phx-success-bg); border-color: var(--phx-success); color: var(--phx-success); }
-.agentcli-reject { background: var(--phx-error-bg); border-color: var(--phx-error); color: var(--phx-error); }
-.agentcli-approve:hover { background: var(--phx-success); color: var(--phx-accent-fg); }
-.agentcli-reject:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
+.agentcli-approve, .agentcli-reject, .phx-decision-approve, .phx-decision-reject { gap: 4px; border: 1px solid; }
+:is(.agentcli-approve, .phx-decision-approve) { background: var(--phx-success-bg); border-color: var(--phx-success); color: var(--phx-success); }
+:is(.agentcli-reject, .phx-decision-reject) { background: var(--phx-error-bg); border-color: var(--phx-error); color: var(--phx-error); }
+:is(.agentcli-approve, .phx-decision-approve:not([aria-busy="true"])):hover { background: var(--phx-success); color: var(--phx-accent-fg); }
+:is(.agentcli-reject, .phx-decision-reject:not([aria-busy="true"])):hover,
+.phx-decision-reject[aria-pressed="true"] { background: var(--phx-error); color: var(--phx-accent-fg); }
+/* A decision that is running, or a request whose action runs elsewhere, stays visible but inert. */
+:is(.phx-decision-approve, .phx-decision-reject)[aria-busy="true"] { cursor: wait; opacity: 0.55; }
 .agentcli-approval-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .agentcli-approval-status { margin-top: 4px; font-size: inherit; color: var(--phx-text-2); }
 /* The admin's rejection reason or the executor's failure detail; selectable so

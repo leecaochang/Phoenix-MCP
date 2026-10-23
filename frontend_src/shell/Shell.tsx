@@ -22,6 +22,7 @@ import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnect
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { LogSelection, LogSelectionContext } from "./logDetails";
+import { ApprovalsProvider } from "./approvals";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { GuideWindow, PhoneGuide } from "./guide";
 import { DOCS_BASE_URL } from "../components/common";
@@ -112,7 +113,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned });
+      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion });
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
       // Closing or reopening Help in one workspace overrides Show Help Bar there only.
       controller.onWindowToggle = (windowId, open) => {
@@ -130,6 +131,12 @@ export function Shell() {
     if (env === "desktop") controllerFor("logs").ensureOpen("logDetails");
     requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="logDetails"]')?.scrollIntoView?.({ block: "nearest" }));
   };
+
+  // A request opened from a link brings Review into view.
+  const revealReview = useCallback(() => {
+    if (env === "desktop") controllerFor("approvals").ensureOpen("review");
+    requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="review"]')?.scrollIntoView?.({ block: "nearest" }));
+  }, [env, controllerFor]);
 
   // A jump to a permission (from Permission Summary) brings the Permissions tree into view.
   const revealPermissions = useCallback(() => {
@@ -375,6 +382,17 @@ export function Shell() {
     <DisplayModeContext.Provider value={toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
     <LogSelectionContext.Provider value={logSelection}>
+    <ApprovalsProvider
+      scope={d.approvalsTab}
+      onScopeChange={d.setApprovalsTab}
+      onCountChange={d.refreshPendingCount}
+      refreshSignal={d.approvalSignal}
+      claimedApprovals={d.claimedApprovals}
+      openApprovalId={d.deepApprovalId}
+      onConsumedDeepLink={d.consumeDeepApprovalLink}
+      active={d.workspace === "approvals"}
+      onReveal={revealReview}
+    >
     <WorkspaceActionsContext.Provider value={actions}>
     <AccessKeyDetailProvider
       accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
@@ -443,6 +461,7 @@ export function Shell() {
       </div>
     </AccessKeyDetailProvider>
     </WorkspaceActionsContext.Provider>
+    </ApprovalsProvider>
     </LogSelectionContext.Provider>
     </HelpContext.Provider>
     </DisplayModeContext.Provider>

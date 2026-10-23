@@ -87,6 +87,39 @@ describe("workspace controller", () => {
     expect(make(older).closedWindows()).toEqual(["notifications"]);
   });
 
+  it("opens a window the default arrangement leaves closed where its definition says", () => {
+    const c = new WorkspaceController("logs", WINDOWS, (_, add) => add("auditLog"), (id) => id, {
+      transient: new Set(["attention"]),
+      closedAt: { conversationLog: { neighbor: "auditLog", side: "right" } },
+    });
+    render(<DockviewReact components={components} onReady={(e) => { c.api = e.api; c.load(undefined); }} />);
+    expect(ids(c)).toEqual(["auditLog"]);
+    expect(c.closedWindows()).toEqual(["conversationLog"]);
+    c.reopen("conversationLog");
+    // Beside its named neighbour, in the same row, not along the bottom.
+    expect(order(c)).toEqual(["auditLog", "conversationLog"]);
+    expect(c.layout()!.dock.grid.orientation).toBe("HORIZONTAL");
+  });
+
+  it("loads the default arrangement for a save made under another layout version, and saves its own", () => {
+    const make = (version: number | undefined, saved?: Parameters<WorkspaceController["load"]>[0]) => {
+      const c = new WorkspaceController("logs", WINDOWS, arrange, (id) => id, { transient: new Set(["attention"]), layoutVersion: version });
+      render(<DockviewReact components={components} onReady={(e) => { c.api = e.api; c.load(saved); }} />);
+      return c;
+    };
+    const old = make(undefined);
+    old.close(old.api!.getPanel("conversationLog")!.group);
+    const saved = old.layout()!;
+    expect(saved.version).toBeUndefined();
+    // The same version keeps the user's arrangement...
+    expect(ids(make(undefined, saved))).toEqual(["auditLog"]);
+    // ...a newer one starts from its default, and records the version it saved under.
+    const upgraded = make(2, saved);
+    expect(ids(upgraded).sort()).toEqual(["auditLog", "conversationLog"]);
+    expect(upgraded.layout()!.version).toBe(2);
+    expect(ids(make(2, upgraded.layout()!)).sort()).toEqual(["auditLog", "conversationLog"]);
+  });
+
   it("saves table settings with the arrangement, loads them back, and Restore Original Layout clears them", () => {
     const c = mount();
     c.tables.set("auditLog", { order: ["resource", "time"], sort: { column: "resource", dir: "asc" } });

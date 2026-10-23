@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { fireEvent, waitFor } from "@testing-library/react";
 import { api } from "../api";
+import { renderApprovals } from "./approvals_harness";
 import type { ApprovalRecord } from "../types";
 
 // Every dashboard-write tool must offer the Diff|Preview toggle once <hui-card>
@@ -41,19 +41,18 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
 
 async function openDetail(rec: ApprovalRecord) {
   vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [rec], total: 1, limit: 50, offset: 0 });
-  const utils = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  const utils = renderApprovals();
   fireEvent.click(await utils.findByText(rec.diff.summary!));
-  await waitFor(() => expect(utils.container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
+  await waitFor(() => expect(utils.container.querySelector(".phx-review-change")).toBeTruthy());
   return utils;
 }
 
-describe("dashboard preview toggle on the approval card", () => {
+describe("dashboard preview toggle in Review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // The Diff|Preview choice is persisted; clear it so each test starts from
     // the default (diff) regardless of what an earlier test clicked.
     localStorage.clear();
-    localStorage.setItem("phx-approval-default-view", "details");
   });
 
   it("offers no Preview button before hui-card is registered, even for a previewable layout", async () => {

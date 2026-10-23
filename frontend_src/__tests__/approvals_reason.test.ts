@@ -4,7 +4,7 @@ import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 import ja from "../../custom_components/phoenix_mcp/catalogs/ja.json";
 import zh from "../../custom_components/phoenix_mcp/catalogs/zh-Hans.json";
 import { primeTranslations } from "../i18n";
-import { extractResultErrorText, friendlyReason, localizedResultErrorText } from "../views/ApprovalsView";
+import { extractResultErrorText, friendlyReason, localizedResultErrorText } from "../utils/approval_text";
 
 afterEach(() => primeTranslations(en.panel));
 

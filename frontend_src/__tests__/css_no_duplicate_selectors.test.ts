@@ -128,17 +128,18 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/@media\s*\(max-width:\s*860px\)\s*and\s*\(min-width:\s*641px\)[\s\S]*?\.changes-col-who\s*\{[^}]*display:\s*none;/);
   });
 
-  it("keeps localized approval-history columns aligned without overflowing", () => {
-    expect(CSS).toMatch(/\.approval-history-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*190px\s+250px\s+150px\s+minmax\(0,\s*1fr\)\s+max-content;/s);
-    expect(CSS).toMatch(/\.approval-history-row\s*>\s*\.badge\s*\{[^}]*justify-self:\s*start;/s);
-    expect(CSS).toMatch(/\.approval-history-tool\s*\{[^}]*min-width:\s*0;[^}]*text-overflow:\s*ellipsis;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*600px\)[\s\S]*?\.approval-history-row\s*\{[^}]*grid-template-columns:\s*max-content\s+minmax\(0,\s*1fr\)\s+max-content;/);
+  it("keeps long localized approval text inside the Approvals windows", () => {
+    // The list's search gives way to the Show menu instead of pushing it out of the window.
+    expect(CSS).toMatch(/\.approvals-filter-row\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.approvals-filter-row\s*>\s*input\[type="search"\]\s*\{[^}]*min-width:\s*0;/s);
+    // A long request title wraps in Review and in Request Details.
+    expect(CSS).toMatch(/\.phx-review-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(CSS).toMatch(/\.phx-request-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   });
 
-  it("uses only the review modal scroller for pending approval diffs on mobile", () => {
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s*\{[^}]*max-height:\s*none;[^}]*overflow:\s*visible;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s+\.yaml-pre\s*\{[^}]*max-height:\s*none;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s+\.yaml-editor\s*\{[^}]*--code-mirror-max-height:\s*none;/s);
+  it("wraps the rejection reason row in a narrow Review", () => {
+    expect(CSS).toMatch(/\.phx-review\s+\.approval-reject-row\.phx-review-reason\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.phx-review-reason\s+\.approval-reason-input\s*\{[^}]*min-width:\s*0;/s);
   });
 
   it("keeps localized MESA mode badges visible", () => {

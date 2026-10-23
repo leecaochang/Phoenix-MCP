@@ -12,7 +12,7 @@ import {
   AccessKeyNotices, CapabilitiesWindow, KeySettingsWindow, PermissionSummaryWindow, PermissionsWindow, PersonaWindow, PresetsWindow,
   useAccessKeyDetail, useKeyActionsTool,
 } from "../views/AccessKeyDetail";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { ApprovalsListWindow, RequestDetailsWindow, ReviewWindow } from "../views/ApprovalsView";
 import { AuditView } from "../views/AuditView";
 import { ChangesView } from "../views/ChangesView";
 import { ConversationsView } from "../views/ConversationsView";
@@ -43,6 +43,8 @@ export const WINDOW_TITLE_KEYS = {
   keySettings: "workspace.keySettings",
   presets: "accessKeys.cardPresets",
   approvals: "shell.tabApprovals",
+  review: "workspace.review",
+  requestDetails: "workspace.requestDetails",
   changes: "shell.tabChanges",
   mesa: "shell.tabMesa",
   auditLog: "shell.tabAudit",
@@ -78,6 +80,10 @@ export interface WorkspaceDef {
   heights?: Partial<Record<WindowId, number>>;
   /** Windows the default arrangement pins along the top or bottom of the workspace. */
   pinned?: Partial<Record<"top" | "bottom", WindowId[]>>;
+  /** Windows the default arrangement leaves closed, with where each opens. */
+  closedAt?: Partial<Record<WindowId, Slot>>;
+  /** Raised when the default arrangement changes so much that saved ones should not load. */
+  layoutVersion?: number;
 }
 
 /** Whether a conditional window is allowed by the current settings; null while they load. */
@@ -111,7 +117,23 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     // Comfortable heights; the workspace scrolls when the screen is shorter than they need.
     heights: { accessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
   },
-  approvals: { labelKey: "shell.tabApprovals", helpKey: "help.wsApprovals", icon: "approvals", windows: ["approvals", "attention"], arrange: (_, add) => add("approvals") },
+  approvals: {
+    labelKey: "shell.tabApprovals",
+    helpKey: "help.wsApprovals",
+    icon: "approvals",
+    windows: ["approvals", "review", "requestDetails", "attention"],
+    // The list beside a larger Review, as accepted for Approvals. Request Details starts
+    // closed and opens below Review from its toolbar tool.
+    arrange: (api, add) => {
+      add("approvals");
+      add("review", { referencePanel: "approvals", direction: "right" });
+      size(api, "approvals", { width: Math.round(api.width * 0.34) });
+    },
+    closedAt: { requestDetails: { neighbor: "review", side: "bottom" } },
+    heights: { requestDetails: 320 },
+    // 2: the three windows replaced the single Approvals window.
+    layoutVersion: 2,
+  },
   changes: { labelKey: "shell.tabChanges", helpKey: "help.wsChanges", icon: "changes", windows: ["changes", "attention"], arrange: (_, add) => add("changes") },
   mesa: { labelKey: "shell.tabMesa", helpKey: "help.wsMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
   logs: {
@@ -215,21 +237,6 @@ function AccessKeysContent() {
   );
 }
 
-function ApprovalsContent() {
-  const d = usePanelData();
-  return (
-    <ApprovalsView
-      tab={d.approvalsTab}
-      onTabChange={d.setApprovalsTab}
-      onCountChange={d.refreshPendingCount}
-      refreshSignal={d.approvalSignal}
-      claimedApprovals={d.claimedApprovals}
-      openApprovalId={d.deepApprovalId}
-      onConsumedDeepLink={d.consumeDeepApprovalLink}
-    />
-  );
-}
-
 function ChangesContent() { return <ChangesView hass={usePanelData().hass} />; }
 function MesaContent() { return <MesaView />; }
 function AuditLogContent() { return <AuditView accessKeys={usePanelData().accessKeys} />; }
@@ -263,7 +270,9 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   permissionSummary: PermissionSummaryWindow,
   keySettings: KeySettingsWindow,
   presets: PresetsWindow,
-  approvals: ApprovalsContent,
+  approvals: ApprovalsListWindow,
+  review: ReviewWindow,
+  requestDetails: RequestDetailsWindow,
   changes: ChangesContent,
   mesa: MesaContent,
   auditLog: AuditLogContent,

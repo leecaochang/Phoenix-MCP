@@ -1,26 +1,6 @@
 import type { ApprovalDiff } from "../types";
 import { hasMessage, t } from "../i18n";
 
-export type ApprovalView = "summary" | "details";
-
-export const APPROVAL_DEFAULT_VIEW_KEY = "phx-approval-default-view";
-
-export function storedApprovalView(): ApprovalView {
-  try {
-    return localStorage.getItem(APPROVAL_DEFAULT_VIEW_KEY) === "details" ? "details" : "summary";
-  } catch {
-    return "summary";
-  }
-}
-
-export function rememberApprovalView(view: ApprovalView): void {
-  try {
-    localStorage.setItem(APPROVAL_DEFAULT_VIEW_KEY, view);
-  } catch {
-    // A blocked store makes the choice session-only; Summary remains the next default.
-  }
-}
-
 export interface FriendlyApprovalSummary {
   title: string;
   body: string;

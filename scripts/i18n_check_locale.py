@@ -98,8 +98,6 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     # just be one more entry to keep in step for no benefit.
     "pure placeholder": (
         "panel.version.size",
-        # A middot and a value that is already localized where it is built.
-        "panel.approvals.cardTimeSuffix",
     ),
 }
 
@@ -209,7 +207,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.stop",  # "Stop", the Danish imperative
         "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
         "panel.approvalSummary.named.kind.script",  # "script", the HA entity type
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.energyGas",  # "Gas"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
@@ -256,8 +253,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMinimal",        # "Minimal"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
-        "panel.approvalSummary.view.details",  # "Details"
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energySolar",         # "Solar"
         "panel.approvals.metaStatus",          # "Status"
@@ -426,7 +421,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.resultOk",  # "ok"
         "panel.agentchat.send",  # "Send", the Norwegian imperative
         "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
         "panel.changes.typeScene",  # "Scene"
@@ -469,8 +463,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.usageContext",        # " · context {tokens}", "context" is a cognate
         "panel.approvalSummary.named.kind.helper",  # "helper"
         "panel.approvalSummary.named.kind.script",  # "script"
-        "panel.approvalSummary.view.details",  # "Details"
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energyWater",         # "Water"
         "panel.approvals.metaStatus",          # "Status"
@@ -520,7 +512,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.model",               # "Model"
         "panel.agentchat.resultOk",            # "ok"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.metaStatus",          # "Status"
         "panel.common.diff",                   # "Diff"
         "panel.settings.languageAuto",         # "Auto"
@@ -562,7 +553,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.levelMax",  # "Max"
         "panel.agentchat.levelMinimal",  # "Minimal"
         "panel.agentchat.resultOk",  # "ok"
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.energyGas",  # "Gas"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.typeBlueprint",  # "Blueprint", Home Assistant's own Swedish term

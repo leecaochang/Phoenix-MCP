@@ -1,9 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  friendlyApprovalSummary,
-  rememberApprovalView,
-  storedApprovalView,
-} from "../utils/approval_summary";
+import { describe, expect, it } from "vitest";
+import { friendlyApprovalSummary } from "../utils/approval_summary";
 
 describe("friendly approval summary", () => {
   it.each([
@@ -228,31 +224,5 @@ describe("friendly approval summary", () => {
         label: "Front door NFC",
       },
     }).title).toBe("Create tag helper 'Front door NFC'");
-  });
-});
-
-describe("approval Summary preference", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    localStorage.clear();
-  });
-
-  it("defaults missing and invalid values to Summary", () => {
-    localStorage.clear();
-    expect(storedApprovalView()).toBe("summary");
-    localStorage.setItem("phx-approval-default-view", "preview");
-    expect(storedApprovalView()).toBe("summary");
-  });
-
-  it("stores Details per browser", () => {
-    rememberApprovalView("details");
-    expect(storedApprovalView()).toBe("details");
-  });
-
-  it("defaults to Summary when storage is blocked", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
-    expect(storedApprovalView()).toBe("summary");
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
-    expect(() => rememberApprovalView("details")).not.toThrow();
   });
 });

@@ -4,7 +4,9 @@
  * Right on the header), resize (drag the edge, or arrow keys on it), hide,
  * show again and sort. Changes are kept per table id (`settings.ts`); hidden
  * columns keep their place for when they are shown again. Rows are chosen by
- * pointer or keyboard, and the chosen row stays marked across refreshes.
+ * pointer or keyboard, and the chosen row stays marked across refreshes. An
+ * optional fixed first column of tick boxes picks several rows at once; Space
+ * on a row ticks it, and ticking never changes the chosen row.
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
@@ -30,7 +32,22 @@ export interface Column<Row> {
   menu?: () => MenuEntry[];
 }
 
+/** Ticking rows, separate from choosing one: the fixed first column. */
+export interface TableSelection<Row> {
+  picked: ReadonlySet<string>;
+  /** Rows that can be ticked; the others show a disabled box. */
+  selectable: (row: Row) => boolean;
+  onToggle: (key: string) => void;
+  onToggleAll: () => void;
+  /** Every selectable row is ticked. */
+  all: boolean;
+  /** Accessible name of a row's box, and of the header's box. */
+  label: (row: Row) => string;
+  allLabel: string;
+}
+
 const DEFAULT_WIDTH = 140;
+const PICK_WIDTH = 36;
 const RESIZE_STEP = 16;
 const MAX_WIDTH = 2000;
 const DRAG_THRESHOLD = 5;
@@ -57,7 +74,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -74,6 +91,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   rowClass?: (row: Row) => string;
   /** Shown under the headers when there are no rows. */
   empty?: ReactNode;
+  /** Tick boxes in a fixed first column, while picking several rows. */
+  selection?: TableSelection<Row>;
 }) {
   const [settings, saveSettings] = useTableSettings(id);
   const showMenu = useContextMenu();
@@ -91,7 +110,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   if (!visible.length) visible = [byId.get(order[0])!];
   const sort = settings.sort && byId.get(settings.sort.column)?.sortValue ? settings.sort : defaultSort;
   const widthOf = (c: Column<Row>) => (liveWidth?.id === c.id ? liveWidth.width : settings.widths?.[c.id] ?? c.width ?? DEFAULT_WIDTH);
-  const total = visible.reduce((sum, c) => sum + widthOf(c), 0);
+  const total = visible.reduce((sum, c) => sum + widthOf(c), 0) + (selection ? PICK_WIDTH : 0);
 
   const sorted = useMemo(() => {
     const col = sort ? byId.get(sort.column) : undefined;
@@ -249,6 +268,9 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     if (next >= 0 && next < sorted.length) {
       e.preventDefault();
       choose(sorted[next], true);
+    } else if (e.key === " " && selection) {
+      e.preventDefault();
+      if (selection.selectable(sorted[index])) selection.onToggle(rowKey(sorted[index]));
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       choose(sorted[index], false);
@@ -259,10 +281,18 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     <div ref={wrap} className={`phx-table-wrap${drag ? " is-dragging" : ""}`}>
       <table className="phx-table" role="grid" aria-label={label} style={{ minWidth: total }}>
         <colgroup>
+          {selection && <col style={{ width: PICK_WIDTH }} />}
           {visible.map((c, i) => <col key={c.id} style={i < visible.length - 1 ? { width: widthOf(c) } : undefined} />)}
         </colgroup>
         <thead>
           <tr ref={head}>
+            {selection && (
+              <th className="phx-table-pick" scope="col">
+                <input type="checkbox" checked={selection.all} aria-label={selection.allLabel}
+                  ref={(el) => { if (el) el.indeterminate = !selection.all && sorted.some((r) => selection.picked.has(rowKey(r))); }}
+                  onChange={selection.onToggleAll} />
+              </th>
+            )}
             {visible.map((col) => {
               const sorting = sort?.column === col.id ? sort.dir : null;
               return (
@@ -300,6 +330,13 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                 tabIndex={onSelect ? (key === focusKey ? 0 : -1) : undefined}
                 onClick={onSelect ? () => choose(row, false) : undefined}
                 onKeyDown={onSelect ? rowKeys(index) : undefined}>
+                {selection && (
+                  // Ticking stays apart from choosing: a click on the box never picks the row for review.
+                  <td className="phx-table-pick" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" tabIndex={-1} checked={selection.picked.has(key)} disabled={!selection.selectable(row)}
+                      aria-label={selection.label(row)} onChange={() => selection.onToggle(key)} />
+                  </td>
+                )}
                 {visible.map((col) => <td key={col.id} className={col.className} title={col.title?.(row)}>{col.cell(row)}</td>)}
               </tr>
             );

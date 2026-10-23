@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { fireEvent, waitFor } from "@testing-library/react";
+import { renderApprovals } from "./approvals_harness";
 import { api } from "../api";
 import { getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
 import type { ApprovalRecord } from "../types";
 
-// The rejection reason typed in this modal is shared with the Agent Chat
+// The rejection reason typed in Review is shared with the Agent Chat
 // window's approval bubble, whose Reject button has no reason field of its own.
 // The two live in different bundles when the global chat window is enabled, so
 // the hand-off goes through localStorage rather than module state.
@@ -37,10 +37,11 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   };
 }
 
+/** Choose the request for Review and open its rejection reason. */
 async function openDetail() {
-  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  const view = renderApprovals();
   fireEvent.click(await view.findByText("Create automation 'x'"));
-  await waitFor(() => expect(view.container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
+  fireEvent.click(await view.findByRole("button", { name: "Reject" }));
   return view;
 }
 
@@ -48,7 +49,6 @@ describe("rejection reason draft sharing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    localStorage.setItem("phx-approval-default-view", "details");
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record()], total: 1, limit: 50, offset: 0,
     });
@@ -56,7 +56,7 @@ describe("rejection reason draft sharing", () => {
 
   it("stashes what is typed so another surface can send it", async () => {
     const { findByLabelText } = await openDetail();
-    const input = await findByLabelText("Optional rejection reason");
+    const input = await findByLabelText("Optional reason");
     fireEvent.change(input, { target: { value: "use the outdoor sensor" } });
     expect(getReasonDraft("appr_1")).toBe("use the outdoor sensor");
 
@@ -65,10 +65,10 @@ describe("rejection reason draft sharing", () => {
     expect(getReasonDraft("appr_1")).toBe("");
   });
 
-  it("restores the draft when the modal is reopened", async () => {
+  it("restores the draft when the request is reviewed again", async () => {
     setReasonDraft("appr_1", "put it on the Kitchen view");
     const { findByLabelText } = await openDetail();
-    const input = await findByLabelText("Optional rejection reason") as HTMLInputElement;
+    const input = await findByLabelText("Optional reason") as HTMLInputElement;
     expect(input.value).toBe("put it on the Kitchen view");
   });
 
@@ -78,7 +78,7 @@ describe("rejection reason draft sharing", () => {
       record({ status: "rejected", rejected_reason: "wrong entity" }));
 
     const { findByRole } = await openDetail();
-    fireEvent.click(await findByRole("button", { name: "Reject" }));
+    fireEvent.click(await findByRole("button", { name: "Confirm Rejection" }));
 
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledWith(
       "appr_1", { reason: "wrong entity" }));

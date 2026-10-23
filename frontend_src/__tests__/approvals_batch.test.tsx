@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
 import type { ApprovalRecord } from "../types";
+import { listRows, pickBoxes, renderApprovals, reviewWindow } from "./approvals_harness";
 
 // Batch approve is an operator convenience only: the server still runs each id
 // through the same single-approval path. These cover the panel's own contract,
@@ -41,9 +41,7 @@ async function renderPending(records: ApprovalRecord[], props = {}) {
   vi.mocked(api.listApprovals).mockResolvedValue({
     approvals: records, total: records.length, limit: 50, offset: 0,
   });
-  const utils = render(
-    <ApprovalsView tab="pending" onTabChange={() => {}} {...props} />,
-  );
+  const utils = renderApprovals(props);
   if (records.length) await utils.findByText(records[0].diff.summary!);
   return utils;
 }
@@ -54,9 +52,21 @@ describe("batch approve", () => {
     localStorage.clear();
   });
 
-  it("shows no batch bar for a single pending approval", async () => {
-    const { queryByText } = await renderPending([record("a")]);
-    expect(queryByText("Select all")).toBeNull();
+  it("offers no selection for a single pending approval", async () => {
+    const { getByRole } = await renderPending([record("a")]);
+    expect(getByRole("button", { name: "Select Multiple" })).toBeDisabled();
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    expect(pickBoxes()).toHaveLength(0);
+  });
+
+  it("shows tick boxes only in selection mode, and Cancel Selection leaves it", async () => {
+    const { getByRole, queryByRole } = await renderPending([record("a"), record("b")]);
+    expect(pickBoxes()).toHaveLength(0);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    expect(pickBoxes()).toHaveLength(2);
+    fireEvent.click(getByRole("button", { name: "Cancel Selection" }));
+    expect(pickBoxes()).toHaveLength(0);
+    expect(queryByRole("button", { name: /Approve \d Selected/ })).toBeNull();
   });
 
   it("sends the ticked ids in the order shown", async () => {
@@ -69,19 +79,32 @@ describe("batch approve", () => {
     const { getByRole } = await renderPending(
       [record("a"), record("b"), record("c")],
     );
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
     // Tick c first, then a: the request must still follow list order, so that a
     // "stopped at" names a row the operator can find. Addressed positionally
     // because all three rows carry the same tool name and so the same label.
-    const boxes = document.querySelectorAll<HTMLInputElement>(".approval-card-check");
-    fireEvent.click(boxes[2]);
-    fireEvent.click(boxes[0]);
+    fireEvent.click(pickBoxes()[2]);
+    fireEvent.click(pickBoxes()[0]);
     fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
     await waitFor(() => expect(api.batchApproveApprovals).toHaveBeenCalled());
     expect(vi.mocked(api.batchApproveApprovals).mock.calls[0][0]).toEqual(["a", "c"]);
   });
 
+  it("ticking never changes the request in Review, and Space on a row ticks it", async () => {
+    const { getByRole } = await renderPending([record("a"), record("b"), record("c")]);
+    fireEvent.click(listRows()[1]);
+    expect(within(reviewWindow()).getByText("Edit b")).toBeTruthy();
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(pickBoxes()[0]);
+    fireEvent.keyDown(listRows()[2], { key: " " });
+    expect(pickBoxes().map((b) => b.checked)).toEqual([true, false, true]);
+    expect(within(reviewWindow()).getByText("Edit b")).toBeTruthy();
+    expect(getByRole("button", { name: "Approve 2 Selected" })).toBeTruthy();
+  });
+
   it("select-all ticks every selectable row", async () => {
     const { getByRole, findByRole } = await renderPending([record("a"), record("b")]);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
     expect(await findByRole("button", { name: "Approve 2 Selected" })).toBeTruthy();
   });
@@ -91,19 +114,19 @@ describe("batch approve", () => {
     // operator never chose, so it is not selectable in the first place. Three
     // rows, because a claimed one does not count toward the two that turn
     // batching on at all.
-    await renderPending([record("a", { in_progress: true }), record("b"), record("c")]);
-    const boxes = document.querySelectorAll<HTMLInputElement>(".approval-card-check");
-    expect(boxes[0].disabled).toBe(true);
-    expect(boxes[1].disabled).toBe(false);
+    const { getByRole } = await renderPending([record("a", { in_progress: true }), record("b"), record("c")]);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    expect(pickBoxes()[0].disabled).toBe(true);
+    expect(pickBoxes()[1].disabled).toBe(false);
+    fireEvent.keyDown(listRows()[0], { key: " " });
+    expect(pickBoxes()[0].checked).toBe(false);
   });
 
-  it("shows no tick box at all when only one row is selectable", async () => {
-    // A lone tick box with no button to press reads as a broken control.
-    await renderPending([record("a")]);
-    expect(document.querySelectorAll(".approval-card-check")).toHaveLength(0);
-    // And a claimed row does not make a second one "selectable".
-    await renderPending([record("a", { in_progress: true }), record("b")]);
-    expect(document.querySelectorAll(".approval-card-check")).toHaveLength(0);
+  it("offers no selection when only one row is selectable", async () => {
+    // A lone tick box with no button to press reads as a broken control,
+    // and a claimed row does not make a second one "selectable".
+    const { getByRole } = await renderPending([record("a", { in_progress: true }), record("b")]);
+    expect(getByRole("button", { name: "Select Multiple" })).toBeDisabled();
   });
 
   it("retires the result banner once the queue moves under it", async () => {
@@ -115,9 +138,10 @@ describe("batch approve", () => {
       failed: null,
       remaining: [],
     });
-    const { getByRole, findByText, queryByText, rerender } = await renderPending(
+    const { getByRole, findByText, queryByText, update } = await renderPending(
       [record("a"), record("b")],
     );
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
     fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
     expect(await findByText("Approved 2.")).toBeTruthy();
@@ -126,8 +150,50 @@ describe("batch approve", () => {
     vi.mocked(api.listApprovals).mockResolvedValue({
       approvals: [record("x"), record("y")], total: 2, limit: 50, offset: 0,
     });
-    rerender(<ApprovalsView tab="pending" onTabChange={() => {}} refreshSignal={1} />);
+    update({ refreshSignal: 1 });
     await waitFor(() => expect(queryByText("Approved 2.")).toBeNull());
+  });
+
+  it("keeps the result once the run's own reload removes what it approved", async () => {
+    vi.mocked(api.batchApproveApprovals).mockResolvedValue({
+      applied: [{ approval_id: "a", tool_name: "edit_automation" },
+                { approval_id: "b", tool_name: "edit_automation" }],
+      failed: null,
+      remaining: [],
+    });
+    const { getByRole, findByText, getByText } = await renderPending([record("a"), record("b")]);
+    // The reload after the run answers a moment later, without the approved rows.
+    vi.mocked(api.listApprovals).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ approvals: [], total: 0, limit: 50, offset: 0 }), 30);
+    }));
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(getByRole("checkbox", { name: "Select all" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
+    expect(await findByText("Approved 2.")).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(getByText("Approved 2.")).toBeTruthy();
+  });
+
+  it("keeps the result while reloads and approval events catch up in several steps", async () => {
+    vi.mocked(api.batchApproveApprovals).mockResolvedValue({
+      applied: [{ approval_id: "a", tool_name: "edit_automation" },
+                { approval_id: "b", tool_name: "edit_automation" }],
+      failed: null,
+      remaining: [],
+    });
+    const { getByRole, findByText, getByText, update } = await renderPending([record("a"), record("b")]);
+    // The run's own reload still sees one row; the event-driven reload after it sees none.
+    vi.mocked(api.listApprovals)
+      .mockResolvedValueOnce({ approvals: [record("b")], total: 1, limit: 50, offset: 0 })
+      .mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(getByRole("checkbox", { name: "Select all" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
+    expect(await findByText("Approved 2.")).toBeTruthy();
+    update({ refreshSignal: 1 });
+    await waitFor(() => expect(api.listApprovals).toHaveBeenCalledTimes(3));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(getByText("Approved 2.")).toBeTruthy();
   });
 
   it("reports applied, the stopping point, and what is left pending", async () => {
@@ -142,6 +208,7 @@ describe("batch approve", () => {
     const { getByRole, findByText } = await renderPending(
       [record("a"), record("b"), record("c")],
     );
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
     fireEvent.click(getByRole("button", { name: "Approve 3 Selected" }));
 
@@ -160,9 +227,24 @@ describe("batch approve", () => {
     const { getByRole, findByRole } = await renderPending(
       [record("a"), record("b"), record("c")],
     );
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
     fireEvent.click(getByRole("checkbox", { name: "Select all" }));
     fireEvent.click(getByRole("button", { name: "Approve 3 Selected" }));
     // One click retries exactly the remainder once the cause is dealt with.
     expect(await findByRole("button", { name: "Approve 1 Selected" })).toBeTruthy();
+  });
+
+  it("ends selection once nothing is left", async () => {
+    vi.mocked(api.batchApproveApprovals).mockResolvedValue({
+      applied: [{ approval_id: "a", tool_name: "edit_automation" }, { approval_id: "b", tool_name: "edit_automation" }],
+      failed: null,
+      remaining: [],
+    });
+    const { getByRole, findByRole } = await renderPending([record("a"), record("b")]);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(getByRole("checkbox", { name: "Select all" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
+    expect(await findByRole("button", { name: "Select Multiple" })).toBeTruthy();
+    expect(pickBoxes()).toHaveLength(0);
   });
 });

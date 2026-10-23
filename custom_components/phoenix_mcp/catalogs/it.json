@@ -339,13 +339,8 @@
       "loadFailed": "Impossibile caricare il registro di controllo. Aggiorna per riprovare."
     },
     "approvalSummary": {
-      "action.approve": "Approva ed esegui",
-      "action.approving": "Approvazione...",
-      "action.cancelReject": "Annulla",
       "action.optionalReason": "Motivo facoltativo",
       "action.reasonPlaceholder": "Spiega perché questa richiesta è stata rifiutata",
-      "action.reject": "Rifiuta",
-      "action.rejecting": "Rifiuto...",
       "blueprint.create.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
       "blueprint.create.title": "Crea il progetto {domain} '{rel}'",
       "blueprint.delete.body": "Il progetto {domain} {rel} verrà eliminato definitivamente.",
@@ -555,9 +550,6 @@
       "set_yaml_config.removing_entry.body": "Verrà sostituito l'intero contenuto di {file} e verrà rimossa una voce. Apri Dettagli per rivedere la modifica esatta proposta.",
       "set_yaml_config.removing_entry.title": "Aggiorna {file}",
       "set_yaml_config.title": "Aggiorna {file}",
-      "view.defaultAria": "Vista di approvazione predefinita",
-      "view.details": "Dettagli",
-      "view.summary": "Riepilogo",
       "write_file.body": "Verrà scritto in {path}. Il contenuto esistente in quel percorso potrebbe essere sostituito.",
       "write_file.title": "Scrivi il file '{path}'",
       "zigbee_binding.body": "Verrà modificato il controllo diretto tra due dispositivi Zigbee. Apri Dettagli per rivedere entrambi i dispositivi e i cluster selezionati.",
@@ -649,15 +641,11 @@
       "approve": "Approva ed esegui",
       "approveFailed": "Approvazione non riuscita.",
       "approveSelected": "Approva {count} selezionate",
-      "approving": "Approvazione...",
       "batchApplied": "Approvate {count}.",
       "batchRemaining": "{count} ancora in attesa.",
-      "batchRunning": "Approvazione...",
       "batchStopped": "Interrotto su {tool}: {reason}",
       "detailTabArgs": "Argomenti grezzi",
-      "detailTabDiff": "Differenze",
       "detailTabResult": "Risultato",
-      "detailTablist": "Dettagli dell'approvazione",
       "diffCardAfter": "Mostra la scheda in fase di aggiunta.",
       "diffCardBefore": "Mostra la scheda in fase di rimozione o sostituzione.",
       "diffModeAria": "Modalità di visualizzazione delle differenze",
@@ -677,11 +665,9 @@
       "expiresExpired": "scaduto",
       "expiresHours": "{hours}h {mins}m rimanenti",
       "expiresMinutes": "{mins}m rimanenti",
-      "filterAll": "Tutte",
       "filterApproved": "Approvato",
       "filterCancelled": "Annullato",
       "filterExpired": "Scaduto",
-      "filterGroup": "Filtra per stato",
       "filterRejected": "Rifiutato",
       "loadFailed": "Impossibile caricare le approvazioni.",
       "mesaAllowed": "Consentito anche",
@@ -695,10 +681,6 @@
       "metaTool": "Strumento",
       "noResult": "Nessun risultato. {status}: {reason}",
       "noResultRecorded": "Nessun risultato registrato (stato: {status}).",
-      "othersPending": {
-        "one": "{count} altra approvazione è in attesa di revisione.",
-        "other": "{count} altre approvazioni sono in attesa di revisione."
-      },
       "processing": "In elaborazione",
       "reason": {
         "admin_cancelled": "Annullata dall'amministratore",
@@ -716,16 +698,11 @@
         "access_key_revoked": "Chiave di accesso revocata"
       },
       "reasonExecutionFailedDetail": "Esecuzione non riuscita: {detail}",
-      "reasonLabel": "Motivo di rifiuto opzionale",
-      "reasonPlaceholder": "Spiega perché questa richiesta è stata rifiutata",
-      "reasonPrefix": "Motivo: {reason}",
       "reject": "Rifiuta",
       "rejectFailed": "Rifiuto non riuscito.",
-      "rejecting": "Rifiuto...",
       "resolvedCancelled": "Annullato",
       "resolvedReason": "Motivo",
       "resolvedRejected": "Rifiutato",
-      "reviewAll": "Rivedi tutte",
       "searchAria": "Cerca approvazioni",
       "searchPlaceholder": "Cerca per chiave di accesso, strumento o motivo...",
       "selectAll": "Seleziona tutto",
@@ -739,7 +716,14 @@
       "tabHistory": "Storico",
       "tabPending": "In attesa",
       "tabPendingCount": "In attesa ({count})",
-      "tablist": "Viste delle approvazioni"
+      "cancelReject": "Annulla rifiuto",
+      "cancelSelection": "Annulla selezione",
+      "colRequest": "Richiesta",
+      "colRequested": "Data richiesta",
+      "confirmReject": "Conferma rifiuto",
+      "selectMultiple": "Selezione multipla",
+      "show": "Mostra",
+      "scopeAll": "Tutte le richieste"
     },
     "caps": {
       "cap_automation_write": {
@@ -2414,7 +2398,11 @@
       "restoreDefaultsAction": "Ripristina predefiniti",
       "myDefaultSaved": "Questa disposizione è stata salvata come tuo predefinito per {workspace}.",
       "myDefaultRestored": "La tua disposizione predefinita è stata ripristinata.",
-      "panelDefaultsRestored": "Le impostazioni predefinite del pannello sono state ripristinate."
+      "panelDefaultsRestored": "Le impostazioni predefinite del pannello sono state ripristinate.",
+      "review": "Revisione",
+      "reviewEmpty": "Seleziona una richiesta per esaminarla.",
+      "requestDetails": "Dettagli della richiesta",
+      "requestDetailsEmpty": "Seleziona una richiesta per visualizzarne i dettagli."
     },
     "notifications": {
       "title": "Notifiche",

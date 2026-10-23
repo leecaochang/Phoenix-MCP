@@ -150,7 +150,7 @@ describe("phoenix-mcp-panel full app shell", () => {
     window.location.hash = "#approvals/ap-9";
     const el = mountPanel();
     await waitFor(() => {
-      expect(el.shadowRoot!.querySelector("[role='dialog']")).toBeTruthy();
+      expect(el.shadowRoot!.querySelector('[data-phx-window="review"] .phx-review')).toBeTruthy();
     });
   });
 
@@ -168,7 +168,7 @@ describe("phoenix-mcp-panel full app shell", () => {
 
     const el = mountPanel();
     await waitFor(() => {
-      expect(el.shadowRoot!.querySelector("[role='dialog']")).toBeTruthy();
+      expect(el.shadowRoot!.querySelector('[data-phx-window="review"] .phx-review')).toBeTruthy();
     });
     expect(open).not.toHaveBeenCalled();
   });
