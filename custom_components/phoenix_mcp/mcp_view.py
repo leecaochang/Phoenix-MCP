@@ -5890,8 +5890,9 @@ async def async_execute_approved_tool(
     MESA semantics. Raises ExecutorNotRegistered if no executor is registered
     for the tool_name, the ONLY failure here that proves nothing was dispatched.
     """
+    # The refusals below precede the executor, so nothing can have been written.
     if error := tool_arguments_error(args):
-        return _tool_error(error), "invalid_request", tool_name
+        return _tool_refused_before_write(error), "invalid_request", tool_name
     fn = _EXECUTOR_REGISTRY.get(tool_name)
     if fn is None:
         raise ExecutorNotRegistered(f"No executor registered for tool {tool_name!r}")
@@ -5902,7 +5903,7 @@ async def async_execute_approved_tool(
         entities = binding.get("entity_ids") if isinstance(binding, dict) else None
         if (not isinstance(entities, list) or any(not isinstance(entity, str) for entity in entities)
                 or not targets_current(args, entities, hass)):
-            return _tool_error(TARGETS_CHANGED), "denied", tool_name
+            return _tool_refused_before_write(TARGETS_CHANGED), "denied", tool_name
     # The admin's approval covers the whole action, so the MESA gate inside the
     # executor runs under confirm-approved semantics (see _approved_exec_ctx).
     ctx = _approved_exec_ctx.set(True)

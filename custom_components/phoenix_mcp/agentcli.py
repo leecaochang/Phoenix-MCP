@@ -3954,6 +3954,19 @@ def execution_failure_text(approval: Any) -> str | None:
     return _flatten_text(tool_result.get("content", [])).strip() or None
 
 
+def refused_before_write(approval: Any) -> bool:
+    """Whether an approved action's executor refused before it could write anything.
+
+    The approve path persists the flag only for a tool_common.RefusedBeforeWrite
+    result, so the failure has no outcome to reconcile. Anything else, including
+    a record without the flag, keeps the unknown-outcome handling.
+    """
+    result = getattr(approval, "result", None)
+    return (getattr(approval, "status", None) == STATUS_FAILED
+            and getattr(approval, "rejected_reason", None) == "execution_failed"
+            and isinstance(result, dict) and result.get("refused_before_write") is True)
+
+
 def _resolved_result(status: str, applied_result: dict | None, approval: Any = None) -> dict:
     """A CallToolResult to feed back after an interactive approval resolves.
 
@@ -4675,6 +4688,8 @@ async def _run_tool_batch(
     authority_lost = False
     write_started = False
     outcome_unknown = False
+    # The approved executor's own error, when that is what made the outcome unknown.
+    unknown_reason: str | None = None
 
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
@@ -4776,12 +4791,16 @@ async def _run_tool_batch(
                 "status": status,
                 "reason": _clip_display(reason) if reason else None,
             })
-            if status in (STATUS_FAILED, "execution_failed"):
+            refused = refused_before_write(resolved_record)
+            if status in (STATUS_FAILED, "execution_failed") and not refused:
                 # The executor may have applied part of the approved action.
                 # Do not let the next model round turn its error into a replay.
+                unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
                 outcome_unknown = True
                 break
-            if status in (STATUS_APPROVED, STATUS_REJECTED):
+            # A refusal before writing reaches the model with the executor's
+            # reason (see _resolved_result), so it can re-read and propose again.
+            if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
                 human_resolved = True
         is_error = bool(result.get("isError"))
         content = result.get("content", [])
@@ -4808,10 +4827,12 @@ async def _run_tool_batch(
     if outcome_unknown:
         # Every earlier call appended its result, so the uncertain call is the
         # first one left unanswered and the rest never started.
+        uncertain = _UNKNOWN_OUTCOME_RESULT + (
+            f" The executor reported: {_clip_display(unknown_reason)}" if unknown_reason else "")
         for index, tc in enumerate(tool_calls[len(results):]):
             results.append({"tool_use_id": tc.get("id"),
                             "tool_name": str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH],
-                            "result_text": _NOT_RUN_AFTER_UNKNOWN if index else _UNKNOWN_OUTCOME_RESULT,
+                            "result_text": _NOT_RUN_AFTER_UNKNOWN if index else uncertain,
                             "is_error": True})
 
     return _ToolBatchResult(

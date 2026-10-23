@@ -29,6 +29,7 @@ from custom_components.phoenix_mcp.tools.lovelace import (
     _execute_dashboard_card,
 )
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
@@ -323,10 +324,13 @@ class TestCardOpCas:
         data, _v = _data()
         stale_hash = content_hash(await async_get_lovelace_config(h, None))
         await async_save_lovelace_config(h, None, {"views": [{"cards": []}]})  # drift
-        _, outcome, _ = await _execute_dashboard_card(
+        content, outcome, _ = await _execute_dashboard_card(
             {"view_index": 0, "card": NEW_CARD, "expected_hash": stale_hash},
             "add", "add_dashboard_card", access_key, h, data)
         assert outcome == "invalid_request"
+        # Refused before writing, so an approved run reports a known failure.
+        assert isinstance(content, RefusedBeforeWrite)
+        assert (await async_get_lovelace_config(h, None)) == {"views": [{"cards": []}]}
 
     async def test_executor_revalidates_bounds_without_hash(self, hass, lovelace_env):
         # No expected_hash: the executor still re-resolves the target, so an

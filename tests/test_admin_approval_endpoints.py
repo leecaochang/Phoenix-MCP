@@ -714,6 +714,35 @@ class TestApprovalApprove:
         assert out["rejected_reason"] == "execution_failed"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("refused", [True, False])
+    async def test_approve_records_an_executor_refusal_made_before_writing(self, refused):
+        # Only a RefusedBeforeWrite result is persisted as known-unapplied; the
+        # type cannot survive storage, so the record carries a server-owned flag.
+        from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+
+        access_key = _make_access_key("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        request = _make_admin_request(body=b"{}")
+        text = "This configuration changed since you last read it (expected_hash no longer matches)."
+
+        async def _executor(name, args, tok, hass, data):
+            result = _tool_refused_before_write(text) if refused else _tool_error(text)
+            return result, "invalid_request", "restart_ha"
+
+        with \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            resp = await view.post(request, approval_id="appr_a")
+
+        out = json.loads(resp.text)
+        assert out["status"] == STATUS_FAILED and out["rejected_reason"] == "execution_failed"
+        assert out["result"].get("refused_before_write") is (True if refused else None)
+
+    @pytest.mark.asyncio
     async def test_approve_cancels_when_token_revoked(self):
         # No access key in store, so get_access_key_by_id returns None.
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[])

@@ -2382,6 +2382,68 @@ async def test_a_refusal_before_writing_returns_to_the_model(hass, marked):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("refused", [True, False])
+async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass, refused):
+    # The dashboard changed while the approval waited, so the approved executor
+    # refused its stale hash before writing. The persisted flag lets the model
+    # read the executor's reason and continue; without it the outcome stays
+    # unknown, and the synthetic result still carries that reason.
+    provider = _ClaudeShapedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "patch_dashboard", "input": {}},
+         _tool_use_done(("tu1", "patch_dashboard"))],
+        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    stale = "This configuration changed since you last read it (expected_hash no longer matches)."
+    pending_result = {"content": [{"type": "text", "text": json.dumps(
+        {"status": "pending_approval", "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1"})}]}
+    fake_dispatch = AsyncMock(return_value=({"result": pending_result}, "m", "r", "pending_approval"))
+    record = SimpleNamespace(
+        status=STATUS_FAILED, rejected_reason="execution_failed", diff=None, execution_started_at=None,
+        result={"tool_result": {"content": [{"type": "text", "text": stale}], "isError": True},
+                "outcome": "invalid_request", **({"refused_before_write": True} if refused else {})},
+    )
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+        task = hass.async_create_task(async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        ))
+        await asyncio.sleep(0.05)
+        hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
+        await task
+
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    answer = returned[2]["content"][0]
+    assert answer["is_error"] is True
+    errors = [p["code"] for n, p in events if n == "error"]
+    if refused:
+        assert provider.i == 2 and errors == []
+        assert data.agent_recovery.records("tid") == []
+        message = json.loads(answer["content"][0]["text"])
+        assert message["status"] == "execution_failed"
+        assert f"executing it failed: {stale}" in message["message"]
+        assert events[-1] == ("done", {"stop_reason": "end_turn"})
+    else:
+        assert provider.i == 1 and errors == ["outcome_unknown"]
+        assert data.agent_recovery.blocks("tid")
+        assert answer["content"][0]["text"] == f"{agentcli._UNKNOWN_OUTCOME_RESULT} The executor reported: {stale}"
+
+
+@pytest.mark.asyncio
 async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
     # One batch with a gated call then a second call. Cancel fires while the
     # loop is blocked on the approval wait: the second call must never

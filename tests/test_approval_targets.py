@@ -11,6 +11,8 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.approval_targets import TARGETS_CHANGED
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 
 
 @pytest.fixture
@@ -66,6 +68,11 @@ async def test_capability_approval_refuses_changed_area_targets(hass, target_run
     result, outcome, _ = await async_execute_approved_tool(tool, approval.args, access_key, hass, data)
     assert outcome == 'denied', result
     assert calls == []
+    assert result['content'][0]['text'] == TARGETS_CHANGED
+    # A removed member fails the binding check before the executor runs, a
+    # proven no-op. The others are refused inside the executor, which may stop
+    # after earlier subgroups acted, so they stay unmarked.
+    assert isinstance(result, RefusedBeforeWrite) is (change == 'removed')
 
 
 @pytest.mark.parametrize('tool', ['call_service', 'HassTurnOn', 'HassSetPosition', 'HassStopMoving'])
@@ -327,3 +334,14 @@ async def test_position_approval_retains_unsupported_selected_domain_without_act
     result, outcome, _ = await async_execute_approved_tool('HassSetPosition', approval.args, access_key, hass, data)
     assert outcome == 'allowed', result
     assert len(calls) == 1 and calls[0]['entity_id'] == [first.entity_id]
+
+
+async def test_invalid_stored_arguments_are_refused_before_the_executor(hass, target_runtime):
+    # Persisted arguments are re-validated before any executor runs, so the
+    # refusal is a proven no-op an approved Agent Chat run can hand back.
+    access_key, data, *_, calls = target_runtime
+    result, outcome, _ = await async_execute_approved_tool('call_service', ['not', 'an', 'object'], access_key, hass, data)
+    assert outcome == 'invalid_request'
+    assert result['content'][0]['text'] == 'Tool arguments must be an object.'
+    assert isinstance(result, RefusedBeforeWrite)
+    assert calls == []

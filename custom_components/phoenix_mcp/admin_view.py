@@ -3554,8 +3554,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                                 except AuthorityChangedError:
                                     # This check precedes the executor. A removed or
                                     # inactive requester cannot have caused effects.
-                                    tool_result = {"isError": True, "content": [{"type": "text", "text":
-                                        "Requester authority changed. No action was dispatched."}]}
+                                    from .tool_common import _tool_refused_before_write
+                                    tool_result = _tool_refused_before_write(
+                                        "Requester authority changed. No action was dispatched.")
                                     outcome, _resource = "denied", record.tool_name
                                 else:
                                     tool_result, outcome, _resource = await async_execute_approved_tool(
@@ -3652,7 +3653,12 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             )
 
         is_error = bool(tool_result.get("isError"))
-        saved_result = {"tool_result": tool_result, "outcome": outcome}
+        saved_result: dict[str, Any] = {"tool_result": tool_result, "outcome": outcome}
+        from .tool_common import RefusedBeforeWrite
+        if isinstance(tool_result, RefusedBeforeWrite):
+            # Persisted because the type does not survive storage. Server-owned:
+            # executor text cannot set a key at this level.
+            saved_result["refused_before_write"] = True
         final_status = STATUS_FAILED if is_error else STATUS_APPROVED
         auto_reason = "execution_failed" if is_error else None
         audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
