@@ -29,7 +29,7 @@ from .const import (
     CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS, CONVERSATION_LOG_STATUS_PRIORITY,
     TURN_DELIVERED_EVENT,
 )
-from .helpers import is_sensitive_key, redact_secrets_in_text
+from .helpers import is_sensitive_key, log_internal_failure, redact_secrets_in_text
 
 _LOGGER = logging.getLogger(__name__)
 _REDACTED = "<redacted>"
@@ -53,6 +53,16 @@ _SPOKEN_CODE = re.compile(r"(?i)(\b(?:code|pin|passcode)\s+(?:is\s+)?)(\d[\d -]*
 def sensitive_key(key: str, service: bool = False) -> bool:
     """Service codes are credentials; protocol error codes remain readable."""
     return is_sensitive_key(key) or key.casefold() in {"pin", "psk", "encryption_key"} or (service and key.casefold() == "code")
+
+
+def _names_guarded_domain(value: Any) -> bool:
+    """Whether a `domain` value names an alarm or lock domain, alone or in a list.
+
+    Tools accept a list of domains, and an unhashable value must not end
+    sanitization: that would drop the whole event from the log.
+    """
+    names = value if isinstance(value, (list, tuple)) else [value]
+    return any(isinstance(name, str) and name in {"alarm_control_panel", "lock"} for name in names)
 
 
 def hide_address(match: re.Match) -> str:
@@ -124,7 +134,8 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
             return [visit(item, depth + 1, service) for item in obj]
         if isinstance(obj, dict):
             service = service or isinstance(obj.get("service"), (str, dict)) or (
-                isinstance(obj.get("action"), str) and obj["action"].startswith(("alarm_control_panel.", "lock.")))
+                isinstance(obj.get("action"), str) and obj["action"].startswith(("alarm_control_panel.", "lock."))
+            ) or _names_guarded_domain(obj.get("domain"))
             kind = obj.get("type")
             if isinstance(kind, str) and kind in {"image", "image_url", "input_image", "audio", "input_audio"}:
                 return {"attachment": True, "type": kind, "mime_type": text(str(obj.get("mimeType", obj.get("mime_type", ""))))[:128], "omitted": "media"}
@@ -138,7 +149,7 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
                 elif key in {"blob", "base64"}:
                     result[safe_key] = "<attachment omitted>"
                 else:
-                    result[safe_key] = visit(item, depth + 1, service or key in {"service", "service_data"} or obj.get("domain") in {"alarm_control_panel", "lock"})
+                    result[safe_key] = visit(item, depth + 1, service or key in {"service", "service_data"})
             return result
         raise ValueError("unsupported data")
 
@@ -371,7 +382,9 @@ class ConversationLog:
                     reason = "size_limit"
             except ValueError as error:
                 result, reason = None, "size_limit" if str(error) == "payload budget" else "sanitization"
-            except Exception:
+            except Exception as error:  # noqa: BLE001 - never keep the raw value
+                # A sanitizer defect, not a refusal: record where without the data.
+                log_internal_failure(_LOGGER, "conversation_log_sanitize", error)
                 result, reason = None, "sanitization"
         if reason and reason not in entry["omissions"]:
             entry["omissions"].append(reason)

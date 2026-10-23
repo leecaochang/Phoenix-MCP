@@ -64,6 +64,44 @@ def test_media_and_private_fields_are_not_retained():
     assert result["image"]["mime_type"] == "image/png"
 
 
+@pytest.mark.parametrize("domain", ["lock", ["light", "lock"], ["alarm_control_panel"]])
+def test_an_alarm_or_lock_domain_guards_codes_beside_and_below_it(domain):
+    result = history.sanitized({"domain": domain, "code": "canary-one", "data": {"code": "canary-two"}}, max_bytes=100000)
+    assert "canary" not in json.dumps(result)
+    assert result["domain"] == domain
+
+
+@pytest.mark.parametrize("domain", [["binary_sensor", "sensor"], {"include": ["light"]}, [], None])
+def test_any_domain_shape_is_kept_instead_of_dropping_the_event(domain):
+    # Tools filter by a list of domains; an unhashable value once ended
+    # sanitization and dropped the whole tool call from the log.
+    args = {"domain": domain, "stale_hours": 168, "code": "E42"}
+    assert history.sanitized({"name": "search_entities", "arguments": args}, max_bytes=100000)["arguments"] == args
+
+
+def test_json_shaped_values_never_fail_sanitization():
+    # Any value a provider's JSON can carry either sanitizes or hits the byte
+    # budget; nothing else may raise and silently drop the event.
+    import random
+    keys = ["domain", "service", "action", "type", "code", "data", "service_data", "mimeType", "blob", "_x", "text"]
+    words = ["lock", "alarm_control_panel", "lock.unlock", "image", "light", "code: 1234", "Bearer abc", ""]
+
+    def value(depth, rng):
+        roll = rng.random()
+        if depth > 3 or roll < 0.4:
+            return rng.choice([rng.choice(words), rng.randint(-3, 3), 0.5, True, None])
+        if roll < 0.7:
+            return [value(depth + 1, rng) for _ in range(rng.randint(0, 3))]
+        return {rng.choice(keys): value(depth + 1, rng) for _ in range(rng.randint(0, 4))}
+
+    rng = random.Random(7)
+    for _ in range(3000):
+        try:
+            history.sanitized({"arguments": value(0, rng)}, max_bytes=100000)
+        except ValueError as error:
+            assert str(error) == "payload budget"
+
+
 def test_bounds_fail_closed_and_original_is_not_mutated():
     value = {"password": "secret", "items": ["ok"]}
     original = deepcopy(value)
@@ -206,7 +244,21 @@ async def test_enable_during_disabled_turn_does_not_backfill(hass, conversation_
     assert not data.conversations.query()["entries"]
 
 
-def test_privacy_and_sanitizer_failure_never_keep_raw(conversation_data, monkeypatch):
+def test_a_multi_domain_tool_call_keeps_its_name_and_arguments(conversation_data):
+    data, _ = conversation_data
+    data.store.get_settings().log_entity_names = True
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt="which sensors are quiet?")
+    args = {"stale_hours": 168, "domain": ["binary_sensor", "sensor"], "limit": 200}
+    log.event(handle, "tool_call", {"name": "search_entities", "arguments": args, "request_id": "r"})
+    entry = only(log)
+    call = next(event for event in entry["events"] if event["kind"] == "tool_call")
+    assert call["payload"]["name"] == "search_entities" and call["payload"]["arguments"] == args
+    assert "omission" not in call and "sanitization" not in entry["omissions"]
+    assert entry["first_tool"] == "search_entities"
+
+
+def test_privacy_and_sanitizer_failure_never_keep_raw(conversation_data, monkeypatch, caplog):
     data, _ = conversation_data
     settings = data.store.get_settings()
     settings.log_entity_names = False
@@ -220,6 +272,9 @@ def test_privacy_and_sanitizer_failure_never_keep_raw(conversation_data, monkeyp
     monkeypatch.setattr(history, "sanitized", MagicMock(side_effect=RuntimeError("secret")))
     log.event(handle, "error", "canary")
     assert "canary" not in json.dumps(only(log))
+    # A sanitizer defect is reported with where it happened, never with the data.
+    assert "phase=conversation_log_sanitize type=RuntimeError" in caplog.text
+    assert "secret" not in caplog.text and "canary" not in caplog.text
 
 
 @pytest.mark.asyncio
