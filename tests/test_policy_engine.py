@@ -26,10 +26,13 @@ from custom_components.phoenix_mcp.policy_engine import (
     device_config_entry_ids,
     filter_entities_for_access_key,
     filter_service_response,
+    get_effective_hint,
     parse_relative_time,
     resolve,
     resolve_config_entry_registry_access,
     resolve_config_entry_registry_write,
+    resolve_device_registry_access,
+    resolve_device_registry_write,
     resolve_registry_access,
     resolve_intent_entities,
     resolve_service_targets,
@@ -185,6 +188,147 @@ def device_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg, d
         "light_accent": light_accent,
         "sensor": sensor,
     }
+
+
+@pytest.fixture
+def part_env(hass, device_env, config_entry, entity_reg, device_reg):
+    """A child device that is a part of the hub, plus a via-device dependent."""
+    hub = device_env["device"]
+    part = device_reg.async_get_or_create_child(
+        config_entry_id=config_entry.entry_id,
+        identifiers={("test_integration", "hub-outlet")},
+        name="Outlet",
+        parent_device_id=hub.id,
+    )
+    part_light = entity_reg.async_get_or_create(
+        "light", "test_integration", "hub-outlet-light",
+        config_entry=config_entry,
+        device_id=part.id,
+    )
+    hass.states.async_set(part_light.entity_id, "on")
+    dependent = device_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={("test_integration", "hub-dependent")},
+        name="Dependent",
+        via_device_id=hub.id,
+    )
+    dependent_light = entity_reg.async_get_or_create(
+        "light", "test_integration", "hub-dependent-light",
+        config_entry=config_entry,
+        device_id=dependent.id,
+    )
+    hass.states.async_set(dependent_light.entity_id, "on")
+    return {
+        "hub": hub,
+        "part": part,
+        "part_light": part_light.entity_id,
+        "dependent": dependent,
+        "dependent_light": dependent_light.entity_id,
+    }
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+class TestChildDeviceAuthority:
+    """A main device's node governs its child devices; via_device does not."""
+
+    def test_parent_red_blocks_child_entity_despite_domain_grant(self, hass, part_env):
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["hub"].id: "RED"}
+        )
+        assert resolve(part_env["part_light"], key, hass) == Permission.DENY
+        assert resolve(part_env["dependent_light"], key, hass) == Permission.WRITE
+
+    def test_parent_grant_reaches_child_entity(self, hass, part_env):
+        key = _make_access_key(devices={part_env["hub"].id: "GREEN"})
+        assert resolve(part_env["part_light"], key, hass) == Permission.WRITE
+        assert resolve(part_env["dependent_light"], key, hass) == Permission.NO_ACCESS
+
+    @pytest.mark.parametrize(
+        ("part_state", "hub_state", "expected"),
+        [
+            ("YELLOW", "GREEN", Permission.READ),
+            ("GREEN", "YELLOW", Permission.WRITE),
+            ("GREEN", "RED", Permission.DENY),
+            ("RED", "GREEN", Permission.DENY),
+        ],
+    )
+    def test_child_node_is_more_specific_but_red_ancestor_wins(
+        self, hass, part_env, part_state, hub_state, expected
+    ):
+        key = _make_access_key(
+            devices={part_env["part"].id: part_state, part_env["hub"].id: hub_state}
+        )
+        assert resolve(part_env["part_light"], key, hass) == expected
+
+    def test_registry_only_child_entity_inherits_parent(self, hass, part_env, entity_reg):
+        entity_reg.async_update_entity(
+            part_env["part_light"], disabled_by=er.RegistryEntryDisabler.USER
+        )
+        key = _make_access_key(devices={part_env["hub"].id: "GREEN"})
+        assert resolve_registry_access(part_env["part_light"], key, hass) == Permission.WRITE
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["hub"].id: "RED"}
+        )
+        assert resolve_registry_access(part_env["part_light"], key, hass) == Permission.DENY
+
+    @pytest.mark.parametrize(
+        ("hub_state", "expected"),
+        [("GREEN", Permission.WRITE), ("YELLOW", Permission.READ), ("RED", Permission.DENY)],
+    )
+    def test_child_device_registry_resolvers_inherit_parent(
+        self, hass, part_env, hub_state, expected
+    ):
+        key = _make_access_key(devices={part_env["hub"].id: hub_state})
+        assert resolve_device_registry_write(part_env["part"].id, key, hass) == expected
+        assert resolve_device_registry_write(
+            part_env["dependent"].id, key, hass
+        ) == Permission.NO_ACCESS
+        if expected != Permission.DENY:
+            assert resolve_device_registry_access(part_env["part"].id, key, hass) == expected
+
+    def test_parent_red_beats_child_device_grant(self, hass, part_env):
+        key = _make_access_key(
+            devices={part_env["part"].id: "GREEN", part_env["hub"].id: "RED"}
+        )
+        assert resolve_device_registry_write(part_env["part"].id, key, hass) == Permission.DENY
+
+    def test_parent_hint_reaches_child_entity(self, hass, part_env):
+        key = _make_access_key()
+        key.permissions.devices[part_env["hub"].id] = _node("GREEN", "Hub hint")
+        assert get_effective_hint(key, part_env["part_light"], hass) == "Hub hint"
+        key.permissions.devices[part_env["part"].id] = _node("GREY", "Outlet hint")
+        assert get_effective_hint(key, part_env["part_light"], hass) == "Outlet hint"
+
+    def test_parent_device_target_reaches_parts_not_dependents(self, hass, part_env):
+        key = _make_access_key(domains={"light": "GREEN"})
+        result, _ = resolve_service_targets(
+            device_id=part_env["hub"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert part_env["part_light"] in result
+        assert part_env["dependent_light"] not in result
+
+        result, _ = resolve_service_targets(
+            device_id=part_env["part"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert result == [part_env["part_light"]]
+
+    def test_parent_target_still_filters_child_permissions(self, hass, part_env):
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["part"].id: "RED"}
+        )
+        result, _ = resolve_service_targets(
+            device_id=part_env["hub"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert part_env["part_light"] not in result
 
 
 class TestConfigEntryRegistryPolicy:

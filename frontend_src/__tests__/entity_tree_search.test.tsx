@@ -18,6 +18,7 @@ vi.mock("../api", () => ({
 }));
 
 import { EntityTree, matchesTreeSearch } from "../components/EntityTree";
+import { t } from "../i18n";
 
 const DEVICE_ID = "93d485bc30d4dc83aaf5efed8ea23fd3";
 const GHOST_DEVICE_ID = "deadbeefdeadbeefdeadbeefdeadbeef";
@@ -169,5 +170,78 @@ describe("permission tree search and device cleanup", () => {
     expect(await screen.findByText("zone")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Permission for domain zone" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Expand zone" })).not.toBeInTheDocument();
+  });
+  it("applies a RED main parent to its child device and the child's entities", async () => {
+    const PARENT_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const CHILD_ID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    mocks.getEntityTree.mockResolvedValue({
+      sensor: {
+        devices: {
+          [PARENT_ID]: {
+            device_id: PARENT_ID,
+            parent_device_id: null,
+            name: "Strip",
+            area_id: null,
+            area_name: null,
+            entities: ["sensor.strip_power"],
+          },
+        },
+        deviceless_entities: [],
+        entity_details: {
+          "sensor.strip_power": {
+            entity_id: "sensor.strip_power",
+            friendly_name: "Strip power",
+            device_id: PARENT_ID,
+            area_id: null,
+            area_name: null,
+            labels: [],
+          },
+        },
+      },
+      switch: {
+        devices: {
+          [CHILD_ID]: {
+            device_id: CHILD_ID,
+            parent_device_id: PARENT_ID,
+            name: "Outlet",
+            area_id: null,
+            area_name: null,
+            entities: ["switch.outlet"],
+          },
+        },
+        deviceless_entities: [],
+        entity_details: {
+          "switch.outlet": {
+            entity_id: "switch.outlet",
+            friendly_name: "Outlet",
+            device_id: CHILD_ID,
+            area_id: null,
+            area_name: null,
+            labels: [],
+          },
+        },
+      },
+    } satisfies EntityTreeData);
+
+    const { container } = render(
+      <EntityTree
+        accessKeyId="access-key-1"
+        permissions={{
+          domains: { switch: { state: "GREEN", hint: null } },
+          devices: { [PARENT_ID]: { state: "RED", hint: null } },
+          entities: {},
+        }}
+        onPermissionsChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Expand switch" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Expand Outlet" }));
+    await screen.findByText("switch.outlet");
+
+    const switchDomain = screen.getByRole("button", { name: "Collapse switch" }).closest(".tree-domain-group");
+    const effective = [...switchDomain!.querySelectorAll(".tree-effective")].map((node) => node.textContent);
+    const denied = `(${t("perms.stateDeny")})`;
+    expect(effective).toEqual([`(${t("perms.stateWrite")})`, denied, denied]);
+    expect(container).not.toHaveTextContent("Unmatched Device Permissions");
   });
 });

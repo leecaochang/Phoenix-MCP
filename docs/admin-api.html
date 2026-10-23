@@ -130,7 +130,7 @@ GET    /api/phoenix-mcp/admin/access-keys/{id}/scope                          Re
   "state": "GREEN",   // GREY | YELLOW | GREEN | RED
   "hint": "Rachel's desk lamp, not the ceiling light"  // optional, &lt;= 200 chars, null clears
 }</code></pre>
-        <p><code>resolve</code> returns the decision and the ancestor that made it: <code>{ entity_id, resolution_path: [{level, state}], effective, effective_hint }</code>.</p>
+        <p><code>resolve</code> returns the decision and the ancestor that made it: <code>{ entity_id, resolution_path: [{level, state}], effective, effective_hint }</code>. For an entity on a child device, the path lists the main device before the child device.</p>
         <p><code>integration-options</code> returns <code>{ integrations: [...] }</code>. Each row includes <code>entry_id</code>, <code>domain</code>, <code>title</code>, <code>device_count</code>, <code>deviceless_entity_count</code>, <code>registry_only_deviceless_count</code>, <code>required_domain_ids</code>, and <code>shared_device_count</code>.</p>
         <pre class="code" data-lang="json" data-label="Bulk selector body"><code>{
   "selector_type": "integration", // area | label | integration

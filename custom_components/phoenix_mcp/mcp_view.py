@@ -256,7 +256,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -3320,29 +3320,39 @@ def _device_child_write_error(
     *,
     restoring: bool,
 ) -> tuple[dict, str, str] | None:
-    """Block authorization-affecting edits when any child is not writable."""
+    """Block authorization-affecting edits when any child is not writable.
+
+    Children are the device's entities and, for a main device, its child
+    devices and their entities, which Core disables and places with it.
+    """
     affects_children = any(field in args for field in ("name", "area_id", "enabled"))
     if restoring:
         affects_children = affects_children or "disabled_by" in args
     if not affects_children:
         return None
+    snapshot = device_registry_snapshot(hass)
     blocked = [
         entity_id
-        for entity_id in device_registry_entity_ids(hass, device.id)
+        for entity_id in device_cascade_entity_ids(hass, device.id, snapshot=snapshot)
         if resolve_registry_access(
             entity_id, access_key, hass, force_registry_only=True
         )
         != Permission.WRITE
     ]
-    if not blocked:
+    blocked_parts = any(
+        resolve_device_registry_write(part_id, access_key, hass, snapshot=snapshot)
+        != Permission.WRITE
+        for part_id in snapshot.part_ids(device.id)
+    )
+    if not blocked and not blocked_parts:
         return None
     return (
         _tool_error(
             json.dumps(
                 {
                     "error": (
-                        "The device update would affect registry entities that are "
-                        "not writable by this access key."
+                        "The device update would affect registry entities or child "
+                        "devices that are not writable by this access key."
                     ),
                     "device_id": device.id,
                     "blocked_entities": blocked,
@@ -3394,7 +3404,7 @@ def _device_mesa_decision(
 ) -> _DeviceMesaDecision | tuple[dict, str, str]:
     """Resolve all device MESA actions across the exact attached membership."""
     if entity_ids is None:
-        entity_ids = device_registry_entity_ids(hass, device.id)
+        entity_ids = device_cascade_entity_ids(hass, device.id)
     else:
         entity_ids = sorted(set(entity_ids))
     mesa_active = (
@@ -3617,7 +3627,7 @@ async def _build_diff_set_device(
             "after": after_labels,
         }
     if device is not None and args.get("enabled") is False:
-        affected = device_registry_entity_ids(hass, device.id)
+        affected = device_cascade_entity_ids(hass, device.id)
         preview["affected_entities"] = affected
         preview["relationships"] = await _registry_relationships_preview(
             hass, affected
@@ -3901,7 +3911,7 @@ def _commit_set_device(
         body["labels_added"] = labels_added
         body["labels_removed"] = labels_removed
     if "enabled" in args and args["enabled"]:
-        entity_ids = device_registry_entity_ids(hass, device_id)
+        entity_ids = device_cascade_entity_ids(hass, device_id)
         body["activation"] = {
             "reload_or_restart_may_be_needed": any(
                 hass.states.get(entity_id) is None for entity_id in entity_ids
@@ -3936,6 +3946,7 @@ class _DeviceRemovalContext:
     owner_ids: list[str]
     affected_entity_ids: list[str]
     child_device_ids: list[str]
+    part_device_ids: list[str]
     fingerprint: str
 
 
@@ -4012,6 +4023,7 @@ def _device_removal_context_fingerprint(
     owner_ids: list[str],
     affected_entity_ids: list[str],
     child_device_ids: list[str],
+    part_device_ids: list[str],
 ) -> str:
     return hashlib.sha256(
         json.dumps(
@@ -4022,6 +4034,7 @@ def _device_removal_context_fingerprint(
                 "owner_ids": owner_ids,
                 "affected_entity_ids": affected_entity_ids,
                 "child_device_ids": child_device_ids,
+                "part_device_ids": part_device_ids,
                 "supports_removal": True,
             },
             sort_keys=True,
@@ -4113,19 +4126,43 @@ def _device_removal_context(
         return _tool_error("The owning config entry no longer exists."), "invalid_request", device_id
     if entry.domain == DOMAIN:
         return _tool_error("Phoenix MCP devices cannot be removed."), "denied", device_id
+    # Core deletes a device's child devices, and their entities, with the
+    # device. That happens only once its last owner is removed.
+    part_device_ids = (
+        list(device_snapshot.part_ids(device_id)) if owner_ids == [selected] else []
+    )
+    if any(
+        resolve_device_registry_write(part_id, access_key, hass, snapshot=device_snapshot)
+        != Permission.WRITE
+        for part_id in part_device_ids
+    ):
+        return (
+            _tool_error(
+                "Removing this device would also remove child devices that are "
+                "not writable by this access key."
+            ),
+            "denied",
+            device_id,
+        )
+    removed_device_ids = {device_id, *part_device_ids}
     affected_entity_ids = sorted(
         registry_entry.entity_id
         for registry_entry in er.async_get(hass).entities.values()
-        if registry_entry.device_id == device_id
+        if registry_entry.device_id in removed_device_ids
         and registry_entry.config_entry_id == selected
     )
-    child_device_ids = list(device_snapshot.child_ids(device_id))
+    child_device_ids = [
+        child_id
+        for child_id in device_snapshot.child_ids(device_id)
+        if child_id not in removed_device_ids
+    ]
     fingerprint = _device_removal_context_fingerprint(
         device_id,
         entry,
         owner_ids,
         affected_entity_ids,
         child_device_ids,
+        part_device_ids,
     )
     return _DeviceRemovalContext(
         device=device,
@@ -4134,6 +4171,7 @@ def _device_removal_context(
         owner_ids=owner_ids,
         affected_entity_ids=affected_entity_ids,
         child_device_ids=child_device_ids,
+        part_device_ids=part_device_ids,
         fingerprint=fingerprint,
     )
 
@@ -4223,6 +4261,7 @@ async def _build_diff_remove_device(
             hass, context.affected_entity_ids
         ),
         "child_devices_losing_parent_if_device_disappears": visible_children,
+        "child_devices_removed_with_device": context.part_device_ids,
         "remaining_owners": remaining_owners,
         "device_permission_references": _device_permission_references(
             data, context.device.id
@@ -4495,6 +4534,7 @@ async def _execute_remove_device(
         ),
         "owners_before": context.owner_ids,
         "affected_entities": context.affected_entity_ids,
+        "child_devices_removed_with_device": context.part_device_ids,
         "device_disappeared": disappeared,
         "remaining_owner_ids": remaining_owner_ids,
     }

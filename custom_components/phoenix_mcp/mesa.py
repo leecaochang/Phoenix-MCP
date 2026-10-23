@@ -251,9 +251,11 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     """
 
     def _device_entities(ent_reg: Any, device_id: str) -> list[str]:
+        # A targeted parent device reaches its child devices' entities too.
         return [
             e.entity_id
-            for e in er_mod.async_entries_for_device(ent_reg, device_id)
+            for target_id in (device_id, *device_registry_snapshot(hass).part_ids(device_id))
+            for e in er_mod.async_entries_for_device(ent_reg, target_id)
             if e.disabled_by is None
         ]
 

@@ -28,6 +28,7 @@ from .const import (
 )
 from .device_semantics import (
     DeviceRegistrySnapshot,
+    device_authority_chain,
     device_registry_snapshot,
     device_registry_snapshot_from_registry,
     effective_entity_area_id,
@@ -115,6 +116,9 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
     blocklist check). Home Companion access keys are limited to the companion control
     and read domains and sensor classes, and are never pass-through. The
     DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
+
+    The ancestor chain is entity, device, the main parent of a child device, then
+    domain. A child device with malformed ancestry confers NO_ACCESS.
     """
     # A non-string cannot name an entity, and a model does not always follow the
     # tool schema (for example a list where a string was declared). Treated as a
@@ -169,19 +173,23 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
         return Permission.WRITE
 
     permissions = access_key.permissions
-    device_id = entry.device_id if entry else None
+    device_chain = device_authority_chain(hass, entry.device_id if entry else None)
+    if device_chain is None:
+        return Permission.NO_ACCESS
 
-    entity_node = permissions.entities.get(entity_id)
-    device_node = permissions.devices.get(device_id) if device_id else None
-    domain_node = permissions.domains.get(domain)
+    nodes = (
+        permissions.entities.get(entity_id),
+        *(permissions.devices.get(device_id) for device_id in device_chain),
+        permissions.domains.get(domain),
+    )
 
     # Pass 1: RED check - walk entire ancestor chain before resolving any grant
-    for node in (entity_node, device_node, domain_node):
+    for node in nodes:
         if node is not None and node.state == "RED":
             return Permission.DENY
 
     # Pass 2: most specific non-GREY grant
-    for node in (entity_node, device_node, domain_node):
+    for node in nodes:
         if node is None:
             continue
         if node.state == "GREEN":
@@ -228,11 +236,14 @@ def resolve_registry_access(
 
     permissions = access_key.permissions
     domain = canonical_id.split(".", 1)[0]
-    device_node = permissions.devices.get(entry.device_id) if entry.device_id else None
-    domain_node = permissions.domains.get(domain)
+    # resolve() already refused a malformed chain and any RED ancestor.
+    device_chain = device_authority_chain(hass, entry.device_id) or ()
 
     inherited = Permission.NO_ACCESS
-    for node in (device_node, domain_node):
+    for node in (
+        *(permissions.devices.get(device_id) for device_id in device_chain),
+        permissions.domains.get(domain),
+    ):
         if node is None:
             continue
         if node.state == "GREEN":
@@ -276,6 +287,27 @@ def device_registry_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]
     )
 
 
+def device_cascade_entity_ids(
+    hass: HomeAssistant,
+    device_id: str,
+    *,
+    snapshot: DeviceRegistrySnapshot | None = None,
+) -> list[str]:
+    """Return a device's registry entities plus those of its child devices.
+
+    Core cascades deletion and disabling from a main device to its child
+    devices, and a child without its own area follows the parent's. A write to
+    the parent therefore reaches every entity listed here.
+    """
+    snapshot = snapshot or device_registry_snapshot(hass)
+    device_ids = {device_id, *snapshot.part_ids(device_id)}
+    return sorted(
+        entry.entity_id
+        for entry in er.async_get(hass).entities.values()
+        if entry.device_id in device_ids
+    )
+
+
 def _phoenix_owned_device(device: Any, hass: HomeAssistant) -> bool:
     """Whether a device belongs to Phoenix MCP and must remain unreachable."""
     for config_entry_id in device_config_entry_ids(device):
@@ -299,8 +331,9 @@ def resolve_device_registry_access(
 ) -> Permission:
     """Resolve read access to a device-registry entry.
 
-    An explicit device node authorizes the device even when it has no entities.
-    Otherwise one attached entity must pass the ordinary registry-aware entity
+    An explicit device node, or the node of a child device's main parent,
+    authorizes the device even when it has no entities. Otherwise one attached
+    entity must pass the ordinary registry-aware entity
     resolver. Pass-through access keys retain their Assist-exposure filter: a device
     with no exposed attached entity is not an alternate enumeration path.
     """
@@ -332,14 +365,12 @@ def resolve_device_registry_access(
             return Permission.NO_ACCESS
         return Permission.WRITE
 
-    device_node = access_key.permissions.devices.get(device_id)
-    if device_node is not None:
-        if device_node.state == "RED":
-            return Permission.DENY
-        if device_node.state == "GREEN":
-            return Permission.WRITE
-        if device_node.state == "YELLOW":
-            return Permission.READ
+    device_chain = device_authority_chain(hass, device_id)
+    if device_chain is None:
+        return Permission.NO_ACCESS
+    explicit = _device_chain_permission(access_key, device_chain)
+    if explicit is not None:
+        return explicit
 
     inherited = [
         resolve_registry_access(
@@ -370,7 +401,9 @@ def resolve_device_registry_write(
 
     Attached entities may make a device readable, but they never authorize a
     registry mutation that affects the whole device. Scoped callers therefore
-    need GREEN on the exact device node; pass-through remains unrestricted.
+    need GREEN on the device node, or on the main parent of a child device whose
+    own node is Grey; a RED parent blocks its children. Pass-through remains
+    unrestricted.
     """
     if not isinstance(device_id, str):
         return Permission.NOT_FOUND
@@ -382,16 +415,31 @@ def resolve_device_registry_write(
         return Permission.NO_ACCESS
     if access_key.pass_through:
         return Permission.WRITE
-    node = access_key.permissions.devices.get(device_id)
-    if node is None:
+    device_chain = device_authority_chain(hass, device_id)
+    if device_chain is None:
         return Permission.NO_ACCESS
-    if node.state == "GREEN":
-        return Permission.WRITE
-    if node.state == "YELLOW":
-        return Permission.READ
-    if node.state == "RED":
+    return _device_chain_permission(access_key, device_chain) or Permission.NO_ACCESS
+
+
+def _device_chain_permission(
+    access_key: AccessKeyRecord, device_chain: tuple[str, ...]
+) -> Permission | None:
+    """Resolve explicit device nodes along a device's authority chain.
+
+    A RED node anywhere on the chain denies; otherwise the most specific
+    non-Grey node grants. None means every node on the chain is Grey.
+    """
+    nodes = [access_key.permissions.devices.get(device_id) for device_id in device_chain]
+    if any(node is not None and node.state == "RED" for node in nodes):
         return Permission.DENY
-    return Permission.NO_ACCESS
+    for node in nodes:
+        if node is None:
+            continue
+        if node.state == "GREEN":
+            return Permission.WRITE
+        if node.state == "YELLOW":
+            return Permission.READ
+    return None
 
 
 def config_entry_registry_context(
@@ -684,15 +732,20 @@ def expand_service_targets(
             dids = [d for d in device_id if isinstance(d, str)]
         else:
             dids = []
-        for did in dids:
-            for entry in entity_registry.entities.values():
-                if (
-                    entry.device_id == did
-                    and entry.domain == service_domain
-                    and not entry.disabled_by
-                    and _eligible_for_indirect_expansion(entry)
-                ):
-                    candidates.add(entry.entity_id)
+        # Like HA's own target helper, a parent device reaches its parts too.
+        target_device_ids = {
+            target_id
+            for did in dids
+            for target_id in (did, *device_snapshot.part_ids(did))
+        }
+        for entry in entity_registry.entities.values():
+            if (
+                entry.device_id in target_device_ids
+                and entry.domain == service_domain
+                and not entry.disabled_by
+                and _eligible_for_indirect_expansion(entry)
+            ):
+                candidates.add(entry.entity_id)
 
     if area_id is not None:
         if isinstance(area_id, str):
@@ -965,8 +1018,8 @@ def get_effective_hint(
     if entity_node and entity_node.hint:
         return entity_node.hint
 
-    if entry and entry.device_id:
-        device_node = permissions.devices.get(entry.device_id)
+    for device_id in device_authority_chain(hass, entry.device_id if entry else None) or ():
+        device_node = permissions.devices.get(device_id)
         if device_node and device_node.hint:
             return device_node.hint
 

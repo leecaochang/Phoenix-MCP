@@ -114,24 +114,42 @@ interface Props {
   onOpenMesa?: (targetKey: string, scope: LinkScope, targetName?: string) => void;
 }
 
+// A child device's main parent sits between the child device and the domain,
+// matching the backend resolver.
+function chainStates(
+  states: NodeState[],
+): string {
+  if (states.includes("RED")) return "DENY";
+  for (const state of states) {
+    if (state === "GREEN") return "WRITE";
+    if (state === "YELLOW") return "READ";
+  }
+  return "NO_ACCESS";
+}
+
+function deviceStates(
+  deviceId: string | null,
+  parentDeviceId: string | null | undefined,
+  permissions: PermissionTree,
+): NodeState[] {
+  const states: NodeState[] = [];
+  if (deviceId) states.push(permissions.devices[deviceId]?.state ?? "GREY");
+  if (deviceId && parentDeviceId) states.push(permissions.devices[parentDeviceId]?.state ?? "GREY");
+  return states;
+}
+
 function effectivePermission(
   entityId: string,
   domainKey: string,
   deviceId: string | null,
+  parentDeviceId: string | null | undefined,
   permissions: PermissionTree,
 ): string {
-  const eState = permissions.entities[entityId]?.state ?? "GREY";
-  const dState = deviceId ? (permissions.devices[deviceId]?.state ?? "GREY") : "GREY";
-  const domState = permissions.domains[domainKey]?.state ?? "GREY";
-
-  if (eState === "RED" || dState === "RED" || domState === "RED") return "DENY";
-  if (eState === "GREEN") return "WRITE";
-  if (eState === "YELLOW") return "READ";
-  if (dState === "GREEN") return "WRITE";
-  if (dState === "YELLOW") return "READ";
-  if (domState === "GREEN") return "WRITE";
-  if (domState === "YELLOW") return "READ";
-  return "NO_ACCESS";
+  return chainStates([
+    permissions.entities[entityId]?.state ?? "GREY",
+    ...deviceStates(deviceId, parentDeviceId, permissions),
+    permissions.domains[domainKey]?.state ?? "GREY",
+  ]);
 }
 
 function effectiveForNode(
@@ -139,22 +157,11 @@ function effectiveForNode(
   nodeId: string,
   domainKey: string,
   permissions: PermissionTree,
+  parentDeviceId?: string | null,
 ): string {
-  if (nodeType === "domain") {
-    const s = permissions.domains[domainKey]?.state ?? "GREY";
-    if (s === "GREEN") return "WRITE";
-    if (s === "YELLOW") return "READ";
-    if (s === "RED") return "DENY";
-    return "NO_ACCESS";
-  }
-  const dState = permissions.devices[nodeId]?.state ?? "GREY";
-  const domState = permissions.domains[domainKey]?.state ?? "GREY";
-  if (dState === "RED" || domState === "RED") return "DENY";
-  if (dState === "GREEN") return "WRITE";
-  if (dState === "YELLOW") return "READ";
-  if (domState === "GREEN") return "WRITE";
-  if (domState === "YELLOW") return "READ";
-  return "NO_ACCESS";
+  const domainState = permissions.domains[domainKey]?.state ?? "GREY";
+  if (nodeType === "domain") return chainStates([domainState]);
+  return chainStates([...deviceStates(nodeId, parentDeviceId, permissions), domainState]);
 }
 
 interface HintInputProps {
@@ -270,6 +277,7 @@ interface EntityRowProps {
   entityId: string;
   friendlyName: string | null;
   deviceId: string | null;
+  parentDeviceId?: string | null;
   domainKey: string;
   permissions: PermissionTree;
   accessKeyId: string;
@@ -287,12 +295,12 @@ interface EntityRowProps {
 }
 
 function EntityRow({
-  entityId, friendlyName, deviceId, domainKey, permissions,
+  entityId, friendlyName, deviceId, parentDeviceId, domainKey, permissions,
   accessKeyId, filterText, isGhost, onPermChange, onEntityClick, revealEntity, revealDepth, revealNonce, mesaProfileEntities, onOpenMesa, globalHints, onGlobalHintsChange,
 }: EntityRowProps) {
   const entityNode = permissions.entities[entityId];
   const state: NodeState = entityNode?.state ?? "GREY";
-  const effective = effectivePermission(entityId, domainKey, deviceId, permissions);
+  const effective = effectivePermission(entityId, domainKey, deviceId, parentDeviceId, permissions);
   const rowRef = React.useRef<HTMLDivElement>(null);
   const [permError, setPermError] = useState<string | null>(null);
   const isRevealed = (revealDepth ?? "entity") === "entity" && revealEntity === entityId;
@@ -439,7 +447,8 @@ function DeviceGroup({
   const [permError, setPermError] = useState<string | null>(null);
   const deviceNode = permissions.devices[deviceId];
   const state: NodeState = deviceNode?.state ?? "GREY";
-  const effective = effectiveForNode("device", deviceId, domainKey, permissions);
+  const parentDeviceId = domainData.devices[deviceId]?.parent_device_id ?? null;
+  const effective = effectiveForNode("device", deviceId, domainKey, permissions, parentDeviceId);
   const isDynamic = state !== "GREY";
   const headerRef = React.useRef<HTMLDivElement>(null);
   const isRevealed = revealDepth === "device" && !!revealEntity && entityIds.includes(revealEntity);
@@ -546,6 +555,7 @@ function DeviceGroup({
                 entityId={eid}
                 friendlyName={detail?.friendly_name ?? null}
                 deviceId={deviceId}
+                parentDeviceId={parentDeviceId}
                 domainKey={domainKey}
                 permissions={permissions}
                 accessKeyId={accessKeyId}

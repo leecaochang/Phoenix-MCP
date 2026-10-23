@@ -55,6 +55,45 @@ class DeviceRegistrySnapshot:
             return None
         return self.child_parent_by_id.get(device_id)
 
+    def part_ids(self, device_id: str | None) -> tuple[str, ...]:
+        """Return the 2026.9 child devices that are parts of one main device.
+
+        Unlike child_ids, via-device dependents are excluded: they are separate
+        products reached through this device, not parts of it. A device that is
+        itself a child has no parts, since Core allows one level only.
+        """
+        if not isinstance(device_id, str) or device_id in self.child_parent_by_id:
+            return ()
+        return tuple(sorted(
+            child_id
+            for child_id, parent_id in self.child_parent_by_id.items()
+            if parent_id == device_id
+        ))
+
+
+def device_authority_chain(
+    hass: HomeAssistant, device_id: str | None
+) -> tuple[str, ...] | None:
+    """Return a device and, for a child device, its main parent.
+
+    A 2026.9 child device is a part of its parent product, so a permission node
+    on the parent governs the child as an ancestor, between the child device and
+    the domain. via_device describes connectivity and is not followed. Returns an
+    empty tuple without a device and None when a child's parent is missing or is
+    itself a child: Core forbids both, and callers fail closed on them.
+    """
+    if not isinstance(device_id, str) or not device_id:
+        return ()
+    registry = dr.async_get(hass)
+    device = registry.async_get(device_id)
+    parent_id = getattr(device, "parent_device_id", None) if device is not None else None
+    if parent_id is None:
+        return (device_id,)
+    parent = registry.async_get(parent_id) if isinstance(parent_id, str) and parent_id else None
+    if parent is None or getattr(parent, "parent_device_id", None) is not None:
+        return None
+    return (device_id, parent_id)
+
 
 def _collection_entries(collection: object) -> Collection[Any]:
     """Normalize legacy mappings and HA 2026.9 collection views."""

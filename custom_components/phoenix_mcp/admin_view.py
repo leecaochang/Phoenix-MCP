@@ -57,7 +57,7 @@ from .const import (
     ACCESS_KEY_NAME_REGEX,
 )
 from .data import PhoenixData
-from .device_semantics import device_registry_snapshot, effective_entity_area_id
+from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
 from .helpers import cancel_expiry_timer, panel_catalog
 from .locales import canonical_language
 from .policy_engine import (
@@ -429,6 +429,7 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
                         d_area_name = da.name if da else None
                     tree[domain]["devices"][device_id] = {
                         "device_id": device_id,
+                        "parent_device_id": device_snapshot.child_parent_id(device_id),
                         "name": device.name_by_user or device.name or device_id,
                         "area_id": d_area_id,
                         "area_name": d_area_name,
@@ -437,6 +438,7 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
                 else:
                     tree[domain]["devices"][device_id] = {
                         "device_id": device_id,
+                        "parent_device_id": None,
                         "name": device_id,
                         "area_id": None,
                         "area_name": None,
@@ -564,13 +566,14 @@ def _build_resolution_path(entity_id: str, access_key: Any, hass: HomeAssistant)
     domain_node = access_key.permissions.domains.get(domain)
     path.append({"level": f"domain:{domain}", "state": domain_node.state if domain_node else "GREY"})
 
-    if entry and entry.device_id:
-        device = dr_reg.async_get(entry.device_id)
+    # Outermost first: a child device's main parent sits above the child.
+    for device_id in reversed(device_authority_chain(hass, entry.device_id if entry else None) or ()):
+        device = dr_reg.async_get(device_id)
         if device:
-            device_name = device.name_by_user or device.name or entry.device_id
+            device_name = device.name_by_user or device.name or device_id
         else:
-            device_name = entry.device_id
-        device_node = access_key.permissions.devices.get(entry.device_id)
+            device_name = device_id
+        device_node = access_key.permissions.devices.get(device_id)
         path.append({"level": f"device:{device_name}", "state": device_node.state if device_node else "GREY"})
 
     entity_node = access_key.permissions.entities.get(entity_id)

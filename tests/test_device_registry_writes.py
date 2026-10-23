@@ -184,6 +184,53 @@ async def test_child_device_update_uses_child_registry_api(
     assert updated.area_id == device_env["area_id"]
 
 
+@pytest.mark.usefixtures("requires_child_devices")
+@pytest.mark.parametrize(
+    "blocked_node",
+    [
+        {"entity": PermissionNode(state="YELLOW")},
+        {"device": PermissionNode(state="RED")},
+    ],
+)
+async def test_parent_disable_requires_write_on_child_devices(
+    hass: HomeAssistant, device_env, blocked_node
+):
+    registry = dr.async_get(hass)
+    part = registry.async_get_or_create_child(
+        config_entry_id=device_env["owner"].entry_id,
+        identifiers={("test_integration", "disable-part")},
+        name="Disable part",
+        parent_device_id=device_env["device_id"],
+    )
+    part_entity = er.async_get(hass).async_get_or_create(
+        "switch", "test_integration", "disable-part-switch",
+        config_entry=device_env["owner"],
+        device_id=part.id,
+    ).entity_id
+    hass.states.async_set(part_entity, "on")
+    data = await _data(hass)
+
+    diff = await _build_diff_set_device(
+        {"device_id": device_env["device_id"], "enabled": False},
+        _access_key(device_env["device_id"]),
+        hass,
+    )
+    assert part_entity in diff["preview"]["affected_entities"]
+
+    key = _access_key(device_env["device_id"])
+    if "entity" in blocked_node:
+        key.permissions.entities[part_entity] = blocked_node["entity"]
+    else:
+        key.permissions.devices[part.id] = blocked_node["device"]
+    content, outcome, _ = await _execute_set_device(
+        {"device_id": device_env["device_id"], "enabled": False}, key, hass, data
+    )
+
+    assert outcome == "denied"
+    assert "child devices" in content["content"][0]["text"]
+    assert registry.async_get(device_env["device_id"]).disabled_by is None
+
+
 async def test_nullable_fields_labels_and_version_restore(
     hass: HomeAssistant, device_env
 ):

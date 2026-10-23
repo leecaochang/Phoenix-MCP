@@ -462,6 +462,8 @@ export interface EntityInfo {
 
 export interface DeviceInfo {
   device_id: string;
+  /** Main parent of a child device; its permission node applies to the child. */
+  parent_device_id?: string | null;
   name: string;
   area_id: string | null;
   area_name: string | null;

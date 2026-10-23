@@ -30,6 +30,8 @@ from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
     ALL_ADMIN_VIEWS,
+    _build_entity_tree,
+    _build_resolution_path,
     _bulk_permission_selection,
     _wipe_flag,
 )
@@ -935,6 +937,49 @@ async def test_area_bulk_selection_includes_child_device_inherited_area(hass):
 
     assert selection is not None
     assert selection["entity_ids"] == [entity.entity_id]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_tree_and_resolution_path_show_child_device_parent(hass):
+    from types import SimpleNamespace
+
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+
+    entry = MockConfigEntry(domain="test_integration", entry_id="child-tree")
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(entry.domain, "tree-parent")},
+        name="Strip",
+    )
+    child = registry.async_get_or_create_child(
+        config_entry_id=entry.entry_id,
+        identifiers={(entry.domain, "tree-child")},
+        name="Outlet",
+        parent_device_id=parent.id,
+    )
+    entity = er.async_get(hass).async_get_or_create(
+        "switch", entry.domain, "tree-child-switch", config_entry=entry, device_id=child.id
+    )
+    hass.states.async_set(entity.entity_id, "on")
+
+    tree = _build_entity_tree(hass)
+    assert tree["switch"]["devices"][child.id]["parent_device_id"] == parent.id
+
+    access_key = SimpleNamespace(permissions=PermissionTree(
+        devices={parent.id: PermissionNode(state="RED")}
+    ))
+    path = _build_resolution_path(entity.entity_id, access_key, hass)
+    assert [step["level"] for step in path] == [
+        "global", "domain:switch", "device:Strip", "device:Outlet", f"entity:{entity.entity_id}",
+    ]
+    assert path[2]["state"] == "RED"
 
 
 @pytest.mark.asyncio

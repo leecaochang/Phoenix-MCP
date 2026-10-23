@@ -77,6 +77,7 @@
 
         <h2 id="how-a-permission-is-resolved">How a permission is resolved</h2>
         <p>When a request arrives for an entity, Phoenix MCP walks the ancestor chain (entity, then device, then domain) twice.</p>
+        <p>Some products are registered as one main device with child devices for their parts, such as the outlets of a power strip. For an entity on a child device, the main device is an extra ancestor between the child device and the domain. A RED main device blocks all of its parts, a GREEN or YELLOW main device grants them unless the child device or entity says otherwise, and the main device's hint applies when the child has none. A device that is only connected through a hub or bridge does not inherit from the hub.</p>
 
         <figure class="diagram">
           <svg viewBox="0 0 720 300" role="img" xmlns="http://www.w3.org/2000/svg">
