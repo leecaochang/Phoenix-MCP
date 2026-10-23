@@ -255,7 +255,7 @@ from .tool_defs import (
     _TOOL_ANNOTATIONS,
 )
 from .audit import Outcome
-from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
+from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
 from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
@@ -4303,7 +4303,7 @@ async def _tool_remove_device(
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
     error = unknown_argument_error("remove_device", args)
     if error:
-        return _tool_error(error), "invalid_request", "remove_device"
+        return _tool_refused_before_write(error), "invalid_request", "remove_device"
     resolved = await _resolve_device_removal_context(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
@@ -5030,7 +5030,7 @@ async def _tool_delete_entity(
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
     error = unknown_argument_error("delete_entity", args)
     if error:
-        return _tool_error(error), "invalid_request", "delete_entity"
+        return _tool_refused_before_write(error), "invalid_request", "delete_entity"
     pre = _registry_write_precheck(args, access_key, hass, "delete_entity", data)
     if pre is not None:
         return pre
@@ -8133,16 +8133,17 @@ async def _call_tool(
         raise
     if not household_tool_access(tool_name):
         return _tool_error("Forbidden."), "denied", tool_name
+    # Every refusal below precedes the handler, so nothing can have been written.
     if error := tool_arguments_error(arguments):
-        return _tool_error(error), "invalid_request", tool_name
+        return _tool_refused_before_write(error), "invalid_request", tool_name
     decoded = decode_container_strings(tool_name, arguments)
     if decoded is not arguments:
         if error := tool_arguments_error(decoded):
-            return _tool_error(error), "invalid_request", tool_name
+            return _tool_refused_before_write(error), "invalid_request", tool_name
         arguments = decoded
     from .const import APPROVAL_TARGETS_KEY
     if APPROVAL_TARGETS_KEY in arguments:
-        return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
+        return _tool_refused_before_write("Approval target bindings are server-owned."), "invalid_request", tool_name
     from .home_companion import is_companion, authorize_call, run_request, record_outcome
     if is_companion(access_key):
         refusal = authorize_call(access_key, tool_name, arguments)
@@ -8169,11 +8170,11 @@ async def _call_tool(
     # handler's migration guidance.
     if tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS:
         if error := unknown_argument_error(tool_name, arguments):
-            return _tool_error(error), "invalid_request", tool_name
+            return _tool_refused_before_write(error), "invalid_request", tool_name
         if not set(arguments) & set(_RETIRED_REPLACEMENTS.get(tool_name, {})):
             arguments, error = scalar_arguments(tool_name, arguments)
             if error:
-                return _tool_error(error), "invalid_request", tool_name
+                return _tool_refused_before_write(error), "invalid_request", tool_name
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     from .request_authority import dispatch_request_id
     request_context = dispatch_request_id.set(request_id)

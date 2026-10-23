@@ -4625,6 +4625,22 @@ class _ToolBatchResult:
     stop_turn: bool
     authority_lost: bool
     write_started: bool = False
+    # A call's outcome could not be established; the turn must end with a
+    # recovery barrier instead of another model round.
+    outcome_unknown: bool = False
+
+
+# The answers a round records when one call's outcome is unknown. The turn ends
+# there, so the model reads them only on a later turn, after Needs Attention
+# was reviewed.
+_UNKNOWN_OUTCOME_RESULT = (
+    "Outcome unknown: this action may have been applied in full, in part, or not at all, and Phoenix "
+    "MCP stopped the turn. Do not repeat it. Check its effect in Home Assistant first."
+)
+_NOT_RUN_AFTER_UNKNOWN = (
+    "Not run: an earlier call in this response has an unknown outcome, so the turn stopped before this "
+    "call. Send it again only if it is still needed after that outcome is checked."
+)
 
 
 async def _run_tool_batch(
@@ -4643,7 +4659,9 @@ async def _run_tool_batch(
     EVERY tool_use id gets a result even when nothing was dispatched: Anthropic
     requires each one answered in the next message, so a blocked call still
     appends a synthetic error rather than being skipped. That is why this drains
-    the whole batch instead of returning early.
+    the whole batch instead of returning early. An unknown outcome stops the
+    batch but still answers the uncertain call and every call after it, because
+    the returned conversation is what the browser sends on the next turn.
 
     The access key is re-resolved per call (_current_dispatch_access_key), so a mid-turn
     revoke, expiry, kill switch or cap narrowing is honored BEFORE any side
@@ -4656,6 +4674,7 @@ async def _run_tool_batch(
     stop_turn = False
     authority_lost = False
     write_started = False
+    outcome_unknown = False
 
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
@@ -4708,12 +4727,15 @@ async def _run_tool_batch(
                     client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
                 ),
             )
-        except BaseException:
+        except BaseException as exc:
             # Creation may have saved a queue entry before dispatch was interrupted.
             for saved in data.store.get_pending_approvals():
                 if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
                     await _cancel_agent_approval(hass, data, saved["id"])
-            raise
+            if not isinstance(exc, RecoveryRequired):
+                raise
+            outcome_unknown = True
+            break
         result = dispatch_tool_result(resp_msg)
         if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
             authority_lost = stop_turn = True
@@ -4757,7 +4779,8 @@ async def _run_tool_batch(
             if status in (STATUS_FAILED, "execution_failed"):
                 # The executor may have applied part of the approved action.
                 # Do not let the next model round turn its error into a replay.
-                raise RecoveryRequired("An approved action has an uncertain outcome.")
+                outcome_unknown = True
+                break
             if status in (STATUS_APPROVED, STATUS_REJECTED):
                 human_resolved = True
         is_error = bool(result.get("isError"))
@@ -4782,10 +4805,19 @@ async def _run_tool_batch(
         results.append({"tool_use_id": tc.get("id"), "tool_name": name,
                         "result_text": model_text, "images": images, "is_error": is_error})
 
+    if outcome_unknown:
+        # Every earlier call appended its result, so the uncertain call is the
+        # first one left unanswered and the rest never started.
+        for index, tc in enumerate(tool_calls[len(results):]):
+            results.append({"tool_use_id": tc.get("id"),
+                            "tool_name": str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH],
+                            "result_text": _NOT_RUN_AFTER_UNKNOWN if index else _UNKNOWN_OUTCOME_RESULT,
+                            "is_error": True})
+
     return _ToolBatchResult(
         results=results, human_resolved=human_resolved,
         stop_turn=stop_turn, authority_lost=authority_lost,
-        write_started=write_started,
+        write_started=write_started, outcome_unknown=outcome_unknown,
     )
 
 
@@ -5025,17 +5057,10 @@ async def async_run_agent_turn(
                 break
             continue
         dispatch_started = True
-        try:
-            batch = await _run_tool_batch(
-                tool_calls, hass=hass, data=data, access_key_id=access_key_id,
-                client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
-            )
-        except RecoveryRequired:
-            await emit("error", {"code": "outcome_unknown", "retryable": False,
-                                 "message": "An action outcome is unknown. Check Phoenix MCP > Needs Attention before retrying."})
-            turn_errored = True
-            stop_reason = "error"
-            break
+        batch = await _run_tool_batch(
+            tool_calls, hass=hass, data=data, access_key_id=access_key_id,
+            client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
+        )
         results = batch.results
         write_started = write_started or batch.write_started
         human_resolved = batch.human_resolved
@@ -5043,6 +5068,14 @@ async def async_run_agent_turn(
         authority_lost = batch.authority_lost
         if results:
             provider.append_tool_results(messages, results)
+        if batch.outcome_unknown:
+            # Appended above first, so the conversation handed back to the
+            # browser stays valid for the provider once the barrier is reviewed.
+            await emit("error", {"code": "outcome_unknown", "retryable": False,
+                                 "message": "An action outcome is unknown. Check Phoenix MCP > Needs Attention before retrying."})
+            turn_errored = True
+            stop_reason = "error"
+            break
         # A human approved or rejected an action this round: reset the runaway
         # guard, since a human is actively gating the loop.
         if human_resolved:

@@ -38,7 +38,7 @@ from ..const import CAP_DENY, DOMAIN, FILESYSTEM_ALLOWED_DIRS, MAX_FILE_BYTES, R
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap, redact_secrets_in_text as _redact_secrets_in_text, str_arg, str_list_arg, version_summary_fields as _version_summary
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _read_text_capped, _record_version, _restore_ctx, _text_file_cas_conflict, _tool_error, _tool_success, _truncate, _usable_path_arg, _version_content_payload, _write_text_atomic, redaction_sentinel_path
+from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _read_text_capped, _record_version, _restore_ctx, _text_file_cas_conflict, _tool_error, _tool_refused_before_write, _tool_success, _truncate, _usable_path_arg, _version_content_payload, _write_text_atomic, redaction_sentinel_path
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes, yaml_patch
 
@@ -337,7 +337,7 @@ async def _tool_write_file(
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "write_file"
     error = unknown_argument_error("write_file", args)
     if error:
-        return _tool_error(error), "invalid_request", "write_file"
+        return _tool_refused_before_write(error), "invalid_request", "write_file"
     pre = _file_write_precheck(args, hass, "write_file")
     if pre is not None:
         return pre
@@ -850,7 +850,7 @@ async def _tool_set_yaml_config(
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_yaml_config"
     error = unknown_argument_error("set_yaml_config", args)
     if error:
-        return _tool_error(error), "invalid_request", "set_yaml_config"
+        return _tool_refused_before_write(error), "invalid_request", "set_yaml_config"
     pre = _yaml_write_precheck(args, "set_yaml_config")
     if pre is not None:
         return pre

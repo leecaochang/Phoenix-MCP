@@ -116,6 +116,21 @@ def _tool_error(message: str) -> dict:
     return {"content": [{"type": "text", "text": message}], "isError": True}
 
 
+class RefusedBeforeWrite(dict):
+    """A tool error returned before the call could write anything.
+
+    It serializes as the ordinary error dict, so clients see no difference, and
+    tool text cannot create one. Phoenix's agent loops hand it back to the model
+    instead of holding an unknown-outcome barrier. A copy that drops the type
+    keeps that barrier, so losing the marker fails closed.
+    """
+
+
+def _tool_refused_before_write(message: str) -> dict:
+    """Return a tool error for a refusal made before any write could start."""
+    return RefusedBeforeWrite(_tool_error(message))
+
+
 def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
     """Return an MCP tool result for a pending admin approval.
 
@@ -687,8 +702,9 @@ def _cas_conflict(
     current_hash = content_hash(current) if current is not None else None
     if current_hash == expected:
         return None
+    # Every caller returns this before its write starts.
     return (
-        _tool_error(
+        _tool_refused_before_write(
             "This configuration changed since you last read it (expected_hash no "
             "longer matches). Re-read it and reapply your change."
         ),

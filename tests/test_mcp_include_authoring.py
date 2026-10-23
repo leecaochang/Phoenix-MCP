@@ -30,7 +30,9 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 from custom_components.phoenix_mcp.tools.authoring import (
+    _automation_op_error,
     _build_diff_create_script,
     _build_diff_delete_automation,
     _execute_delete_automation,
@@ -464,6 +466,7 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in (env / "automations.yaml").read_text(encoding="utf-8")
 
         content, outcome, _ = await _execute_delete_automation(
@@ -535,6 +538,7 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in (env / "scripts/hello.yaml").read_text(encoding="utf-8")
 
     async def test_stale_split_scene_delete_replay_is_refused(self, hass, env):
@@ -585,4 +589,14 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in (env / "scenes/pack.yaml").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(("kind", "marked"), [("conflict", True), ("io_error", False), ("refused", False)])
+def test_only_an_automation_conflict_is_marked_as_refused_before_writing(kind, marked):
+    # yaml_includes returns conflicts before it writes; an I/O error may follow
+    # a partial write, and other refusals already have a known outcome.
+    content, _, _ = _automation_op_error(yi.OpResult(ok=False, error_kind=kind, message="m"), "edit_automation")
+    assert isinstance(content, RefusedBeforeWrite) is marked
+    assert content == {"content": [{"type": "text", "text": "m"}], "isError": True}

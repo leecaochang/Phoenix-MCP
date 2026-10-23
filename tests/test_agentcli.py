@@ -2236,6 +2236,13 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
         assert provider.i == 1
         assert data.agent_recovery.blocks("tid")
         assert any(n == "error" and p["code"] == "outcome_unknown" for n, p in events)
+        # The returned conversation still answers the call, so the next turn
+        # is accepted by the provider once the barrier is reviewed.
+        returned = next(p["messages"] for n, p in events if n == "messages")
+        assert returned[-1]["tool_results"] == [{
+            "tool_use_id": "tu1", "tool_name": "call_service",
+            "result_text": agentcli._UNKNOWN_OUTCOME_RESULT, "is_error": True,
+        }]
         return
     # The executed result flows back to the transcript as the tool_result summary,
     # with the operator-accepted note appended so the model treats the approved
@@ -2244,6 +2251,134 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
     assert tr["summary"].startswith("applied")
     assert "reviewed this exact change and approved it" in tr["summary"]
     assert names[-1] == "done"
+
+
+class _ClaudeShapedProvider(_ScriptedProvider):
+    """Scripted turns that keep the conversation in Anthropic's message shapes."""
+
+    def __init__(self, turns: list[list[dict]]) -> None:
+        super().__init__(turns)
+        self._claude = ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k"))
+
+    def append_tool_results(self, messages, results):
+        self._claude.append_tool_results(messages, results)
+
+
+def _tool_use_done(*calls: tuple[str, str]) -> dict:
+    """A tool_use stop whose assistant message carries the calls as Anthropic blocks."""
+    return {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+        "role": "assistant",
+        "content": [{"type": "tool_use", "id": call_id, "name": name, "input": {}} for call_id, name in calls],
+    }}
+
+
+def _unanswered_tool_uses(messages: list[dict]) -> list[str]:
+    """Return tool_use ids that the next message does not answer, the rule Anthropic enforces."""
+    missing = []
+    for index, message in enumerate(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        after = messages[index + 1] if index + 1 < len(messages) else {}
+        answered = {block.get("tool_use_id") for block in after.get("content", [])
+                    if isinstance(block, dict) and block.get("type") == "tool_result"} \
+            if after.get("role") == "user" and isinstance(after.get("content"), list) else set()
+        missing += [block["id"] for block in message["content"]
+                    if block.get("type") == "tool_use" and block["id"] not in answered]
+    return missing
+
+
+@pytest.mark.asyncio
+async def test_unknown_outcome_answers_every_call_in_the_round(hass):
+    # A read succeeds, the next write's outcome is unknown, and a third call
+    # never starts. The turn ends there, but the conversation handed back to the
+    # browser answers all three, so the next turn is not refused by the provider.
+    provider = _ClaudeShapedProvider([[
+        {"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
+        {"type": agentcli.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
+        {"type": agentcli.EV_TOOL, "id": "tu3", "name": "call_service", "input": {}},
+        _tool_use_done(("tu1", "get_state"), ("tu2", "call_service"), ("tu3", "call_service")),
+    ]])
+    data = _loop_data()
+
+    async def dispatch(method, tool_id, params, *args, **kwargs):
+        if params["name"] == "get_state":
+            return {"result": {"content": [{"type": "text", "text": "on"}]}}, "m", "r", "allowed"
+        # An error after the handler ran: the write may have been applied.
+        return {"result": {"content": [{"type": "text", "text": "Failed."}], "isError": True}}, "m", "r", "invalid_request"
+
+    fake_dispatch = AsyncMock(side_effect=dispatch)
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+        await async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    assert fake_dispatch.await_count == 2  # the call after the unknown outcome never ran
+    assert provider.i == 1  # and no further model round turned the error into a replay
+    assert data.agent_recovery.blocks("tid")
+    assert [p["code"] for n, p in events if n == "error"] == ["outcome_unknown"]
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    answers = {block["tool_use_id"]: block for block in returned[-1]["content"]}
+    assert answers["tu1"]["content"][0]["text"] == "on" and "is_error" not in answers["tu1"]
+    assert answers["tu2"]["content"][0]["text"] == agentcli._UNKNOWN_OUTCOME_RESULT
+    assert answers["tu3"]["content"][0]["text"] == agentcli._NOT_RUN_AFTER_UNKNOWN
+    assert answers["tu2"]["is_error"] is answers["tu3"]["is_error"] is True
+    assert events[-1] == ("done", {"stop_reason": "error"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marked", [True, False])
+async def test_a_refusal_before_writing_returns_to_the_model(hass, marked):
+    # A stale expected_hash is refused before anything is written, so the model
+    # gets the error and can re-read. The same error without the server-owned
+    # marker keeps the unknown-outcome barrier: losing the marker fails closed.
+    from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+
+    provider = _ClaudeShapedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "edit_dashboard_card", "input": {}},
+         _tool_use_done(("tu1", "edit_dashboard_card"))],
+        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    stale = "This configuration changed since you last read it (expected_hash no longer matches)."
+    result = _tool_refused_before_write(stale) if marked else _tool_error(stale)
+    fake_dispatch = AsyncMock(return_value=({"result": result}, "m", "r", "invalid_request"))
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+        await async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    errors = [p["code"] for n, p in events if n == "error"]
+    if marked:
+        assert provider.i == 2 and errors == []
+        assert not data.agent_recovery.blocks("tid")
+        assert data.agent_recovery.records("tid") == []
+        answer = returned[2]["content"][0]
+        assert answer["is_error"] is True and answer["content"][0]["text"] == stale
+        assert events[-1] == ("done", {"stop_reason": "end_turn"})
+    else:
+        assert provider.i == 1 and errors == ["outcome_unknown"]
+        assert data.agent_recovery.blocks("tid")
 
 
 @pytest.mark.asyncio

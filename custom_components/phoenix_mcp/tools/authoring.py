@@ -46,7 +46,10 @@ from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_success, _truncate
+from ..tool_common import (
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
+    _tool_success, _truncate,
+)
 from ..policy_engine import Permission, filter_entities_for_access_key, resolve
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
@@ -363,10 +366,21 @@ def _automation_argument_error(args: dict, *, create: bool) -> str | None:
     return " ".join(findings) if findings else None
 
 
+def _op_refusal(op: yaml_includes.OpResult) -> dict:
+    """Return a failed operation's tool error.
+
+    yaml_includes returns every conflict before it writes, so a conflict is a
+    refusal before any write.
+    """
+    if op.error_kind == "conflict":
+        return _tool_refused_before_write(op.error_text)
+    return _tool_error(op.error_text)
+
+
 def _automation_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[dict, str, str]:
     """Map identity and storage refusals to the existing tool envelope."""
     outcome = "invalid_request" if op.error_kind in ("conflict", "io_error") else "denied"
-    return _tool_error(op.error_text), outcome, tool_name
+    return _op_refusal(op), outcome, tool_name
 
 
 async def _automation_write_precheck(
@@ -644,7 +658,7 @@ async def _execute_delete_automation(
                 await hass.async_add_executor_job(_write_automations_yaml, path, filtered)
             elif not op.ok:
                 outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _tool_error(op.error_text), outcome, "delete_automation"
+                return _op_refusal(op), outcome, "delete_automation"
             else:
                 removed = op.before
         await hass.services.async_call("automation", "reload", blocking=True)
@@ -963,7 +977,7 @@ async def _execute_delete_script(
                 await hass.async_add_executor_job(_write_scripts_yaml, path, scripts)
             elif not op.ok:
                 outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _tool_error(op.error_text), outcome, "delete_script"
+                return _op_refusal(op), outcome, "delete_script"
             else:
                 before_cfg = op.before
         await hass.services.async_call("script", "reload", blocking=True)
@@ -1458,7 +1472,7 @@ async def _execute_delete_scene(
                 )
                 if not op.ok:
                     outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                    return _tool_error(op.error_text), outcome, "delete_scene"
+                    return _op_refusal(op), outcome, "delete_scene"
                 existing = op.before
         await hass.services.async_call("scene", "reload", blocking=True)
         # Reloading scenes.yaml does not remove the scene's entity-registry entry.

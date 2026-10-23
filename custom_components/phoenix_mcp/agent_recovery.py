@@ -291,6 +291,8 @@ async def dispatch_agent_tool(
     client_ip: str, base_url: str,
 ) -> tuple:
     """One dispatch, with no retry after the durable boundary."""
+    from .tool_common import RefusedBeforeWrite
+
     recovery = data.agent_recovery
     # Unknown names are refused before a handler can run. Do not turn a model
     # typo into a durable claim that an action might have reached HA.
@@ -314,6 +316,10 @@ async def dispatch_agent_tool(
                 await recovery.received(request_id)
             elif isinstance(result, dict) and outcome in ("denied", "not_found"):
                 await recovery.received(request_id)
+            elif isinstance(result, RefusedBeforeWrite):
+                # Server-owned proof that nothing was written: the model gets the
+                # error back and there is no outcome to reconcile.
+                await recovery.finish(request_id)
             elif (isinstance(msg, dict) and isinstance(msg.get("error"), dict)
                   and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
