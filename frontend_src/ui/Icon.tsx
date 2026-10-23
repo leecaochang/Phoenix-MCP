@@ -6,7 +6,7 @@ import {
   Archive, ArrowDownLeft, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
   Download, Ellipsis, FunnelX, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
-  LayoutDashboard, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
+  LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, Save, ScrollText, SearchCheck,
   Settings, Shield, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
@@ -104,6 +104,7 @@ const ICONS = {
   hint: MessageSquareText,
   hintAdd: MessageSquarePlus,
   save: Save,
+  suggestions: Lightbulb,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

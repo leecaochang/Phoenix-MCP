@@ -1,14 +1,13 @@
-import { MesaIdentity } from "./MesaIdentity";
-import { BusyButton } from "./BusyButton";
-// The MESA tab's "Suggested profiles" section: rows computed by the backend
-// scanner (blast-radius orchestrators, naked risky devices) with Apply /
-// Review / Dismiss per row. Purely presentational; all api calls live in
-// MesaView so this component stays trivially testable.
-import { useState } from "react";
-import { t, hasMessage, localeNumber } from "../i18n";
+/**
+ * Wording for MESA's suggested profiles, computed by the backend scanner
+ * (blast-radius orchestrators, unprotected risky devices): the signal that
+ * raised each one, its suggested mode, and its reason in the reader's language.
+ */
+
+import { t, hasMessage } from "../i18n";
 import type { MesaSuggestion } from "../types";
 
-const SIGNAL_LABEL_KEYS: Record<string, string> = {
+export const SIGNAL_LABEL_KEYS: Record<string, string> = {
   blast_radius: "mesa.signalBlastRadius",
   naked_risky: "mesa.signalUnprotected",
 };
@@ -23,7 +22,7 @@ const SIGNAL_LABEL_KEYS: Record<string, string> = {
  * Falls back to the stored English whenever anything is missing, so an older
  * record or a new template still reads.
  */
-function suggestionReason(s: MesaSuggestion): string {
+export function suggestionReason(s: MesaSuggestion): string {
   const key = s.reason_key ? `mesaSuggestion.${s.reason_key}` : "";
   if (!key || !hasMessage(key)) return s.reason;
   const params: Record<string, string | number> = { ...(s.reason_params ?? {}) };
@@ -36,111 +35,10 @@ function suggestionReason(s: MesaSuggestion): string {
   return t(key, params);
 }
 
-const MODE_LABEL_KEYS: Record<string, string> = {
+export const MODE_LABEL_KEYS: Record<string, string> = {
   confirm: "mesa.modeConfirm",
   prohibited: "mesa.modeProhibited",
   read_only: "mesa.modeReadOnly",
   autonomous: "mesa.modeAutonomous",
 };
 
-const MODE_BADGE: Record<string, string> = {
-  confirm: "badge-amber",
-  prohibited: "badge-red",
-  read_only: "badge-blue",
-  autonomous: "badge-green",
-};
-
-export function MesaSuggestions({
-  suggestions,
-  friendlyName,
-  dismissedCount,
-  busyKey,
-  rescanning,
-  onApply,
-  onReview,
-  onDismiss,
-  onRestoreAll,
-  onRescan,
-}: {
-  suggestions: MesaSuggestion[];
-  friendlyName?: (s: MesaSuggestion) => string;
-  dismissedCount: number;
-  busyKey: string | null;
-  rescanning: boolean;
-  onApply: (s: MesaSuggestion) => void;
-  onReview: (s: MesaSuggestion) => void;
-  onDismiss: (s: MesaSuggestion) => void;
-  onRestoreAll: () => void;
-  onRescan: () => void;
-}) {
-  // Collapsible, matching the domain/entity group cards below it on this tab
-  // (same .collapsible-chevron). Expanded by default: this is where a new
-  // finding needs to be noticed. Always rendered, even with zero findings,
-  // so the Rescan affordance never disappears.
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="card mesa-suggestions">
-      <div className="mesa-suggest-toolbar">
-        <button
-          type="button"
-          className="mesa-suggest-toggle"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-        >
-          <span className={`collapsible-chevron${open ? " open" : ""}`} aria-hidden="true" />
-          <span>{t("mesa.suggestTitle")}</span>
-          {suggestions.length > 0 && <span className="badge badge-amber mesa-suggest-count">{localeNumber(suggestions.length)}</span>}
-        </button>
-        {open && (
-          <button className="btn btn-outline btn-sm" onClick={onRescan} disabled={rescanning}>
-            {rescanning ? t("mesa.scanning") : t("mesa.rescan")}
-          </button>
-        )}
-      </div>
-      {open && (
-        <div className="mesa-suggest-body">
-          <p className="mesa-suggest-sub">
-            {t("mesa.suggestSub")}
-          </p>
-          {suggestions.length === 0 && (
-            <p className="mesa-suggest-empty">{t("mesa.noOpenSuggestions")}</p>
-          )}
-          {suggestions.map((s) => {
-            const busy = busyKey === s.key;
-            return (
-              <div key={s.key} className="preset-row mesa-suggest-row">
-                <div className="mesa-suggest-main">
-                  <div className="mesa-suggest-head">
-                    <MesaIdentity id={s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id} name={friendlyName?.(s)} />
-                    <span className="mesa-suggest-badges">
-                      <span className="badge badge-grey">{SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal}</span>
-                      <span className={`badge ${MODE_BADGE[s.suggested_mode] ?? "badge-grey"}`}>{MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode}</span>
-                    </span>
-                  </div>
-                  <div className="mesa-suggest-reason">{suggestionReason(s)}</div>
-                </div>
-                <span className="preset-row-actions">
-                  <BusyButton className="btn btn-primary btn-sm" busy={busy} onClick={() => onApply(s)}>
-                    {busy ? t("mesa.working") : t("mesa.apply")}
-                  </BusyButton>
-                  <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => onReview(s)}>
-                    {t("mesa.review")}
-                  </BusyButton>
-                  <BusyButton className="btn btn-ghost btn-sm" busy={busy} onClick={() => onDismiss(s)} aria-label={t("mesa.dismissAria", { id: s.subject_id })}>
-                    {t("mesa.dismiss")}
-                  </BusyButton>
-                </span>
-              </div>
-            );
-          })}
-          {dismissedCount > 0 && (
-            <div className="mesa-suggest-footer">
-              <span>{t("mesa.dismissedCount", { count: dismissedCount })}</span>
-              <button className="btn btn-text btn-sm" onClick={onRestoreAll}>{t("mesa.restoreAll")}</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}

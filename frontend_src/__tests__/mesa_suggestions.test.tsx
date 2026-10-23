@@ -1,7 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, fireEvent } from "@testing-library/react";
-import { MesaSuggestions } from "../components/MesaSuggestions";
+/**
+ * Suggested Profiles: one row per suggestion, its actions in the window's
+ * action bar for the chosen row, its reason in full under the list, Rescan
+ * always reachable, and dismissed suggestions restorable. Review fills
+ * Profile Editor with the suggested values; nothing is applied by a scan.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { api, setHass } from "../api";
 import type { MesaSuggestion } from "../types";
+import { EMPTY_ISSUES, editorWindow, mockEmptyMesa, renderMesa, rowsIn, suggestedWindow } from "./mesa_harness";
+
+vi.mock("../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api")>();
+  const names = [
+    "listMesaProfiles", "getMesaIssues", "listMesaDomains", "listMesaIntegrations", "listMesaAreas", "listMesaDevices",
+    "getEntityTree", "getMesaVocabulary", "getMesaIntegrationOptions", "getMesaDeviceOptions",
+    "putMesaDomain", "putMesaProfile", "getMesaProfile", "dismissMesaSuggestion", "restoreMesaSuggestions",
+  ];
+  return { ...actual, api: Object.fromEntries(names.map((n) => [n, vi.fn()])) };
+});
 
 const lockRow: MesaSuggestion = {
   key: "naked_risky:entity:lock.front",
@@ -23,106 +40,94 @@ const domainRow: MesaSuggestion = {
   evidence: { domain: "update", uncovered_count: 6, examples: [] },
 };
 
-const noop = () => {};
-const baseProps = {
-  dismissedCount: 0,
-  busyKey: null,
-  rescanning: false,
-  onApply: noop,
-  onReview: noop,
-  onDismiss: noop,
-  onRestoreAll: noop,
-  onRescan: noop,
-};
+beforeEach(() => {
+  vi.resetAllMocks();
+  setHass({ user: { id: "test-admin" } });
+  mockEmptyMesa();
+});
 
-describe("MesaSuggestions", () => {
-  it("renders the empty state with a reachable Rescan when nothing was found", () => {
-    // The card must never disappear entirely: an early or empty scan would
-    // otherwise hide the Rescan affordance and the feature itself.
-    const { getByText } = render(<MesaSuggestions {...baseProps} suggestions={[]} />);
-    expect(getByText("No open suggestions.")).toBeTruthy();
-    expect(getByText("Rescan")).toBeTruthy();
+const button = (name: string) => suggestedWindow().getByRole("button", { name });
+
+describe("Suggested Profiles", () => {
+  it("keeps Rescan reachable with nothing found, and the row actions unavailable", async () => {
+    renderMesa();
+    expect(await suggestedWindow().findByText("No open suggestions.")).toBeTruthy();
+    expect(button("Rescan")).not.toBeDisabled();
+    for (const name of ["Apply", "Review", "Dismiss"]) expect(button(name)).toBeDisabled();
+    vi.mocked(api.getMesaIssues).mockResolvedValue({ ...EMPTY_ISSUES, suggestions: [lockRow] });
+    fireEvent.click(button("Rescan"));
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
   });
 
-  it("renders rows with subject, badges, and reason", () => {
-    const { container, getByText } = render(
-      <MesaSuggestions {...baseProps} suggestions={[lockRow, domainRow]} />,
-    );
-    expect(getByText("lock.front")).toBeTruthy();
-    // The mode pill shows the translated label, not the raw slug; the slug still
-    // drives the badge colour and the apply payload.
-    expect(getByText("Prohibited")).toBeTruthy();
-    expect(getByText(/physical security boundary/)).toBeTruthy();
+  it("lists each suggestion's subject, suggested mode and signal, and shows the chosen one's reason in full", async () => {
+    vi.mocked(api.getMesaIssues).mockResolvedValue({ ...EMPTY_ISSUES, suggestions: [lockRow, domainRow] });
+    renderMesa();
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(2));
+    const win = suggestedWindow();
+    expect(win.getByText("lock.front")).toBeTruthy();
+    // The mode shows its translated label, not the raw slug.
+    expect(win.getByText("Prohibited")).toBeTruthy();
+    expect(win.getAllByText("Unprotected")).toHaveLength(2);
     // Domain-scope rows are labelled as such.
-    expect(getByText("update.* (domain)")).toBeTruthy();
-    // Count badge reflects the open suggestions.
-    expect(container.querySelector(".mesa-suggest-count")?.textContent).toBe("2");
+    expect(win.getByText("update.* (domain)")).toBeTruthy();
+    expect(win.queryByText(/physical security boundary/)).toBeNull();
+    expect(win.getByText("Select a suggestion to read why it was suggested.")).toBeTruthy();
+    fireEvent.click(rowsIn("Suggested Profiles").find((r) => r.textContent?.includes("lock.front"))!);
+    expect(win.getByText(/physical security boundary/)).toBeTruthy();
   });
 
-  it("fires the right callback with the row", () => {
-    const onApply = vi.fn();
-    const onReview = vi.fn();
-    const onDismiss = vi.fn();
-    const { getAllByText } = render(
-      <MesaSuggestions
-        {...baseProps}
-        suggestions={[lockRow]}
-        onApply={onApply}
-        onReview={onReview}
-        onDismiss={onDismiss}
-      />,
-    );
-    fireEvent.click(getAllByText("Apply")[0]);
-    fireEvent.click(getAllByText("Review")[0]);
-    fireEvent.click(getAllByText("Dismiss")[0]);
-    expect(onApply).toHaveBeenCalledWith(lockRow);
-    expect(onReview).toHaveBeenCalledWith(lockRow);
-    expect(onDismiss).toHaveBeenCalledWith(lockRow);
+  it("applies the chosen suggestion as a create-only profile carrying its reason", async () => {
+    vi.mocked(api.getMesaIssues).mockResolvedValueOnce({ ...EMPTY_ISSUES, suggestions: [lockRow] }).mockResolvedValue(EMPTY_ISSUES);
+    vi.mocked(api.putMesaProfile).mockResolvedValue({ warnings: [] } as never);
+    renderMesa();
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+    fireEvent.click(rowsIn("Suggested Profiles")[0]);
+    fireEvent.click(button("Apply"));
+    await waitFor(() => expect(api.putMesaProfile).toHaveBeenCalledWith("lock.front", {
+      semantic_profile: { operational_boundaries: { control_mode: "prohibited", control_reason: lockRow.reason } },
+    }, true));
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(0));
   });
 
-  it("shows the restore-all footer when only dismissals exist", () => {
-    const onRestoreAll = vi.fn();
-    const { getByText } = render(
-      <MesaSuggestions {...baseProps} suggestions={[]} dismissedCount={3} onRestoreAll={onRestoreAll} />,
-    );
-    expect(getByText("3 dismissed")).toBeTruthy();
-    fireEvent.click(getByText("Restore All"));
-    expect(onRestoreAll).toHaveBeenCalled();
-    expect(getByText("No open suggestions.")).toBeTruthy();
+  it("Review fills Profile Editor with the suggested mode for the suggested target, without saving", async () => {
+    vi.mocked(api.getMesaIssues).mockResolvedValue({ ...EMPTY_ISSUES, suggestions: [lockRow] });
+    vi.mocked(api.getMesaProfile).mockResolvedValue({ stored: null, effective: {}, explanation: { explanation: [], warnings: [] } } as never);
+    renderMesa();
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+    fireEvent.click(rowsIn("Suggested Profiles")[0]);
+    fireEvent.click(button("Review"));
+    const editor = editorWindow();
+    await waitFor(() => expect(editor.getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    expect(editor.getByDisplayValue("lock.front")).toBeDisabled();
+    expect(api.putMesaProfile).not.toHaveBeenCalled();
   });
 
-  it("disables only the busy row's own actions, not Rescan or the toggle", () => {
-    const { container, getByText } = render(
-      <MesaSuggestions {...baseProps} suggestions={[lockRow]} busyKey={lockRow.key} />,
-    );
-    const row = container.querySelector(".mesa-suggest-row") as HTMLElement;
-    for (const b of Array.from(row.querySelectorAll("button"))) {
-      expect(b).toHaveAttribute("aria-disabled", "true");
-    }
-    expect((getByText("Rescan") as HTMLButtonElement).disabled).toBe(false);
-    expect(container.querySelector(".mesa-suggest-toggle")).not.toBeNull();
+  it("dismisses the chosen suggestion and restores dismissed ones", async () => {
+    vi.mocked(api.getMesaIssues).mockResolvedValue({ ...EMPTY_ISSUES, suggestions: [lockRow] });
+    vi.mocked(api.dismissMesaSuggestion).mockResolvedValue({ suggestions: [], dismissed_suggestions: [lockRow] } as never);
+    vi.mocked(api.restoreMesaSuggestions).mockResolvedValue({ suggestions: [lockRow], dismissed_suggestions: [] } as never);
+    renderMesa();
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+    fireEvent.click(rowsIn("Suggested Profiles")[0]);
+    fireEvent.click(button("Dismiss"));
+    await waitFor(() => expect(api.dismissMesaSuggestion).toHaveBeenCalledWith(lockRow.key));
+    expect(await suggestedWindow().findByText("1 dismissed")).toBeTruthy();
+    fireEvent.click(button("Restore All"));
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+    expect(api.restoreMesaSuggestions).toHaveBeenCalledWith({ all: true });
   });
 
-  it("toggles collapsed/expanded via the disclosure chevron, defaulting open", () => {
-    const { container, getByText, queryByText } = render(
-      <MesaSuggestions {...baseProps} suggestions={[lockRow]} />,
-    );
-    const toggle = container.querySelector(".mesa-suggest-toggle") as HTMLButtonElement;
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(container.querySelector(".collapsible-chevron.open")).not.toBeNull();
-    expect(getByText("lock.front")).toBeTruthy();
-    expect(getByText("Rescan")).toBeTruthy();
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(queryByText("lock.front")).toBeNull();
-    // Rescan hides along with the rest of the body while collapsed, matching
-    // the other collapsible cards on this tab.
-    expect(queryByText("Rescan")).toBeNull();
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(getByText("lock.front")).toBeTruthy();
-    expect(getByText("Rescan")).toBeTruthy();
+  it("while a suggestion is being applied, only its own actions wait; Rescan stays available", async () => {
+    let finish!: () => void;
+    vi.mocked(api.getMesaIssues).mockResolvedValue({ ...EMPTY_ISSUES, suggestions: [lockRow] });
+    vi.mocked(api.putMesaProfile).mockReturnValue(new Promise((resolve) => { finish = () => resolve({ warnings: [] } as never); }));
+    renderMesa();
+    await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+    fireEvent.click(rowsIn("Suggested Profiles")[0]);
+    fireEvent.click(button("Apply"));
+    for (const name of ["Apply", "Review", "Dismiss"]) expect(button(name)).toHaveAttribute("aria-busy", "true");
+    expect(button("Rescan")).not.toHaveAttribute("aria-busy");
+    await act(async () => finish());
+    expect(within(screen.getByRole("region", { name: "Suggested Profiles window" })).getByRole("button", { name: "Apply" })).not.toHaveAttribute("aria-busy");
   });
 });

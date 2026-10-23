@@ -6,7 +6,7 @@
  * state is `shell/changes.tsx`.
  */
 
-import { useContext, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useContext, useRef, useState, type ReactNode } from "react";
 import type { VersionSummary } from "../types";
 import { ErrorMsg, Loading } from "../components/common";
 import { CodeToggle, diffLines, LayoutToggle, RawDiffPane, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
@@ -15,8 +15,8 @@ import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { changeLabel, RAW_CONTENT_TYPES, rawSide, restoreAvailability, useChanges, type ChangesState, type RestoreSide } from "../shell/changes";
-import { ControllerContext } from "../shell/dock/TitleBar";
-import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
+import { useToolbarTools, type ToolGroup } from "../shell/tools";
+import { InlineTools, useWindowToggle } from "../shell/windowTools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -98,38 +98,6 @@ function whoDetail(
 function versionSummary(v: { summary?: string | null; summary_key?: string | null; summary_params?: Record<string, string | number> | null }): string {
   if (v.summary_key && hasMessage(v.summary_key)) return t(v.summary_key, v.summary_params ?? undefined);
   return v.summary ?? "";
-}
-
-/** Tools a window offers on the toolbar, or inline when it is not in the shell. */
-function InlineTools({ groups }: { groups: ToolGroup[] }) {
-  const tools = groups.flatMap((g) => g.tools);
-  if (!tools.length) return null;
-  return (
-    <div className="phx-window-actions">
-      {tools.map((tool: Tool) => (
-        <ActionButton key={tool.id} icon={tool.icon} label={tool.label} disabled={tool.disabled} pressed={tool.pressed}
-          onClick={() => tool.onSelect?.()} className="btn btn-outline btn-sm" />
-      ))}
-    </div>
-  );
-}
-
-const noSubscribe = () => () => {};
-const noVersion = () => 0;
-
-/** A toolbar toggle that opens a closed window or closes an open one, for the window it belongs to. */
-function useWindowToggle(windowId: string): { open: boolean; toggle: () => void } | null {
-  const controller = useContext(ControllerContext);
-  useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
-  if (!controller) return null;
-  return {
-    open: !!controller.hostOf(windowId),
-    toggle: () => {
-      const group = controller.groupOf(windowId);
-      if (group) controller.close(group);
-      else controller.ensureOpen(windowId);
-    },
-  };
 }
 
 export function ChangesListWindow() {

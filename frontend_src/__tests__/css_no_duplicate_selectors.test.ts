@@ -144,9 +144,9 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/\.phx-review-reason\s+\.approval-reason-input\s*\{[^}]*min-width:\s*0;/s);
   });
 
-  it("keeps localized MESA mode badges visible", () => {
-    expect(CSS).toMatch(/\.mesa-group\s+\.data-table\s+td:nth-child\(2\)\s*\{[^}]*width:\s*260px;/s);
-    expect(CSS).toMatch(/\.mesa-row-modes\s*\{[^}]*white-space:\s*normal;/s);
+  it("keeps long localized MESA names and modes inside their column, and the editor grid responsive", () => {
+    expect(CSS).toMatch(/\.mesa-profile-cell\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+    expect(CSS).toMatch(/\.mesa-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,/s);
   });
 
   it("never defines the same class in two separate blocks", () => {

@@ -26,6 +26,7 @@ import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
+import { MesaProvider, type MesaFindings } from "./mesa";
 import { DOCS_BASE_URL } from "../components/common";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
@@ -368,11 +369,13 @@ export function Shell() {
   const showAttention = (attentionCount > 0 || d.attentionRequested) && (dismissedAt === null || attentionCount > dismissedAt);
   useEffect(() => { if (attentionCount === 0) setDismissedAt(null); }, [attentionCount]);
   const dismissAttention = d.dismissAttentionRequest;
+  // Orphaned Profiles and Advisory show only while MESA has undismissed findings for them.
+  const [mesaFindings, setMesaFindings] = useState<MesaFindings | null>(null);
   const settings = d.settings;
   useEffect(() => {
     for (const [id, controller] of controllers) {
       // Presets appears only while its setting is on.
-      controller.availability = (w) => windowAvailable(w, settings);
+      controller.availability = (w) => windowAvailable(w, settings, mesaFindings);
       controller.syncAvailable();
       controller.onTransientClose = () => { setDismissedAt(attentionCount); dismissAttention(); };
       if (env === "desktop" && id === d.workspace && showAttention) controller.showTransient(ATTENTION_WINDOW);
@@ -407,6 +410,7 @@ export function Shell() {
       onReveal={revealReview}
     >
     <ChangesProvider hass={d.hass} active={d.workspace === "changes"}>
+    <MesaProvider active={d.workspace === "mesa"} onFindings={setMesaFindings}>
     <WorkspaceActionsContext.Provider value={actions}>
     <WizardGuideContext.Provider value={wizardGuide}>
     <AccessKeyDetailProvider
@@ -447,7 +451,7 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} settings={s}
+            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings}
               guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => userSetGuide(active, false)}
                 topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
@@ -481,6 +485,7 @@ export function Shell() {
     </AccessKeyDetailProvider>
     </WizardGuideContext.Provider>
     </WorkspaceActionsContext.Provider>
+    </MesaProvider>
     </ChangesProvider>
     </ApprovalsProvider>
     </LogSelectionContext.Provider>

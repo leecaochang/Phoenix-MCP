@@ -963,10 +963,6 @@
   font-family: inherit;
 }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
-/* Swaps a button's label for a shorter one on narrow screens (see the
-   max-width: 600px block), same full/short pattern as .audit-time-full. */
-.btn-label-short { display: none; }
-.btn-label-full  { display: inline; }
 .btn-primary { background: var(--phx-accent); color: var(--phx-accent-fg); }
 .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); box-shadow: var(--phx-shadow-md); }
 .btn-danger { background: var(--phx-error); color: var(--phx-accent-fg); }
@@ -1417,27 +1413,6 @@ select.input {
      Archived / Create access key as their own full-width row below. */
   .filter-row-refresh { order: 2; flex-shrink: 0; }
   .filter-row-right { order: 3; flex-basis: 100%; flex-wrap: wrap; }
-
-  .btn-label-full { display: none; }
-  .btn-label-short { display: inline; }
-
-  /* MESA toolbar: two .filter-row-right groups (Add area/integration/domain/
-     entity profile, then Import/Export/Refresh). The generic rule above
-     forces each onto its own full-width row in DOM order, stacking the
-     compact icon row at the very bottom; the compound selectors below
-     (higher specificity, so they win regardless of source order) reorder
-     it instead: icons form their own row 1 (always narrow, right-aligned
-     to match the rest of the panel's icon rows), and the shortened
-     add-profile labels above form an even 2-column grid below it rather
-     than an uneven wrap. */
-  .filter-row-right.mesa-toolbar-tools {
-    order: 1; flex-basis: auto; flex-wrap: nowrap; margin-left: auto;
-  }
-  .filter-row-right.mesa-toolbar-add {
-    order: 2; flex-basis: 100%; flex-wrap: nowrap;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  }
-  .mesa-toolbar-add .btn { width: 100%; }
 
   .tree-badge, .tree-effective, .tree-hint-btn { display: none; }
   .tree-children { margin-left: 9px; padding-left: 6px; }
@@ -1901,49 +1876,9 @@ select.input {
   color: var(--phx-text-2);
 }
 .preset-diff-list li { margin: 2px 0; }
-/* MESA profile suggestions (Suggested profiles card on the MESA tab) */
-.mesa-suggestions { margin-bottom: 16px; }
-.mesa-suggest-toolbar { display: flex; align-items: center; gap: 8px; }
-.mesa-suggest-toggle {
-  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-  background: none; border: none; cursor: pointer; padding: 4px 0;
-  font-size: 11px; font-weight: 700;
-  color: var(--phx-text-2); text-align: left;
-}
-.mesa-suggest-toggle:hover { color: var(--phx-text); }
-.mesa-suggest-body { margin-top: 12px; }
-.mesa-suggest-count { margin-left: 0; }
-.mesa-suggest-sub { font-size: 12.5px; color: var(--phx-text-2); margin: 0 0 12px; line-height: 1.5; }
-.mesa-suggest-empty { font-size: 13px; color: var(--phx-text-2); margin: 0; }
-.mesa-suggest-row { align-items: flex-start; margin-bottom: 8px; }
-.mesa-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.mesa-suggest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mesa-suggest-head code { font-size: 12.5px; }
-.mesa-suggest-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mesa-suggest-reason { font-size: 12.5px; color: var(--phx-text-2); line-height: 1.5; }
-.mesa-suggest-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--phx-text-2);
-  margin-top: 4px;
-}
-@media (max-width: 600px) {
-  /* Suggested profiles row: was a single flex row (text left, Apply/Review/
-     Dismiss right, .preset-row-actions never shrinks) so on a narrow screen
-     the fixed-width button group and the shrunk text sat on top of each
-     other. Stacked instead: id, then its badges, then the reason, then the
-     buttons on their own row, right-aligned. Scoped to .mesa-suggest-row so
-     the unrelated access-key-settings-presets rows (also .preset-row) are
-     untouched. Placed here, after the base rules above, because the base
-     .mesa-suggest-row/-head align-items rules are equal specificity and
-     would otherwise win the cascade tie by winning on source order (the
-     bug behind this not having taken effect the first time). */
-  .mesa-suggest-row { flex-direction: column; align-items: stretch; }
-  .mesa-suggest-head { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .mesa-suggest-row .preset-row-actions { align-self: flex-end; margin-left: 0; }
-}
+/* MESA Suggested Profiles: the chosen suggestion's reason under the list, and the dismissed count. */
+.mesa-suggest-reason { min-height: 1.5em; font-size: 13px; color: var(--phx-text-2); line-height: 1.5; }
+.mesa-suggest-footer { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--phx-text-2); }
 .access-key-card-badges {
   display: flex;
   gap: 6px;
@@ -2429,11 +2364,10 @@ hui-card { display: block; min-width: 0; }
 .mesa-explain summary { cursor: pointer; color: var(--phx-text-2); font-weight: 600; }
 .mesa-preview-block { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--phx-border); }
 .mesa-preview-warnings { margin: 6px 0 0 0; padding-left: 18px; font-size: 12px; color: var(--phx-text-2); }
-.mesa-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0 0 10px 0; }
 
 /* MESA profile editor: tidy two-column form, fuzzy key search, inline help */
 .mesa-editor-body .field { margin-bottom: 14px; }
-.mesa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.mesa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 16px; }
 .mesa-field-label {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--phx-text-2);
@@ -2556,66 +2490,33 @@ hui-card { display: block; min-width: 0; }
 }
 .tag-reco-chip:hover { border-color: var(--phx-accent); border-style: solid; background: var(--phx-hover); }
 
-/* MESA list: summary filter chips, search, and domain groups */
-.mesa-controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.mesa-summary { display: flex; flex-wrap: wrap; gap: 6px; }
-.mesa-chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px;
-  border-radius: 14px; border: 1.5px solid var(--phx-border); background: var(--phx-surface);
-  color: var(--phx-text); font-size: 12px; font-weight: 600; cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
-}
-.mesa-chip:hover { border-color: var(--phx-accent); }
-.mesa-chip-active { border-color: var(--phx-accent); background: var(--phx-accent-lt); }
-.mesa-chip-count { font-size: 11px; color: var(--phx-text-2); background: var(--phx-surface-2); padding: 0 6px; border-radius: 8px; }
-.mesa-chip-active .mesa-chip-count { color: var(--phx-accent); }
-.mesa-search { max-width: 260px; flex: 1 1 180px; }
-.mesa-groups { display: flex; flex-direction: column; gap: 10px; }
-.mesa-group { padding: 0; overflow: hidden; }
-.mesa-group-header {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 9px 14px; background: var(--phx-surface-2); border: none;
-  border-bottom: 1px solid var(--phx-border); cursor: pointer;
-  font-size: 13px; color: var(--phx-text); text-align: left;
-}
-.mesa-group-header:hover { background: var(--phx-hover); }
-.mesa-group-count { margin-left: auto; font-size: 11px; color: var(--phx-text-2); background: var(--phx-surface); padding: 1px 8px; border-radius: 8px; }
-/* Fixed layout + shared widths so every domain group's columns line up.  The
-   mode column is deliberately generous: localized vendor and mode badges can
-   wrap between badges, while long tag lists use the remaining space. */
-.mesa-group .data-table { table-layout: fixed; }
-.mesa-group .data-table td { vertical-align: middle; overflow: hidden; }
-.mesa-group .data-table td:nth-child(2) { width: 260px; }
-.mesa-group .data-table td:nth-child(3) { width: 22%; }
+/* MESA Profiles: the name with its control mode and ID under it; control modes in their meaning colors. */
+.mesa-profile-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mesa-profile-cell > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mesa-control-autonomous { color: var(--phx-success); }
+.mesa-control-confirm { color: var(--phx-warning); }
+.mesa-control-read_only { color: var(--phx-read); }
+.mesa-control-prohibited { color: var(--phx-error); }
+/* Profile Editor as a window: the target and its actions, then the form. */
+.mesa-editor-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
+.mesa-editor-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 14px; font-weight: 400; min-width: 0; }
+.mesa-editor-target strong { font-weight: 600; overflow-wrap: anywhere; }
+.mesa-editor-target code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.mesa-editor-scope { font-size: 12px; color: var(--phx-text-2); }
+.mesa-findings { display: flex; flex-direction: column; gap: 10px; }
+.mesa-findings > .banner, .mesa-notice { margin: 0; }
+.mesa-orphan-group + .mesa-orphan-group { margin-top: 8px; }
+.mesa-import { display: flex; flex-direction: column; gap: 10px; }
+.mesa-import .field, .mesa-import p { margin: 0; }
+.mesa-import-summary { margin-top: 8px; }
+.mesa-import-result { border-top: 1px solid var(--phx-divider); padding-top: 10px; }
+.phx-window-note { margin: 0 0 8px; font-size: 12.5px; color: var(--phx-text-2); line-height: 1.5; }
 .mesa-identity { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; vertical-align: top; }
 .mesa-identity-name { font-size: 13px; font-weight: 700; color: var(--phx-text); overflow-wrap: anywhere; }
 .mesa-identity-id { font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
 .mesa-identity .mesa-identity-secondary { font-size: 11px; color: var(--phx-text-2); }
 .mesa-notice-identities { margin: 6px 0; padding-left: 20px; }
 .mesa-notice-identities li, .mesa-notice-details li { margin-top: 4px; }
-.mesa-row-modes { white-space: normal; }
-.mesa-row-modes .badge + .badge { margin-left: 6px; }
-.mesa-row-tags { font-size: 12px; color: var(--phx-text-2); white-space: normal; overflow-wrap: anywhere; }
-@media (max-width: 600px) { .mesa-search { max-width: none; } }
-
-@media (max-width: 600px) {
-  /* Existing profiles list: the 3 table columns (name/id, mode badges, tags)
-     were squeezed by table-layout:fixed's column widths above. Collapsed to
-     name/id + badges sharing a line (id/name flexes and truncates, badges
-     hug the right edge), then tags on their own full-width line below.
-     Placed after the desktop rules above so the equal-specificity width
-     overrides win on source order without needing !important. */
-  .mesa-profile-table, .mesa-profile-table tbody { display: block; width: 100%; }
-  .mesa-profile-table tr {
-    display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 10px;
-    padding: 8px 0; border-top: 1px solid var(--phx-border);
-  }
-  .mesa-profile-table tr:first-child { border-top: none; }
-  .mesa-profile-table td { display: block; padding: 0; }
-  .mesa-profile-table td:first-child { flex: 1 1 auto; min-width: 0; }
-  .mesa-group .mesa-profile-table td.mesa-row-modes { width: auto; flex: 0 0 auto; margin-left: auto; text-align: right; }
-  .mesa-group .mesa-profile-table td.mesa-row-tags { width: auto; flex: 0 0 100%; margin-top: 6px; }
-}
 
 /* ---------------------------------------------------------------------------
    agentCLI floating chat window

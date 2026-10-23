@@ -16,7 +16,8 @@ import { ApprovalsListWindow, RequestDetailsWindow, ReviewWindow } from "../view
 import { AuditView } from "../views/AuditView";
 import { ChangesListWindow, ComparisonWindow, ItemHistoryWindow } from "../views/ChangesView";
 import { ConversationsView } from "../views/ConversationsView";
-import { MesaView } from "../views/MesaView";
+import { AdvisoryWindow, DiagnosticsWindow, MesaImportWindow, MesaProfilesWindow, OrphanedProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow } from "../views/MesaWindows";
+import type { MesaFindings } from "./mesa";
 import { OnboardingWizard } from "../views/OnboardingWizard";
 import { SettingsView } from "../views/SettingsView";
 import { t } from "../i18n";
@@ -48,7 +49,13 @@ export const WINDOW_TITLE_KEYS = {
   changes: "shell.tabChanges",
   comparison: "workspace.comparison",
   itemHistory: "workspace.itemHistory",
-  mesa: "shell.tabMesa",
+  mesaProfiles: "workspace.mesaProfiles",
+  mesaEditor: "workspace.profileEditor",
+  mesaSuggestions: "mesa.suggestTitle",
+  mesaOrphans: "workspace.orphanedProfiles",
+  mesaAdvisory: "workspace.advisory",
+  mesaImport: "mesa.importTitle",
+  mesaDiagnostics: "workspace.diagnostics",
   auditLog: "shell.tabAudit",
   conversationLog: "conversations.title",
   logDetails: "workspace.logDetails",
@@ -88,10 +95,16 @@ export interface WorkspaceDef {
   layoutVersion?: number;
 }
 
-/** Whether a conditional window is allowed by the current settings; null while they load. */
-export function windowAvailable(id: string, settings: GlobalSettings | null): boolean | null {
-  if (id !== "presets") return true;
-  return settings ? !!settings.access_key_presets_enabled : null;
+/**
+ * Whether a conditional window is allowed now; null while unknown. Presets
+ * follows its setting; Orphaned Profiles and Advisory appear only while MESA
+ * has findings for them that are not dismissed.
+ */
+export function windowAvailable(id: string, settings: GlobalSettings | null, mesa: MesaFindings | null = null): boolean | null {
+  if (id === "presets") return settings ? !!settings.access_key_presets_enabled : null;
+  if (id === "mesaOrphans") return mesa ? mesa.orphans : null;
+  if (id === "mesaAdvisory") return mesa ? mesa.advisory : null;
+  return true;
 }
 
 const size = (api: DockviewApi, id: string, dims: { width?: number; height?: number }) => api.getPanel(id)?.group.api.setSize(dims);
@@ -153,7 +166,33 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     // 2: the three windows replaced the single Changes window.
     layoutVersion: 2,
   },
-  mesa: { labelKey: "shell.tabMesa", helpKey: "help.wsMesa", icon: "mesa", windows: ["mesa", "attention"], arrange: (_, add) => add("mesa") },
+  mesa: {
+    labelKey: "shell.tabMesa",
+    helpKey: "help.wsMesa",
+    icon: "mesa",
+    windows: ["mesaProfiles", "mesaEditor", "mesaSuggestions", "mesaOrphans", "mesaAdvisory", "mesaImport", "mesaDiagnostics", "attention"],
+    // Finding and editing a profile get the primary space: Profiles beside Profile
+    // Editor, Suggested Profiles across the bottom, as accepted for MESA. Orphaned
+    // Profiles and Advisory appear below it only while they have findings; Import
+    // and Diagnostics open from the MESA Actions menu.
+    arrange: (api, add) => {
+      add("mesaProfiles");
+      add("mesaEditor", { referencePanel: "mesaProfiles", direction: "right" });
+      add("mesaSuggestions", { direction: "below" });
+      size(api, "mesaProfiles", { width: Math.round(api.width * 0.45) });
+    },
+    conditional: {
+      mesaOrphans: { neighbor: "mesaSuggestions", side: "bottom" },
+      mesaAdvisory: { neighbor: "mesaSuggestions", side: "bottom" },
+    },
+    closedAt: {
+      mesaImport: { neighbor: "mesaEditor", side: "bottom" },
+      mesaDiagnostics: { neighbor: "mesaSuggestions", side: "bottom" },
+    },
+    heights: { mesaProfiles: 560, mesaEditor: 560, mesaSuggestions: 320, mesaOrphans: 240, mesaAdvisory: 260, mesaImport: 360, mesaDiagnostics: 360 },
+    // 2: the MESA windows replaced the single MESA window.
+    layoutVersion: 2,
+  },
   logs: {
     labelKey: "workspace.logs",
     helpKey: "help.wsLogs",
@@ -255,7 +294,6 @@ function AccessKeysContent() {
   );
 }
 
-function MesaContent() { return <MesaView />; }
 function AuditLogContent() { return <AuditView accessKeys={usePanelData().accessKeys} />; }
 function ConversationLogContent() { return <ConversationsView accessKeys={usePanelData().accessKeys} />; }
 
@@ -293,7 +331,13 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   changes: ChangesListWindow,
   comparison: ComparisonWindow,
   itemHistory: ItemHistoryWindow,
-  mesa: MesaContent,
+  mesaProfiles: MesaProfilesWindow,
+  mesaEditor: ProfileEditorWindow,
+  mesaSuggestions: SuggestedProfilesWindow,
+  mesaOrphans: OrphanedProfilesWindow,
+  mesaAdvisory: AdvisoryWindow,
+  mesaImport: MesaImportWindow,
+  mesaDiagnostics: DiagnosticsWindow,
   auditLog: AuditLogContent,
   conversationLog: ConversationLogContent,
   settings: SettingsContent,

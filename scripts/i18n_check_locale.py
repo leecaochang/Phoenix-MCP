@@ -149,6 +149,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
     "panel.perms.colId",              # "ID"
+    "panel.mesa.colId",               # "ID"
     "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
     # Product and plan names are proper nouns rather than translatable prose.
@@ -187,6 +188,8 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colTags",  # "Tags"
         "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Danish
@@ -215,7 +218,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.changes.typeScript",  # "Script"
         "panel.common.diff",  # "Diff"
         "panel.conversations.modelLabel",  # "Model"
-        "panel.mesa.addIntegrationShort",  # "+ Integration"
         "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
         "panel.mesa.privNormal",  # "Normal"
         "panel.mesa.scopeLabelIntegration",  # "Integration"
@@ -236,6 +238,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.mesa.colName",  # "Name"
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colTags",  # "Tags"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -263,7 +268,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.changes.typeBlueprint",         # "Blueprint"
         "panel.changes.typeDashboard",         # "Dashboard"
         "panel.common.diff",                   # "Diff"
-        "panel.mesa.addIntegrationShort",      # "+ Integration"
         "panel.mesa.costTrivial",              # "Trivial"
         "panel.mesa.privNormal",               # "Normal"
         "panel.mesa.scopeLabelIntegration",    # "Integration"
@@ -298,6 +302,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colSource",  # "Source"
         "panel.guide.title",  # "Guide", the same word in this language
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
@@ -373,7 +379,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.typeFile",              # "File", the same word in Italian
         "panel.changes.typeScript",            # "Script"
-        "panel.mesa.addAreaShort",             # "+ Area", a compact picker label
         "panel.mesa.no",                       # "No", the boolean answer
         "panel.mesa.scopeLabelArea",           # "Area"
         "panel.mesaSuggestion.noun.script",    # "script"
@@ -404,6 +409,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "panel.mesa.colSignal",  # "Signal"
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Norwegian
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -438,6 +444,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.mesa.colTags",  # "Tags"
         "panel.help.title",  # "Help", the usual Dutch interface term
         "panel.logs.filters",  # "Filters", also Dutch
         "panel.logs.filtersCount",  # "Filters ({count})", also Dutch
@@ -537,6 +544,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.mesa.colSignal",  # "Signal"
         "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Swedish
@@ -557,7 +565,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.typeBlueprint",  # "Blueprint", Home Assistant's own Swedish term
         "panel.common.diff",  # "Diff"
-        "panel.mesa.addIntegrationShort",  # "+ Integration"
         "panel.mesa.costTrivial",  # "Trivial"
         "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
         "panel.mesa.privNormal",  # "Normal"
@@ -597,7 +604,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
 # glue between fragments and losing it is a real defect.
 WHITESPACE_EXEMPT = frozenset({
     "panel.common.listSeparator",   # ", " becomes the ideographic comma
-    "panel.mesa.currentFilter",     # "Current filter: " becomes a full-width colon
     "panel.agentchat.approvalReason",  # leading " - " becomes a full-width comma
     # Appended after a sentence: English needs the separating space, Chinese
     # does not, because the preceding full stop is already full-width.

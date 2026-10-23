@@ -9,6 +9,7 @@ import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
 import type { GlobalSettings } from "../types";
 import { ATTENTION_WINDOW, SHARED_WINDOWS, WINDOW_CONTENT, WORKSPACES, windowAvailable, windowTitle, type WindowId } from "./workspaces";
+import type { MesaFindings } from "./mesa";
 
 function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }) {
   const [folded, setFolded] = useState(() => WORKSPACES[workspace].folded?.includes(id) ?? false);
@@ -40,9 +41,11 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention, settings, guide }: { workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; guide?: ReactNode }) {
+export function PhoneStack({ workspace, showAttention, settings, mesa = null, guide }: {
+  workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; mesa?: MesaFindings | null; guide?: ReactNode;
+}) {
   const def = WORKSPACES[workspace];
-  const windows = def.windows.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings) === true));
+  const windows = def.windows.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings, mesa) === true));
   // Needs Attention leads the stack when it is shown.
   windows.sort((a, b) => Number(b === ATTENTION_WINDOW) - Number(a === ATTENTION_WINDOW));
   return (

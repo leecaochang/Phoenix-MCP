@@ -1,0 +1,189 @@
+/**
+ * The MESA workspace's Profiles and Profile Editor: one list for all five
+ * scopes with type, control and enforcement filters; a chosen profile opens
+ * in the editor window; switching away from unsaved changes asks first;
+ * Save shows the saved profile; Discard reverts; Delete confirms in place,
+ * naming its target, in the window and in the injected modal alike.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { api, setHass } from "../api";
+import { windowAvailable } from "../shell/workspaces";
+import { ProfileEditor } from "../views/MesaView";
+import { editorWindow, mockEmptyMesa, profilesWindow, renderMesa, rowsIn } from "./mesa_harness";
+
+vi.mock("../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api")>();
+  const names = [
+    "listMesaProfiles", "getMesaIssues", "listMesaDomains", "listMesaIntegrations", "listMesaAreas", "listMesaDevices",
+    "getEntityTree", "getMesaVocabulary", "getMesaIntegrationOptions", "getMesaDeviceOptions",
+    "getMesaProfile", "getMesaDomain", "getMesaDevice", "putMesaProfile", "putMesaDomain", "deleteMesaProfile", "deleteMesaDomain",
+  ];
+  return { ...actual, api: Object.fromEntries(names.map((n) => [n, vi.fn()])) };
+});
+
+const doc = (mode: string, extra: Record<string, unknown> = {}) => ({ semantic_profile: { semantic_tags: ["security.entry"], operational_boundaries: { control_mode: mode, ...extra } } });
+const detail = (mode: string) => ({ stored: doc(mode), effective: doc(mode), explanation: { explanation: [], warnings: [] } });
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  setHass({ user: { id: "test-admin" } });
+  mockEmptyMesa();
+  vi.mocked(api.getEntityTree).mockResolvedValue({
+    lock: { devices: {}, deviceless_entities: ["lock.front"], entity_details: { "lock.front": { entity_id: "lock.front", friendly_name: "Front door", device_id: null, area_id: null, area_name: null, labels: [] } } },
+    light: { devices: {}, deviceless_entities: ["light.desk"], entity_details: { "light.desk": { entity_id: "light.desk", friendly_name: "Desk lamp", device_id: null, area_id: null, area_name: null, labels: [] } } },
+  });
+  vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: [
+    { entity_id: "lock.front", document: doc("prohibited", { enforcement_mode: "enforced" }) },
+    { entity_id: "light.desk", document: doc("autonomous") },
+  ], total_matched: 2, has_more: false, next_cursor: null });
+  vi.mocked(api.listMesaDevices).mockResolvedValue({ devices: [{ device_id: "dev-hall", document: doc("confirm") }] });
+  vi.mocked(api.getMesaDeviceOptions).mockResolvedValue({ devices: [{ id: "dev-hall", name: "Hall hub" }] });
+  vi.mocked(api.getMesaProfile).mockImplementation(async (key: string) => detail(key === "lock.front" ? "prohibited" : "autonomous") as never);
+  vi.mocked(api.getMesaDevice).mockResolvedValue({ stored: doc("confirm") } as never);
+});
+
+const names = () => rowsIn("Profiles").map((r) => r.querySelector(".mesa-profile-name")!.textContent);
+const choose = (name: string) => fireEvent.click(rowsIn("Profiles").find((r) => r.querySelector(".mesa-profile-name")!.textContent === name)!);
+
+describe("Profiles", () => {
+  it("lists every scope together, filters by type, control mode (with counts) and enforcement, and searches", async () => {
+    renderMesa();
+    await waitFor(() => expect(names().sort()).toEqual(["Desk lamp", "Front door", "Hall hub"]));
+    const win = profilesWindow();
+    expect(win.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(expect.arrayContaining(["Name", "Applies To"]));
+    expect(win.queryByRole("columnheader", { name: /Tags/ })).toBeNull();
+
+    fireEvent.change(win.getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
+    expect(names()).toEqual(["Hall hub"]);
+    fireEvent.change(win.getByRole("combobox", { name: "Applies To" }), { target: { value: "" } });
+
+    const control = win.getByRole("combobox", { name: "Control Mode" });
+    expect([...control.querySelectorAll("option")].map((o) => o.textContent)).toContain("Prohibited (1)");
+    fireEvent.change(control, { target: { value: "prohibited" } });
+    expect(names()).toEqual(["Front door"]);
+    fireEvent.change(control, { target: { value: "" } });
+
+    fireEvent.change(win.getByRole("combobox", { name: "Enforcement" }), { target: { value: "advisory" } });
+    expect(names().sort()).toEqual(["Desk lamp", "Hall hub"]);
+    fireEvent.click(win.getByRole("button", { name: "Clear Filters" }));
+
+    fireEvent.change(win.getByRole("searchbox", { name: "Search profiles" }), { target: { value: "hub" } });
+    expect(names()).toEqual(["Hall hub"]);
+    fireEvent.change(win.getByRole("searchbox", { name: "Search profiles" }), { target: { value: "lock.front" } });
+    expect(names()).toEqual(["Front door"]);
+    expect(rowsIn("Profiles")[0]).toHaveTextContent("Prohibited · Enforced");
+  });
+
+  it("opens a chosen profile in Profile Editor, named with its scope and exact ID", async () => {
+    renderMesa();
+    expect(await editorWindow().findByText("Select a profile to edit it, or add one.")).toBeTruthy();
+    await waitFor(() => expect(names()).toContain("Hall hub"));
+    choose("Hall hub");
+    const heading = await editorWindow().findByRole("heading", { level: 3 });
+    expect(heading).toHaveTextContent("Device");
+    expect(heading).toHaveTextContent("Hall hub");
+    expect(within(heading).getByText("dev-hall").tagName).toBe("CODE");
+    expect(api.getMesaDevice).toHaveBeenCalledWith("dev-hall");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm"));
+    expect(rowsIn("Profiles").find((r) => r.getAttribute("aria-selected") === "true")).toHaveTextContent("Hall hub");
+  });
+
+  it("asks before leaving unsaved changes for another profile", async () => {
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    choose("Front door");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
+    // Choosing the profile already open keeps the form as it is.
+    choose("Front door");
+    expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
+    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
+
+    choose("Desk lamp");
+    const ask = editorWindow().getByRole("group", { name: "Discard changes?" });
+    expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Front door");
+    fireEvent.click(within(ask).getByRole("button", { name: "Keep Editing" }));
+    expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
+    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
+
+    choose("Desk lamp");
+    fireEvent.click(within(editorWindow().getByRole("group", { name: "Discard changes?" })).getByRole("button", { name: "Discard and Open" }));
+    await waitFor(() => expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Desk lamp"));
+    expect(api.putMesaProfile).not.toHaveBeenCalled();
+  });
+
+  it("Discard Changes returns the form to the saved profile, and is unavailable while nothing changed", async () => {
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    choose("Front door");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    const discard = editorWindow().getByRole("button", { name: "Discard Changes" });
+    expect(discard).toBeDisabled();
+    fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
+    expect(discard).not.toBeDisabled();
+    fireEvent.click(discard);
+    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited");
+  });
+
+  it("adds a profile from the Add Profile menu, and Save shows it as saved", async () => {
+    vi.mocked(api.putMesaDomain).mockResolvedValue({} as never);
+    vi.mocked(api.getMesaDomain).mockResolvedValue({ stored: doc("confirm") } as never);
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    fireEvent.click(profilesWindow().getByRole("button", { name: "Add Profile" }));
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Add Entity Profile", "Add Device Profile", "Add Area Profile", "Add Integration Profile", "Add Domain Profile",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add Domain Profile" }));
+    expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Add Domain Profile");
+    expect(editorWindow().queryByRole("button", { name: "Delete" })).toBeNull();
+    fireEvent.change(editorWindow().getByRole("combobox", { name: /Domain/ }), { target: { value: "lock" } });
+    fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
+    fireEvent.click(editorWindow().getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.putMesaDomain).toHaveBeenCalledWith("lock", expect.any(Object), true));
+    await waitFor(() => expect(editorWindow().getByRole("button", { name: "Delete" })).toBeInTheDocument());
+    expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("lock");
+    expect(api.getMesaDomain).toHaveBeenCalledWith("lock");
+    expect(api.listMesaProfiles).toHaveBeenCalledTimes(2);
+  });
+
+  it("deletes only after an inline confirmation naming the target, then empties the editor", async () => {
+    vi.mocked(api.deleteMesaProfile).mockResolvedValue(undefined as never);
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    choose("Front door");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    fireEvent.click(editorWindow().getByRole("button", { name: "Delete" }));
+    const confirm = editorWindow().getByRole("group", { name: "Delete this entity profile?" });
+    expect(confirm).toHaveTextContent('The "Front door" entity will fall back');
+    expect(api.deleteMesaProfile).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Delete Entity Profile" }));
+    await waitFor(() => expect(api.deleteMesaProfile).toHaveBeenCalledWith("lock.front"));
+    expect(await editorWindow().findByText("Select a profile to edit it, or add one.")).toBeTruthy();
+  });
+});
+
+describe("the injected modal editor", () => {
+  it("also confirms an entity profile's deletion first", async () => {
+    vi.mocked(api.deleteMesaProfile).mockResolvedValue(undefined as never);
+    const onClose = vi.fn();
+    render(<ProfileEditor scope="entity" profileKey="lock.front" isNew={false} entityTree={{}} canonicalTags={[]} onClose={onClose} onSaved={() => {}} lockedKey />);
+    await waitFor(() => expect(screen.getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(api.deleteMesaProfile).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("group", { name: "Delete this entity profile?" })).getByRole("button", { name: "Delete Entity Profile" }));
+    await waitFor(() => expect(api.deleteMesaProfile).toHaveBeenCalledWith("lock.front"));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("conditional MESA windows", () => {
+  it("are unknown until MESA has loaded, then follow its findings; other windows are always allowed", () => {
+    expect(windowAvailable("mesaOrphans", null)).toBeNull();
+    expect(windowAvailable("mesaAdvisory", null, null)).toBeNull();
+    expect(windowAvailable("mesaOrphans", null, { orphans: true, advisory: false })).toBe(true);
+    expect(windowAvailable("mesaAdvisory", null, { orphans: true, advisory: false })).toBe(false);
+    expect(windowAvailable("mesaProfiles", null, null)).toBe(true);
+  });
+});
