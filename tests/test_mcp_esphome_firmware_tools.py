@@ -617,6 +617,59 @@ class TestJobStatus:
         assert body["armed_for_next_boot"] is True
         assert "next wake" in body["note"]
 
+    async def test_going_offline_during_the_build_reports_the_armed_update(self, hass, esphome_dir):
+        """The add-on flags the compile and CANCELS its held upload; that is not a stopped install."""
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile", is_deferred_install=True),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [
+                {"job_id": UPLOAD, "configuration": FILE, "job_type": "upload", "status": "cancelled",
+                 "depends_on": JOB, "is_deferred_install": False,
+                 "error": "Device went offline; update queued for its next wake"},
+            ],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["upload"]["status"] == "cancelled"
+        assert body["flashed"] is False
+        assert body["armed_for_next_boot"] is True
+        assert "next wake" in body["note"]
+
+    async def test_a_failed_upload_to_an_offline_device_reports_the_armed_update(self, hass, esphome_dir):
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile"),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [
+                {"job_id": UPLOAD, "configuration": FILE, "job_type": "upload", "status": "failed",
+                 "depends_on": JOB, "is_deferred_install": True},
+            ],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["upload"]["status"] == "failed"
+        assert body["flashed"] is False
+        assert body["armed_for_next_boot"] is True
+
+    @pytest.mark.parametrize("upload", [
+        {"status": "cancelled", "is_deferred_install": False},
+        {"status": "failed", "is_deferred_install": False},
+    ])
+    async def test_an_unflagged_stopped_upload_is_not_called_armed(self, hass, esphome_dir, upload):
+        """An operator cancel or an ordinary failed flash arms nothing."""
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile", is_deferred_install=False),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [{"job_id": UPLOAD, "configuration": FILE, "job_type": "upload",
+                                   "depends_on": JOB, **upload}],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["flashed"] is False
+        assert "armed_for_next_boot" not in body
+
     async def test_a_failed_compile_never_looks_for_an_upload(self, hass, esphome_dir):
         builder = FakeBuilder(**{
             "firmware/get_job": _job(status="failed", exit_code=1),
@@ -1271,6 +1324,18 @@ class TestScrubbing:
         assert REAL_API_KEY not in blob
         assert REAL_OTA_PASSWORD not in blob
         assert "<redacted>" in _json(content)["output"]
+
+    async def test_job_error_text_is_scrubbed(self, hass, esphome_dir):
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="failed", exit_code=1,
+                                     error=f"Upload refused for key {REAL_API_KEY}"),
+            "firmware/follow_job": BuilderResult(output="", success=False, exit_code=1),
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert REAL_API_KEY not in json.dumps(content)
+        assert body["error"] == "Upload refused for key <redacted>"
 
     async def test_running_job_output_is_scrubbed_too(self, hass, esphome_dir):
         builder = FakeBuilder(**{

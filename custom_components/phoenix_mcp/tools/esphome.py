@@ -1229,6 +1229,12 @@ async def _tool_validate_esphome_yaml(
     }
     if res.output_truncated:
         body["output_truncated"] = True
+    # What produced this verdict: the compiler and the Device Builder have
+    # separate versions, and a schema change in either can change it.
+    if res.esphome_version:
+        body["esphome_version"] = res.esphome_version
+    if res.server_version:
+        body["device_builder_version"] = res.server_version
     return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
 
 
@@ -1503,7 +1509,9 @@ async def _tool_list_esphome_jobs(
                 or (status is not None and status != job.get("status"))):
             continue
         row = {"file": rel}
-        for key in ("job_id", "status", "type", "created_at", "started_at", "finished_at"):
+        # The add-on's own field names: a job record carries job_type and
+        # completed_at, never type or finished_at.
+        for key in ("job_id", "status", "job_type", "created_at", "started_at", "completed_at"):
             value = job.get(key)
             if isinstance(value, str):
                 row[key] = redact_diagnostics(
@@ -2449,9 +2457,13 @@ async def _esphome_job_result(
     }
     if truncated:
         body["output_truncated"] = True
-    for key in ("progress", "exit_code", "error"):
+    for key in ("progress", "exit_code"):
         if job.get(key) is not None:
             body[key] = job[key]
+    # The add-on's own failure text, from the same process that wrote the log,
+    # so it gets the same scrub.
+    if isinstance(job.get("error"), str) and job["error"]:
+        body["error"] = scrub_secret_values(job["error"], values)
 
     # Only ever claim the device was flashed on the evidence of a COMPLETED
     # upload job. An install returns its compile job alone, so a finished compile
@@ -2459,8 +2471,8 @@ async def _esphome_job_result(
     # wake produces no upload job at all.
     if finished and status == "completed":
         upload = await _esphome_dependent_job(hass, url, rel, str(job.get("job_id") or ""))
+        upload_status = upload.get("status") if upload is not None else None
         if upload is not None:
-            upload_status = upload.get("status")
             body["upload"] = {
                 "job_id": upload.get("job_id"),
                 "status": upload_status,
@@ -2469,7 +2481,19 @@ async def _esphome_job_result(
             body["flashed"] = upload_status == "completed"
             if upload_status in _ESPHOME_JOB_ACTIVE:
                 body["note"] = "Compiled. The device is being flashed now; poll the upload job."
-        elif job.get("is_deferred_install") or job.get("queued_update_armed"):
+        # The add-on arms the update for the device's next wake in three shapes,
+        # and only the first has no upload job: the install found the device
+        # offline at the start, the device went offline during the build (the
+        # compile is flagged and its held upload CANCELLED), or the upload failed
+        # with the device offline (the upload is flagged). The flag is
+        # is_deferred_install on whichever job carries it; queued_update_armed
+        # only appears on a follow's terminal frame, never on a job record.
+        armed = (
+            (upload is None or upload_status == "cancelled")
+            and bool(job.get("is_deferred_install") or job.get("queued_update_armed"))
+        ) or (upload is not None and upload_status == "failed"
+              and bool(upload.get("is_deferred_install")))
+        if armed:
             body["flashed"] = False
             body["armed_for_next_boot"] = True
             body["note"] = (

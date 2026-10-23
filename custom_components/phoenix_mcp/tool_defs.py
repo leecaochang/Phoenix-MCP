@@ -2397,7 +2397,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "immediately; poll get_esphome_job to follow the compile and then the upload. "
             "Compiling finishing does NOT mean the device was flashed. If the device is "
             "currently offline the flash is armed for its next wake instead. Compile first "
-            "with compile_esphome_firmware if you are not certain the config builds."
+            "with compile_esphome_firmware if you are not certain the config builds. If the "
+            "upload is refused because the device did not offer OTA encryption, report that "
+            "to the operator: never add allow_plaintext_upload or change a credential "
+            "yourself to get the install through."
         ),
         "cap": "cap_esphome_flash",
         "inputSchema": {

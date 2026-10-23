@@ -1058,10 +1058,10 @@ Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 # Version-sensitive surface: the frame shapes and command names are the add-on's,
 # with no stability promise, so re-verify them on add-on upgrades.
 # Source-qualified protocol targets. The compiler and Device Builder use
-# independent version families; ESPHome 2026.9.1 bundles Device Builder 1.14.9.
+# independent version families; ESPHome 2026.10.0 bundles Device Builder 1.25.0.
 # Used only to add context to failures, never as an upgrade warning on success.
-ESPHOME_BUILDER_VERIFIED_VERSION = "1.14.9"
-ESPHOME_COMPILER_VERIFIED_VERSION = "2026.9.1"
+ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
+ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.0"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
 # Validation runs the config through ESPHome itself (no compile), which is
 # seconds on a small file but can pull external_components on a large one.

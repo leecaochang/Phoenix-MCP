@@ -1041,17 +1041,24 @@ class TestScopedEsphomeInventory:
         jobs = [
             {"job_id": "hidden", "configuration": "private.yaml", "status": "failed"},
             {"job_id": "old", "configuration": "rf-blaster1.yaml", "status": "completed", "created_at": "2026-09-01"},
-            {"job_id": "new", "configuration": "rf-blaster1.yaml", "status": "failed", "created_at": "2026-09-02",
-             "output": ["REALAPIKEY123456="], "error": "housepassword1", "port": "192.168.1.10"},
+            # The Device Builder 1.25.0 record shape: job_type and completed_at,
+            # plus fields the projection must never carry.
+            {"job_id": "new", "configuration": "rf-blaster1.yaml", "job_type": "compile", "status": "failed",
+             "created_at": "2026-09-02", "started_at": "2026-09-02T00:00:01", "completed_at": "2026-09-02T00:01:00",
+             "output": ["REALAPIKEY123456="], "error": "housepassword1", "port": "192.168.1.10",
+             "skip_bootloader": True, "failure_reason": "", "remote_peer": "PRIVATE"},
             {"job_id": "escape", "configuration": "../private.yaml", "status": "failed"},
         ]
         (content, outcome, _), builder = await _inventory_call(hass, "list_esphome_jobs", {"limit": 1}, jobs)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 2
-        assert body["jobs"][0]["job_id"] == "new"
+        assert body["jobs"][0] == {
+            "file": "rf-blaster1.yaml", "job_id": "new", "status": "failed", "job_type": "compile",
+            "created_at": "2026-09-02", "started_at": "2026-09-02T00:00:01",
+            "completed_at": "2026-09-02T00:01:00",
+        }
         assert body["next_offset"] == 1
-        assert "error" not in body["jobs"][0]
         assert builder.await_args.args[2] == "firmware/get_jobs"
         (content, _, _), _builder = await _inventory_call(hass, "list_esphome_jobs", {"status": "completed"}, jobs)
         assert _json(content)["count"] == 1

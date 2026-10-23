@@ -149,6 +149,8 @@ class TestValidate:
         assert body["valid"] is True
         assert body["exit_code"] == 0
         assert "Configuration is valid" in body["output"]
+        # A stubbed reply announced no handshake, so no version is invented.
+        assert "esphome_version" not in body and "device_builder_version" not in body
 
     async def test_sends_the_filename_and_never_the_content(self, hass, esphome_dir):
         """Validation must run on approved on-disk content, not a caller payload.
@@ -425,7 +427,7 @@ class TestFullStack:
         self, hass, esphome_dir, aiohttp_client, monkeypatch, socket_enabled
     ):
         from custom_components.phoenix_mcp import esphome_builder
-        from tests.test_esphome_builder import FakeDeviceBuilder, stream
+        from tests.test_esphome_builder import SERVER_INFO as fake_versions, FakeDeviceBuilder, stream
 
         fake = FakeDeviceBuilder(replies={
             "devices/validate": stream(
@@ -449,6 +451,9 @@ class TestFullStack:
         assert body["valid"] is False
         assert body["exit_code"] == 1
         assert "is malformed" in body["output"]
+        # The verdict names both versions the handshake announced.
+        assert body["esphome_version"] == fake_versions["esphome_version"]
+        assert body["device_builder_version"] == fake_versions["server_version"]
         # The credential the validator echoed back never reaches the agent.
         assert REAL_API_KEY not in content["content"][0]["text"]
         assert fake.received[0]["args"] == {"configuration": "rf-blaster1.yaml"}
