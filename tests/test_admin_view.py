@@ -971,6 +971,11 @@ async def test_tree_and_resolution_path_show_child_device_parent(hass):
 
     tree = _build_entity_tree(hass)
     assert tree["switch"]["devices"][child.id]["parent_device_id"] == parent.id
+    parent_row = tree["switch"]["devices"][parent.id]
+    assert parent_row["entities"] == []
+    assert parent_row["parent_device_id"] is None
+    assert parent_row["name"] == "Strip"
+    assert all(parent.id not in domain["devices"] for key, domain in tree.items() if key != "switch")
 
     access_key = SimpleNamespace(permissions=PermissionTree(
         devices={parent.id: PermissionNode(state="RED")}

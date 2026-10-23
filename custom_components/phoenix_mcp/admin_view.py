@@ -347,6 +347,8 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     """Build a domain-keyed tree of enabled entities outside BLOCKED_DOMAINS and Phoenix's own.
 
     Pulls from the entity, device, and area registries (all in-memory dicts).
+    A child device's row names its main parent, and the parent has a row, possibly
+    without entities, in every domain where one of its parts appears.
     Synchronous; never performs I/O. The result is cached in
     PhoenixData.entity_tree_cache and invalidated on registry change events.
     """
@@ -360,6 +362,28 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     label_reg = lr.async_get(hass)
 
     tree: dict[str, dict] = {}
+
+    def device_row(device_id: str) -> dict[str, Any]:
+        device = device_snapshot.get(device_id)
+        if device is None:
+            return {
+                "device_id": device_id,
+                "parent_device_id": None,
+                "name": device_id,
+                "area_id": None,
+                "area_name": None,
+                "entities": [],
+            }
+        area_id = device_snapshot.effective_area_id(device_id)
+        area = area_reg.async_get_area(area_id) if area_id else None
+        return {
+            "device_id": device_id,
+            "parent_device_id": device_snapshot.child_parent_id(device_id),
+            "name": device.name_by_user or device.name or device_id,
+            "area_id": area_id,
+            "area_name": area.name if area else None,
+            "entities": [],
+        }
 
     for entry in entity_reg.entities.values():
         if entry.disabled_by is not None:
@@ -420,35 +444,21 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         if entry.device_id:
             device_id = entry.device_id
             if device_id not in tree[domain]["devices"]:
-                device = device_snapshot.get(device_id)
-                if device:
-                    d_area_id = device_snapshot.effective_area_id(device_id)
-                    d_area_name = None
-                    if d_area_id:
-                        da = area_reg.async_get_area(d_area_id)
-                        d_area_name = da.name if da else None
-                    tree[domain]["devices"][device_id] = {
-                        "device_id": device_id,
-                        "parent_device_id": device_snapshot.child_parent_id(device_id),
-                        "name": device.name_by_user or device.name or device_id,
-                        "area_id": d_area_id,
-                        "area_name": d_area_name,
-                        "entities": [],
-                    }
-                else:
-                    tree[domain]["devices"][device_id] = {
-                        "device_id": device_id,
-                        "parent_device_id": None,
-                        "name": device_id,
-                        "area_id": None,
-                        "area_name": None,
-                        "entities": [],
-                    }
+                tree[domain]["devices"][device_id] = device_row(device_id)
             tree[domain]["devices"][device_id]["entities"].append(entity_id)
         else:
             tree[domain]["deviceless_entities"].append(entity_id)
 
         tree[domain]["entity_details"][entity_id] = entity_info
+
+    # A child device's main parent governs it, so it gets a row in every domain
+    # where its parts appear, even when it has no entities there or anywhere.
+    # Without it, a parent's node could only show as an unmatched device.
+    for domain_tree in tree.values():
+        devices = domain_tree["devices"]
+        for parent_id in {row["parent_device_id"] for row in list(devices.values())}:
+            if parent_id is not None and parent_id not in devices:
+                devices[parent_id] = device_row(parent_id)
 
     # Zone, tag, and person creation require inherited domain WRITE scope because
     # their entity IDs do not exist until Home Assistant creates them. Keep all

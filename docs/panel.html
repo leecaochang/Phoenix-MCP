@@ -75,7 +75,7 @@
         </div>
 
         <h2 id="permission-tree">Painting the permission tree</h2>
-        <p>The tree groups entities by domain and device. You rarely set every node: the usual pattern is to set a whole domain or device, leave the children grey so they inherit, then use RED to carve out exceptions. See <a href="permissions.html">Permissions</a> for how the states resolve. The panel tools below make this faster.</p>
+        <p>The tree groups entities by domain and device. When Home Assistant registers a product as a main device with child devices for its parts, the child devices appear inside the main device's row, and the main device has a row in every domain where one of its parts has entities, even when it has no entities of its own. You rarely set every node: the usual pattern is to set a whole domain or device, leave the children grey so they inherit, then use RED to carve out exceptions. See <a href="permissions.html">Permissions</a> for how the states resolve. The panel tools below make this faster.</p>
         <p>Each row also carries a small MESA control, a <code>+</code> to create a profile or <code>MESA</code> when one already exists, which opens the profile editor over the workspace without losing your place. It writes at the level of the row you clicked: a domain group authors a domain profile, a device group authors a device profile covering every entity that device owns, and an entity row authors an entity profile. Permissions and MESA are independent, so a profile written here changes what any access key may do with that entity by nature, not just this one. The <a href="mesa.html">MESA</a> page covers what the levels mean.</p>
 
         <h3 id="select-by">Select by area, label, or integration</h3>

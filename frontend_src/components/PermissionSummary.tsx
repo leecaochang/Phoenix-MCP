@@ -67,12 +67,13 @@ function buildLookups(entityTree: EntityTree | null | undefined): {
       if (info.friendly_name) entityNames.set(eid, info.friendly_name);
     }
     const domFirst = domain.deviceless_entities[0]
-      ?? Object.values(domain.devices)[0]?.entities[0];
+      ?? Object.values(domain.devices).find((device) => device.entities.length > 0)?.entities[0];
     if (domFirst) domainFirstEntity.set(domainKey, domFirst);
     for (const [did, device] of Object.entries(domain.devices)) {
       deviceNames.set(did, device.name);
       if (device.entities[0]) deviceFirstEntity.set(did, device.entities[0]);
-      deviceDomain.set(did, domainKey);
+      // A parent listed only for its parts has no entity of its own in this domain.
+      if (device.entities.length > 0) deviceDomain.set(did, domainKey);
       if (device.parent_device_id) deviceParent.set(did, device.parent_device_id);
       for (const eid of device.entities) {
         entityToDevice.set(eid, did);

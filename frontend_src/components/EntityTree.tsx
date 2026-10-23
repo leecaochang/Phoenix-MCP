@@ -394,6 +394,8 @@ interface DeviceGroupProps {
   deviceName: string;
   domainKey: string;
   entityIds: string[];
+  // Child devices of this main device in the same domain, rendered nested.
+  partDeviceIds?: string[];
   domainData: DomainTree;
   permissions: PermissionTree;
   accessKeyId: string;
@@ -440,7 +442,7 @@ function DeviceIdentity({ deviceId, deviceName, expanded, onToggle }: DeviceIden
 }
 
 function DeviceGroup({
-  deviceId, deviceName, domainKey, entityIds, domainData,
+  deviceId, deviceName, domainKey, entityIds, partDeviceIds = [], domainData,
   permissions, accessKeyId, filterText, allEntityIds, onPermChange, onEntityClick, collapseKey, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, onOpenMesa, globalHints, onGlobalHintsChange,
 }: DeviceGroupProps) {
   const [expanded, setExpanded] = useState(false);
@@ -452,6 +454,9 @@ function DeviceGroup({
   const isDynamic = state !== "GREY";
   const headerRef = React.useRef<HTMLDivElement>(null);
   const isRevealed = revealDepth === "device" && !!revealEntity && entityIds.includes(revealEntity);
+  const sortedPartIds = [...partDeviceIds].sort((a, b) =>
+    compareStrings(domainData.devices[a]?.name ?? a, domainData.devices[b]?.name ?? b));
+  const partEntityIds = sortedPartIds.flatMap((id) => domainData.devices[id]?.entities ?? []);
 
   // Entities sorted by friendly name (falling back to entity id).
   const sortedEntityIds = [...entityIds].sort((a, b) => {
@@ -469,7 +474,8 @@ function DeviceGroup({
   // (no nonce bump) to refresh the summary, and that must not expand this row.
   // The effect still runs on mount, so a deep-linked reveal expands correctly.
   useEffect(() => {
-    if (revealDepth !== "domain" && revealEntity && entityIds.includes(revealEntity)) setExpanded(true);
+    if (revealDepth !== "domain" && revealEntity
+      && (entityIds.includes(revealEntity) || partEntityIds.includes(revealEntity))) setExpanded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce]);
 
@@ -496,7 +502,8 @@ function DeviceGroup({
     try {
       const tree = await api.patchDevicePermission(accessKeyId, deviceId, { state: newState });
       onPermChange(tree);
-      if (entityIds[0]) onEntityClick?.(entityIds[0], "device", { reveal: false });
+      const representative = entityIds[0] ?? partEntityIds[0];
+      if (representative) onEntityClick?.(representative, "device", { reveal: false });
     } catch (e: unknown) {
       setPermError(e instanceof Error ? e.message : t("perms.permSaveFailed"));
     }
@@ -506,10 +513,10 @@ function DeviceGroup({
   // load-bearing: a raw registry ID has no representation in entity_details.
   const deviceMatches = matchesTreeSearch(filterText, deviceId, deviceName);
   const hasVisibleChild = filterText
-    ? entityIds.some((eid) => {
+    ? [...entityIds, ...partEntityIds].some((eid) => {
         const detail = domainData.entity_details[eid];
         return matchesTreeSearch(filterText, eid, detail?.friendly_name);
-      })
+      }) || sortedPartIds.some((id) => matchesTreeSearch(filterText, id, domainData.devices[id]?.name))
     : true;
 
   if (filterText && !hasVisibleChild && !deviceMatches) return null;
@@ -573,6 +580,35 @@ function DeviceGroup({
               />
             );
           })}
+          {sortedPartIds.length > 0 && (
+            <div className="tree-children">
+              {sortedPartIds.map((partId) => (
+                <DeviceGroup
+                  key={partId}
+                  deviceId={partId}
+                  deviceName={domainData.devices[partId]?.name ?? partId}
+                  domainKey={domainKey}
+                  entityIds={domainData.devices[partId]?.entities ?? []}
+                  domainData={domainData}
+                  permissions={permissions}
+                  accessKeyId={accessKeyId}
+                  filterText={filterText}
+                  allEntityIds={allEntityIds}
+                  onPermChange={onPermChange}
+                  onEntityClick={onEntityClick}
+                  collapseKey={collapseKey}
+                  revealEntity={revealEntity}
+                  revealDepth={revealDepth}
+                  revealNonce={revealNonce}
+                  mesaProfileEntities={mesaProfileEntities}
+                  mesaProfileDevices={mesaProfileDevices}
+                  onOpenMesa={onOpenMesa}
+                  globalHints={globalHints}
+                  onGlobalHintsChange={onGlobalHintsChange}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -712,7 +748,7 @@ function DomainGroup({
       const tree = await api.patchDomainPermission(accessKeyId, domainKey, { state: newState });
       onPermChange(tree);
       const firstEntity = domainData.deviceless_entities[0]
-        ?? Object.values(domainData.devices)[0]?.entities[0];
+        ?? Object.values(domainData.devices).find((device) => device.entities.length > 0)?.entities[0];
       if (firstEntity) onEntityClick?.(firstEntity, "domain", { reveal: false });
     } catch (e: unknown) {
       setPermError(e instanceof Error ? e.message : t("perms.permSaveFailed"));
@@ -720,6 +756,17 @@ function DomainGroup({
   }
 
   const ghostEntityIds = ghostEntitiesForDomain(domainKey, permissions, allEntityIds);
+  // A child device nests under its main parent, which the backend lists in
+  // every domain where one of its parts appears.
+  const partsByParent = new Map<string, string[]>();
+  for (const [deviceId, device] of Object.entries(domainData.devices)) {
+    const parentId = device.parent_device_id;
+    if (parentId && parentId in domainData.devices) {
+      partsByParent.set(parentId, [...(partsByParent.get(parentId) ?? []), deviceId]);
+    }
+  }
+  const topLevelDevices = Object.entries(domainData.devices).filter(([, device]) =>
+    !device.parent_device_id || !(device.parent_device_id in domainData.devices));
   const hasChildren = domainData.deviceless_entities.length > 0
     || Object.keys(domainData.devices).length > 0
     || ghostEntityIds.length > 0;
@@ -812,7 +859,7 @@ function DomainGroup({
                 })}
             </div>
           )}
-          {Object.entries(domainData.devices)
+          {topLevelDevices
             .sort(([, a], [, b]) => compareStrings(a.name, b.name))
             .map(([deviceId, device]) => (
               <DeviceGroup
@@ -821,6 +868,7 @@ function DomainGroup({
                 deviceName={device.name}
                 domainKey={domainKey}
                 entityIds={device.entities}
+                partDeviceIds={partsByParent.get(deviceId)}
                 domainData={domainData}
                 permissions={permissions}
                 accessKeyId={accessKeyId}
