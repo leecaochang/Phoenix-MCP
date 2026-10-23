@@ -92,8 +92,10 @@ grain of the model gives the smoothest results and avoids dead ends.
   `recent_activity`, `compare_states`: what changed and when. Use relative time
   strings like `24h`, `7d`, `2w`, `1m`. History and statistics are bounded
   pages: continue only when `has_more` is true, using `next_cursor` as the next
-  call's `cursor`. There is no total to infer. `significant_states` is a
-  scrubbed significant-state view, not every sample, and accepts at most 7 days.
+  call's `cursor`. There is no total to infer. A page's `covered_range` is only
+  what it read; `unread_range` is the rest, so it never shows where data begins.
+  `significant_states` is a scrubbed significant-state view, not every sample,
+  and accepts at most 7 days.
   For how long something was in a state or how often it changed, use
   `get_history` `mode: "summary"`: per-state durations and entry counts with no
   rows. Read `complete` before reporting a zero or a total; unrecorded time is

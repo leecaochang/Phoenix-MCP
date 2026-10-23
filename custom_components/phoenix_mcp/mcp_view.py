@@ -1067,6 +1067,7 @@ async def _tool_get_history(
         retention=retention_metadata("short_term", keep_days),
         warnings=warnings,
         result_key="history",
+        newest_first=newest,
     )
     body["order"] = order
     body["mode"] = mode

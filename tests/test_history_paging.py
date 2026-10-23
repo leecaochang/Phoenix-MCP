@@ -89,9 +89,19 @@ async def test_small_pages_return_each_row_once(recorder_mock, hass: HomeAssista
             body = await _page(hass, mode=mode, order=order, limit=limit, **({"cursor": cursor} if cursor else {}))
             pages += 1
             assert 1 <= body["count"] <= limit
-            seen += [_when(row) for row in body["history"]]
+            page = [_when(row) for row in body["history"]]
+            seen += page
+            # Earliest to latest whatever the order, as compared instants.
+            stamps = sorted(page, key=dt_util.parse_datetime)
+            assert [dt_util.parse_datetime(body["data_range"][edge]) for edge in ("start", "end")] == [
+                dt_util.parse_datetime(stamps[0]), dt_util.parse_datetime(stamps[-1])]
             if not body["has_more"]:
+                assert "unread_range" not in body
                 break
+            # What no page has read yet lies past the cursor, toward the end the order runs to.
+            unread, requested = body["unread_range"], body["requested_range"]
+            assert unread == ({"start": body["next_cursor"], "end": requested["end"]} if order == "oldest_first"
+                              else {"start": requested["start"], "end": body["next_cursor"]})
             assert body["next_cursor"] != cursor, "a cursor must move"
             assert pages <= 80
             edge = "end" if order == "oldest_first" else "start"

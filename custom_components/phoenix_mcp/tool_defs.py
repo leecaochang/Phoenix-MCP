@@ -146,7 +146,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "summary returns per-state durations and entry counts instead of rows (how long a light was on, "
             "how often a pump started); a zero or total is definitive only when complete is true. Zone states "
             "are occupant counts: occupied time is the sum of counts above 0. "
-            "Follow has_more with next_cursor and the same order; there is intentionally no estimated total."
+            "Follow has_more with next_cursor and the same order; there is intentionally no estimated total. "
+            "covered_range and data_range describe only this page; with has_more, unread_range may hold "
+            "more history, so neither shows where history begins."
         ),
         "inputSchema": {
             "type": "object",

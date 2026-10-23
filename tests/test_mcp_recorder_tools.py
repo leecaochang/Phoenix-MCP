@@ -69,6 +69,8 @@ async def test_statistics_common_envelope_and_safe_day_cap(hass) -> None:
     assert body["effective_limit"] == 366
     assert body["has_more"] is True
     assert body["next_cursor"] == body["covered_range"]["end"]
+    # The rest of the requested range is named, so an empty first page is not read as "no data".
+    assert body["unread_range"] == {"start": body["covered_range"]["end"], "end": body["requested_range"]["end"]}
     assert body["retention"] == {"kind": "long_term"}
     assert body["statistics"] == []
     assert body["count"] == 0
@@ -124,6 +126,7 @@ async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
     assert body["count"] == 2
     assert body["has_more"] is False
     assert body["next_cursor"] is None
+    assert "unread_range" not in body
     assert body["warnings"] == []
     assert body["data_range"] == {
         "start": start.isoformat(),

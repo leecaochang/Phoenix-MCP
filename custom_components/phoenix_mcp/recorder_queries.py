@@ -266,16 +266,28 @@ def recorder_envelope(
     retention: dict[str, Any],
     warnings: list[str],
     result_key: Literal["history", "statistics"],
+    newest_first: bool = False,
 ) -> dict[str, Any]:
-    """Build the common cursor-based Recorder response contract."""
+    """Build the common cursor-based Recorder response contract.
+
+    `covered_range` is the time this page read and `data_range` spans its rows,
+    earliest to latest whatever order they are listed in. With `has_more`,
+    `unread_range` names the side of the requested range that no page has read
+    yet, so a page's own bounds are never mistaken for where the data begins.
+    """
     timestamps = [stamp for row in rows if (stamp := timestamp_getter(row)) is not None]
     data_range = None
     if timestamps:
-        data_range = {"start": iso_utc(timestamps[0]), "end": iso_utc(timestamps[-1])}
+        data_range = {"start": iso_utc(min(timestamps)), "end": iso_utc(max(timestamps))}
+    unread: dict[str, Any] = {}
+    if has_more:
+        start, end = (window.start, covered_start) if newest_first else (covered_end, window.end)
+        unread["unread_range"] = {"start": iso_utc(start), "end": iso_utc(end)}
     return {
         "entity_id": entity_id,
         "requested_range": {"start": iso_utc(window.start), "end": iso_utc(window.end)},
         "covered_range": {"start": iso_utc(covered_start), "end": iso_utc(covered_end)},
+        **unread,
         "data_range": data_range,
         "count": len(rows),
         "limit": window.limit,
