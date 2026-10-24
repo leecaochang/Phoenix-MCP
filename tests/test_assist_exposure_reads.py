@@ -349,8 +349,29 @@ async def test_mesa_entity_tools(home, tool):
             entity_id, {"semantic_profile": {"semantic_tags": ["lighting.ambient"]}},
             default_origin=MetadataOrigin.USER))
     data = _data(mesa=runtime)
-    assert (await _call_tool(tool, {"entity_id": SHOWN}, _key(), home, data))[1] == "allowed"
-    assert (await _call_tool(tool, {"entity_id": HIDDEN}, _key(filtered=False), home, data))[1] == "allowed"
+    # mesa-core resolves in a worker thread; an exposed entity's profile must still be found.
+    shown = await _call_tool(tool, {"entity_id": SHOWN}, _key(), home, data)
+    assert shown[1] == "allowed" and _body(shown)["entity_id"] == SHOWN and "error" not in _body(shown)
+    unfiltered = await _call_tool(tool, {"entity_id": HIDDEN}, _key(filtered=False), home, data)
+    assert unfiltered[1] == "allowed" and "error" not in _body(unfiltered)
     refused = await _call_tool(tool, {"entity_id": HIDDEN}, _key(), home, data)
     assert refused[1] == "not_found"
     assert _body(refused) == _not_found_envelope(HIDDEN)
+
+
+async def test_mesa_query_lists_the_exposed_profiles(home):
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+
+    runtime = await async_setup_mesa(home, "advisory")
+    for entity_id in (SHOWN, HIDDEN):
+        runtime.store.set(entity_id, SemanticProfile.from_dict(
+            entity_id, {"semantic_profile": {"semantic_tags": ["lighting.ambient"]}},
+            default_origin=MetadataOrigin.USER))
+    data = _data(mesa=runtime)
+    listed = {}
+    for filtered in (True, False):
+        result = await _call_tool("mesa_query_profiles", {}, _key(filtered=filtered), home, data)
+        assert result[1] == "allowed", result
+        listed[filtered] = {row["entity_id"] for row in _body(result)["results"]}
+    assert listed[True] == {SHOWN} and listed[False] >= {SHOWN, HIDDEN}

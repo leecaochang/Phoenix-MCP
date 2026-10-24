@@ -181,18 +181,22 @@ class ScopedProfileStore:
     ENUMERATION: device_keys / area_keys / integration_keys name objects a caller
     may have no entity access to, so none is exposed here. If one is ever needed,
     filter it to keys with at least one visible entity mapping to them.
+
+    Which profiled entities are visible is decided once, on the event loop, when
+    the view is built: mesa-core resolves in a worker thread, where Home
+    Assistant's Assist exposure lookup cannot run and the scope check would fail
+    closed for an access key that filters by exposure.
     """
 
     def __init__(self, inner, access_key: AccessKeyRecord, hass: HomeAssistant) -> None:
         self._inner = inner
-        self._access_key = access_key
-        self._hass = hass
+        self._visible = frozenset(k for k in inner.entity_keys() if _is_visible(k, access_key, hass))
 
     def entity_keys(self) -> list[str]:
-        return [k for k in self._inner.entity_keys() if _is_visible(k, self._access_key, self._hass)]
+        return [k for k in self._inner.entity_keys() if k in self._visible]
 
     def get(self, entity_id: str) -> SemanticProfile | None:
-        if not _is_visible(entity_id, self._access_key, self._hass):
+        if entity_id not in self._visible:
             return None
         return self._inner.get(entity_id)
 
