@@ -69,7 +69,8 @@
             <div class="tool-head"><span class="tool-name">get_automation</span><span class="badge badge-cap">Manage automations</span></div>
             <p class="tool-desc">Read one automation's full configuration before editing it. <code>edit_automation</code> replaces the entire configuration, so omitting a trigger, condition, or action removes it.</p>
             <p class="tool-desc">The response includes a <code>content_hash</code> for the edit's <code>expected_hash</code>. This prevents overwriting a newer change. YAML tags appear as display strings, such as <code>!secret my_key</code>; secret values are never resolved. The read requires Manage automations but never needs approval.</p>
-            <dl><dt>params</dt><dd><code>automation_id</code> (required), from <code>list_automations</code> or the entity's <code>id</code> attribute</dd></dl>
+            <p class="tool-desc"><code>automation_id</code> may also be the automation's entity ID. A YAML automation without an <code>id:</code> has no stored configuration to read, and one defined outside the automation files Phoenix edits, such as in a package, has none here either; for an automation the access key can see, the refusal says which.</p>
+            <dl><dt>params</dt><dd><code>automation_id</code> (required), from <code>list_automations</code> or the entity's <code>id</code> attribute, or the entity ID</dd></dl>
           </article>
 
           <article class="tool" data-cap="write" data-search="create_automation edit_automation delete_automation automations.yaml expected_hash">

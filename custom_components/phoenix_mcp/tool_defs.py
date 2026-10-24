@@ -752,7 +752,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "The automation's stored id (from list_automations or its 'id' state attribute) or its entity_id."},
+                "automation_id": {"type": "string", "description": "The automation's stored id (from list_automations or its 'id' state attribute) or its entity_id. A YAML automation without an id: has no stored configuration to read."},
             },
             "required": ["automation_id"],
         },

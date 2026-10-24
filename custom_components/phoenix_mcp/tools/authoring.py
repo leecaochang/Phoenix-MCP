@@ -392,10 +392,33 @@ async def _tool_list_automations(
     return _tool_success(json.dumps(longest_fitting(build, len(items)), default=str)), "allowed", tool
 
 
+def _automation_not_found(
+    hass: HomeAssistant, access_key: AccessKeyRecord, requested: str, automation_id: str
+) -> str:
+    """Why no stored configuration was found, said plainly for an automation the caller can see.
+
+    A YAML automation without an id: has no stored id, so its entity ID cannot
+    be resolved to an entry, and one defined outside the automation files
+    Phoenix edits (a package) has an id but no entry here; a bare "not found"
+    sent agents looking for an id that cannot exist. Only an entity this access
+    key can read is explained, so the text never confirms one it cannot.
+    """
+    if (requested.startswith("automation.") and hass.states.get(requested) is not None
+            and resolve_read(requested, access_key, hass) in (Permission.READ, Permission.WRITE)):
+        if automation_id == requested:
+            return (f"{requested} is a YAML automation without an id:, so it has no stored configuration this "
+                    "tool can read or edit. get_relationships still shows what it references; giving it an id: in "
+                    "YAML makes it readable here.")
+        return (f"{requested} has id '{automation_id}', but its configuration is not in the automation files "
+                "Phoenix edits (for example it is in a package), so this tool cannot read or edit it.")
+    return f"No automation found with id '{automation_id}'."
+
+
 async def _tool_get_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one automation's current stored config, with a content_hash."""
+    requested = str(args.get("automation_id") or "").strip()
     args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_automation"
@@ -404,7 +427,8 @@ async def _tool_get_automation(
         return _tool_error("automation_id is required."), "invalid_request", "get_automation"
     config = await _read_config_entry(hass, "automation", automation_id)
     if config is None:
-        return _tool_error(f"No automation found with id '{automation_id}'."), "not_found", f"automation:{automation_id}"
+        return (_tool_error(_automation_not_found(hass, access_key, requested, automation_id)), "not_found",
+                f"automation:{automation_id}")
     return _config_read_response("automation_id", automation_id, config, f"automation:{automation_id}")
 
 
@@ -691,6 +715,7 @@ async def _tool_delete_automation(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a UI automation."""
+    requested = str_arg(args.get("automation_id")).strip()
     args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_automation"
@@ -699,7 +724,8 @@ async def _tool_delete_automation(
         return _tool_error("automation_id is required."), "invalid_request", "delete_automation"
     args, current = await _bind_delete_args(args, hass, "automation", automation_id)
     if current is None:
-        return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "delete_automation"
+        return (_tool_error(_automation_not_found(hass, access_key, requested, automation_id)), "denied",
+                "delete_automation")
     blocked = await _gate(
         "cap_automation_write", access_key, hass, data,
         tool_name="delete_automation", args=args, request_id=request_id,
