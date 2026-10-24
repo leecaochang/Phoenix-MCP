@@ -809,6 +809,33 @@ class TestRelationshipCoverage:
         matches = [c for c in _json(content)["consumers"] if c["id"] == "helper3"]
         assert [m["name"] for m in matches] == ["Rate from <redacted-ip>"]
 
+    async def test_a_ui_group_helper_is_listed_once(self, hass, rel_env, monkeypatch):
+        """The body scan finds its config entry and HA's graph names its group entity: one consumer."""
+        import custom_components.phoenix_mcp.tools.discovery as disc
+
+        helper = MockConfigEntry(
+            domain="group", entry_id="group-helper", title="Kitchen lights",
+            options={"group_type": "light", "entities": ["light.kitchen"]},
+        )
+        helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "light", "group", "group-helper", config_entry=helper, suggested_object_id="kitchen_lights")
+        hass.states.async_set(entity.entity_id, "on", {"friendly_name": "Kitchen lights"})
+
+        async def _graph(hass_, command, payload):
+            return {"group": {entity.entity_id}} if payload["item_id"] == "light.kitchen" else {}
+
+        monkeypatch.setattr(disc, "async_ws_command", _graph)
+        access_key = _access_key(cap_integration_write="allow")
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+        content, _, _ = await _call("get_relationships", {"entity_id": "light.kitchen"}, access_key, hass)
+        matches = [c for c in _json(content)["consumers"] if "group-helper" in (c["id"], c.get("entity_id"))
+                   or c.get("entity_id") == entity.entity_id]
+        assert len(matches) == 1, matches
+        assert matches[0]["kind"] == "config_entry" and matches[0]["id"] == "group-helper"
+        assert matches[0]["entity_id"] == entity.entity_id
+        assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": ["group"]}]
+
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor
         the registry can never resolve again, for anyone."""

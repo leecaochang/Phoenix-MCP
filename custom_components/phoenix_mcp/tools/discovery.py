@@ -464,16 +464,28 @@ def _merge_graph_hits(
     consumers: list[dict],
     hits: set[tuple[str, str, str]],
 ) -> None:
-    """Merge graph-only consumers without weakening detailed YAML roles."""
+    """Merge graph-only consumers without weakening detailed YAML roles.
+
+    A UI helper's entity (a group helper, say) belongs to the config entry the
+    body scan already found, so its graph hit joins that consumer, which then
+    names the entity, rather than listing the same helper twice.
+    """
     by_key = {
         (consumer["kind"], str(consumer["id"])): consumer
         for consumer in consumers if "entity_id" not in consumer
     }
     by_entity = {consumer["entity_id"]: consumer for consumer in consumers if "entity_id" in consumer}
+    by_entry = {str(consumer["id"]): consumer for consumer in consumers if consumer["kind"] == "config_entry"}
+    registry = er.async_get(hass)
     for kind, graph_entity_id, target_entity_id in sorted(hits):
         consumer_id, name = _graph_consumer_identity(hass, kind, graph_entity_id)
         key = (kind, consumer_id)
         consumer = by_entity.get(graph_entity_id) or by_key.get(key)
+        registry_entry = registry.async_get(graph_entity_id)
+        if consumer is None and registry_entry is not None and registry_entry.config_entry_id in by_entry:
+            consumer = by_entry[registry_entry.config_entry_id]
+            consumer.setdefault("entity_id", graph_entity_id)
+            by_entity[graph_entity_id] = consumer
         if consumer is None:
             consumer = {
                 "kind": kind,
