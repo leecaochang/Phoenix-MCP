@@ -2034,19 +2034,20 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Get execution traces for an accessible automation or script, to debug why it did or did not run. "
             "Without run_id, returns a list of recent run summaries (newest first); an empty list comes with a "
             "diagnosis (disabled, never run, or no retained trace). With run_id, returns that run; set summary "
-            "true for a condensed view that highlights the error and last step. Values recorded for entities "
-            "outside this access key's read scope are redacted. Returns 'not found' if the automation or script "
-            "is not accessible."
+            "true for a condensed view that highlights the error and last step. Without automation_id, returns "
+            "every accessible automation and script with retained runs: counts by outcome, the last run, and "
+            "each run that recorded an error, errors first: one call to learn whether anything failed. Values "
+            "recorded for entities outside this access key's read scope are redacted. Returns 'not found' if "
+            "the automation or script is not accessible."
         ),
         "cap": "cap_traces",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id, or a script entity_id (script.x) for script traces."},
+                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id, or a script entity_id (script.x) for script traces. Omit for the overview of all."},
                 "run_id": {"type": "string", "description": "Optional specific run to fetch."},
                 "summary": {"type": "boolean", "description": "Condensed view highlighting error and last step.", "default": False},
             },
-            "required": ["automation_id"],
         },
     },
     {

@@ -253,11 +253,12 @@
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>include_fields</code></dd></dl>
           </article>
 
-          <article class="tool" data-cap="discovery" data-search="get_automation_traces execution traces script never run disabled diagnosis">
+          <article class="tool" data-cap="discovery" data-search="get_automation_traces execution traces script never run disabled diagnosis overview failed error">
             <div class="tool-head"><span class="tool-name">get_automation_traces</span><span class="badge badge-cap">Automation traces</span></div>
             <p class="tool-desc">Execution traces for an accessible automation, or for a script when <code>automation_id</code> is a <code>script.*</code> entity ID. Optional <code>run_id</code> and <code>summary</code> (highlights the error and last step). An empty list carries a <code>diagnosis</code>: disabled, never run, or no retained trace.</p>
+            <p class="tool-desc">Without <code>automation_id</code>, one call returns every accessible automation and script with retained runs, so a question such as whether any automation failed this week needs no call per automation. Each row counts the runs by how they ended, gives the last run, and lists every run that recorded an error, with its text. A run counts as an error the way the Home Assistant trace view shows one: an exception, or an error on its last step, such as a <code>stop</code> with an error. A condition that was simply false is not an error. Rows with errors come first, not-triggered evaluations are counted separately, and rows that do not fit in one result are named in <code>not_listed</code>.</p>
             <p class="tool-desc">A trace records live data, such as the trigger's old and new states, service results and template output. Anything recorded about an entity outside the access key's read scope is redacted: a state object for such an entity is replaced whole, its ID is masked in text and values, and sensitive attributes are removed from every recorded state.</p>
-            <dl><dt>params</dt><dd><code>automation_id</code> (required), <code>run_id</code>, <code>summary</code></dd></dl>
+            <dl><dt>params</dt><dd><code>automation_id</code> (omit for the overview), <code>run_id</code>, <code>summary</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="discovery" data-search="get_overview home summary counts mesa_mode restrictions prohibited read_only safety">

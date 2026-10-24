@@ -132,18 +132,21 @@ class TestGetHistoryTransitions:
 # --- get_automation_traces ---
 
 class _FakeTrace:
-    def __init__(self, run_id="run1", start="2026-01-01T00:00:00+00:00", not_triggered=False):
+    def __init__(self, run_id="run1", start="2026-01-01T00:00:00+00:00", not_triggered=False, error=None):
         self.run_id = run_id
         self._start = start
         self.not_triggered = not_triggered
+        self._error = error
 
     def as_short_dict(self):
         short = {
-            "run_id": self.run_id, "state": "stopped", "script_execution": "finished",
+            "run_id": self.run_id, "state": "stopped", "script_execution": "error" if self._error else "finished",
             "last_step": "action/0", "timestamp": {"start": self._start},
         }
         if self.not_triggered:
             short["not_triggered"] = True
+        if self._error:
+            short["error"] = self._error
         return short
 
     def as_dict(self):
@@ -222,6 +225,120 @@ class TestGetAutomationTraces:
             {"automation_id": "automation.morning", "run_id": "no-such-run"},
             _auto_access_key(), hass)
         assert outcome == "not_found"
+
+
+class TestTraceOverview:
+    """Without automation_id, one call says which automations and scripts ran and which failed."""
+
+    def _setup(self, hass, *, many=0):
+        from homeassistant.components.trace.const import DATA_TRACE
+        entry = MockConfigEntry(domain="test_integration", entry_id="e1")
+        entry.add_to_hass(hass)
+        registry = er.async_get(hass)
+        for domain, uid, name in (("automation", "uid_ok", "fine"), ("automation", "uid_bad", "broken"),
+                                  ("automation", "uid_hidden", "hidden"), ("script", "uid_script", "porch"),
+                                  *(("automation", f"uid_{i}", f"bulk_{i:02d}") for i in range(many))):
+            registry.async_get_or_create(domain, "test_integration", uid, config_entry=entry, suggested_object_id=name)
+        hass.data[DATA_TRACE] = {
+            "automation.uid_ok": _trace_buckets(
+                runs=[_FakeTrace("a1", "2026-01-03T00:00:00+00:00"), _FakeTrace("a2", "2026-01-01T00:00:00+00:00")],
+                not_triggered=[_FakeTrace("n1", "2026-01-04T00:00:00+00:00", not_triggered=True)]),
+            "automation.uid_bad": _trace_buckets(runs=[
+                _FakeTrace("b1", "2026-01-02T00:00:00+00:00", error="Action light.flash not found"),
+                _FakeTrace("b2", "2026-01-01T00:00:00+00:00")]),
+            "automation.uid_hidden": _trace_buckets(runs=[_FakeTrace("h1", error="secret failure")]),
+            "script.uid_script": _trace_buckets(runs=[_FakeTrace("s1", "2026-01-05T00:00:00+00:00")]),
+            **{f"automation.uid_{i}": _trace_buckets(runs=[_FakeTrace(f"r{i}", error="x" * 200)]) for i in range(many)},
+        }
+
+    def _key(self):
+        return _access_key(permissions=PermissionTree(
+            domains={"automation": PermissionNode(state="GREEN"), "script": PermissionNode(state="GREEN")},
+            entities={"automation.hidden": PermissionNode(state="RED")}), cap_traces="allow")
+
+    async def test_every_readable_automation_and_script_in_one_call_errors_first(self, hass):
+        self._setup(hass)
+        content, outcome, _ = await _call("get_automation_traces", {}, self._key(), hass)
+        assert outcome == "allowed"
+        body = _json(content)
+        assert [row["entity_id"] for row in body["items"]] == ["automation.broken", "script.porch", "automation.fine"]
+        assert body["count"] == 3 and body["with_errors"] == 1
+        broken, _, fine = body["items"]
+        assert broken["outcomes"] == {"error": 1, "finished": 1}
+        # Error text is scoped like the single-trace view: an entity this key cannot read is redacted.
+        assert broken["errors"] == [{"run_id": "b1", "start": "2026-01-02T00:00:00+00:00", "execution": "error",
+                                     "last_step": "action/0", "error": "Action <redacted-entity> not found"}]
+        assert fine["runs"] == 2 and fine["not_triggered"] == 1 and fine["last"]["run_id"] == "a1"
+        assert "errors" not in fine and "secret failure" not in content["content"][0]["text"]
+
+    async def test_the_overview_fits_one_result_and_names_the_rest(self, hass):
+        from custom_components.phoenix_mcp import tool_common
+        from custom_components.phoenix_mcp.conversation_log import json_size
+        self._setup(hass, many=30)
+        with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", 4000):
+            body = _json((await _call("get_automation_traces", {}, self._key(), hass))[0])
+        assert body["count"] < 33 and len(body["not_listed"]) == 33 - body["count"]
+        assert json_size(json.dumps(body)) <= 4000
+        assert any("not_listed" in warning for warning in body["warnings"])
+
+    async def test_runs_saved_before_a_restart_are_read(self, hass):
+        # Home Assistant restores saved traces only when they are first listed; reading
+        # its trace data directly would report a restarted instance as having no runs.
+        from homeassistant.components.trace.const import DATA_TRACE, DATA_TRACE_STORE
+        self._setup(hass)
+        hass.data[DATA_TRACE] = {}
+        saved = {"extended_dict": {"domain": "automation", "item_id": "uid_bad", "run_id": "old1", "last_step": "action/0",
+                                   "context": {"id": "c1", "parent_id": None, "user_id": None},
+                                   "trace": {"action/0": [{"path": "action/0", "error": "Pump jammed"}]}},
+                 "short_dict": {"run_id": "old1", "state": "stopped", "script_execution": "aborted",
+                                "last_step": "action/0", "timestamp": {"start": "2026-01-02T00:00:00+00:00"}}}
+        hass.data[DATA_TRACE_STORE] = MagicMock(async_load=AsyncMock(return_value={"automation.uid_bad": [saved]}))
+        overview = _json((await _call("get_automation_traces", {}, self._key(), hass))[0])
+        assert overview["items"][0]["errors"][0] == {"run_id": "old1", "start": "2026-01-02T00:00:00+00:00",
+                                                     "execution": "aborted", "last_step": "action/0", "error": "Pump jammed"}
+        single = _json((await _call("get_automation_traces", {"automation_id": "automation.broken"}, self._key(), hass))[0])
+        assert [trace["run_id"] for trace in single["traces"]] == ["old1"]
+
+    def test_an_aborted_run_without_recorded_steps_has_no_error(self):
+        from custom_components.phoenix_mcp.tools.authoring import _run_error
+
+        class _Aborted:
+            def as_extended_dict(self):
+                return {"last_step": None, "trace": {}}
+
+        assert _run_error({"script_execution": "aborted"}, _Aborted()) is None
+        assert _run_error({"script_execution": "aborted", "error": "boom"}, _Aborted()) == "boom"
+
+    async def test_a_run_id_needs_its_automation(self, hass):
+        self._setup(hass)
+        content, outcome, _ = await _call("get_automation_traces", {"run_id": "b1"}, self._key(), hass)
+        assert outcome == "invalid_request" and "needs automation_id" in content["content"][0]["text"]
+
+    async def test_a_real_failed_run_is_reported_with_its_error(self, hass):
+        from homeassistant.setup import async_setup_component
+        # A stop with an error and a false condition both end a run as aborted; only the
+        # first is a failure, and Home Assistant records its error on the last step.
+        assert await async_setup_component(hass, "automation", {"automation": [{
+            "id": "flash", "alias": "Flash",
+            "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+            "actions": [{"stop": "Pump jammed", "error": True}],
+        }, {
+            "id": "quiet", "alias": "Quiet",
+            "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+            "actions": [{"condition": "state", "entity_id": "binary_sensor.porch", "state": "off"}, {"delay": 0}],
+        }]})
+        await hass.async_block_till_done()
+        hass.states.async_set("binary_sensor.porch", "on")
+        await hass.async_block_till_done()
+        key = _access_key(permissions=PermissionTree(domains={
+            "automation": PermissionNode(state="GREEN"), "binary_sensor": PermissionNode(state="GREEN")}),
+            cap_traces="allow")
+        body = _json((await _call("get_automation_traces", {}, key, hass))[0])
+        rows = {row["entity_id"]: row for row in body["items"]}
+        assert body["with_errors"] == 1 and list(rows) == ["automation.flash", "automation.quiet"]
+        assert rows["automation.flash"]["outcomes"] == {"aborted": 1}
+        assert rows["automation.flash"]["errors"][0]["error"] == "Pump jammed"
+        assert rows["automation.quiet"]["outcomes"] == {"aborted": 1} and "errors" not in rows["automation.quiet"]
 
 
 class TestTraceScopeAndScripts:

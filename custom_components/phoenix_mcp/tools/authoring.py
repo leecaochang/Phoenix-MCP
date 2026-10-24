@@ -48,7 +48,7 @@ from ..entity_registration import async_observe_registration
 from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
-    _tool_success, _truncate,
+    _tool_success, _truncate, longest_fitting,
 )
 from ..policy_engine import Permission, filter_entities_for_access_key, resolve
 from ..request_authority import AuthorityChangedError, check_request_authority
@@ -1111,16 +1111,122 @@ def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str, trace_key: str) 
             "the most recent runs, as many as the stored_traces trace option allows (default 5).")
 
 
+def _run_error(short: dict, trace: Any) -> str | None:
+    """The error a run recorded, as Home Assistant's trace view shows it.
+
+    An exception is on the run itself. A stop with an error, or a check that could
+    not be evaluated, ends the run as aborted with the error on its last step; a
+    condition that was simply false ends it the same way without one.
+    """
+    if short.get("error") is not None:
+        return str(short["error"])
+    extended = getattr(trace, "as_extended_dict", None)
+    if short.get("script_execution") != "aborted" or not callable(extended):
+        return None
+    detail = extended()
+    steps = (detail.get("trace") or {}).get(detail.get("last_step")) or []
+    error = steps[-1].get("error") if steps and isinstance(steps[-1], dict) else None
+    return None if error is None else str(error)
+
+
+def _trace_run(short: dict, error: str | None) -> dict:
+    """One run in the overview: when it started, how it ended, and its error."""
+    run = {
+        "run_id": short.get("run_id"),
+        "start": (short.get("timestamp") or {}).get("start"),
+        "execution": short.get("script_execution"),
+        "last_step": short.get("last_step"),
+    }
+    if error is not None:
+        run["error"] = error
+    return run
+
+
+async def _restore_saved_traces(hass: HomeAssistant) -> None:
+    """Load the traces Home Assistant saved before its last restart.
+
+    The trace component restores them only when traces are first listed through
+    its own API; until then the runs before a restart look like no runs at all.
+    Restoring is idempotent, the same call the trace view makes.
+    """
+    from homeassistant.components.trace.const import DATA_TRACE_STORE  # noqa: PLC0415
+
+    if DATA_TRACE_STORE in hass.data:
+        from homeassistant.components.trace.util import async_restore_traces  # noqa: PLC0415
+
+        await async_restore_traces(hass)
+
+
+def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """Every readable automation and script with retained runs, in one call.
+
+    "Did any automation fail this week" otherwise takes one call per automation.
+    Each row counts the retained runs by how they ended and lists the runs that
+    recorded an error; rows with errors come first. Not-triggered evaluations are
+    counted apart, since they are not runs. Runs past what one result holds are
+    named in not_listed.
+    """
+    from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
+
+    owners = {
+        (entry.domain, entry.unique_id): entry.entity_id
+        for entry in er.async_get(hass).entities.values()
+        if entry.domain in ("automation", "script") and entry.unique_id is not None
+    }
+    rows: list[dict[str, Any]] = []
+    for trace_key, bucket in hass.data.get(DATA_TRACE, {}).items():
+        domain, _, item_id = str(trace_key).partition(".")
+        entity_id = owners.get((domain, item_id))
+        if entity_id is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+            continue
+        traces = [(trace.as_short_dict(), trace) for trace in _traces_for_automation(bucket)]
+        runs = sorted(((short, _run_error(short, trace)) for short, trace in traces if not short.get("not_triggered")),
+                      key=lambda run: str((run[0].get("timestamp") or {}).get("start") or ""), reverse=True)
+        skipped = len(traces) - len(runs)
+        if not runs and not skipped:
+            continue
+        outcomes: dict[str, int] = {}
+        for short, _error in runs:
+            outcome = str(short.get("script_execution") or short.get("state") or "unknown")
+            outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        row: dict[str, Any] = {"entity_id": entity_id, "runs": len(runs), "outcomes": outcomes}
+        if runs:
+            row["last"] = _trace_run(*runs[0])
+        if errors := [_trace_run(short, error) for short, error in runs if error is not None]:
+            row["errors"] = errors
+        if skipped:
+            row["not_triggered"] = skipped
+        rows.append(_scope_trace(row, access_key, hass))
+    rows.sort(key=lambda row: str((row.get("last") or {}).get("start") or ""), reverse=True)
+    rows.sort(key=lambda row: "errors" not in row)
+
+    def build(count: int) -> dict:
+        body: dict[str, Any] = {"count": count, "with_errors": sum("errors" in row for row in rows[:count]),
+                                "items": rows[:count]}
+        if count < len(rows):
+            body["not_listed"] = [row["entity_id"] for row in rows[count:]]
+            body["warnings"] = ["The result is full: read the not_listed ones by automation_id."]
+        if DATA_TRACE not in hass.data:
+            body["warnings"] = [*body.get("warnings", []),
+                                "The trace component is not loaded; trace history is unavailable."]
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(rows)), default=str)), "allowed", "get_automation_traces"
+
+
 async def _tool_get_automation_traces(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: execution traces for an accessible automation or script."""
+    """MCP tool: execution traces for an accessible automation or script, or an overview of all."""
     if effective_cap(access_key, "cap_traces") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_automation_traces"
 
     raw = str(args.get("automation_id") or args.get("entity_id") or "").strip()
+    if not raw and args.get("run_id"):
+        return _tool_error("run_id needs automation_id."), "invalid_request", "get_automation_traces"
+    await _restore_saved_traces(hass)
     if not raw:
-        return _tool_error("Missing required argument: automation_id"), "invalid_request", "get_automation_traces"
+        return _trace_overview(access_key, hass)
 
     entity_id, trace_key = _resolve_trace_target(raw, hass)
     # Scope: nonexistent and inaccessible look identical (no oracle).

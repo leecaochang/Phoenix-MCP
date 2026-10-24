@@ -12,6 +12,7 @@ which would be a cycle. mcp_view imports the names it uses from here.
 
 
 import asyncio
+from collections.abc import Callable
 import dataclasses
 import json
 from contextvars import ContextVar
@@ -29,6 +30,7 @@ from .const import (
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     REDACTION_SENTINEL,
     REGISTRY_ID_HINT_MAX,
+    TOOL_RESULT_MAX_BYTES,
 )
 from .data import PhoenixData
 from .device_semantics import (
@@ -85,6 +87,33 @@ def unknown_category_message(hass: HomeAssistant, scope: str, category_id: str) 
     more = f" and {len(known) - REGISTRY_ID_HINT_MAX} more" if len(known) > REGISTRY_ID_HINT_MAX else ""
     return f"Unknown category id {category_id!r} in scope {scope!r}. " + (
         f"Categories in this scope: {listed}{more}." if known else "This scope has no categories yet.")
+
+
+def stored_result_bytes(value: Any) -> int:
+    """Bytes a tool result's JSON text takes as the Conversation Log stores it."""
+    from .conversation_log import json_size  # noqa: PLC0415
+
+    return json_size(json.dumps(value, default=str))
+
+
+def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
+    """The body built from the most leading rows whose result fits TOOL_RESULT_MAX_BYTES.
+
+    build(k) makes the body from the first k of count rows and says how the rest
+    continue (a next offset, a cursor, or their names). The Conversation Log keeps
+    a result of this size whole, so what a model saw stays auditable.
+    """
+    body = build(count)
+    if count == 0 or stored_result_bytes(body) <= TOOL_RESULT_MAX_BYTES:
+        return body
+    low, high = 0, count - 1
+    while low < high:
+        middle = (low + high + 1) // 2
+        if stored_result_bytes(build(middle)) <= TOOL_RESULT_MAX_BYTES:
+            low = middle
+        else:
+            high = middle - 1
+    return build(low)
 
 
 def offset_page(rows: list, args: dict, *, default_limit: int, max_limit: int) -> tuple[list, dict] | str:
