@@ -5351,3 +5351,9 @@ def test_only_identifier_shaped_provider_codes_are_kept():
     prose = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "see https://x.invalid/ now"}}),
                                    code="rate_limit", retryable=True)
     assert shaped["provider_code"] == "rate_limit_exceeded" and "provider_code" not in prose
+
+
+def test_agentcli_states_when_each_automation_last_triggered_locally():
+    text = json.dumps({"automations": [{"entity_id": "automation.a", "last_triggered": "2026-08-13T22:00:00+00:00"}]})
+    augmented = json.loads(agentcli._agentcli_add_local_time_fields("list_automations", text, timezone(timedelta(hours=7))))
+    assert augmented["automations"][0]["last_triggered_local"] == "2026-08-14T05:00:00+07:00"

@@ -3745,6 +3745,7 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_logbook": frozenset({"start_time", "end_time", "when"}),
     "recent_activity": frozenset({"when"}),
     "get_automation_traces": frozenset({"start", "finish"}),
+    "list_automations": frozenset({"last_triggered"}),
     "get_logs": frozenset({
         "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
     }),

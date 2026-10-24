@@ -697,7 +697,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "list_automations",
         "description": (
             "List Home Assistant automations with the id needed to read or edit each one "
-            "(entity_id, alias, automation id, and current state). Use get_automation to read "
+            "(entity_id, alias, automation id, current state, and when it last triggered, so "
+            "which ran today or have not run for a month needs no other call). Use get_automation to read "
             "one's full configuration. trigger and query search every configuration in one call, "
             "instead of reading each automation: only the matches are listed, each with its "
             "triggers (type and when it fires) and, for query, where the text appears. They need "

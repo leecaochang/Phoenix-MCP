@@ -325,15 +325,20 @@ class TestListTools:
             PermissionTree(domains={"automation": PermissionNode(state="GREEN")}),
             cap_registry_read="allow",
         )
-        hass.states.async_set("automation.porch", "on", {"friendly_name": "Porch", "id": "auto-1"})
+        hass.states.async_set("automation.porch", "on", {"friendly_name": "Porch", "id": "auto-1",
+                                                         "last_triggered": "2026-10-24T06:30:00+00:00"})
+        hass.states.async_set("automation.never", "on", {"friendly_name": "Never", "id": "auto-2", "last_triggered": None})
         result, outcome, _res = await _call_tool("list_automations", {}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
-        assert body["count"] == 1
-        row = body["automations"][0]
+        assert body["count"] == 2
+        never, row = body["automations"]
         assert row["entity_id"] == "automation.porch"
         assert row["automation_id"] == "auto-1"
         assert row["alias"] == "Porch"
+        # When each last ran is in the listing, so "which ran today" is one call.
+        assert row["last_triggered"] == "2026-10-24T06:30:00+00:00"
+        assert never["last_triggered"] is None
 
     async def test_renamed_script_list_preserves_editable_storage_id(self, hass):
         hass.services.async_register("script", "reload", lambda call: None)

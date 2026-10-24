@@ -355,6 +355,8 @@ async def _tool_list_automations(
             "alias": attrs.get("friendly_name"),
             "automation_id": attrs.get("id"),
             "state": e.get("state"),
+            # Which ran today, or not for a month, is then this one listing.
+            "last_triggered": attrs.get("last_triggered"),
         }
         if searching:
             config = configs.get(str(attrs.get("id")))
