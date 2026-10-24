@@ -1029,6 +1029,7 @@ async def _tool_list_devices(
     filters = {key: args.get(key) for key in ("area", "integration", "query")}
     if any(value is not None and not isinstance(value, str) for value in filters.values()):
         return _tool_error("area, integration and query must be strings."), "invalid_request", "list_devices"
+    has_area = args.get("has_area")
     area = (filters["area"] or "").strip().lower()
     integration = (filters["integration"] or "").strip().lower()
     query = (filters["query"] or "").strip().lower()
@@ -1046,6 +1047,8 @@ async def _tool_list_devices(
         ) not in (Permission.READ, Permission.WRITE):
             continue
         if area_ids is not None and device_snapshot.effective_area_id(device.id) not in area_ids:
+            continue
+        if has_area is not None and (device_snapshot.effective_area_id(device.id) is not None) != has_area:
             continue
         if integration and not any(
             (entry := hass.config_entries.async_get_entry(entry_id)) is not None and entry.domain == integration
@@ -1288,6 +1291,7 @@ class _SearchFilters:
     radios: set[str] | None
     state: Any
     area: str
+    has_area: bool | None
     want_unavailable: bool
     stale_threshold: float | None
     limit: int
@@ -1365,6 +1369,7 @@ def _parse_search_args(args: dict) -> _SearchFilters:
         radios=_search_names(args.get("radio")),
         state=args.get("state") or None,
         area=str(args.get("area") or "").strip().lower(),
+        has_area=args.get("has_area"),
         want_unavailable=bool(args.get("unavailable")),
         stale_threshold=stale_threshold,
         limit=max(1, min(limit, SEARCH_ENTITIES_MAX_LIMIT)),
@@ -1578,6 +1583,8 @@ async def _tool_search_entities(
             continue
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg)
         if area_ids is not None and _resolve_area_id(entry, dev_reg) not in area_ids:
+            continue
+        if f.has_area is not None and (_resolve_area_id(entry, dev_reg) is not None) != f.has_area:
             continue
         last_changed = None
         if f.stale_threshold is not None:

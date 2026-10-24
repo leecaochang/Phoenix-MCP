@@ -1873,6 +1873,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Filter by device-registry disabled state.",
                 },
                 "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias for every area on it."},
+                "has_area": {"type": "boolean", "description": "false finds devices with no area, their own or a main device's; true only those with one."},
                 "integration": {"type": "string", "description": "Owning integration domain, e.g. zha or hue."},
                 "query": {"type": "string", "description": "Case-insensitive text matched against name, manufacturer and model."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum rows to return."},
@@ -1934,6 +1935,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Restrict to one or more domains, e.g. light or [light, switch].",
                 },
                 "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias, which matches every area on that floor (case-insensitive)."},
+                "has_area": {"type": "boolean", "description": "false finds entities with no area, directly or through their device; true only those with one."},
                 "device_class": {
                     "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
                     "description": "One or more exact device_class values, e.g. motion or [door, window].",
