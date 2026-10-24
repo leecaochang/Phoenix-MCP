@@ -1890,6 +1890,9 @@ async def _tool_get_radio_network(
         return _tool_error("Forbidden."), "denied", "get_radio_network"
     networks = await radio_backend.async_radio_networks(hass)
     body: dict[str, Any] = {"networks": networks}
+    # Said outright, so "which Zigbee devices are weak" ends here when there are none.
+    if not any(network.get("protocol") == "zigbee" for network in networks):
+        body["absent"] = ["zigbee"]
     if full_pass_through(access_key, hass):
         try:
             bluetooth = bluetooth_network(hass)

@@ -536,7 +536,8 @@ class TestGetRadioNetwork:
     async def test_no_backends_empty_list(self, hass, radio_env, broker):
         res = await _call_tool("get_radio_network", {}, _light_access_key(cap_diagnostics="allow"), hass, _data())
         assert res[1] == "allowed"
-        assert _body(res) == {"networks": []}
+        # Said outright, so a question about Zigbee devices ends here.
+        assert _body(res) == {"networks": [], "absent": ["zigbee"]}
 
     async def test_z2m_projection_no_key_material(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
@@ -546,6 +547,7 @@ class TestGetRadioNetwork:
         assert len(networks) == 1
         net = networks[0]
         assert net["backend"] == "z2m" and net["protocol"] == "zigbee"
+        assert "absent" not in _body(res)
         assert net["channel"] == 15 and net["pan_id"] == 6754
         assert net["coordinator"]["ieee"] == "0x00124b002e1e03c7"
         assert net["permit_join"] is False
@@ -580,6 +582,8 @@ class TestGetRadioNetwork:
         networks = _body(res)["networks"]
         assert networks[0]["backend"] == "z2m"
         assert "error" in networks[0]
+        # A coordinator that cannot be read is not an absent one.
+        assert "absent" not in _body(res)
 
 
 class TestScanZigbeeTopology:

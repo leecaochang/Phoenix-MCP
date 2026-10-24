@@ -1414,7 +1414,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Report every radio network this Home Assistant manages: protocol, backend "
             "(Zigbee via Zigbee2MQTT or ZHA in this version), channel, PAN id, coordinator, and whether "
             "the network is currently open for joining. Returns an empty list when no radio network is "
-            "present. Network keys and other credentials are never included."
+            "present; absent names zigbee when neither Zigbee2MQTT nor ZHA is set up, so there are no "
+            "Zigbee devices to look for. Network keys and other credentials are never included."
         ),
         "cap": "cap_diagnostics",
         "inputSchema": {"type": "object", "properties": {}},
