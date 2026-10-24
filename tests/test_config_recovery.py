@@ -161,6 +161,22 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
     assert body["status"] == "needs_confirmation"
     assert body["adapter"]["type"] == "sensor"
 
+    # Empty receipt fields are placeholders: the receipt comes back, not "changed".
+    placeholder, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before",
+                                  "snapshot_digest": "", "target_fingerprint": ""},
+        access_key, hass, runtime,
+    )
+    assert outcome == "allowed"
+    assert json.loads(placeholder["content"][0]["text"]) == body
+    half, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before",
+                                  "snapshot_digest": body["snapshot_digest"], "target_fingerprint": ""},
+        access_key, hass, runtime,
+    )
+    assert outcome == "invalid_request"
+    assert "Send both snapshot_digest and target_fingerprint" in half["content"][0]["text"]
+
     stranger = _template_agent(domain)
     result, outcome, _ = await _call_tool(
         "restore_configuration", {"recovery_id": recovery_id, "side": "before"},

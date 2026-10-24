@@ -99,6 +99,9 @@ def _dashboard_registry_lookup_key(record: dict[str, Any], side: str, snapshot: 
     return str(snapshot["resource_id"])
 
 
+_RECEIPT_FIELDS = ("snapshot_digest", "target_fingerprint")
+
+
 async def _tool_restore_configuration(
     args: dict,
     access_key,
@@ -123,6 +126,14 @@ async def _tool_restore_configuration(
     side = args.get("side")
     if not isinstance(rid, str) or not rid or side not in ("before", "source"):
         return _tool_error("recovery_id and side ('before' or 'source') are required."), "invalid_request", tool
+    # An empty receipt field is a placeholder, not a stale receipt; one value
+    # without the other is neither a receipt request nor a confirmation.
+    args = {key: value for key, value in args.items() if not (key in _RECEIPT_FIELDS and value == "")}
+    if sum(args.get(key) is not None for key in _RECEIPT_FIELDS) == 1:
+        return _tool_error(
+            "Send both snapshot_digest and target_fingerprint from the receipt to restore, "
+            "or neither to get a receipt."
+        ), "invalid_request", tool
     record = data.config_recovery.get(rid)
     if not _may_restore_record(record, access_key):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
