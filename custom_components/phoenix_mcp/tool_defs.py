@@ -150,8 +150,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "covered_range and data_range describe only this page; with has_more, unread_range may hold "
             "more history, so neither shows where history begins. state_changes also lists the same-state row "
             "Home Assistant records at each restart; use summary to learn whether something entered a state. "
-            "In summary mode entity_id may be a list of up to 50, one compact row each: the way to check "
-            "which of several entities entered a state in a period."
+            "In summary mode entity_id may be a list of up to 50, one compact row each, or select may "
+            "name them by search_entities filters instead: the way to ask which sensors entered a state "
+            "in a period, in one call."
         ),
         "inputSchema": {
             "type": "object",
@@ -195,8 +196,30 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "The ISO UTC next_cursor from the previous page.",
                 },
+                "select": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "description": (
+                        "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
+                        "match (up to 50; diagnostic and configuration entities only with include_diagnostic)."
+                    ),
+                    "properties": {
+                        "query": {"type": "string", "description": "Words matched against entity_id, name and aliases."},
+                        "domain": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                                   "description": "One or more domains."},
+                        "device_class": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                                         "description": "One or more device classes."},
+                        "integration": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                                        "description": "One or more providing integrations."},
+                        "radio": {"oneOf": [
+                            {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
+                            {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
+                        ], "description": "How the device connects."},
+                        "area": {"type": "string", "description": "An area or floor."},
+                        "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
+                    },
+                },
             },
-            "required": ["entity_id"],
         },
     },
     {
@@ -1869,7 +1892,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "entity is or how to use it, when one is set. "
             "total counts all scoped matching entities before paging; count is the number returned. When has_more "
             "is true, call again with offset set to next_offset for the next page. "
-            "For counts alone, use limit=1 to avoid enumerating the full list."
+            "For counts alone, use limit=1 to avoid enumerating the full list. "
+            "To learn how the matching entities behaved over a period (which did not trigger this week), skip this "
+            "listing: call get_history with mode summary and these filters as select, which finds and summarizes "
+            "them in one call."
         ),
         "cap": "cap_search",
         "inputSchema": {

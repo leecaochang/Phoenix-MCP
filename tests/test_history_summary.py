@@ -525,3 +525,107 @@ async def test_a_numeric_sensor_lists_its_longest_states_in_a_many_entity_summar
     assert len(temperature["states"]) == 5 and temperature["other_states"]["count"] == 7
     assert "other_states" not in desk
     assert any("use get_statistics" in warning for warning in body["warnings"])
+
+
+def _search_key(**caps) -> AccessKeyRecord:
+    domains = {domain: PermissionNode(state="GREEN") for domain in ("binary_sensor", "sensor", "light")}
+    return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=dt_util.utcnow(),
+                           created_by="u", permissions=PermissionTree(domains=domains),
+                           **{"cap_search": "allow", **caps})
+
+
+async def _select(hass: HomeAssistant, select, start: float = 0, end: float = 400, key=None, **extra):
+    args = {"select": select, "mode": "summary", "start_time": _at(start).isoformat(),
+            "end_time": _at(end).isoformat(), **extra}
+    return await _call_tool("get_history", args, key or _search_key(), hass, MagicMock(), "r", None)
+
+
+def _register(hass: HomeAssistant, entity_id: str, *, category=None, device=None):
+    from homeassistant.helpers import entity_registry as er
+    domain, object_id = entity_id.split(".")
+    return er.async_get(hass).async_get_or_create(
+        domain, "test", object_id, suggested_object_id=object_id, entity_category=category,
+        device_id=device)
+
+
+async def test_select_summarizes_what_the_filters_match_and_skips_diagnostics(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # One call answers "which motion and door sensors entered on" without listing them first.
+    from homeassistant.const import EntityCategory
+    _anchor(hass)
+    for entity_id in ("binary_sensor.hall_motion", "binary_sensor.front_door", "binary_sensor.desk_battery_low"):
+        _register(hass, entity_id, category=EntityCategory.DIAGNOSTIC if "battery" in entity_id else None)
+    for entity_id, device_class in (("binary_sensor.hall_motion", "motion"), ("binary_sensor.front_door", "door"),
+                                    ("binary_sensor.desk_battery_low", "door")):
+        _set(hass, entity_id, "off", -60, {"device_class": device_class})
+    _set(hass, "binary_sensor.hall_motion", "on", 50, {"device_class": "motion"})
+    await async_wait_recording_done(hass)
+    result = await _select(hass, {"domain": "binary_sensor", "device_class": ["motion", "door"]})
+    assert result[1] == "allowed", result
+    body = json.loads(result[0]["content"][0]["text"])
+    assert body["select"] == {"domain": "binary_sensor", "device_class": ["motion", "door"]}
+    assert body["matched"] == 2 and body["diagnostic_excluded"] == 1
+    assert [row["entity_id"] for row in body["entities"]] == ["binary_sensor.front_door", "binary_sensor.hall_motion"]
+    hall = body["entities"][1]
+    assert {item["state"]: item["entered"] for item in hall["states"]}["on"] == 1
+    with_diagnostic = json.loads((await _select(
+        hass, {"domain": "binary_sensor", "device_class": ["motion", "door"], "include_diagnostic": True}))[0]["content"][0]["text"])
+    assert with_diagnostic["matched"] == 3 and "diagnostic_excluded" not in with_diagnostic
+
+
+async def test_select_by_radio_reads_the_device_registry(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import device_registry as dr
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    _anchor(hass)
+    entry = MockConfigEntry(domain="zha", entry_id="zha-entry")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id,
+                                                      identifiers={("zha", "00:11:22:33:44:55:66:77")})
+    _register(hass, "binary_sensor.leak", device=device.id)
+    _register(hass, "binary_sensor.wired_door")
+    for entity_id in ("binary_sensor.leak", "binary_sensor.wired_door"):
+        _set(hass, entity_id, "off", -60)
+    await async_wait_recording_done(hass)
+    body = json.loads((await _select(hass, {"radio": "zigbee"}))[0]["content"][0]["text"])
+    assert body["matched"] == 1 and [row["entity_id"] for row in body["entities"]] == ["binary_sensor.leak"]
+
+
+async def test_select_past_one_call_names_the_rest(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    for index in range(53):
+        _set(hass, f"sensor.probe_{index:02d}", "1", -60)
+    await async_wait_recording_done(hass)
+    body = json.loads((await _select(hass, {"query": "probe"}))[0]["content"][0]["text"])
+    assert body["matched"] == 53 and body["count"] == 50
+    assert body["not_summarized"] == ["sensor.probe_50", "sensor.probe_51", "sensor.probe_52"]
+    assert any("summarize not_summarized" in warning for warning in body["warnings"])
+
+
+async def test_an_approximate_name_selects_nothing(recorder_mock, hass: HomeAssistant) -> None:
+    # Summarizing a typo-matched entity would answer a question nobody asked.
+    _anchor(hass)
+    _set(hass, "binary_sensor.kitchen_window", "off", -60)
+    await async_wait_recording_done(hass)
+    body = json.loads((await _select(hass, {"query": "kitchn windw"}))[0]["content"][0]["text"])
+    assert body["matched"] == 0 and body["entities"] == []
+    assert any("closest matches" in warning for warning in body["warnings"])
+
+
+@pytest.mark.parametrize(("args", "message"), [
+    ({"select": {"domain": "light"}, "entity_id": "light.desk", "mode": "summary"}, "entity_id or select, not both"),
+    ({"select": {"domain": "light"}}, "select is accepted only with mode summary"),
+    ({"select": {"colour": "red"}, "mode": "summary"}, "search_entities filters"),
+    ({"select": {}, "mode": "summary"}, "at least one filter"),
+    ({"select": {"domain": "light", "include_diagnostic": "yes"}, "mode": "summary"}, "must be a boolean"),
+    ({"select": {"radio": "thread"}, "mode": "summary"}, "radio must be one or more of"),
+])
+async def test_a_malformed_select_is_refused(hass: HomeAssistant, args, message) -> None:
+    content, outcome, _ = await _call_tool("get_history", args, _search_key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+
+
+async def test_select_needs_search_access(hass: HomeAssistant) -> None:
+    content, outcome, _ = await _call_tool(
+        "get_history", {"select": {"domain": "light"}, "mode": "summary"}, _search_key(cap_search="deny"),
+        hass, MagicMock(), "r", None)
+    assert outcome == "denied" and "pass entity_id instead" in content["content"][0]["text"]

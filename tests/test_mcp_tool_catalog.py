@@ -192,21 +192,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 51,
-            "canonical_bytes": 52411,
-            "claude_bytes": 47147,
-            "openai_bytes": 48626,
+            "canonical_bytes": 53795,
+            "claude_bytes": 48531,
+            "openai_bytes": 50010,
         },
         "write_capable": {
             "tool_count": 97,
-            "canonical_bytes": 112826,
-            "claude_bytes": 102087,
-            "openai_bytes": 104900,
+            "canonical_bytes": 114210,
+            "claude_bytes": 103471,
+            "openai_bytes": 106284,
         },
         "announce_all": {
             "tool_count": 165,
-            "canonical_bytes": 188895,
-            "claude_bytes": 171294,
-            "openai_bytes": 176079,
+            "canonical_bytes": 190279,
+            "claude_bytes": 172678,
+            "openai_bytes": 177463,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 165
@@ -592,3 +592,18 @@ def test_recognize_intent_is_visible_with_search_or_config_read():
     assert "recognize_intent" not in mcp_view._EXECUTOR_REGISTRY
     assert definition["annotations"]["readOnlyHint"] is True
     assert "agent_id" not in definition["inputSchema"]["properties"]
+
+
+def test_set_questions_are_steered_to_one_summary_call():
+    """The load-bearing wording that turns a set question into one get_history call.
+
+    Live, models listed every matching entity before summarizing until the tool
+    they start with said to skip that listing; both halves of the route stay pinned.
+    """
+    defs = {definition["name"]: definition for definition in _all_defs()}
+    search = defs["search_entities"]["description"]
+    assert "skip this listing" in search and "these filters as select" in search
+    history = defs["get_history"]
+    assert "select may name them by search_entities filters" in history["description"]
+    assert set(history["inputSchema"]["properties"]["select"]["properties"]) == {
+        "query", "domain", "device_class", "integration", "radio", "area", "include_diagnostic"}

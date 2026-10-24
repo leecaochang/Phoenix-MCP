@@ -100,9 +100,11 @@ grain of the model gives the smoothest results and avoids dead ends.
   and accepts at most 7 days.
   For how long something was in a state or how often it changed, use
   `get_history` `mode: "summary"`: per-state durations and entry counts with no
-  rows. For a set of entities ("which of my sensors did not trigger this
-  week"), find them with one filtered `search_entities` call and pass all their
-  IDs as one `entity_id` list in summary mode, instead of one call each.
+  rows. For a set of entities ("which of my Zigbee sensors did not trigger
+  this week"), pass `select` with the `search_entities` filters (`radio`,
+  `domain`, `device_class`, `integration`, `area`, `query`) in summary mode:
+  one call, no listing first. With IDs already in hand, pass them as one
+  `entity_id` list instead of one call each.
   Read `complete` before reporting a zero or a total; unrecorded time is not a
   state. A zone's states are occupant counts.
 - `compare_entities`: whether one entity can stand in for another, BEFORE you

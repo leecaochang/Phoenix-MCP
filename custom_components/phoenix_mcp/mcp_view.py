@@ -922,9 +922,11 @@ async def _tool_get_state(
 
 
 async def _tool_get_history(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one bounded page of state history, or summarize several entities."""
+    if "select" in args:
+        return await _history_summary_select(args["select"], args, access_key, hass, data)
     if isinstance(args.get("entity_id"), list):
         return await _history_summary_many(args["entity_id"], args, access_key, hass)
     entity_id = str_arg(args.get("entity_id"))
@@ -1090,8 +1092,82 @@ async def _scan_summary(
     )
 
 
+# search_entities filters select accepts; it finds the entities, so their scope,
+# Assist exposure and child-device rules are exactly that tool's.
+_SUMMARY_SELECT_FILTERS = ("query", "domain", "device_class", "integration", "radio", "area")
+# Rows read from search_entities to resolve select: enough to say how many matched.
+_SUMMARY_SELECT_SCAN = 500
+
+
+async def _history_summary_select(
+    select: Any, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
+) -> tuple[dict, str, str]:
+    """get_history summary mode over the entities a search_entities filter selects.
+
+    "Which Zigbee sensors did not trigger this week" is then one call with no
+    listing first. Diagnostic and configuration entities are left out unless
+    asked for, since a battery or link-quality sensor is not what such a question
+    means. More matches than one call summarizes are named in not_summarized
+    rather than dropped, and an approximate (typo-tolerant) name match selects
+    nothing, because summarizing a guessed entity would answer the wrong question.
+    """
+    tool = "get_history"
+    if "entity_id" in args:
+        return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
+    if str(args.get("mode") or "").strip().lower() != "summary":
+        return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
+    allowed = (*_SUMMARY_SELECT_FILTERS, "include_diagnostic")
+    if not isinstance(select, dict) or any(key not in allowed for key in select):
+        return _tool_error(
+            "select must be an object of search_entities filters: " + ", ".join(allowed) + "."
+        ), "invalid_request", tool
+    include_diagnostic = select.get("include_diagnostic", False)
+    if not isinstance(include_diagnostic, bool):
+        return _tool_error("select.include_diagnostic must be a boolean."), "invalid_request", tool
+    filters = {key: select[key] for key in _SUMMARY_SELECT_FILTERS if select.get(key) not in (None, "", [])}
+    if not filters:
+        return _tool_error(
+            'select needs at least one filter, for example {"radio": "zigbee", "domain": "binary_sensor"}.'
+        ), "invalid_request", tool
+    from .tools.discovery import _tool_search_entities
+
+    found, outcome, _resource = await _tool_search_entities(
+        {**filters, "limit": _SUMMARY_SELECT_SCAN, "registry_state": "enabled"}, access_key, hass,
+        data if data is not None else hass.data[DOMAIN])
+    text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
+    if outcome != "allowed":
+        if outcome == "denied":
+            text = "select uses search_entities, which this access key cannot use; pass entity_id instead."
+        return _tool_error(text if text.startswith("select") else f"select: {text}"), outcome, tool
+    listed = json.loads(text)
+    warnings: list[str] = []
+    rows = listed.get("entities", [])
+    if listed.get("fuzzy_fallback"):
+        rows = []
+        warnings.append("No entity name contains every query word; search_entities shows the closest matches.")
+    diagnostic = [row for row in rows if row.get("entity_category") in ("config", "diagnostic")]
+    chosen = sorted(row["entity_id"] for row in rows if include_diagnostic or row not in diagnostic)
+    if listed.get("has_more"):
+        warnings.append(f"More than {_SUMMARY_SELECT_SCAN} entities matched select; narrow it.")
+    selection: dict[str, Any] = {"select": {**filters, **({"include_diagnostic": True} if include_diagnostic else {})},
+                                 "matched": len(chosen)}
+    if diagnostic and not include_diagnostic:
+        selection["diagnostic_excluded"] = len(diagnostic)
+    if len(chosen) > HISTORY_SUMMARY_MAX_ENTITIES:
+        selection["not_summarized"] = chosen[HISTORY_SUMMARY_MAX_ENTITIES:]
+        warnings.append(
+            f"{len(chosen)} entities matched; the first {HISTORY_SUMMARY_MAX_ENTITIES} by entity_id are summarized. "
+            "Narrow select, or summarize not_summarized as an entity_id list.")
+    if not chosen:
+        warnings.append("No entity matched select.")
+    selection["warnings"] = warnings
+    return await _history_summary_many(chosen[:HISTORY_SUMMARY_MAX_ENTITIES], args, access_key, hass,
+                                       selection=selection)
+
+
 async def _history_summary_many(
-    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+    selection: dict[str, Any] | None = None,
 ) -> tuple[dict, str, str]:
     """get_history summary mode for several entities: one compact row each.
 
@@ -1100,7 +1176,8 @@ async def _history_summary_many(
     read and again after the scans; inaccessible and missing ones share
     not_found. One time budget bounds the call: entities it does not reach are
     listed as unscanned, never dropped, and an entity whose own scan stops at its
-    budget keeps a next_cursor to continue alone.
+    budget keeps a next_cursor to continue alone. A selection resolved by select
+    adds its own fields and warnings, and may legitimately match nothing.
     """
     tool = "get_history"
     if str(args.get("mode") or "").strip().lower() != "summary":
@@ -1112,7 +1189,7 @@ async def _history_summary_many(
             "limit, order and cursor do not apply to a summary of several entities; continue an entity that "
             "returned next_cursor in a single-entity call."
         ), "invalid_request", tool
-    if (not raw_ids or len(raw_ids) > HISTORY_SUMMARY_MAX_ENTITIES
+    if ((not raw_ids and selection is None) or len(raw_ids) > HISTORY_SUMMARY_MAX_ENTITIES
             or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
         return _tool_error(
             f"entity_id must be one entity ID or a list of 1 to {HISTORY_SUMMARY_MAX_ENTITIES} entity ID strings."
@@ -1187,9 +1264,12 @@ async def _history_summary_many(
     if unavailable:
         warnings.append(
             "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
+    if selection is not None:
+        warnings = list(selection.pop("warnings", [])) + warnings
     body: dict[str, Any] = {
         "mode": "summary",
         "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+        **(selection or {}),
         "count": len(rows),
         "entities": rows,
     }
