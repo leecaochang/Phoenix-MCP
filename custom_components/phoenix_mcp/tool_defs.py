@@ -80,6 +80,30 @@ _DASHBOARD_SAVED = (
 )
 
 
+def _select_schema(description: str) -> dict:
+    """The select object get_history and get_statistics share: search_entities filters naming the entities."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "description": description,
+        "properties": {
+            "query": {"type": "string", "description": "Words matched against entity_id, name and aliases."},
+            "domain": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                       "description": "One or more domains."},
+            "device_class": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                             "description": "One or more device classes."},
+            "integration": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                            "description": "One or more providing integrations."},
+            "radio": {"oneOf": [
+                {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
+                {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
+            ], "description": "How the device connects."},
+            "area": {"type": "string", "description": "An area or floor."},
+            "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
+        },
+    }
+
+
 _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_state",
@@ -196,29 +220,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "The ISO UTC next_cursor from the previous page.",
                 },
-                "select": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "description": (
-                        "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
-                        "match (diagnostic and configuration entities only with include_diagnostic)."
-                    ),
-                    "properties": {
-                        "query": {"type": "string", "description": "Words matched against entity_id, name and aliases."},
-                        "domain": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
-                                   "description": "One or more domains."},
-                        "device_class": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
-                                         "description": "One or more device classes."},
-                        "integration": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
-                                        "description": "One or more providing integrations."},
-                        "radio": {"oneOf": [
-                            {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
-                            {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
-                        ], "description": "How the device connects."},
-                        "area": {"type": "string", "description": "An area or floor."},
-                        "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
-                    },
-                },
+                "select": _select_schema(
+                    "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
+                    "match (diagnostic and configuration entities only with include_diagnostic)."
+                ),
             },
         },
     },
@@ -228,12 +233,23 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Get a bounded page of Recorder statistics for one accessible entity. Five-minute data uses "
             "short-term retention; hour, day, week, month, and year use long-term statistics. Calendar "
             "periods align in Home Assistant's local timezone. Follow has_more with next_cursor; there is "
-            "intentionally no estimated total. For individual state changes use get_history."
+            "intentionally no estimated total. For individual state changes use get_history. A list of "
+            "entity_id, or select with search_entities filters, returns one row per entity for the whole "
+            "window instead: mean, min and max of a measurement, change of a total, in its unit. That is "
+            "the way to compare sensors (warmest room, most energy used) in one call."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "Accessible entity whose Recorder statistics to read."},
+                "entity_id": {"oneOf": [
+                    {"type": "string", "description": "Accessible entity whose Recorder statistics to read."},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SEARCH_ENTITIES_MAX_LIMIT,
+                     "description": "Several entities, one row each for the whole window."},
+                ], "description": "Entity ID, or a list of entity IDs."},
+                "select": _select_schema(
+                    "Instead of entity_id: one row for the whole window per entity these search_entities filters "
+                    "match (diagnostic and configuration entities only with include_diagnostic)."
+                ),
                 "start_time": {"type": "string", "description": "ISO or relative time. Defaults to 30 days before end_time."},
                 "end_time": {"type": "string", "description": "ISO or relative time. Defaults to now."},
                 "period": {
@@ -260,7 +276,6 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "description": "The ISO UTC next_cursor from the previous page.",
                 },
             },
-            "required": ["entity_id"],
         },
     },
     {'name': 'create_calendar_event',

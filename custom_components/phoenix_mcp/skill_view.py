@@ -104,7 +104,10 @@ grain of the model gives the smoothest results and avoids dead ends.
   this week"), pass `select` with the `search_entities` filters (`radio`,
   `domain`, `device_class`, `integration`, `area`, `query`) in summary mode:
   one call, no listing first. With IDs already in hand, pass them as one
-  `entity_id` list instead of one call each.
+  `entity_id` list instead of one call each. For numbers over a period
+  ("which room was warmest", "what used the most energy"), `get_statistics`
+  takes the same `select` or `entity_id` list: one row per entity with its
+  mean, min and max, or a total's change.
   Read `complete` before reporting a zero or a total; unrecorded time is not a
   state. A zone's states are occupant counts.
 - `compare_entities`: whether one entity can stand in for another, BEFORE you

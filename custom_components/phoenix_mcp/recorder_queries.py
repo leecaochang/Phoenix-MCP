@@ -364,6 +364,26 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
     return page_start, page_end, effective_limit, page_end < requested_end
 
 
+def read_statistic_window(
+    hass: Any, start: datetime, end: datetime, statistic_id: str, types: set[Any],
+) -> tuple[dict[str, Any], str | None] | None:
+    """Mean, min, max and change of one statistic over [start, end). Recorder executor only.
+
+    Core combines hourly and five-minute statistics for an exact window and converts
+    the values to the display unit, which is the label; None when the entity has no
+    statistics. A type the statistic does not keep (a mean of a total) is absent.
+    """
+    from homeassistant.components.recorder import statistics as recorder_stats
+
+    values = recorder_stats.statistic_during_period(hass, start, end, statistic_id, types, None)
+    metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
+    if metadata is None:
+        return None
+    unit = recorder_stats.get_display_unit(
+        hass, statistic_id, metadata[1].get("unit_class"), metadata[1].get("unit_of_measurement"))
+    return {key: value for key, value in values.items() if value is not None}, unit
+
+
 def read_statistics_page(
     hass: Any, start: datetime, end: datetime, statistic_id: str,
     period: Literal["5minute", "day", "hour", "week", "month", "year"], types: set[Any],

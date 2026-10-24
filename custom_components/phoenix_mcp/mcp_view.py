@@ -52,7 +52,7 @@ from .template_render import TemplateRenderError, async_render_template_for_acce
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
-from .tool_common import _create_registry_mesa_approval, offset_page, unknown_category_message, unknown_label_message
+from .tool_common import _create_registry_mesa_approval, longest_fitting, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
 from .device_semantics import (
@@ -79,6 +79,7 @@ from .proxy_diagnostics import discovered_flows, full_pass_through, integration_
 from .history_summary import SummaryUnavailableError, compact_summary_row, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
+    read_statistic_window,
     RecorderWindow,
     backward_page_start,
     ceil_us,
@@ -926,13 +927,7 @@ async def _tool_get_history(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one bounded page of state history, or summarize several entities."""
-    # Some models fill every optional parameter: an empty select or entity_id
-    # beside the other names nothing, so it is not a second, conflicting request.
-    if "select" in args and "entity_id" in args:
-        for placeholder in ("select", "entity_id"):
-            if args[placeholder] in (None, "", [], {}):
-                args = {key: value for key, value in args.items() if key != placeholder}
-                break
+    args = _without_empty_placeholder(args)
     if "select" in args:
         return await _history_summary_select(args["select"], args, access_key, hass, data)
     if isinstance(args.get("entity_id"), list):
@@ -1110,23 +1105,31 @@ def _stored_bytes(value: Any) -> int:
     return json_size(json.dumps(value))
 
 
-async def _history_summary_select(
-    select: Any, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
-) -> tuple[dict, str, str]:
-    """get_history summary mode over the entities a search_entities filter selects.
+def _without_empty_placeholder(args: dict) -> dict:
+    """args without an empty select or entity_id sent beside the other.
+
+    Some models fill every optional parameter: an empty one beside the other names
+    nothing, so it is not a second, conflicting request.
+    """
+    if "select" in args and "entity_id" in args:
+        for placeholder in ("select", "entity_id"):
+            if args[placeholder] in (None, "", [], {}):
+                return {key: value for key, value in args.items() if key != placeholder}
+    return args
+
+
+async def _resolve_select(
+    select: Any, tool: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
+) -> tuple[list[str], dict[str, Any]] | tuple[dict, str, str]:
+    """The entities a search_entities filter selects for a summary, and the fields describing them.
 
     "Which Zigbee sensors did not trigger this week" is then one call with no
     listing first. Diagnostic and configuration entities are left out unless
     asked for, since a battery or link-quality sensor is not what such a question
-    means. Matches past what one result holds are named in not_summarized rather
-    than dropped, and an approximate (typo-tolerant) name match selects nothing,
-    because summarizing a guessed entity would answer the wrong question.
+    means, and an approximate (typo-tolerant) name match selects nothing, because
+    summarizing a guessed entity would answer the wrong question. Returns the
+    sorted entity IDs and the selection fields, or a tool error.
     """
-    tool = "get_history"
-    if "entity_id" in args:
-        return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
-    if str(args.get("mode") or "").strip().lower() != "summary":
-        return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
     allowed = (*_SUMMARY_SELECT_FILTERS, "include_diagnostic")
     if not isinstance(select, dict) or any(key not in allowed for key in select):
         return _tool_error(
@@ -1167,6 +1170,26 @@ async def _history_summary_select(
     if not chosen:
         warnings.append("No entity matched select.")
     selection["warnings"] = warnings
+    return chosen, selection
+
+
+async def _history_summary_select(
+    select: Any, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
+) -> tuple[dict, str, str]:
+    """get_history summary mode over the entities a search_entities filter selects.
+
+    Matches past what one result holds are named in not_summarized rather than
+    dropped; _resolve_select owns which entities a filter selects.
+    """
+    tool = "get_history"
+    if "entity_id" in args:
+        return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
+    if str(args.get("mode") or "").strip().lower() != "summary":
+        return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
+    resolved = await _resolve_select(select, tool, access_key, hass, data)
+    if not isinstance(resolved[0], list):
+        return cast(tuple[dict, str, str], resolved)
+    chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
     return await _history_summary_many(chosen, args, access_key, hass, selection=selection)
 
 
@@ -1369,10 +1392,137 @@ async def _history_summary(
     return _tool_success(json.dumps(body)), "allowed", entity_id
 
 
-async def _tool_get_statistics(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+_STATISTIC_WINDOW_TYPES = ("mean", "min", "max", "change")
+
+
+async def _statistics_summary_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+    selection: dict[str, Any] | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: fetch one aligned and bounded page of Recorder statistics."""
+    """get_statistics over several entities: one row each for the whole window.
+
+    "Which room was warmest this week" or "which device used the most energy"
+    then takes one call instead of one page per entity: each row has the mean,
+    min and max of a measurement, or the change of a total, in its display unit.
+    Access is checked before any Recorder read and again before disclosure; the
+    shared time budget names the entities it did not reach, and rows past what one
+    result holds are named in not_summarized.
+    """
+    tool = "get_statistics"
+    if ((not raw_ids and selection is None) or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
+        ), "invalid_request", tool
+    raw_types = args.get("statistic_types")
+    if raw_types is not None and (not isinstance(raw_types, list) or not raw_types
+                                  or any(not isinstance(item, str) for item in raw_types)):
+        return _tool_error("statistic_types must be a non-empty array of strings."), "invalid_request", tool
+    # Page options and per-period fields change nothing a whole-window row reads, so
+    # a model carrying them over from a page request is told, not sent back.
+    ignored = [key for key in ("period", "limit", "cursor") if key in args]
+    ignored += [item for item in raw_types or [] if item not in _STATISTIC_WINDOW_TYPES]
+    types = {item for item in raw_types or _STATISTIC_WINDOW_TYPES if item in _STATISTIC_WINDOW_TYPES} \
+        or set(_STATISTIC_WINDOW_TYPES)
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(days=30))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+    end = min(window.end, utcnow())
+    if window.start >= end:
+        return _tool_error("Statistics need a range that starts before the current time."), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    rows: list[dict[str, Any]] = []
+    no_statistics: list[str] = []
+    unscanned: list[str] = []
+    try:
+        from homeassistant.components.recorder import get_instance
+
+        instance = get_instance(hass)
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        for entity_id in scan_ids:
+            if time.monotonic() >= deadline:
+                unscanned.append(entity_id)
+                continue
+            found = await instance.async_add_executor_job(
+                read_statistic_window, hass, window.start, end, entity_id, types)
+            if found is None:
+                no_statistics.append(entity_id)
+            else:
+                values, unit = found
+                rows.append({"entity_id": entity_id, **{key: round(value, 4) if isinstance(value, float) else value
+                                                         for key, value in values.items()}, "unit": unit})
+    except Exception:
+        _LOGGER.warning("MCP statistics of several entities failed", exc_info=True)
+        return _tool_error("Statistics call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in scan_ids if readable(entity_id)}
+    # A comparison is reported by room and name, so each row carries them.
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    rows = [{"entity_id": row["entity_id"],
+             "name": (state.name if (state := hass.states.get(row["entity_id"])) is not None else None),
+             "area": _area_name_for_entity(row["entity_id"], *registries),
+             **{key: value for key, value in row.items() if key != "entity_id"}}
+            for row in rows if row["entity_id"] in still]
+    selected = dict(selection or {})
+    selection_warnings = list(selected.pop("warnings", []))
+
+    def build(count: int) -> dict[str, Any]:
+        warnings = list(selection_warnings)
+        if ignored:
+            warnings.append(
+                "Ignored " + ", ".join(ignored) + ": each row covers the whole window with "
+                + ", ".join(sorted(types)) + " (change is a total's use over the window).")
+        body: dict[str, Any] = {
+            "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+            **selected,
+            "count": count,
+            "entities": rows[:count],
+        }
+        for key, values in (("not_found", [e for e in ids if e not in still]),
+                            ("not_summarized", [row["entity_id"] for row in rows[count:]]),
+                            ("no_statistics", [e for e in no_statistics if e in still]),
+                            ("unscanned", [e for e in unscanned if e in still])):
+            if values:
+                body[key] = values
+        if count < len(rows):
+            warnings.append("The result is full: read not_summarized as an entity_id list in another call.")
+        if unscanned:
+            warnings.append("The call's time budget ended before the unscanned entities; read them in another call.")
+        if no_statistics:
+            warnings.append("Entities in no_statistics have no Recorder statistics (no state_class); use get_history.")
+        body["warnings"] = warnings
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(rows)), default=str)), "allowed", tool
+
+
+async def _tool_get_statistics(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
+) -> tuple[dict, str, str]:
+    """MCP tool: fetch one aligned and bounded page of Recorder statistics, or several entities' windows."""
+    args = _without_empty_placeholder(args)
+    if "select" in args:
+        if "entity_id" in args:
+            return _tool_error("Pass entity_id or select, not both."), "invalid_request", "get_statistics"
+        resolved = await _resolve_select(args["select"], "get_statistics", access_key, hass, data)
+        if not isinstance(resolved[0], list):
+            return cast(tuple[dict, str, str], resolved)
+        chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
+        return await _statistics_summary_many(chosen, args, access_key, hass, selection=selection)
+    if isinstance(args.get("entity_id"), list):
+        return await _statistics_summary_many(args["entity_id"], args, access_key, hass)
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_statistics"
