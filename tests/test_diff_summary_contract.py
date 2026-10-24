@@ -153,7 +153,7 @@ def test_every_template_is_reachable() -> None:
     computed_prefixes = (
         "location.", "blueprint.", "dashboard.", "dashboard_card.", "dashboard_resource.", "hass_turn.",
         "patch_dashboard.", "patch_yaml_config.", "patch.", "edit_energy_config.",
-        "entity.", "device.",
+        "entity.", "device.", "label.", "category.",
     )
     named = _keys_named_in_source() | set(_CARD_OP_VERSION_KEYS.values())
     orphans = [

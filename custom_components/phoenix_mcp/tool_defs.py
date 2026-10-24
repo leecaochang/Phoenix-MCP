@@ -1929,6 +1929,48 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "list_labels",
+        "description": (
+            "List the labels and the categories (by scope: automation, script, scene, helpers) carried by something "
+            "this access key can read, with their IDs for set_entity, set_device and set_area_or_floor, and how many "
+            "readable entities and devices carry each. Pass-through keys also see unused ones."
+        ),
+        "cap": "cap_registry_read",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "set_label_or_category",
+        "description": (
+            "Create, rename or edit, or delete a label or a category through cap_registry_write. A change needs WRITE "
+            "on everything that carries the label or category, since renaming or deleting it changes those too; one "
+            "nothing carries, and creating a new one, need pass-through authority. Use IDs from list_labels. Deleting "
+            "removes it from everything that carries it, automations that target it stop matching, and it cannot be "
+            "restored automatically; an update can be restored from version history."
+        ),
+        "cap": "cap_registry_write",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["label", "category"], "description": "What to change."},
+                "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "create, update or delete."},
+                "id": {"type": "string", "description": "update and delete: the label_id or category_id from list_labels."},
+                "scope": {"type": "string", "enum": ["automation", "script", "scene", "helpers"],
+                          "description": "Categories only: which kind of item the category groups."},
+                "changes": {
+                    "type": "object", "additionalProperties": False,
+                    "description": "create and update: the fields to set. Categories take name and icon only.",
+                    "properties": {
+                        "name": {"type": "string", "description": "The name; required to create."},
+                        "color": {"type": ["string", "null"], "description": "Labels: a color name or hex code; null clears."},
+                        "icon": {"type": ["string", "null"], "description": "An mdi: icon; null clears."},
+                        "description": {"type": ["string", "null"], "description": "Labels: a description; null clears."},
+                    },
+                },
+            },
+            "required": ["kind", "operation"],
+        },
+    },
+    {
         "name": "list_areas",
         "description": (
             "List Home Assistant areas that contain at least one entity this access key can access. "
@@ -4280,6 +4322,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "set_helper_settings": _annot(False, True, True),
     "set_entity": _annot(False, True, True),
     "set_area_or_floor": _annot(False, True, False),
+    "set_label_or_category": _annot(False, True, False),
+    "list_labels": _annot(True, False, True),
     "set_device": _annot(False, True, True),
     "remove_device": _annot(False, True, True),
     "delete_entity": _annot(False, True, True),

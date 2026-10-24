@@ -51,6 +51,7 @@ from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
 from .tools.notify import _execute_send_notification, _tool_get_notifications, _tool_send_notification
+from .tools.labels import _execute_set_label_or_category, _tool_list_labels, _tool_set_label_or_category, restore_label_version
 from .template_render import TemplateRenderError, async_render_template_for_access_key
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
@@ -6484,6 +6485,8 @@ async def async_restore_version(
             return await _execute_write_file({"path": resource_id, "content": restorable}, access_key, hass, data)
         if resource_type in {"area", "floor"}:
             return await restore_location_version(resource_type, resource_id, target, access_key, hass, data)
+        if resource_type in {"label", "category"}:
+            return await restore_label_version(resource_type, resource_id, target, access_key, hass, data)
         if resource_type == "entity":
             # Re-apply the registry metadata. Restoring a deleted entry's snapshot
             # lands here too and fails cleanly in set_entity, because a deleted
@@ -11016,6 +11019,7 @@ _register_executor("delete_dashboard_card", _execute_delete_dashboard_card)
 _register_executor("patch_dashboard", _execute_patch_dashboard)
 _register_executor("edit_energy_config", _execute_edit_energy_config)
 _register_executor("set_area_or_floor", _execute_set_area_or_floor)
+_register_executor("set_label_or_category", _execute_set_label_or_category)
 _register_executor("set_entity", _execute_set_entity)
 _register_executor("set_device", _execute_set_device)
 _register_executor("remove_device", _execute_remove_device)
@@ -11108,6 +11112,8 @@ _register_tool("create_blueprint", _tool_create_blueprint)
 _register_tool("edit_blueprint", _tool_edit_blueprint)
 _register_tool("delete_blueprint", _tool_delete_blueprint)
 _register_tool("set_area_or_floor", _tool_set_area_or_floor)
+_register_tool("set_label_or_category", _tool_set_label_or_category)
+_register_tool("list_labels", _tool_list_labels)
 _register_tool("set_entity", _tool_set_entity)
 _register_tool("set_device", _tool_set_device)
 _register_tool("remove_device", _tool_remove_device)

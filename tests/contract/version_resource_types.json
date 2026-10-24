@@ -4,6 +4,7 @@
     "area",
     "automation",
     "blueprint",
+    "category",
     "config_entry",
     "dashboard",
     "device",
@@ -13,6 +14,7 @@
     "file",
     "floor",
     "helper",
+    "label",
     "scene",
     "script",
     "yaml_config"

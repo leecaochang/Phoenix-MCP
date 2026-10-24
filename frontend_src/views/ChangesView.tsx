@@ -43,6 +43,8 @@ export const RESOURCE_TYPE_LABEL_KEYS: Record<string, string> = {
   config_entry: "changes.typeConfigEntry",
   area: "changes.typeArea",
   floor: "changes.typeFloor",
+  label: "changes.typeLabel",
+  category: "changes.typeCategory",
 };
 
 function resourceTypeLabel(rt: string): string {

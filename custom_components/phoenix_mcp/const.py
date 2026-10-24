@@ -268,7 +268,7 @@ MAX_VERSIONS_PER_RESOURCE = 20
 # version of that resource.
 VERSIONED_RESOURCE_TYPES = frozenset(
     {"automation", "script", "scene", "helper", "dashboard", "yaml_config", "file", "entity", "device",
-     "blueprint", "esphome_yaml", "energy", "config_entry", "area", "floor"}
+     "blueprint", "esphome_yaml", "energy", "config_entry", "area", "floor", "label", "category"}
 )
 
 # Dashboard card catalog. Which Lovelace cards this instance can actually render,
@@ -1612,6 +1612,12 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "location.create": "Create location {name}",
     "location.update": "Update location {name}",
     "location.delete": "Delete location {name}",
+    "label.create": "Create label {name}",
+    "label.update": "Update label {name}",
+    "label.delete": "Delete label {name}",
+    "category.create": "Create category {name}",
+    "category.update": "Update category {name}",
+    "category.delete": "Delete category {name}",
     # Device registry.
     "set_device": "Update device registry metadata ({fields}) for {device_id}",
     "remove_device": "Remove {device_id} from config entry {config_entry_id}",
@@ -1831,9 +1837,9 @@ def _approval_summary_body(key: str) -> str:
         return "This will change the {label} integration in Home Assistant."
     if key.startswith(("dashboard", "patch_dashboard", "edit_energy_config")):
         return "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change."
-    if key == "location.delete":
+    if key in ("location.delete", "label.delete", "category.delete"):
         return "This will remove the selected item. The change may not be reversible."
-    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.")):
+    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.", "label.", "category.")):
         return "This will apply the proposed configuration change. Open Details to review the exact proposed change."
     if key.startswith(("call_service", "mesa_service")):
         return "This will run the proposed Home Assistant service action."

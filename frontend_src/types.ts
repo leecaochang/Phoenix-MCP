@@ -713,7 +713,9 @@ export type VersionResourceType =
   | "file"
   | "config_entry"
   | "area"
-  | "floor";
+  | "floor"
+  | "label"
+  | "category";
 
 export interface VersionSummary {
   id: string;
