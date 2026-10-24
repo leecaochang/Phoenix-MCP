@@ -865,7 +865,7 @@
 
           <article class="tool" data-cap="service" data-search="dry_run_service preview predicted outcome mesa">
             <div class="tool-head"><span class="tool-name">dry_run_service</span><span class="badge badge-cap">Search &amp; discovery</span></div>
-            <p class="tool-desc">Preview a service call without running it. Resolves and flattens targets, reports the MESA verdict per entity, and returns a single <code>predicted_outcome</code> of <code>allowed</code>, <code>pending_approval</code>, or <code>denied</code>, folding the capability gate and MESA together. It uses the same structured <code>service</code> and <code>targets</code> parameters as <code>call_service</code>.</p>
+            <p class="tool-desc">Preview a service call without running it. Resolves and flattens targets, reports the MESA verdict per entity, and returns a single <code>predicted_outcome</code> of <code>allowed</code>, <code>pending_approval</code>, or <code>denied</code>, folding the capability gate and MESA together. <code>requested_target_count</code> and <code>dropped_count</code> count only targets this access key can see. It uses the same structured <code>service</code> and <code>targets</code> parameters as <code>call_service</code>.</p>
             <dl><dt>params</dt><dd><code>service</code> (required): required <code>service.domain</code> and <code>service.name</code>, plus optional <code>service.data</code>. Required <code>targets</code> entries use <code>kind</code> <code>entity</code>, <code>device</code>, <code>area</code>, or <code>all</code>, with non-empty <code>ids</code> except for <code>all</code>.</dd></dl>
           </article>
         </section>

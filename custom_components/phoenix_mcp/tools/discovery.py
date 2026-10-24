@@ -68,7 +68,7 @@ from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as 
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..radio import device_radio_types
 from ..recorder_queries import iso_utc, state_timestamp
@@ -3107,18 +3107,17 @@ async def _tool_dry_run_service(
             }
             return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
-    try:
-        if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
-            return (
-                _tool_error("An explicit entity_id, device_id, or area_id target is required."),
-                "invalid_request", "dry_run_service",
-            )
-        permitted, requested = resolve_service_targets(
-            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+    if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+            "invalid_request", "dry_run_service",
         )
-    except EntityCreationNotPermitted:
-        permitted, requested = [], 0
+    # Counts cover only entities the key can see, so a hidden target and a
+    # missing one preview identically.
+    permitted, requested = resolve_service_targets(
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+    )
 
     if not service_target_binding_valid(domain, service, permitted, hass):
         permitted = []

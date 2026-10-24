@@ -59,15 +59,6 @@ def device_registry_entries(registry: Any) -> Any:
     return device_registry_snapshot_from_registry(registry).entries
 
 
-class EntityCreationNotPermitted(Exception):
-    def __init__(self, entity_id: str) -> None:
-        self.entity_id = entity_id
-        super().__init__(
-            f"Entity {entity_id!r} is not in the entity registry; "
-            "Phoenix MCP does not permit entity creation via service calls."
-        )
-
-
 _RELATIVE_TIME_RE = re.compile(r"^(\d+)(h|d|w|m)$")
 _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
@@ -692,15 +683,14 @@ def expand_service_targets(
     service_domain: str,
     hass: HomeAssistant,
 ) -> tuple[set[str], list[str]]:
-    """Expand service call targets without permission filtering or entity creation checks.
+    """Expand service call targets without permission filtering or registry checks.
 
     Returns (device_area_candidates, explicit_entity_ids) where:
     - device_area_candidates: entity IDs from device/area/'all' expansion (deduplicated set)
     - explicit_entity_ids: entity IDs specified directly (not via 'all') that callers must
       validate against the entity registry before use
 
-    Use resolve_service_targets for the full filtered result. Use this directly only when
-    a raw count is needed (e.g. X-Phoenix-Entities-Requested header).
+    Use resolve_service_targets for the full filtered result.
     """
     entity_registry = er.async_get(hass)
     device_snapshot = device_registry_snapshot(hass)
@@ -798,12 +788,11 @@ def resolve_service_targets(
 ) -> tuple[list[str], int]:
     """Resolve service call targets to a WRITE-permitted, deduplicated entity_id list.
 
-    Returns (permitted_entities, raw_count) where raw_count is the number of
-    candidate entities before permission filtering. This avoids a second call to
-    expand_service_targets just to populate X-Phoenix-Entities-Requested.
-
-    Raises:
-        EntityCreationNotPermitted: if an explicit entity_id is not in the entity registry.
+    Returns (permitted_entities, visible_count) where visible_count is the number
+    of candidates this access key can read or write. An explicit ID with no
+    registry entry is skipped, so it is never dispatched (HA could create it) and
+    counts exactly like an entity the key cannot see: neither a mixed target list
+    nor the count tells a missing entity from a hidden one.
 
     Returns an empty list when no entities pass permission filtering; the caller must
     return 403 in that case.
@@ -821,28 +810,37 @@ def resolve_service_targets(
         hass=hass,
     )
 
-    # Entity creation check for explicit entity_ids; raises immediately if any are not in registry
+    unregistered: set[str] = set()
     for eid in explicit_ids:
         entry = entity_registry.async_get(eid.lower())
         if entry is None:
-            raise EntityCreationNotPermitted(eid)
-        # HA accepts registry IDs too. Every later gate and dispatch must use
-        # the same canonical identity that permission resolution authorizes.
-        candidates.add(entry.entity_id)
-
-    raw_count = len(candidates)
+            unregistered.add(eid.lower())
+        else:
+            # HA accepts registry IDs too. Every later gate and dispatch must use
+            # the same canonical identity that permission resolution authorizes.
+            candidates.add(entry.entity_id)
 
     # Deduplicate while preserving order, then filter to WRITE-permitted entities
     seen: set[str] = set()
     permitted: list[str] = []
+    visible = 0
     for eid in candidates:
         if eid in seen:
             continue
         seen.add(eid)
-        if resolve(eid, access_key, hass) == Permission.WRITE:
+        permission = resolve(eid, access_key, hass)
+        if permission in (Permission.READ, Permission.WRITE):
+            visible += 1
+        if permission == Permission.WRITE:
             permitted.append(eid)
+    # A stateful entity without a registry entry (YAML, no unique ID) that the
+    # key can read is counted as dropped; a ghost resolves NOT_FOUND and is not.
+    visible += sum(
+        resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
+        for eid in unregistered - seen
+    )
 
-    return permitted, raw_count
+    return permitted, visible
 
 
 def service_target_binding_valid(
@@ -906,13 +904,10 @@ def call_needs_physical_gate(
     if domain in PHYSICAL_GATE_DOMAINS:
         return True
     if domain == "homeassistant" and service == "toggle":
-        try:
-            targets, _ = resolve_service_targets(
-                entity_id=entity_id, device_id=device_id, area_id=area_id,
-                service_domain=domain, access_key=access_key, hass=hass,
-            )
-        except EntityCreationNotPermitted:
-            return False
+        targets, _ = resolve_service_targets(
+            entity_id=entity_id, device_id=device_id, area_id=area_id,
+            service_domain=domain, access_key=access_key, hass=hass,
+        )
         return physical_gate_applies(domain, service, targets)
     return False
 

@@ -259,7 +259,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -1894,13 +1894,10 @@ async def _tool_call_service(
         area_id=args.get("area_id"), access_key=access_key, hass=hass,
     ):
         if effective_cap(access_key, "cap_physical_control") != CAP_DENY:
-            try:
-                targets, _ = resolve_service_targets(
-                    entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-                    area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
-                )
-            except EntityCreationNotPermitted:
-                targets = []
+            targets, _ = resolve_service_targets(
+                entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+                area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+            )
             if not targets:
                 return _tool_error("Forbidden."), "denied", "call_service"
         blocked = await _gate(
@@ -2106,24 +2103,21 @@ async def _execute_call_service(
                 surface_validation_errors=True,
             )
 
-    try:
-        if not any((entity_id, device_id, area_id)):
-            if domain == "esphome":
-                return _tool_error("Forbidden."), "denied", resource
-            return (
-                _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
-                "invalid_request", resource,
-            )
-        permitted_entities, _requested_count = resolve_service_targets(
-            entity_id=entity_id,
-            device_id=device_id,
-            area_id=area_id,
-            service_domain=domain,
-            access_key=access_key,
-            hass=hass,
+    if not any((entity_id, device_id, area_id)):
+        if domain == "esphome":
+            return _tool_error("Forbidden."), "denied", resource
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
+            "invalid_request", resource,
         )
-    except EntityCreationNotPermitted:
-        return _tool_error("Forbidden."), "denied", resource
+    permitted_entities, _visible_count = resolve_service_targets(
+        entity_id=entity_id,
+        device_id=device_id,
+        area_id=area_id,
+        service_domain=domain,
+        access_key=access_key,
+        hass=hass,
+    )
 
     if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
@@ -10683,14 +10677,11 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
     # Read-only target resolution for the MESA note; the executor re-resolves
     # at approve time. Dual-gate and no-target reloads have no targets and
     # resolve to nothing, so they never carry the note.
-    try:
-        resolved, _count = resolve_service_targets(
-            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), service_domain=domain,
-            access_key=access_key, hass=hass,
-        )
-    except EntityCreationNotPermitted:
-        resolved = []
+    resolved, _count = resolve_service_targets(
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), service_domain=domain,
+        access_key=access_key, hass=hass,
+    )
     mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
     if mesa_note:
         preview["mesa"] = mesa_note

@@ -19,7 +19,6 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.policy_engine import (
-    EntityCreationNotPermitted,
     Permission,
     call_needs_physical_gate,
     config_entry_registry_context,
@@ -985,16 +984,14 @@ class TestResolveServiceTargetsEntityId:
         )
         assert result == []
 
-    async def test_nonexistent_entity_raises_entity_creation_not_permitted(self, hass):
+    async def test_nonexistent_entity_is_skipped_and_never_dispatched(self, hass):
         access_key = _make_access_key(domains={"light": "GREEN"})
-        with pytest.raises(EntityCreationNotPermitted) as exc_info:
-            resolve_service_targets(
-                entity_id="light.does_not_exist",
-                service_domain="light",
-                access_key=access_key,
-                hass=hass,
-            )
-        assert exc_info.value.entity_id == "light.does_not_exist"
+        assert resolve_service_targets(
+            entity_id="light.does_not_exist",
+            service_domain="light",
+            access_key=access_key,
+            hass=hass,
+        ) == ([], 0)
 
     async def test_all_expands_to_domain_entities(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
@@ -1251,13 +1248,12 @@ class TestResolveServiceTargetsPassThrough:
 
     async def test_pass_through_entity_creation_still_blocked(self, hass):
         access_key = _make_access_key(pass_through=True)
-        with pytest.raises(EntityCreationNotPermitted):
-            resolve_service_targets(
-                entity_id="light.ghost_entity",
-                service_domain="light",
-                access_key=access_key,
-                hass=hass,
-            )
+        assert resolve_service_targets(
+            entity_id="light.ghost_entity",
+            service_domain="light",
+            access_key=access_key,
+            hass=hass,
+        ) == ([], 0)
 
     async def test_pass_through_still_blocks_phoenix_domain(self, hass, registered_env):
         access_key = _make_access_key(pass_through=True)
