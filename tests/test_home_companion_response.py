@@ -310,3 +310,22 @@ def test_states_found_on_the_way_answer_only_a_plain_state_question(read):
         assert 'Door: on' in report['message'] and 'Gate' not in report['message']
     else:
         assert report['message']=='The gate sensor has not triggered this week.'
+
+
+@pytest.mark.parametrize('proposed', [False, True])
+def test_a_read_only_clarification_keeps_the_models_question_before_the_guidance(proposed):
+    evidence=ResponseEvidence()
+    search(evidence)
+    evidence.control_proposed=proposed
+    question='Thermostat Temperature reads 71.6 °F but has no room. Is that the living room sensor?'
+    report=build_report('clarification_needed',question,evidence,'en')
+    assert report['status']=='clarification_needed' and report['next_step']=='full_request'
+    assert 'complete request' in report['message']
+    if proposed:
+        # A device command was proposed: only Phoenix's own guidance and candidates are reported.
+        assert question not in report['message'] and 'Matches include: Gate, Door' in report['message']
+    else:
+        assert report['message'].startswith(question) and 'Matches include' not in report['message']
+    # The model cannot turn a reply without any read into its own clarification.
+    report=build_report('completed','I turned everything on.',ResponseEvidence(),'en')
+    assert report['status']=='clarification_needed' and 'turned' not in report['message']

@@ -1177,3 +1177,20 @@ async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_nar
     # The model's answer is used: the states listed while finding the sensors are not an answer.
     assert report['status'] == 'completed' and report['message'] == 'You have 400 zigbee contact sensors.'
     assert report['tool_outcomes'] == [{'tool': 'search_entities', 'outcome': 'allowed'}] * 2
+
+
+@pytest.mark.parametrize('control', [False, True])
+async def test_only_a_clarification_without_a_proposed_command_keeps_the_models_text(hass, companion, monkeypatch, control):
+    question = 'Two lamps match. Which one did you mean?'
+    rounds = [[('search_entities', {'domain': 'light', 'query': 'lamp'})]]
+    if control:
+        # Vetoed by the preflight check, so nothing is attempted, but a command was proposed.
+        rounds.append([('intent__HassTurnOn', {'entity_id': 'light.selected'})])
+    rounds.append(json.dumps({'status': 'clarification_needed', 'message': question}))
+    scripted(monkeypatch, rounds)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'What is the lamp doing?'}))
+    assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
+    assert 'complete request' in report['message']
+    assert (question in report['message']) is not control
+    service.assert_not_awaited()

@@ -88,6 +88,8 @@ class ResponseEvidence:
     # A history, statistics or other interpreted read, or a result withheld from
     # the model: the answer is then the model's, not a list of current states.
     model_answer: bool = False
+    # Set when the model proposed any device command, even one never dispatched.
+    control_proposed: bool = False
     # The states the model chose to read, which answer before the rows its searches found.
     chosen: dict[str, str] = field(default_factory=dict)
 
@@ -315,7 +317,12 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         next_step = 'check_state'
         parts.append(voice_text(language, 'companion_unverified' if status == 'outcome_unknown' else 'companion_refused'))
     elif status == 'clarification_needed' or (status == 'completed' and not evidence.successful_reads and not evidence.last_read_failed):
+        # A read-only question keeps the model's own question; the guidance still follows it.
+        own = status == 'clarification_needed' and not evidence.control_proposed and model_message.strip()
         status, next_step = 'clarification_needed', 'full_request'
+        if own:
+            parts.append(model_message.strip())
+            labels = []
         parts.append(voice_text(language, 'companion_clarify'))
     elif status == 'output_limit':
         next_step = 'review_limits'

@@ -195,6 +195,9 @@ def preflight_control_calls(access_key: Any, calls: list[dict]) -> list[dict] | 
     if not internal_turn(access_key):
         return None
     check_request_authority()
+    turn = _turn.get()
+    if turn is not None and any(call.get('name') in HOME_COMPANION_CONTROL_TOOLS for call in calls):
+        turn.evidence.control_proposed = True
     from .tools.native import validate_native_control_args
     errors = {}
     for call in calls:
