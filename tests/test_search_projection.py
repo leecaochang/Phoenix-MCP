@@ -165,3 +165,55 @@ async def test_by_domain_counts_every_match_not_just_the_page(hass, placed):
     # One domain needs no breakdown beside total.
     content, _, _ = await _call_tool("search_entities", {"domain": "sensor", "has_area": False}, _key(), hass, _data())
     assert "by_domain" not in json.loads(content["content"][0]["text"])
+
+
+@pytest.fixture
+def context_home(hass, placed):
+    """The placed home plus a floor, a label and a manufacturer, and a name-only Kitchen entity."""
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers import floor_registry as fr
+    from homeassistant.helpers import label_registry as lr
+
+    upstairs = fr.async_get(hass).async_create("Upstairs")
+    kitchen = next(a for a in ar.async_get(hass).async_list_areas() if a.name == "Kitchen")
+    ar.async_get(hass).async_update(kitchen.id, floor_id=upstairs.floor_id)
+    dr.async_get(hass).async_update_device(placed.loose.id, manufacturer="Acme Corp", model="Widget 9")
+    label = lr.async_get(hass).async_create("Holiday Lights")
+    er.async_get(hass).async_update_entity(placed.orphan, labels={label.label_id})
+    hass.states.async_set("sensor.kitchen_scale", "1", {"friendly_name": "Kitchen Scale"})
+    return placed
+
+
+async def _ranked(hass, query):
+    content, outcome, _ = await _call_tool("search_entities", {"query": query}, _key(), hass, _data())
+    assert outcome == "allowed", content
+    return json.loads(content["content"][0]["text"])["entities"]
+
+
+@pytest.mark.parametrize(("query", "field"), [
+    ("upstairs", "floor"), ("holiday", "label"), ("acme", "manufacturer"), ("widget", "model"), ("hub", "device"),
+])
+async def test_a_query_finds_entities_by_their_floor_label_and_device(hass, context_home, query, field):
+    rows = await _ranked(hass, query)
+    assert rows and all(field in row["matched"] for row in rows)
+    expected = {"upstairs": {context_home.direct, context_home.by_device}, "holiday": {context_home.orphan},
+                "acme": {context_home.orphan}, "widget": {context_home.orphan}, "hub": {context_home.by_device}}[query]
+    assert {row["entity_id"] for row in rows} == expected
+
+
+async def test_a_name_match_leads_and_an_area_match_says_so(hass, context_home):
+    rows = await _ranked(hass, "kitchen")
+    # The entity named Kitchen leads; those only in the Kitchen area follow, one of them through its device.
+    assert rows[0]["entity_id"] == "sensor.kitchen_scale" and "matched" not in rows[0]
+    assert {row["entity_id"] for row in rows[1:]} == {context_home.direct, context_home.by_device}
+    assert all(row["matched"] == ["area"] for row in rows[1:])
+
+
+async def test_every_word_must_be_found_somewhere(hass, context_home):
+    content, _, _ = await _call_tool("search_entities", {"query": "kitchen orphan"}, _key(), hass, _data())
+    # No entity has both words anywhere, so only the typo-tolerant name fallback answers.
+    assert json.loads(content["content"][0]["text"]).get("fuzzy_fallback") is True
+    rows = await _ranked(hass, "holiday orphan")
+    assert [row["entity_id"] for row in rows] == [context_home.orphan] and rows[0]["matched"] == ["label"]

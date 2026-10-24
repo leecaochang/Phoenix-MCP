@@ -41,6 +41,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import label_registry as lr
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
@@ -57,6 +58,7 @@ from ..device_semantics import (
     device_authority_chain,
     device_entry_value,
     device_registry_snapshot,
+    effective_entity_area_id,
     entity_name_source,
 )
 from ..service_targets import secondary_target_error, unsupported_secondary_targets
@@ -1217,41 +1219,96 @@ def _area_name_for_entity(eid: str, registry: Any, dev_reg: Any, area_reg: Any) 
     return area.name if area is not None else area_id
 
 
+# Where else a query word may be found beside the entity's own names, so
+# "kitchen", "upstairs", "ikea" or a label find what the home calls by that word.
+_SEARCH_CONTEXT_FIELDS = ("area", "floor", "label", "device", "manufacturer", "model")
+# A word found only in that context weighs less than one in the entity's name,
+# so "kitchen" still lists the Kitchen light before everything in the Kitchen.
+_SEARCH_CONTEXT_WEIGHT = 0.3
+
+
+def _search_context(
+    entry: Any, area_name: str | None, snapshot: DeviceRegistrySnapshot, area_reg: Any, floor_reg: Any, label_reg: Any,
+) -> dict[str, str]:
+    """The lowercased words an entity is known by beyond its own names: its area, floor, labels and device."""
+    context: dict[str, str] = {}
+    if area_name:
+        context["area"] = area_name.lower()
+    area_id = effective_entity_area_id(entry, snapshot) if entry is not None else None
+    area = area_reg.async_get_area(area_id) if area_id else None
+    floor = floor_reg.async_get_floor(area.floor_id) if area is not None and area.floor_id else None
+    if floor is not None:
+        context["floor"] = floor.name.lower()
+    device = snapshot.get(entry.device_id) if entry is not None and entry.device_id else None
+    label_ids = set(getattr(entry, "labels", None) or ()) | set(getattr(device, "labels", None) or ())
+    names = [label.name for label_id in sorted(label_ids) if (label := label_reg.async_get_label(label_id)) is not None]
+    if names:
+        context["label"] = " ".join(names).lower()
+    if device is not None:
+        for key, value in (("device", device.name_by_user or device.name),
+                           ("manufacturer", device_entry_value(device, "manufacturer")),
+                           ("model", device_entry_value(device, "model"))):
+            if isinstance(value, str) and value:
+                context[key] = value.lower()
+    return context
+
+
 def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
     """Token-AND filter + relevance rank for a search_entities query.
 
-    Keeps only rows whose entity_id/friendly_name contains every query token (so
+    Keeps only rows where every query token appears in the entity_id, friendly
+    name or aliases, or in the area, floor, label or device it belongs to (so
     multi-word queries work, unlike a single substring test), and orders by an
     IDF-weighted score so the most relevant rows lead and survive truncation.
-    Rarer query terms weigh more; exact and prefix/word-start matches get a bonus.
+    Rarer query terms weigh more; exact and prefix/word-start matches get a bonus,
+    and a token found only in that context weighs less. A row matched through
+    context says where in matched.
     """
     access_keys = [t for t in query.split() if t]
     if not access_keys:
         return matches
     docs = [f"{m['entity_id']} {(m.get('friendly_name') or '')} {' '.join(m.get('_aliases', ()))}".lower() for m in matches]
+    contexts = [m.get("_context") or {} for m in matches]
     n = len(docs) or 1
-    df = {t: sum(1 for d in docs if t in d) for t in set(access_keys)}
+    df = {t: sum(1 for d, c in zip(docs, contexts) if t in d or any(t in v for v in c.values())) for t in set(access_keys)}
     full = " ".join(access_keys)
     scored: list[tuple[float, str, dict]] = []
-    for m, doc in zip(matches, docs):
-        if any(t not in doc for t in access_keys):
-            continue
-        eid = m["entity_id"].lower()
-        obj = eid.split(".")[-1]
-        fname = (m.get("friendly_name") or "").lower()
-        aliases = [alias.lower() for alias in m.get("_aliases", ())]
-        score = 0.0
+    for m, doc, context in zip(matches, docs, contexts):
+        found_in: set[str] = set()
         for t in access_keys:
-            score += math.log(1 + n / (1 + df.get(t, 0)))
-            if t == eid or t == fname or t in aliases:
-                score += 5.0
-            elif obj.startswith(t) or any(w.startswith(t) for name in (fname, *aliases) for w in name.split()):
-                score += 2.0
-        if full in (eid, fname, obj, *aliases):
-            score += 10.0
-        scored.append((score, m["entity_id"], m))
+            if t not in doc:
+                fields = {field for field in _SEARCH_CONTEXT_FIELDS if t in context.get(field, "")}
+                if not fields:
+                    break
+                found_in |= fields
+        else:
+            if found_in:
+                m["matched"] = [field for field in _SEARCH_CONTEXT_FIELDS if field in found_in]
+            scored.append((_search_score(m, doc, access_keys, df, n, full), m["entity_id"], m))
     scored.sort(key=lambda s: (-s[0], s[1]))
     return [m for _, _, m in scored]
+
+
+def _search_score(m: dict, doc: str, access_keys: list[str], df: dict[str, int], n: int, full: str) -> float:
+    """IDF-weighted relevance of one row whose tokens all matched; context-only tokens weigh less."""
+    eid = m["entity_id"].lower()
+    obj = eid.split(".")[-1]
+    fname = (m.get("friendly_name") or "").lower()
+    aliases = [alias.lower() for alias in m.get("_aliases", ())]
+    score = 0.0
+    for t in access_keys:
+        weight = math.log(1 + n / (1 + df.get(t, 0)))
+        if t not in doc:
+            score += weight * _SEARCH_CONTEXT_WEIGHT
+            continue
+        score += weight
+        if t == eid or t == fname or t in aliases:
+            score += 5.0
+        elif obj.startswith(t) or any(w.startswith(t) for name in (fname, *aliases) for w in name.split()):
+            score += 2.0
+    if full in (eid, fname, obj, *aliases):
+        score += 10.0
+    return score
 
 
 def _fuzzy_search_matches(matches: list[dict], query: str) -> list[dict]:
@@ -1543,6 +1600,9 @@ async def _tool_search_entities(
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
     now = utcnow()
+    # Only a query reads an entity's area, floor, label and device words.
+    context_registries = ((device_registry_snapshot(hass), area_reg, fr.async_get(hass), lr.async_get(hass))
+                          if f.query else None)
 
     expose = assist_expose_check(access_key, hass)
     area_ids = _search_area_ids(hass, f.area) if f.area else None
@@ -1621,6 +1681,8 @@ async def _tool_search_entities(
         aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
         if aliases:
             row["_aliases"] = aliases
+        if context_registries is not None:
+            row["_context"] = _search_context(entry, area_name, *context_registries)
         if projection is not None and state is not None:
             row["_scrubbed"] = e
         matches.append(row)
@@ -1654,6 +1716,7 @@ async def _tool_search_entities(
     by_domain = dict(sorted(domains.items(), key=lambda item: (-item[1], item[0])))
     for row in results:
         row.pop("_aliases", None)
+        row.pop("_context", None)
         if "_scrubbed" in row:
             # The returned page carries get_state's projection, so the current
             # values need no follow-up read.
