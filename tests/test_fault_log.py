@@ -153,9 +153,9 @@ async def test_fixed_file_allowlist_refuses_aliases_and_special_files(context, k
     {"source": "../secrets.yaml"}, {"source": []}, {"source": None},
     {"path": "secrets.yaml"}, {"level": "ERROR"}, {"integration": "demo"},
     {"logger": "demo"}, {"since": "1h"}, {"until": "now"},
-    {"order": []}, {"order": "reverse"}, {"limit": True}, {"limit": 1.5},
-    {"limit": 0}, {"limit": 101}, {"search": []}, {"search": "x" * 513},
-    {"cursor": []}, {"cursor": "x" * 1025}, {"cursor": "invalid"},
+    {"order": "reverse"}, {"limit": True}, {"limit": 1.5},
+    {"limit": 0}, {"search": "x" * 513},
+    {"cursor": "x" * 1025}, {"cursor": "invalid"},
 ])
 async def test_invalid_arguments_do_not_read_files(context, args, monkeypatch):
     reads = []

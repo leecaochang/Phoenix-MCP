@@ -934,9 +934,9 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
             "Invalid mode. Must be one of: state_changes, significant_states, summary."
         ), "invalid_request", entity_id
     if mode == "summary" and ("limit" in args or "order" in args):
-        return _tool_error(
-            "limit and order do not apply to summary mode, which returns per-state totals instead of rows."
-        ), "invalid_request", entity_id
+        ignored = [key for key in ("limit", "order") if key in args]
+        note_argument_adjustment(f"Ignored {', '.join(ignored)}, which do not apply to summary mode's per-state totals.")
+        args = {key: value for key, value in args.items() if key not in ignored}
     if args.get("attribute") and mode != "summary":
         return _tool_error(
             "attribute is accepted only with mode summary, which totals how long the attribute held each value."
@@ -8735,7 +8735,7 @@ async def _call_tool_checked(
         if error := unknown_argument_error(tool_name, arguments):
             return _tool_refused_before_write(error), "invalid_request", tool_name
         if not set(arguments) & set(_RETIRED_REPLACEMENTS.get(tool_name, {})):
-            arguments, error = scalar_arguments(tool_name, arguments)
+            arguments, error = scalar_arguments(tool_name, arguments, read_only=tool_is_read_only(tool_name))
             if error:
                 return _tool_refused_before_write(error), "invalid_request", tool_name
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}

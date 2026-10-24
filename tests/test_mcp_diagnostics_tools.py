@@ -659,9 +659,8 @@ class TestDiagnostics:
         ]
 
     @pytest.mark.parametrize("args", [
-        {"limit": True}, {"limit": 0}, {"limit": 51},
-        {"include_ignored": "yes"}, {"severity": "fatal"}, {"severity": []},
-        {"domain": ""},
+        {"limit": True}, {"limit": 0},
+        {"include_ignored": "yes"}, {"severity": "fatal"},
     ])
     async def test_repairs_rejects_invalid_filters(self, hass, args):
         _, outcome, _ = await _call(

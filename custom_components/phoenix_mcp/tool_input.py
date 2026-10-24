@@ -254,18 +254,51 @@ def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str 
     return None
 
 
-def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
+def _scalar_text(name: str, value: Any, schema: dict) -> Any:
+    """A number or boolean sent as its canonical text, for a field that takes no text.
+
+    Some clients send every argument as a string. "10", "2.5" and "true" are
+    the value they spell; any other text stays for the type check to refuse.
+    """
+    kinds = _kinds(schema)
+    if not isinstance(value, str) or "string" in kinds:
+        return value
+    text = value.strip()
+    read: Any = value
+    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
+        read = int(text)
+    elif "number" in kinds and _NUMBER_TEXT.fullmatch(text):
+        read = float(text)
+    elif "boolean" in kinds and text.lower() in ("true", "false"):
+        read = text.lower() == "true"
+    if read is not value:
+        note_argument_adjustment(f"Read {name} text {json.dumps(value[:40])} as {json.dumps(read)}.")
+    return read
+
+
+# Empty on a read means "not given", except for a compare-and-swap token. An
+# empty object can be the request itself (select {} with in_state scans every
+# entity, input {} renders a blueprint without inputs), so it is kept.
+_MEANINGFUL_EMPTY = frozenset({"expected_hash"})
+# Page and wait sizes a read clamps to its maximum instead of refusing.
+_CLAMPED = frozenset({"limit", "timeout"})
+
+
+def scalar_arguments(tool: str, arguments: dict, *, read_only: bool = False) -> tuple[dict, str | None]:
     """Hold top-level arguments to the advertised schema, the one contract on every route.
 
     Required arguments must be present and not null. A scalar the schema refuses
-    by type, bound, length or pattern is refused with the field named, rather
-    than clamped or ignored; enum values and null stay with their handlers, whose
-    messages explain the choice and for whom null can be a refused value (a
-    compare-and-swap expected_hash) as well as absence. Whole-valued
-    floats become ints wherever the schema expects an integer, nested ones
-    included, and native tools take HA's own list and number shapes
-    (_native_shape). Union-typed fields are left to their handler. Call after
-    the owning capability's denial check.
+    by type, bound, length or pattern is refused with the field named; enum
+    values and null stay with their handlers, whose messages explain the choice
+    and for whom null can be a refused value (a compare-and-swap expected_hash)
+    as well as absence. Whole-valued floats become ints wherever the schema
+    expects an integer, nested ones included, and native tools take HA's own
+    list and number shapes (_native_shape). On a read, canonical number and
+    boolean text is the value it spells, an optional argument that is only an
+    empty placeholder is absent, and a limit or timeout above its maximum is the
+    maximum; a write refuses all three. Each reading is noted on the result.
+    Union-typed fields are left to their handler. Call after the owning
+    capability's denial check.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -281,13 +314,24 @@ def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
         if not isinstance(field, dict) or any(key in field for key in ("anyOf", "oneOf", "allOf")):
             continue
         kinds = _kinds(field)
+        if (read_only and value in (None, "", []) and name not in required
+                and name not in _MEANINGFUL_EMPTY):
+            del result[name]
+            note_argument_adjustment(f"Read empty {name} as not given.")
+            continue
         if value is None:
             # What null means stays the handler's call: for some fields it is
             # absence, for a safety token such as expected_hash it must refuse.
             continue
         if tool in _NATIVE_TOOLS:
             value = _native_shape(value, field)
+        elif read_only:
+            value = _scalar_text(name, value, field)
         converted = _whole_integers(value, field)
+        if (read_only and name in _CLAMPED and isinstance(converted, (int, float)) and not isinstance(converted, bool)
+                and "maximum" in field and converted > field["maximum"]):
+            note_argument_adjustment(f"{name} {converted} is above its maximum, so {field['maximum']} was used.")
+            converted = field["maximum"]
         if kinds and set(kinds) <= _SCALAR_TYPES and (error := _scalar_error(name, converted, field, kinds)):
             return arguments, error
         result[name] = converted

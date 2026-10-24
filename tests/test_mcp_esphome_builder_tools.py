@@ -238,7 +238,8 @@ class TestBoards:
         assert payload["query"] == "esp32"
 
     @pytest.mark.parametrize(("given", "expected"), [
-        (None, 20), (7, 7), (50, 50), (500, None), (0, None), (-3, None), ("many", None),
+        # A read clamps a page size above its maximum and says so; below the minimum is refused.
+        (None, 20), (7, 7), (50, 50), (500, 50), (0, None), (-3, None), ("many", None),
     ])
     async def test_limit_is_bounded_or_refused(self, hass, esphome_dir, given, expected):
         command = _builder({"boards": []})

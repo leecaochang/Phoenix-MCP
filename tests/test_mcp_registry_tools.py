@@ -1483,7 +1483,8 @@ class TestSearchMembership:
                 assert all("is_group" not in row and "member_entity_ids" not in row
                            for row in _result_json(content)["entities"])
 
-    @pytest.mark.parametrize("value", [None, 1, 0, "true", [], {}])
+    # A read takes "true" as true and an empty placeholder as not given.
+    @pytest.mark.parametrize("value", [1, 0, "yes", {}])
     async def test_argument_validation_and_capability_precedence(self, hass, reg_env, value):
         args = {"include_membership": value}
         assert (await _call("search_entities", args, _access_key(), hass))[1] == "invalid_request"

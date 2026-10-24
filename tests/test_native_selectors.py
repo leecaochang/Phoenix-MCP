@@ -525,9 +525,11 @@ def test_text_that_is_not_the_number_stays_refused(tool, field, text):
     assert error is not None and field in error
 
 
-def test_only_native_tools_take_numeric_text():
+def test_numeric_text_is_read_on_reads_and_natives_but_refused_on_writes():
     from custom_components.phoenix_mcp.tool_input import scalar_arguments
-    assert scalar_arguments("get_history", {"limit": "10"})[1] == "limit must be an integer."
+    assert scalar_arguments("get_history", {"limit": "10"}, read_only=True) == ({"limit": 10}, None)
+    _, error = scalar_arguments("compile_esphome_firmware", {"file": "a.yaml", "force_local": "true"}, read_only=False)
+    assert error == "force_local must be true or false."
 
 
 async def test_an_empty_string_selector_beside_a_name_stays_a_placeholder():

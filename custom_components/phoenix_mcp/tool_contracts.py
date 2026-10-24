@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from homeassistant.core import valid_entity_id
-
 from .const import (
     PATCH_DASHBOARD_MAX_CHANGES,
     SERVICE_TARGET_MAX_GROUPS,
@@ -300,12 +298,11 @@ def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     """Read an undeclared argument as the one parameter it plainly means.
 
     On a read-only tool, a synonym or one-edit near miss with exactly one
-    candidate that was not also sent is renamed; a write keeps refusing it,
-    since a guessed parameter there could act on something unintended. On any
-    tool an undeclared argument holding only an empty placeholder is dropped,
-    which changes nothing. Each reading is noted on the result; anything else
-    stays for unknown_argument_error to refuse. Retired forms keep their own
-    handling.
+    candidate that was not also sent is renamed, and an undeclared argument
+    holding only an empty placeholder is dropped. A write keeps refusing both,
+    since a guess there could act on something unintended or let an undeclared
+    key through. Each reading is noted on the result; anything else stays for
+    unknown_argument_error to refuse. Retired forms keep their own handling.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -327,7 +324,7 @@ def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
         if renames and len(candidates) == 1 and candidates[0] not in out:
             out[candidates[0]] = out.pop(name)
             read.append(f"{json.dumps(name)} as {candidates[0]}")
-        elif not candidates and args[name] in _EMPTY:
+        elif renames and not candidates and args[name] in _EMPTY:
             del out[name]
             read.append(f"empty {json.dumps(name)}, which this tool does not take, as absent")
     if read:
@@ -410,6 +407,8 @@ def _implied_kind(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     elif tool == "get_esphome_job" and isinstance(value.get("id"), str):
         kind = "file" if value["id"].lower().endswith((".yaml", ".yml")) else "job"
     elif tool == "get_relationships":
+        from homeassistant.core import valid_entity_id
+
         ids = value.get("id")
         ids = [ids] if isinstance(ids, str) else ids
         if isinstance(ids, list) and ids and all(isinstance(item, str) and valid_entity_id(item) for item in ids):

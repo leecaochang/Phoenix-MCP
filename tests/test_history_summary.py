@@ -477,10 +477,16 @@ async def test_access_is_rechecked_after_the_scan(recorder_mock, hass: HomeAssis
 
 
 @pytest.mark.parametrize("extra", [{"limit": 10}, {"order": "newest_first"}, {"order": "oldest_first"}])
-async def test_row_paging_arguments_are_refused(recorder_mock, hass: HomeAssistant, extra: dict) -> None:
+async def test_row_paging_arguments_are_ignored_and_named(recorder_mock, hass: HomeAssistant, extra: dict) -> None:
+    """Refusing them cost a round; the totals do not depend on them."""
+    _anchor(hass)
     _set(hass, "light.desk", "on", -60)
-    result = await _call(hass, "light.desk", 0, 600, **extra)
-    assert result[1] == "invalid_request" and "do not apply to summary mode" in result[0]["content"][0]["text"]
+    await async_wait_recording_done(hass)
+    plain = await _summary(hass, "light.desk", 0, 600)
+    body = await _summary(hass, "light.desk", 0, 600, **extra)
+    assert body.pop("arguments_adjusted") == [
+        f"Ignored {next(iter(extra))}, which do not apply to summary mode's per-state totals."]
+    assert body == plain
 
 
 async def test_hidden_entities_are_not_found_before_any_scan(recorder_mock, hass: HomeAssistant) -> None:

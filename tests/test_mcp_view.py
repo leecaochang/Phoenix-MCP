@@ -4161,8 +4161,9 @@ async def test_single_id_wait_still_returns_the_full_result(hass):
     access_key = _make_physical_access_key("confirm")
     access_key.id = "tid"
 
+    # The retired single id is read as a one-item approval_ids list, the plural form.
     content, outcome, _r = await _tool_wait_for_approval({"approval_id": "appr-1"}, access_key, hass, data)
-    assert outcome == "invalid_request" and content["isError"] is True
+    assert outcome != "invalid_request" and not content.get("isError")
 
 
 @pytest.mark.asyncio
@@ -4215,7 +4216,7 @@ async def test_single_id_form_is_untouched(hass):
 
     content, outcome, _r = await _tool_wait_for_approval(
         {"approval_id": "appr-1"}, access_key, hass, data)
-    assert outcome == "invalid_request" and content["isError"] is True
+    assert outcome != "invalid_request" and not content.get("isError")
 
 
 @pytest.mark.parametrize("domain,service", [("notify", "persistent_notification"), ("persistent_notification", "create"), ("logbook", "log")])

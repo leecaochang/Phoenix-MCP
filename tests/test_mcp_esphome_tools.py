@@ -1028,7 +1028,7 @@ class TestScopedEsphomeInventory:
         assert _json(content)["incomplete"] is True
 
     @pytest.mark.parametrize("args", [{"query": []}, {"query": "x", "context_lines": True},
-                                      {"query": "x", "case_sensitive": "false"}, {"query": "x" * 201}])
+                                      {"query": "x", "case_sensitive": "maybe"}, {"query": "x" * 201}])
     async def test_search_rejects_malformed_arguments(self, hass, args):
         _, outcome, _ = await _call("search_esphome_yaml", args, _yaml_access_key(), hass)
         assert outcome == "invalid_request"

@@ -222,6 +222,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.util.dt": {
         "as_utc": "0.0.0",
+        # The accessor that replaced reading DEFAULT_TIME_ZONE directly, in 2024.6.0.
+        "get_default_time_zone": "2024.6.0",
         "parse_datetime": "0.0.0",
         "utcnow": "0.0.0",
     },
