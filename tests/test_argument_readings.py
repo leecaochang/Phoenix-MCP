@@ -137,6 +137,37 @@ def test_only_entity_ids_split_on_commas_while_json_lists_read_anywhere():
     assert decode_container_strings("get_history", {"in_state": '["on", "off"]'})["in_state"] == ["on", "off"]
 
 
+@pytest.mark.parametrize(("field", "text", "read"), [
+    ("device_class", "[door, window]", ["door", "window"]),
+    ("domain", "[binary_sensor]", ["binary_sensor"]),
+    ("entity_id", "[light.allowed, lock.door]", ["light.allowed", "lock.door"]),
+    # Not bare identifiers, or a state, which is free text: left as sent.
+    ("device_class", "[door, ]", None),
+    ("integration", "[Living Room]", None),
+    ("in_state", "[on, off]", None),
+])
+def test_bracketed_identifiers_read_as_the_list_they_spell(field, text, read):
+    from custom_components.phoenix_mcp.tool_input import decode_container_strings
+
+    tool = "get_history" if field == "in_state" else "search_entities" if field != "entity_id" else "get_state"
+    assert decode_container_strings(tool, {field: text})[field] == (read if read is not None else text)
+
+
+async def test_an_unquoted_device_class_list_finds_what_the_list_finds(home):
+    hass = home.hass
+    hass.states.async_set("binary_sensor.front", "off", {"device_class": "door"})
+    hass.states.async_set("binary_sensor.hall", "off", {"device_class": "window"})
+    key = _key()
+    key.pass_through = True
+    found = {}
+    for value in (["door", "window"], "[door, window]"):
+        result = await _call_tool("search_entities", {"device_class": value}, key, hass, _data())
+        body = _body(result)
+        found[str(value)] = sorted(row["entity_id"] for row in body["entities"])
+    assert found["['door', 'window']"] == found["[door, window]"] == ["binary_sensor.front", "binary_sensor.hall"]
+    assert "a list of 2" in body["arguments_adjusted"][0]
+
+
 @pytest.mark.parametrize(("tool", "field", "sent", "read"), [
     ("get_statistics", "period", "Day", "day"),
     ("get_history", "order", "NEWEST_FIRST", "newest_first"),

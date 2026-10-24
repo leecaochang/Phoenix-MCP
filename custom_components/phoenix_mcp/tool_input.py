@@ -20,6 +20,8 @@ _CONTAINER_TYPES = ("object", "array")
 _NATIVE_TOOLS = frozenset(definition["name"] for definition in _NATIVE_TOOL_DEFS)
 _INTEGER_TEXT = re.compile(r"-?\d+")
 _NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
+_IDENTIFIER = re.compile(r"[\w.-]+")
+_STATE_VALUES = frozenset({"in_state"})
 
 
 # How one call's arguments were read when they arrived in an older or Home
@@ -98,9 +100,11 @@ def decode_container_strings(tool: str, arguments: dict) -> dict:
 def _list_text(name: str, schema: dict, value: str) -> list[str] | None:
     """The list in text sent for a field that takes one string or a list of them.
 
-    JSON array text of strings is the list it spells. A comma list is split only
-    for entity IDs, which contain no comma; any other value, such as a state of
-    "1,234", stays as sent.
+    JSON array text of strings is the list it spells, and so is bracketed text
+    of bare identifiers such as "[door, window]", which no domain, device class
+    or ID can be; a state is free text, so only JSON reads as a list there. A
+    comma list is split only for entity IDs, which contain no comma; any other
+    value, such as a state of "1,234", stays as sent.
     """
     if not any(isinstance(choice, dict) and choice.get("type") == "array" for choice in schema.get("oneOf") or ()):
         return None
@@ -109,7 +113,10 @@ def _list_text(name: str, schema: dict, value: str) -> list[str] | None:
         try:
             decoded = json.loads(text)
         except (ValueError, RecursionError):
-            return None
+            items = [item.strip() for item in text[1:-1].split(",")] if text.endswith("]") else []
+            if name in _STATE_VALUES or not items or not all(_IDENTIFIER.fullmatch(item) for item in items):
+                return None
+            return items
         return decoded if isinstance(decoded, list) and decoded and all(isinstance(i, str) for i in decoded) else None
     if name in ("entity_id", "entity_ids") and "," in text:
         ids = [item.strip() for item in text.split(",") if item.strip()]
