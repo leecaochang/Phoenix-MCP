@@ -3753,6 +3753,13 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     }),
 }
 
+# Result times a read asks the model to send back as a query bound. Agent Chat
+# states them in Home Assistant's zone (the same instant), so a value echoed
+# unchanged meets the wall-time rule for query arguments.
+_AGENTCLI_LOCAL_RESUME_FIELDS: dict[str, frozenset[str]] = {
+    "get_logbook": frozenset({"older_end_time"}),
+}
+
 
 def _agentcli_local_time(value: Any, local_tz: tzinfo) -> str | None:
     """Return a local ISO companion for one recognized wire timestamp."""
@@ -3779,11 +3786,14 @@ def _agentcli_add_local_time_fields(
     """Add local companions without changing canonical tool-result timestamps.
 
     This is an Agent Chat-only presentation layer. Cursor values deliberately get
-    no companion because they are opaque protocol inputs for a subsequent call.
+    no companion because they are opaque protocol inputs for a subsequent call;
+    resume times are restated in the local zone instead.
     """
     fields = _AGENTCLI_LOCAL_TIME_FIELDS.get(tool_name)
-    if fields is None:
+    resume = _AGENTCLI_LOCAL_RESUME_FIELDS.get(tool_name, frozenset())
+    if fields is None and not resume:
         return text
+    fields = fields or frozenset()
     try:
         payload = json.loads(text)
     except (TypeError, ValueError):
@@ -3796,6 +3806,9 @@ def _agentcli_add_local_time_fields(
             return value
         augmented: dict[str, Any] = {}
         for key, item in value.items():
+            if key in resume:
+                augmented[key] = _agentcli_local_time(item, local_tz) or item
+                continue
             augmented[key] = add_companions(item)
             companion = _agentcli_local_time(item, local_tz) if key in fields else None
             companion_key = f"{key}_local"
@@ -3862,7 +3875,12 @@ _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
 def _agentcli_prepare_time_args(
     tool_name: str, args: dict[str, Any], local_tz: tzinfo,
 ) -> tuple[dict[str, Any], str | None]:
-    """Apply HA's zone to naive Agent Chat ranges and reject manual shifting."""
+    """Apply HA's zone to naive Agent Chat ranges and reject manual shifting.
+
+    A value already carrying HA's own offset for that instant, such as a _local
+    result value sent back, is exact and passes unchanged; any other offset is
+    refused as a shift the model made itself.
+    """
     fields = _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name)
     if fields is None:
         return args, None
@@ -3875,10 +3893,13 @@ def _agentcli_prepare_time_args(
         if parsed is None:
             continue
         if parsed.tzinfo is not None and parsed.utcoffset() is not None:
+            if parsed.astimezone(local_tz).utcoffset() == parsed.utcoffset():
+                continue
             return args, (
                 f"Agent Chat {field} must be a Home Assistant local wall time without "
-                "a timezone suffix, or a relative time. Pass the operator's intended "
-                "clock time directly; Phoenix applies the configured time zone."
+                "a timezone suffix, a relative time, or a _local value copied unchanged "
+                "from a result. Pass the operator's intended clock time directly; "
+                "Phoenix applies the configured time zone."
             )
         prepared[field] = parsed.replace(tzinfo=local_tz).isoformat()
     return prepared, None

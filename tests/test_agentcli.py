@@ -2001,6 +2001,31 @@ def test_agentcli_applies_home_zone_to_naive_query_bounds_and_rejects_shifted_on
     assert prepared == original
     assert "without a timezone suffix" in str(error)
 
+    # A _local value sent back is already in the home zone: the exact instant.
+    echoed = {first: "2026-08-14T05:14:17.250000+07:00", second: "2026-08-14T06:00:00+07:00"}
+    assert agentcli._agentcli_prepare_time_args(tool, echoed, local_tz) == (echoed, None)
+
+
+def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving():
+    from zoneinfo import ZoneInfo
+
+    local_tz = ZoneInfo("America/Los_Angeles")
+    for value, accepted in (("2026-07-01T05:00:00-07:00", True), ("2026-01-01T05:00:00-08:00", True),
+                            ("2026-07-01T05:00:00-08:00", False), ("2026-01-01T05:00:00-07:00", False)):
+        _, error = agentcli._agentcli_prepare_time_args("get_logbook", {"start_time": value}, local_tz)
+        assert (error is None) is accepted, value
+
+
+def test_agentcli_states_the_logbook_resume_time_locally_so_it_can_be_sent_back():
+    local_tz = timezone(timedelta(hours=7))
+    text = json.dumps({"entries": [], "older_end_time": "2026-08-13T22:14:17.250000+00:00"})
+    augmented = json.loads(agentcli._agentcli_add_local_time_fields("get_logbook", text, local_tz))
+    assert augmented["older_end_time"] == "2026-08-14T05:14:17.250000+07:00"
+    assert "older_end_time_local" not in augmented
+    assert agentcli._agentcli_prepare_time_args(
+        "get_logbook", {"end_time": augmented["older_end_time"]}, local_tz,
+    ) == ({"end_time": "2026-08-14T05:14:17.250000+07:00"}, None)
+
 
 def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule():
     """A new read tool time parameter must join the table or be named here with its reason."""
