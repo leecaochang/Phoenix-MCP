@@ -14,7 +14,7 @@ from .const import (
     UNKNOWN_ARGUMENT_MAX_NAME,
     UNKNOWN_ARGUMENT_PROTECTED_FIELDS,
 )
-from .tool_input import _PUBLIC_SCHEMAS, nested_argument_error, note_argument_adjustment
+from .tool_input import _PUBLIC_SCHEMAS, nested_argument_error, note_argument_adjustment, scalar_arguments
 
 
 _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
@@ -453,6 +453,25 @@ def state_projection(projection: dict) -> tuple[list | None, bool, str | None]:
     return None, False, None
 
 
+# Tools that check their arguments in the handler, after a capability check
+# only they can make, take the central scalar pass there. call_service and
+# dry_run_service translate a service shape first and keep their own checks.
+_HANDLER_CHECKED = frozenset(UNKNOWN_ARGUMENT_PROTECTED_FIELDS) - {"call_service", "dry_run_service"}
+
+
+def handler_arguments(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """Unknown names, then the central scalar contract, for a tool that checks its own arguments.
+
+    Such a tool runs this after its capability check, so a denied access key
+    still learns nothing about its arguments; its scalars are then held to the
+    contract every other tool's are (_call_tool_checked): view_index 0.0 is 0
+    and a missing required argument is named the same way. Writes stay strict.
+    """
+    if error := unknown_argument_error(tool, args):
+        return args, error
+    return scalar_arguments(tool, args)
+
+
 def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Translate a Catalog v2 request to the flat shape the executors take.
 
@@ -503,6 +522,10 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
     nested_error = nested_argument_error(tool, args)
     if nested_error and tool not in {"call_service", "dry_run_service"}:
         return out, nested_error
+    if tool in _HANDLER_CHECKED:
+        out, error = scalar_arguments(tool, out)
+        if error:
+            return out, error
     if tool == "get_state":
         projection = out.pop("projection", None)
         if not isinstance(projection, dict):

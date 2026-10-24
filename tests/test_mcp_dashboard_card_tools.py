@@ -254,6 +254,25 @@ class TestEditDeleteDashboardCard:
         hist = versions.list_for("dashboard", "lovelace")
         assert hist[0].before["views"][0]["cards"][1] == CARD_B
 
+    async def test_whole_float_indexes_read_as_integers_after_the_capability_check(self, hass, lovelace_env):
+        # A client that sends every number as a float gets what every other tool gives it.
+        h, _light = lovelace_env
+        await _seed(h)
+        _, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": 0.0, "card_index": 1.0, "card": NEW_CARD},
+            _access_key(), h, _data()[0])
+        assert outcome == "allowed"
+        assert (await async_get_lovelace_config(h, None))["views"][0]["cards"] == [CARD_A, NEW_CARD]
+        content, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": "first", "card_index": 1, "card": NEW_CARD},
+            _access_key(), h, _data()[0])
+        assert outcome == "invalid_request" and content["content"][0]["text"] == "view_index must be an integer."
+        # A denied access key still learns nothing about its arguments.
+        content, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": "first", "card": NEW_CARD},
+            _access_key(cap_lovelace_write="deny"), h, _data()[0])
+        assert outcome == "denied" and "view_index" not in content["content"][0]["text"]
+
     async def test_delete_removes_card(self, hass, lovelace_env):
         h, _light = lovelace_env
         await _seed(h)

@@ -303,7 +303,7 @@ class TestToolSearch:
     @pytest.mark.parametrize("args,needle", [
         ({"all_dashboards": True}, "at least one"),
         ({"all_dashboards": True, "query": "x", "url_path": "board-a"}, "not both"),
-        ({"all_dashboards": "yes", "query": "x"}, "boolean"),
+        ({"all_dashboards": "yes", "query": "x"}, "true or false"),
         ({"querry": "x"}, "query"),
     ])
     async def test_argument_refusals(self, boards, args, needle):

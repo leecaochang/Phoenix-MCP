@@ -39,7 +39,7 @@ from ..const import (
     REDACTION_SENTINEL,
 )
 from ..data import PhoenixData
-from ..tool_contracts import normalize_tool_args, unknown_argument_error
+from ..tool_contracts import handler_arguments, normalize_tool_args
 from ..tool_input import nested_argument_error
 from ..helpers import (
     content_hash,
@@ -555,7 +555,7 @@ async def _tool_edit_dashboard(
     """MCP tool: edit a dashboard (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_dashboard"
-    error = unknown_argument_error("edit_dashboard", args)
+    args, error = handler_arguments("edit_dashboard", args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", "edit_dashboard"
     if error := nested_argument_error("edit_dashboard", args):
@@ -601,7 +601,7 @@ async def _tool_delete_dashboard(
     """MCP tool: delete a dashboard (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_dashboard"
-    error = unknown_argument_error("delete_dashboard", args)
+    args, error = handler_arguments("delete_dashboard", args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", "delete_dashboard"
     blocked = await _gate(
@@ -761,7 +761,7 @@ async def _tool_get_dashboard_config(
     tool = "get_dashboard_config"
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool
-    error = unknown_argument_error(tool, args)
+    args, error = handler_arguments(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
     refusal = _url_path_refusal(args, tool)
@@ -935,7 +935,7 @@ async def _tool_set_dashboard_config(
     """MCP tool: replace a dashboard's view/card layout (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_dashboard_config"
-    error = unknown_argument_error("set_dashboard_config", args)
+    args, error = handler_arguments("set_dashboard_config", args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", "set_dashboard_config"
     pre = _dashboard_write_precheck(args, "set_dashboard_config")
@@ -1279,7 +1279,7 @@ async def _tool_dashboard_card(
     """
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
-    error = unknown_argument_error(tool_name, args)
+    args, error = handler_arguments(tool_name, args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", tool_name
     current = await _dashboard_card_current(args, hass, tool_name)

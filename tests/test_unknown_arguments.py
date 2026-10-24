@@ -112,7 +112,7 @@ def test_nested_dashboard_and_retired_forms():
     assert 'target.url_path' in unknown_argument_error('patch_dashboard', {'dashboard_url': 'x'})
     # A top-level url_path is read as target.url_path; the request still needs changes.
     _, error = normalize_tool_args('patch_dashboard', {'url_path': 'x'})
-    assert 'changes must be a list' in error
+    assert error == 'Missing required argument: changes.'
     assert unknown_argument_error('set_dashboard_config', {'config': {'dashboard_url': 'x'}}) is None
     assert unknown_argument_error('set_device', {'changes': {'unrelated': 'x'}}) is None
 

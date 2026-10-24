@@ -64,7 +64,7 @@ from .device_semantics import (
     update_device_registry_entry,
 )
 from .service_targets import secondary_target_error, unsupported_secondary_targets
-from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, normalize_tool_args, unknown_argument_error
+from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, handler_arguments, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
@@ -4977,7 +4977,7 @@ async def _tool_remove_device(
     """MCP tool: remove one integration's ownership through its HA hook."""
     if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
-    error = unknown_argument_error("remove_device", args)
+    args, error = handler_arguments("remove_device", args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", "remove_device"
     resolved = await _resolve_device_removal_context(args, access_key, hass)
@@ -5704,7 +5704,7 @@ async def _tool_delete_entity(
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
-    error = unknown_argument_error("delete_entity", args)
+    args, error = handler_arguments("delete_entity", args)
     if error:
         return _tool_refused_before_write(error), "invalid_request", "delete_entity"
     pre = _registry_write_precheck(args, access_key, hass, "delete_entity", data)
