@@ -5204,6 +5204,13 @@ async def async_run_agent_turn(
 
 
 _HEADLESS_PROVIDER_ERROR = "the language model could not be reached"
+_FINAL_ROUND_SYSTEM = (
+    "\nThis is the final response round. No further tools are available. "
+    "Return the required final answer using only the results already received. "
+    "Distinguish an accepted device command from a verified physical state. "
+    "If the results are insufficient, explain what is known and what is missing. "
+    "Do not claim that no action occurred when a control tool already ran."
+)
 
 # How a headless turn ended. A CODE, not a sentence, because the two surfaces
 # render it very differently: voice speaks it, in the CONVERSATION's language via
@@ -5318,20 +5325,14 @@ async def _run_headless_turn(
     write_started = False
 
     format_corrections = 0
-    count_report_only = False
+    report_only = False
     from .const import HOME_COMPANION_MAX_FORMAT_CORRECTIONS, HOME_COMPANION_FORMAT_ERROR_CODES
     for iteration in range(max_iterations):
-        from .home_companion import check_turn_context, internal_turn, ambiguous_control, count_source
-        final_round = response_only or count_report_only or (reserve_final_round and iteration == max_iterations - 1)
+        from .home_companion import append_fitting_results, check_turn_context, internal_turn, ambiguous_control, count_source
+        final_round = response_only or report_only or (reserve_final_round and iteration == max_iterations - 1)
         round_system = system
         if final_round:
-            round_system += (
-                "\nThis is the final response round. No further tools are available. "
-                "Return the required final answer using only the results already received. "
-                "Distinguish an accepted device command from a verified physical state. "
-                "If the results are insufficient, explain what is known and what is missing. "
-                "Do not claim that no action occurred when a control tool already ran."
-            )
+            round_system += _FINAL_ROUND_SYSTEM
         if not check_turn_context(access_key, round_system, messages):
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         tool_calls: list[dict] = []
@@ -5423,15 +5424,15 @@ async def _run_headless_turn(
             # another batch and leave no round for reporting its outcome.
             return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
         if stop_reason != "tool_use":
-            from .home_companion import invalid_count_report
-            if (not write_started and invalid_count_report(access_key, final_text)
+            from .home_companion import invalid_read_report
+            if (not write_started and invalid_read_report(access_key, final_text)
                     and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
                     and iteration < max_iterations - 1):
                 format_corrections += 1
-                count_report_only = True
+                report_only = True
                 messages.append({'role': 'user', 'content': (
                     'Your final report did not pass validation. Return exactly one JSON object '
-                    'with status and a nonempty message. For a count, copy the unchanged server-provided read_answer reference '
+                    'with status and a nonempty message; an answer already written belongs in message. For a count, copy the unchanged server-provided read_answer reference '
                     'from the received search result. Do not invent a count or source index. '
                     'Do not repeat discovery or run a control. Keep the original task and restrictions unchanged.')})
                 final_text = ''
@@ -5549,7 +5550,8 @@ async def _run_headless_turn(
                 "images": _extract_image_blocks(content),
                 "is_error": bool(result.get("isError")),
             })
-        provider.append_tool_results(messages, results)
+        # Measured against the longer final-round prompt, which the next round may use.
+        append_fitting_results(access_key, system + _FINAL_ROUND_SYSTEM, messages, results, provider.append_tool_results)
 
     if authority_lost:
         # Reported ahead of exhaustion: a turn can hit both (authority lost in the

@@ -11,7 +11,7 @@ from typing import Any
 
 from homeassistant.util.color import color_name_to_rgb
 
-from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES
+from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES, HOME_COMPANION_STATE_READ_TOOLS
 from .helpers import voice_text
 
 
@@ -85,6 +85,11 @@ class ResponseEvidence:
     search_kinds: dict[int, str] = field(default_factory=dict)
     selected_count: int | None = None
     selected_kind: str = "other"
+    # A history, statistics or other interpreted read, or a result withheld from
+    # the model: the answer is then the model's, not a list of current states.
+    model_answer: bool = False
+    # The states the model chose to read, which answer before the rows its searches found.
+    chosen: dict[str, str] = field(default_factory=dict)
 
     def observe(self, name: str, outcome: str, result: dict | None, arguments: dict | None = None) -> None:
         index = self.calls
@@ -151,6 +156,8 @@ class ResponseEvidence:
                 self.search_kinds[index] = domain if isinstance(domain, str) and domain in HOME_COMPANION_COUNT_KIND_TEMPLATES else 'other'
         if name not in {'get_capability_summary'}:
             self.successful_reads += 1
+        if name not in HOME_COMPANION_STATE_READ_TOOLS:
+            self.model_answer = True
         self.last_read_failed = False
         rows = (body['states'] if name == 'get_state' and isinstance(body, dict) and isinstance(body.get('states'), list) else
                 [body] if name == 'get_state' and isinstance(body, dict) else
@@ -170,6 +177,8 @@ class ResponseEvidence:
             if name in {'get_state', 'search_entities'} and isinstance(row.get('state'), str) and len(self.readings) < HOME_COMPANION_MAX_REPORT_ENTITIES:
                 unit = attrs.get('unit_of_measurement', '')
                 self.readings[eid] = f"{label}: {row['state']}" + (f" {unit}" if isinstance(unit, str) and unit else '')
+                if name == 'get_state':
+                    self.chosen[eid] = self.readings[eid]
 
     def valid_read_answer(self, proposal: Any) -> bool:
         """Validate a count reference without selecting or altering evidence."""
@@ -334,11 +343,12 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
                 parts.append(voice_text(language, 'companion_count_groups'))
             if detail == 'detailed':
                 parts.append(voice_text(language, 'companion_count_scope'))
-        elif evidence.readings:
+        elif evidence.readings and not evidence.model_answer:
             parts.append(voice_text(language, 'companion_readings', readings='; '.join(
-                list(evidence.readings.values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
+                list((evidence.chosen or evidence.readings).values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
         else:
-            # Interpretation of successful history/statistics reads remains model-authored.
+            # Interpretation of successful history/statistics reads remains model-authored;
+            # the states gathered while finding the entities do not answer those questions.
             parts.append(model_message)
     if status not in {'authority_lost', 'outcome_unknown'}:
         if detail == 'detailed' and evidence.accepted:

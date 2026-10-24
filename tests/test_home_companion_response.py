@@ -283,3 +283,30 @@ def test_malformed_timer_receipt_never_claims_acceptance(slots):
         'data': {'success': [], 'failed': []}, 'speech_slots': slots}))
     report = build_report('completed', 'Done.', evidence, 'en')
     assert report['execution'] == 'uncertain' and report['verification'] == 'not_verified'
+
+
+def search(evidence):
+    evidence.observe('search_entities','allowed',result({'entities':[
+        {'entity_id':'binary_sensor.gate','state':'off','friendly_name':'Gate'},
+        {'entity_id':'binary_sensor.door','state':'on','friendly_name':'Door'}],'total':2}),{'domain':'binary_sensor'})
+
+
+@pytest.mark.parametrize('read', [None, 'get_state', 'get_history', 'get_statistics', 'compare_states'])
+def test_states_found_on_the_way_answer_only_a_plain_state_question(read):
+    # A question about the past is answered by the model's reading of the history,
+    # not by the current states of the entities the search found first.
+    evidence=ResponseEvidence()
+    search(evidence)
+    if read == 'get_state':
+        evidence.observe(read,'allowed',result({'entity_id':'binary_sensor.door','state':'on','attributes':{'friendly_name':'Door'}}))
+    elif read:
+        evidence.observe(read,'allowed',result({'entities':[{'entity_id':'binary_sensor.gate','count':0}]}))
+    report=build_report('completed','The gate sensor has not triggered this week.',evidence,'en')
+    assert report['status']=='completed' and report['execution']=='not_attempted'
+    if read is None:
+        assert 'Gate: off; Door: on' in report['message'] and 'not triggered' not in report['message']
+    elif read == 'get_state':
+        # Only the state the model chose to read, not every row its search found.
+        assert 'Door: on' in report['message'] and 'Gate' not in report['message']
+    else:
+        assert report['message']=='The gate sensor has not triggered this week.'

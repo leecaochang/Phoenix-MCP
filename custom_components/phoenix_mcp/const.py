@@ -2737,6 +2737,8 @@ HOME_COMPANION_CONTROL_DOMAINS = frozenset({
     "light", "fan", "switch", "input_boolean", "climate", "cover", "valve",
     "media_player", "vacuum", "humidifier", "timer",
 })
+# Reads whose states can answer on their own; any other read leaves the answer to the model.
+HOME_COMPANION_STATE_READ_TOOLS = frozenset({"search_entities", "get_state", "get_capability_summary"})
 HOME_COMPANION_READ_DOMAINS = frozenset({"sensor", "binary_sensor", "weather", "calendar", "sun"})
 HOME_COMPANION_TOOL_DOMAINS = {
     "light__HassLightSet": ("light",), "fan__HassFanSetSpeed": ("fan",),

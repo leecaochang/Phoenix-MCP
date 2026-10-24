@@ -142,11 +142,52 @@ def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None
             turn.evidence.warnings = [scrub(warning) for warning in turn.evidence.warnings]
 
 
+def _context_bytes(system: str, messages: list[dict]) -> int:
+    return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False, default=str).encode())
+
+
 def check_turn_context(access_key: Any, system: str, messages: list[dict]) -> bool:
     if not internal_turn(access_key):
         return True
     check_request_authority()
-    return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False).encode()) <= HOME_COMPANION_MAX_CONTEXT_BYTES
+    return _context_bytes(system, messages) <= HOME_COMPANION_MAX_CONTEXT_BYTES
+
+
+def append_fitting_results(access_key: Any, system: str, messages: list[dict], results: list[dict],
+                           append: Any) -> None:
+    """Append a round's results, withholding the largest reads the request has no room for.
+
+    One full-size result can fill this persona's whole context, which used to end
+    the request. A withheld read comes back as an error naming its size, so the
+    model can ask again for less. A control result is never withheld: it is the
+    evidence of what ran. If the rest still does not fit, the next round's context
+    check ends the request as before.
+    """
+    start = len(messages)
+    append(messages, results)
+    turn = _turn.get()
+    if not internal_turn(access_key) or turn is None:
+        return
+    from .agent_recovery import tool_is_read_only
+    from .conversation_log import record_current
+    withheld: set[int] = set()
+    while (size := _context_bytes(system, messages)) > HOME_COMPANION_MAX_CONTEXT_BYTES:
+        reads = [(len(str(row.get("result_text") or "").encode()), index) for index, row in enumerate(results)
+                 if index not in withheld and not row.get("is_error") and tool_is_read_only(str(row.get("tool_name") or ""))]
+        if not reads:
+            return
+        length, index = max(reads)
+        withheld.add(index)
+        room = max(0, HOME_COMPANION_MAX_CONTEXT_BYTES - (size - length))
+        row = results[index]
+        results[index] = {**row, "images": [], "is_error": True, "result_text": (
+            f"This result was too large for this request ({length} bytes; about {room} bytes remain) and was not shown. "
+            "Ask again for less: fewer entities, a narrower selection, a shorter period or a smaller limit.")}
+        turn.evidence.model_answer = True
+        record_current("error", {"code": "result_withheld", "name": row.get("tool_name"), "call_id": row.get("tool_use_id"),
+                                 "executed": True, "message": f"A {length}-byte result did not fit the request's context and was withheld from the model."})
+        del messages[start:]
+        append(messages, results)
 
 
 def preflight_control_calls(access_key: Any, calls: list[dict]) -> list[dict] | None:
@@ -289,11 +330,15 @@ def _parse_final_answer(text: str, evidence: ResponseEvidence) -> dict | None:
         return None
 
 
-def invalid_count_report(access_key: Any, text: str) -> bool:
-    """Let the bounded loop correct final formatting after scoped count discovery."""
+def invalid_read_report(access_key: Any, text: str) -> bool:
+    """Let the bounded loop correct the final formatting of a read-only answer.
+
+    Models sometimes answer a history question in plain prose; one tools-free
+    round asks for the required object instead of discarding a good answer.
+    """
     turn = _turn.get()
-    return bool(internal_turn(access_key) and turn and turn.evidence.search_totals
-                and not turn.evidence.attempts and _parse_final_answer(text, turn.evidence) is None)
+    return bool(internal_turn(access_key) and turn and not turn.evidence.attempts
+                and _parse_final_answer(text, turn.evidence) is None)
 
 
 async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) -> tuple:

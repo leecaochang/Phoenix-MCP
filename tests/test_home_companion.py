@@ -8,7 +8,7 @@ import pytest
 from homeassistant.core import ServiceCall, ServiceRegistry
 
 from custom_components.phoenix_mcp import agentcli, home_companion as home, mcp_view
-from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_TOOLS
+from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_MAX_CONTEXT_BYTES, HOME_COMPANION_TOOLS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.personas import get_persona_caps, detect_persona
 from custom_components.phoenix_mcp.policy_engine import resolve, Permission
@@ -347,8 +347,23 @@ async def test_repeated_write_never_reexecutes(hass,companion,monkeypatch):
     ('not JSON', 'invalid_output'),
 ])
 async def test_final_envelope_accepts_fences_but_rejects_wrong_shapes(hass,companion,monkeypatch,answer,expected):
-    scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],answer])
+    # A rejected shape gets one tools-free correction; the same shape again is still rejected.
+    catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],answer,answer])
     assert payload(await rpc(hass,companion))['status']==expected
+    assert len(catalogs)==(2 if expected=='completed' else 3)
+
+
+async def test_a_read_answered_in_prose_is_corrected_once_instead_of_discarded(hass,companion,monkeypatch):
+    transcripts=[]
+    catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+                                   'It is 23 degrees.', json.dumps({'status':'completed','message':'It is 23 degrees.'})],
+                      transcripts=transcripts)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report=payload(await rpc(hass,companion))
+    # A plain state read is still reported from the state itself.
+    assert report['status']=='completed' and 'temperature: 23' in report['message']
+    assert len(catalogs)==3 and catalogs[-1]==[] and 'did not pass validation' in json.dumps(transcripts[-1])
+    service.assert_not_awaited()
 
 
 async def test_invalid_final_reply_after_control_reports_possible_effects_without_retry(hass,companion,monkeypatch):
@@ -1140,3 +1155,25 @@ async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(h
     route = next(event['payload'] for event in entry['events'] if event['kind'] == 'routing')
     assert route['route'] == 'provider' and route['provider'] == 'claude' and route['model'] == 'test'
     assert route['result'] == 'completed'
+
+
+async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_narrow_it(hass, companion, monkeypatch):
+    # One full-size result used to fill the whole request and end it with an information limit.
+    _, access_key, _, _ = companion
+    access_key.permissions.domains['binary_sensor'] = PermissionNode('YELLOW')
+    for i in range(400):
+        hass.states.async_set(f'binary_sensor.zigbee_contact_{i}', 'off',
+                              {'friendly_name': f'Zigbee contact sensor number {i} in the long hallway'})
+    transcripts = []
+    scripted(monkeypatch, [
+        [('search_entities', {'domain': 'binary_sensor', 'query': 'zigbee', 'limit': 400})],
+        [('search_entities', {'domain': 'binary_sensor', 'query': 'zigbee', 'limit': 1})],
+        json.dumps({'status': 'completed', 'message': 'You have 400 zigbee contact sensors.'}),
+    ], transcripts=transcripts)
+    report = payload(await rpc(hass, companion, args={'request': 'Which zigbee sensors do I have?'}))
+    withheld = json.dumps(transcripts[1][-1])
+    assert 'too large for this request' in withheld and 'long hallway' not in withheld
+    assert len(json.dumps(transcripts[1]).encode()) < HOME_COMPANION_MAX_CONTEXT_BYTES
+    # The model's answer is used: the states listed while finding the sensors are not an answer.
+    assert report['status'] == 'completed' and report['message'] == 'You have 400 zigbee contact sensors.'
+    assert report['tool_outcomes'] == [{'tool': 'search_entities', 'outcome': 'allowed'}] * 2
