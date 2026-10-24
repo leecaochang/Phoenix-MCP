@@ -8,7 +8,7 @@ import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext } from "./visibility";
 import { WindowPlaceContext } from "./tools";
 import type { GlobalSettings } from "../types";
-import { ATTENTION_WINDOW, SHARED_WINDOWS, WINDOW_CONTENT, WORKSPACES, windowAvailable, windowTitle, type WindowId } from "./workspaces";
+import { ATTENTION_WINDOW, SHARED_WINDOWS, WINDOW_CONTENT, WORKSPACES, canAddToMy, windowAvailable, windowTitle, type WindowId } from "./workspaces";
 import type { MesaFindings } from "./mesa";
 
 function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }) {
@@ -41,11 +41,16 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention, settings, mesa = null, guide }: {
-  workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; mesa?: MesaFindings | null; guide?: ReactNode;
+export function PhoneStack({ workspace, showAttention, settings, mesa = null, myWindows = [], guide }: {
+  workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; mesa?: MesaFindings | null;
+  /** The windows added to My Workspace on phones. */
+  myWindows?: readonly string[];
+  guide?: ReactNode;
 }) {
   const def = WORKSPACES[workspace];
-  const windows = def.windows.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings, mesa) === true));
+  // My Workspace stacks the windows added to it; phones add them once their windows have menus.
+  const ids: WindowId[] = workspace === "my" ? [...myWindows.filter(canAddToMy) as WindowId[], ATTENTION_WINDOW as WindowId] : def.windows;
+  const windows = ids.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings, mesa) === true));
   // Needs Attention leads the stack when it is shown.
   windows.sort((a, b) => Number(b === ATTENTION_WINDOW) - Number(a === ATTENTION_WINDOW));
   return (
@@ -53,6 +58,7 @@ export function PhoneStack({ workspace, showAttention, settings, mesa = null, gu
       {/* The Guide heads the stack when it is open. */}
       {guide}
       {windows.map((id) => <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace} />)}
+      {workspace === "my" && !windows.length && <p className="phx-workspace-empty phx-phone-empty">{t("workspace.myEmptyPhone")}</p>}
     </div>
   );
 }

@@ -2526,3 +2526,57 @@ describe("Xiaomi MiMo controls", () => {
     expect(modelCaps("mimo", "mimo-v2.5-pro", false).temperature).toBe(true);
   });
 });
+
+describe("Agent Chat docked in My Workspace", () => {
+  beforeEach(() => { getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] }); });
+  const props = { accessKeys: ACCESS_KEYS, instances: INSTANCES, scrollbackLines: 500, initialAccessKeyId: "t1", onClose: () => {} };
+
+  it("draws itself into the slot without its floating frame, keeping its menu and pop-out", () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const toggle = vi.fn();
+    render(<AgentCliWindow {...props} dockMount={slot} dock={{ docked: true, toggle }} />);
+    const win = slot.querySelector(".agentcli-window") as HTMLElement;
+    expect(win).toHaveClass("agentcli-docked");
+    expect(win).toHaveAttribute("role", "region");
+    const inSlot = within(win);
+    // The workspace window's title bar moves, folds, maximizes and closes it.
+    for (const name of ["Close", "Minimize", "Maximize"]) expect(inSlot.queryByRole("button", { name })).toBeNull();
+    expect(inSlot.getByRole("button", { name: "Pop out to a separate window" })).toBeInTheDocument();
+    fireEvent.click(inSlot.getByRole("button", { name: "Options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Float Agent Chat" }));
+    expect(toggle).toHaveBeenCalledOnce();
+    slot.remove();
+  });
+
+  it("keeps its draft and conversation while it moves between the slot and floating", () => {
+    setSessionTurns([{ entries: [{ kind: "user", text: "earlier prompt", ts: 1 }], messages: [], lines: 1 }]);
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const { rerender, container } = render(<AgentCliWindow {...props} dockMount={slot} dock={{ docked: true, toggle: () => {} }} />);
+    fireEvent.change(slot.querySelector("textarea")!, { target: { value: "half-written" } });
+    rerender(<AgentCliWindow {...props} dockMount={null} dock={{ docked: true, toggle: () => {} }} />);
+    const floating = container.querySelector(".agentcli-window") as HTMLElement;
+    expect(floating).not.toHaveClass("agentcli-docked");
+    expect(floating).toHaveAttribute("role", "dialog");
+    expect(floating.querySelector("textarea")).toHaveValue("half-written");
+    expect(within(floating).getByText("earlier prompt")).toBeInTheDocument();
+    expect(within(floating).getByRole("button", { name: "Close" })).toBeInTheDocument();
+    rerender(<AgentCliWindow {...props} dockMount={slot} dock={{ docked: true, toggle: () => {} }} />);
+    expect(slot.querySelector("textarea")).toHaveValue("half-written");
+    setSessionTurns([]);
+    slot.remove();
+  });
+
+  it("offers Add to My Workspace while floating where it can dock, and nothing where it cannot", () => {
+    const toggle = vi.fn();
+    const { rerender } = render(<AgentCliWindow {...props} dock={{ docked: false, toggle }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add to My Workspace" }));
+    expect(toggle).toHaveBeenCalledOnce();
+    rerender(<AgentCliWindow {...props} dock={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options" }));
+    expect(screen.queryByRole("menuitem", { name: "Add to My Workspace" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Float Agent Chat" })).toBeNull();
+  });
+});

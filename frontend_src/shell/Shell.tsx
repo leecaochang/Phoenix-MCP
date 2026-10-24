@@ -30,7 +30,13 @@ import { MesaProvider, type MesaFindings } from "./mesa";
 import { SettingsProvider } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
 import { DOCS_BASE_URL } from "../components/common";
-import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
+import {
+  ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, MY_EXTRAS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, arrangeMy, canAddToMy, myWorkspaceWindows,
+  renderWindow, windowAvailable, windowTitle, type WindowId,
+} from "./workspaces";
+import { CHAT_WINDOW, ChatDockContext, type ChatDock } from "./chatDock";
+import { WindowMenuExtrasContext, type WindowMenuExtras } from "./dock/TitleBar";
+import { visibleWindowEl } from "./visibility";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
 
 /** Below this panel width the phone stack is used; the gap between the two bounds stops flicker. */
@@ -45,7 +51,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 /** Every section a record holds, to send a whole record to Home Assistant. */
 function allSections(record: ShellRecord): Section[] {
   return [
-    "toolbar", "help", "guide", "lastWorkspace",
+    "toolbar", "help", "guide", "lastWorkspace", "myWindows",
     ...Object.keys(record.workspaces).map((id) => `ws:${id}` as Section),
     ...Object.keys(record.myDefaults ?? {}).map((id) => `my:${id}` as Section),
   ];
@@ -109,6 +115,13 @@ export function Shell() {
   useEffect(() => { setGuide(record?.guide ?? {}); }, [record]);
   const guideRef = useRef(guide);
   guideRef.current = guide;
+  // The windows added to My Workspace, in the order added.
+  const [myWindows, setMyWindows] = useState<string[]>(() => record?.myWindows ?? []);
+  useEffect(() => { setMyWindows(record?.myWindows ?? []); }, [record]);
+  const myWindowsRef = useRef(myWindows);
+  myWindowsRef.current = myWindows;
+  /** Close Agent Chat, whichever window shows it; set once the chat state below is known. */
+  const closeChatRef = useRef<() => void>(() => {});
 
   // A different user or environment, or an adopted record, starts from fresh controllers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,11 +130,18 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      controller = new WorkspaceController(id, def.windows, def.arrange, windowTitle, { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion });
+      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion };
+      // My Workspace holds the windows the user added, laid out in the order added.
+      controller = id === "my"
+        ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), arrangeMy(() => myWindowsRef.current), windowTitle,
+          { ...extras, ...MY_EXTRAS, heights: { ...def.heights, ...MY_EXTRAS.heights } })
+        : new WorkspaceController(id, def.windows, def.arrange, windowTitle, extras);
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
       // Closing or reopening Help in one workspace overrides Show Help Bar there only.
+      // Closing Agent Chat's window in My Workspace closes Chat.
       controller.onWindowToggle = (windowId, open) => {
         if (windowId === HELP_WINDOW) setHelp((prev) => withHelpIn(prev, id, open));
+        if (windowId === CHAT_WINDOW && !open) closeChatRef.current();
       };
       controllers.set(id, controller);
     }
@@ -129,22 +149,27 @@ export function Shell() {
   }, [controllers]);
 
   const registry = useMemo(() => new ToolRegistry(), []);
+  // Open (or unfold) a window and bring it into view: in My Workspace when it is shown there and holds it,
+  // otherwise in the workspace it belongs to.
+  const workspaceRef = useRef(d.workspace);
+  workspaceRef.current = d.workspace;
+  const revealIn = useCallback((source: WorkspaceId, windowId: string) => {
+    if (env === "desktop") {
+      const here = workspaceRef.current === "my" && myWindowsRef.current.includes(windowId) ? "my" : source;
+      controllerFor(here).ensureOpen(windowId);
+    }
+    requestAnimationFrame(() => visibleWindowEl(root.current, windowId)?.scrollIntoView?.({ block: "nearest" }));
+  }, [env, controllerFor]);
   // Selecting a log record shows it in Log Details, opening or unfolding that window first.
   const logSelection = useMemo(() => new LogSelection(), []);
-  logSelection.onSelect = () => {
-    if (env === "desktop") controllerFor("logs").ensureOpen("logDetails");
-    requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="logDetails"]')?.scrollIntoView?.({ block: "nearest" }));
-  };
+  logSelection.onSelect = () => revealIn("logs", "logDetails");
 
   // A request opened from a link brings Review into view.
-  const revealReview = useCallback(() => {
-    if (env === "desktop") controllerFor("approvals").ensureOpen("review");
-    requestAnimationFrame(() => root.current?.querySelector('[data-phx-window="review"]')?.scrollIntoView?.({ block: "nearest" }));
-  }, [env, controllerFor]);
+  const revealReview = useCallback(() => revealIn("approvals", "review"), [revealIn]);
 
   // A jump to a permission (from Permission Summary) brings the Permissions tree into view.
   const revealPermissions = useCallback(() => {
-    if (env === "desktop") controllerFor("accessKeys").ensureOpen("permissions");
+    if (env === "desktop") controllerFor(workspaceRef.current === "my" && myWindowsRef.current.includes("permissions") ? "my" : "accessKeys").ensureOpen("permissions");
   }, [env, controllerFor]);
 
   // Find Setting and the kill-switch warning open a Settings window, unfolding it first.
@@ -173,8 +198,6 @@ export function Shell() {
   const dirty = useRef(new Set<Section>());
   const remote = useRef<RemoteRecord | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
-  const workspaceRef = useRef(d.workspace);
-  workspaceRef.current = d.workspace;
   /** Store sections already updated in the record, here and in Home Assistant. */
   const commit = useCallback((sections: Section[], now = false) => {
     const rec = recordRef.current;
@@ -198,6 +221,8 @@ export function Shell() {
         if (!same(rec.guide ?? {}, guideRef.current)) { rec.guide = guideRef.current; changed.push(section); }
       } else if (section === "lastWorkspace") {
         if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
+      } else if (section === "myWindows") {
+        if (!same(rec.myWindows ?? [], myWindowsRef.current)) { rec.myWindows = myWindowsRef.current; changed.push(section); }
       } else if (section.startsWith("ws:")) {
         const id = section.slice(3) as WorkspaceId;
         const controller = controllers.get(id);
@@ -275,6 +300,10 @@ export function Shell() {
   useEffect(() => {
     if (!same(guide, recordRef.current?.guide ?? {})) markChanged(["guide"]);
   }, [guide, markChanged]);
+  useEffect(() => {
+    controllers.get("my")?.setWindows(myWorkspaceWindows(myWindows));
+    if (!same(myWindows, recordRef.current?.myWindows ?? [])) markChanged(["myWindows"]);
+  }, [myWindows, controllers, markChanged]);
   const setGuideIn = useCallback((id: WorkspaceId, next: Partial<GuideState>) => {
     setGuide((prev) => ({ ...prev, [id]: { open: false, ...prev[id], ...next } }));
   }, []);
@@ -300,6 +329,28 @@ export function Shell() {
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
   const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
+
+  // My Workspace: Add to My Workspace in every window's menu, Remove from My Workspace there.
+  const addToMy = useCallback((windowId: string) => {
+    if (myWindowsRef.current.includes(windowId)) return;
+    setMyWindows((prev) => (prev.includes(windowId) ? prev : [...prev, windowId]));
+    notify(t("workspace.addedToMy", { window: windowTitle(windowId) }));
+  }, [notify]);
+  const removeFromMy = useCallback((windowId: string) => {
+    if (!myWindowsRef.current.includes(windowId)) return;
+    setMyWindows((prev) => prev.filter((w) => w !== windowId));
+    if (windowId !== CHAT_WINDOW) notify(t("workspace.removedFromMy", { window: windowTitle(windowId) }));
+  }, [notify]);
+  // Adding happens on a desktop; phones show their own My Workspace until they have window menus.
+  const menuExtras = useCallback<WindowMenuExtras>((controller, windowId) => {
+    if (env !== "desktop") return [];
+    if (controller.id === "my") {
+      if (windowId === CHAT_WINDOW) return [{ id: "float-chat", label: t("agentchat.floatChat"), onSelect: () => removeFromMy(CHAT_WINDOW) }];
+      return myWindowsRef.current.includes(windowId) ? [{ id: "remove-my", label: t("workspace.removeFromMy"), onSelect: () => removeFromMy(windowId) }] : [];
+    }
+    if (!canAddToMy(windowId)) return [];
+    return [{ id: "add-my", label: t("workspace.addToMy"), disabled: myWindowsRef.current.includes(windowId), onSelect: () => addToMy(windowId) }];
+  }, [env, addToMy, removeFromMy]);
 
   // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (this workspace) and the website.
   const documentationMenu = useCallback((): MenuEntry[] => {
@@ -395,6 +446,54 @@ export function Shell() {
   const s = d.settings;
   const active = d.workspace;
   const language = resolveLanguage(d.hass);
+
+  // Windows in My Workspace keep their workspace's state loading while My Workspace is shown.
+  const myFrom = useMemo(() => new Set(myWindows.map((w) => SOURCE_OF[w as WindowId]).filter(Boolean)), [myWindows]);
+  const shown = (ws: WorkspaceId) => active === ws || (active === "my" && myFrom.has(ws));
+
+  // Agent Chat docked in My Workspace: Chat draws into the slot while it is on screen and floats otherwise.
+  const [chatSlotEl, setChatSlotEl] = useState<HTMLElement | null>(null);
+  const chatDocked = env === "desktop" && myWindows.includes(CHAT_WINDOW);
+  const chatSlot = chatDocked && s && !s.kill_switch ? chatSlotEl : null;
+  const globalChat = !!(s?.agentcli_global && d.globalChatReady);
+  const chatBridge = () => (window as unknown as { __phxAgentChat?: { setDock?: (dock: unknown) => void; open?: () => void; restore?: () => void; close?: () => void } }).__phxAgentChat;
+  const dockToggle = useCallback(() => {
+    if (myWindowsRef.current.includes(CHAT_WINDOW)) removeFromMy(CHAT_WINDOW);
+    else addToMy(CHAT_WINDOW);
+  }, [addToMy, removeFromMy]);
+  const closeAgentCli = d.closeAgentCli;
+  closeChatRef.current = () => { if (globalChat) chatBridge()?.close?.(); else closeAgentCli(); };
+  // The panel's own Chat counts as open while it shows in the slot, so it floats when My Workspace is left.
+  // Only a slot that has just appeared opens Chat: closing the docked window closes Chat a moment before its slot goes.
+  const { agentCliOpen, keepAgentCliOpen, openAgentCli } = d;
+  const lastChatSlot = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const appeared = !!chatSlot && chatSlot !== lastChatSlot.current;
+    lastChatSlot.current = chatSlot;
+    if (appeared && !globalChat && !agentCliOpen) keepAgentCliOpen();
+  }, [chatSlot, globalChat, agentCliOpen, keepAgentCliOpen]);
+  // The global Chat follows the slot through its bridge; without the panel it floats.
+  useEffect(() => {
+    if (!globalChat) return;
+    chatBridge()?.setDock?.(env === "desktop" ? { slot: chatSlot, docked: chatDocked, toggle: dockToggle } : null);
+  }, [globalChat, env, chatSlot, chatDocked, dockToggle]);
+  useEffect(() => () => { chatBridge()?.setDock?.(null); }, []);
+  // The toolbar's Agent Chat: in My Workspace, its docked window; elsewhere, Chat floats.
+  const openChat = useCallback(() => {
+    if (chatDocked && workspaceRef.current === "my") {
+      controllerFor("my").ensureOpen(CHAT_WINDOW);
+      if (globalChat) chatBridge()?.restore?.();
+      else if (!agentCliOpen) keepAgentCliOpen();
+      requestAnimationFrame(() => requestAnimationFrame(() => visibleWindowEl(root.current, CHAT_WINDOW)?.querySelector<HTMLElement>("textarea")?.focus()));
+      return;
+    }
+    openAgentCli();
+  }, [chatDocked, globalChat, agentCliOpen, keepAgentCliOpen, openAgentCli, controllerFor]);
+  const chatDock = useMemo<ChatDock>(() => ({
+    offer: (slot) => setChatSlotEl(slot),
+    release: (slot) => setChatSlotEl((current) => (current === slot ? null : current)),
+    openChat,
+  }), [openChat]);
   const dock = env === "mobile" ? "top" : toolbar.dock;
   // The wizard makes room for the Guide beside it on a desktop, while the Guide is open in Access Keys.
   const guideBeside = env === "desktop" && active === "accessKeys" && !!guide.accessKeys?.open;
@@ -415,15 +514,17 @@ export function Shell() {
       claimedApprovals={d.claimedApprovals}
       openApprovalId={d.deepApprovalId}
       onConsumedDeepLink={d.consumeDeepApprovalLink}
-      active={d.workspace === "approvals"}
+      active={shown("approvals")}
       onReveal={revealReview}
     >
-    <ChangesProvider hass={d.hass} active={d.workspace === "changes"}>
-    <MesaProvider active={d.workspace === "mesa"} onFindings={setMesaFindings}>
+    <ChangesProvider hass={d.hass} active={shown("changes")}>
+    <MesaProvider active={shown("mesa")} onFindings={setMesaFindings}>
     <SettingsProvider settings={d.settings} onSettingsChange={d.setSettings} theme={d.theme} onThemeChange={d.onThemeChange}
-      language={d.language} onLanguageChange={d.onLanguageChange} active={d.workspace === "settings"} root={rootEl}
+      language={d.language} onLanguageChange={d.onLanguageChange} active={shown("settings")} root={rootEl}
       revealWindow={revealSettings} onNavigate={showSettings}>
     <WorkspaceActionsContext.Provider value={actions}>
+    <WindowMenuExtrasContext.Provider value={menuExtras}>
+    <ChatDockContext.Provider value={chatDock}>
     <WizardGuideContext.Provider value={wizardGuide}>
     <AccessKeyDetailProvider
       accessKeyId={d.accessKeyView.name === "detail" ? d.accessKeyView.accessKeyId : null}
@@ -437,7 +538,7 @@ export function Shell() {
       <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
-          state={toolbar} onChange={setToolbar} documentation={documentationMenu} />
+          state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat} />
         <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
           {confirmDefaults && (
             <div className="banner banner-warning phx-shell-confirm" role="alertdialog" aria-labelledby="phx-defaults-question">
@@ -463,7 +564,7 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings}
+            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings} myWindows={myWindows}
               guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => userSetGuide(active, false)}
                 topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
@@ -472,7 +573,7 @@ export function Shell() {
             inject module owns the window then), nor while the kill switch is on.
             When global injection is unsupported, __phxAgentChat is absent, so this
             renders as the fallback. */}
-        {s && !s.kill_switch && d.agentCliOpen && !(s.agentcli_global && d.globalChatReady) && (
+        {s && !s.kill_switch && (d.agentCliOpen || chatSlot) && !globalChat && (
           <ErrorBoundary key={d.agentCliKey}>
             <AgentCliWindow
               key={d.agentCliKey}
@@ -482,6 +583,8 @@ export function Shell() {
               initialAccessKeyId={d.accessKeys[0]?.id ?? ""}
               onClose={d.closeAgentCli}
               hass={d.hass}
+              dockMount={chatSlot}
+              dock={env === "desktop" ? { docked: chatDocked, toggle: dockToggle } : null}
             />
           </ErrorBoundary>
         )}
@@ -496,6 +599,8 @@ export function Shell() {
       </div>
     </AccessKeyDetailProvider>
     </WizardGuideContext.Provider>
+    </ChatDockContext.Provider>
+    </WindowMenuExtrasContext.Provider>
     </WorkspaceActionsContext.Provider>
     </SettingsProvider>
     </MesaProvider>

@@ -725,6 +725,16 @@
 .phx-find-result:hover, .phx-find-result:focus { background: var(--phx-hover); outline: none; }
 .phx-find-result:focus-visible { box-shadow: inset 0 0 0 2px var(--phx-focus); }
 .phx-find-setting-empty { margin: 4px 8px; color: var(--phx-text-2); }
+
+/* Agent Chat's window in My Workspace: Chat draws into the slot; while it is closed, a way to open it shows instead. */
+.phx-window-body[data-phx-window="agentChat"] { height: 100%; padding: 0; }
+.phx-chat-dock { position: relative; height: 100%; min-height: 240px; }
+.phx-chat-dock-slot { position: absolute; inset: 0; }
+.phx-chat-dock-slot:empty { display: none; }
+.phx-chat-dock-slot:not(:empty) + .phx-chat-dock-empty { display: none; }
+.phx-chat-dock-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; color: var(--phx-text-2); }
+.phx-chat-dock-empty p { margin: 0; }
+.phx-phone-empty { padding: 24px 16px; }
 .change-action-create { color: var(--phx-success); }
 .change-action-delete { color: var(--phx-error); }
 .change-action-rollback { color: var(--phx-warning); }
@@ -2642,6 +2652,22 @@ hui-card { display: block; min-width: 0; }
 }
 .agentcli-window.agentcli-maximized .agentcli-titlebar,
 .agentcli-window.agentcli-popped-out .agentcli-titlebar { cursor: default; }
+/* Docked in My Workspace: the workspace window gives size and place, and its title bar names, moves and closes Chat,
+   so Chat's own bar keeps only its menu and pop-out. */
+.agentcli-window.agentcli-docked {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.agentcli-window.agentcli-docked .agentcli-titlebar { cursor: default; justify-content: flex-end; padding: 2px 6px; }
+.agentcli-window.agentcli-docked .agentcli-title { display: none; }
 .agentcli-titlebar {
   display: flex;
   align-items: center;

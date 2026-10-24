@@ -23,6 +23,7 @@ import { matchesListSearch } from "../utils/list_search";
 import { MenuRootContext } from "../ui/Menu";
 import { Icon } from "../ui/Icon";
 import type { Tool } from "./tools";
+import { visibleWindowEl } from "./visibility";
 import { HOME_TAB_LABEL_KEYS, SETTING_INDEX, SETTINGS_WINDOW_TITLE_KEYS, type AriaName, type HomeTab, type SettingEntry, type SettingsWindowId } from "./settingsIndex";
 
 export type Theme = "light" | "dark" | "auto";
@@ -200,7 +201,7 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
     const step = () => {
       if (run !== revealing.current) return;
       revealRef.current.revealWindow?.(window);
-      const windowEl = rootRef.current?.querySelector<HTMLElement>(`[data-phx-window="${window}"]`) ?? null;
+      const windowEl = visibleWindowEl(rootRef.current, window);
       const last = ++frames >= REVEAL_FRAMES;
       if (windowEl?.hidden) {
         // A folded window in the phone stack opens from its title bar.

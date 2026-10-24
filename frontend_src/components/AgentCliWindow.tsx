@@ -465,6 +465,10 @@ interface Props {
   hass?: unknown;
   getHass?: () => unknown;
   summonVersion?: number;
+  /** My Workspace's Agent Chat slot while it is on screen: the window draws itself into it. */
+  dockMount?: HTMLElement | null;
+  /** Whether Agent Chat belongs in My Workspace, and the menu item that changes it; absent where it cannot dock. */
+  dock?: { docked: boolean; toggle: () => void } | null;
 }
 
 interface AgentCliHass {
@@ -612,7 +616,7 @@ export function clampPosToViewport(
 
 export function AgentCliWindow({
   accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
-  summonVersion,
+  summonVersion, dockMount = null, dock = null,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
   const persistenceOwner = useRef(getAgentCliOwner()).current;
@@ -671,6 +675,8 @@ export function AgentCliWindow({
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
   const poppedOut = popupMount !== null;
+  // Docked in My Workspace: the workspace window gives the size and place, and its title bar moves and closes it.
+  const docked = dockMount !== null && !poppedOut;
   const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
   const agentChatTitle = t("agentchat.title");
   const currentHass = useCallback(() => getLiveHass?.() ?? hass, [getLiveHass, hass]);
@@ -1560,7 +1566,7 @@ export function AgentCliWindow({
 
   // --- drag ---
   const startDrag = useCallback((e: React.PointerEvent) => {
-    if (maximized || poppedOut) return;  // full screen or popup: nothing to drag
+    if (maximized || poppedOut || docked) return;  // full screen, popup or docked: nothing to drag
     if ((e.target as HTMLElement).closest("button, select")) return;
     e.preventDefault();
     const startX = e.clientX, startY = e.clientY;
@@ -1611,7 +1617,7 @@ export function AgentCliWindow({
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
-  }, [maximized, poppedOut, minimized, pillPos, pos, size, persistenceOwner]);
+  }, [maximized, poppedOut, docked, minimized, pillPos, pos, size, persistenceOwner]);
 
   // --- resize ---
   const startResize = useCallback((dir: string) => (e: React.PointerEvent) => {
@@ -1669,7 +1675,7 @@ export function AgentCliWindow({
   // a popped-out chat is already in a separate browser window. Navigation stays
   // on HA's soft SPA path so the turn survives.
   const openReview = useCallback((approvalId: string) => {
-    if (!poppedOut && isNarrowViewport()) {
+    if (!poppedOut && !docked && isNarrowViewport()) {
       reviewRestoreRef.current = mode !== "min"
         ? { approvalId, mode }
         : null;
@@ -1689,7 +1695,7 @@ export function AgentCliWindow({
     } catch {
       window.location.href = url;
     }
-  }, [minimize, mode, poppedOut]);
+  }, [minimize, mode, poppedOut, docked]);
 
   const maximize = useCallback(() => setMode("max"), []);
 
@@ -1830,9 +1836,9 @@ export function AgentCliWindow({
   const noInstances = instances.length === 0;
 
   const pillXY = pillPos.x >= 0 ? pillPos : pos;  // fall back before first seed
-  const collapsed = minimized && !poppedOut;
+  const collapsed = minimized && !poppedOut && !docked;
   // Maximized geometry comes entirely from CSS (inset: 0); no inline style.
-  const geometryStyle: React.CSSProperties = poppedOut || maximized
+  const geometryStyle: React.CSSProperties = poppedOut || docked || maximized
     ? {}
     : collapsed
       ? { left: pillXY.x, top: pillXY.y }
@@ -1860,11 +1866,14 @@ export function AgentCliWindow({
     { id: "larger", label: t("agentchat.increaseTextSize"), disabled: textSizePt >= AGENTCLI_TEXT_SIZE_MAX_PT, onSelect: () => adjustTextSize(AGENTCLI_TEXT_SIZE_STEP_PT) },
     "separator",
     { id: "clear", label: t("agentchat.clearHistory"), onSelect: clearHistory },
+    ...(dock ? ["separator" as const, dock.docked
+      ? { id: "float", label: t("agentchat.floatChat"), onSelect: dock.toggle }
+      : { id: "dock", label: t("workspace.addToMy"), onSelect: dock.toggle }] : []),
   ];
 
   const content = (
     <MenuRootContext.Provider value={rootEl}>
-    <div ref={attachRoot} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}
+    <div ref={attachRoot} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut && !docked ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}${docked ? " agentcli-docked" : ""}`} style={style} role={docked ? "region" : "dialog"} aria-label={agentChatTitle}
          // Files dropped anywhere on the window attach; unhandled, the browser
          // would open the image in place of Home Assistant.
          onDragOver={(e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); }}
@@ -1903,19 +1912,19 @@ export function AgentCliWindow({
               )}
             </button>
           )}
-          {!poppedOut && mode !== "min" && (
+          {!poppedOut && !docked && mode !== "min" && (
             <button className="agentcli-icon-btn" title={t("agentchat.minimize")} aria-label={t("agentchat.minimize")}
                     onClick={minimize}><Icon name="minimize" /></button>
           )}
-          {!poppedOut && mode !== "max" && (
+          {!poppedOut && !docked && mode !== "max" && (
             <button className="agentcli-icon-btn" title={t("agentchat.maximize")} aria-label={t("agentchat.maximize")}
                     onClick={maximize}><Icon name="maximize" /></button>
           )}
-          {!poppedOut && mode !== "normal" && (
+          {!poppedOut && !docked && mode !== "normal" && (
             <button className="agentcli-icon-btn" title={t("agentchat.restore")} aria-label={t("agentchat.restore")}
                     onClick={restore}><Icon name="restore" /></button>
           )}
-          <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}><Icon name="close" /></button>
+          {!docked && <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}><Icon name="close" /></button>}
         </div>
       </div>}
 
@@ -2119,7 +2128,7 @@ export function AgentCliWindow({
           )}
 
           {/* resize handles: windowed mode only (full screen has no edges to drag) */}
-          {mode === "normal" && !poppedOut && (["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const).map((d) => (
+          {mode === "normal" && !poppedOut && !docked && (["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const).map((d) => (
             <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />
           ))}
         </>
@@ -2127,7 +2136,8 @@ export function AgentCliWindow({
     </div>
     </MenuRootContext.Provider>
   );
-  return popupMount ? createPortal(content, popupMount) : content;
+  // A popped-out window stays in its browser window; otherwise a docked one draws into My Workspace.
+  return popupMount ? createPortal(content, popupMount) : dockMount ? createPortal(content, dockMount) : content;
 }
 
 /** A backend notice or error in the operator's language.

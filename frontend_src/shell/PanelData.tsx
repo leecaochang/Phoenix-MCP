@@ -115,6 +115,8 @@ export interface PanelData {
   dismissAttentionRequest: () => void;
 
   openAgentCli: (accessKeyId?: string, preservePosition?: boolean) => void;
+  /** Mark the panel's own Agent Chat open without starting it again (it is showing in My Workspace). */
+  keepAgentCliOpen: () => void;
   closeAgentCli: () => void;
   agentCliOpen: boolean;
   agentCliKey: number;
@@ -340,6 +342,10 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     patchAgentCliDurable({ open: false });
     setAgentCliOpen(false);
   }, []);
+  const keepAgentCliOpen = useCallback(() => {
+    patchAgentCliDurable({ open: true });
+    setAgentCliOpen(true);
+  }, []);
 
   // The panel registers the same shortcut as the global bootstrap so Shift+A
   // also works when the admin chose the panel-only Agent Chat mode. The helper
@@ -522,7 +528,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,
     attention, attentionRequested, dismissAttentionRequest,
-    openAgentCli, closeAgentCli, agentCliOpen, agentCliKey, agentCliInstances, globalChatReady,
+    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliInstances, globalChatReady,
   };
   return <PanelDataContext.Provider value={value}>{children}</PanelDataContext.Provider>;
 }

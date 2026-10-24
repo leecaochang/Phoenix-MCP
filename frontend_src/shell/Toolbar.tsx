@@ -116,7 +116,7 @@ function ToolRow({ registry, workspace, order, groups, hide }: { registry: ToolR
   );
 }
 
-export function Toolbar({ controller, shellRoot, env, state, onChange, documentation }: {
+export function Toolbar({ controller, shellRoot, env, state, onChange, documentation, onAgentChat }: {
   /** The visible workspace's controller; absent in the phone stack. */
   controller: WorkspaceController | null;
   shellRoot: RefObject<HTMLElement | null>;
@@ -125,6 +125,8 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   onChange: (next: ToolbarState) => void;
   /** The Documentation menu: Help, the Guide and the documentation website. */
   documentation: () => MenuEntry[];
+  /** Agent Chat: its docked window in My Workspace, or the floating one. */
+  onAgentChat?: () => void;
 }) {
   const d = usePanelData();
   const menuRef = useRef<HTMLElement | null>(null);
@@ -314,7 +316,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
               </button>
             ) : d.accessKeys.length > 0 ? (
-              <button type="button" className={`phx-toolbar-button ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => d.openAgentCli()}>
+              <button type="button" className={`phx-toolbar-button ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => (onAgentChat ? onAgentChat() : d.openAgentCli())}>
                 <Icon name="agentChat" size={16} />
                 <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
               </button>

@@ -15,7 +15,7 @@
 import { MAX_RECORD_BYTES, SHELL_SCHEMA, parseRecord, type Env, type ShellRecord, type WorkspaceId } from "./storage";
 
 /** A part of the record that changes independently. */
-export type Section = "toolbar" | "help" | "guide" | "lastWorkspace" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`;
+export type Section = "toolbar" | "help" | "guide" | "lastWorkspace" | "myWindows" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`;
 
 /** Wait this long after the last change before writing to Home Assistant, but never longer than the maximum. */
 export const SYNC_DELAY_MS = 2000;
@@ -68,6 +68,7 @@ export function mergeRecords(stored: ShellRecord | null, local: ShellRecord, cha
     else if (section === "help") out.help = local.help;
     else if (section === "guide") out.guide = local.guide;
     else if (section === "lastWorkspace") out.lastWorkspace = local.lastWorkspace;
+    else if (section === "myWindows") out.myWindows = local.myWindows;
     else {
       const [kind, id] = section.split(":") as ["ws" | "my", WorkspaceId];
       const target = kind === "ws" ? out.workspaces : out.myDefaults!;

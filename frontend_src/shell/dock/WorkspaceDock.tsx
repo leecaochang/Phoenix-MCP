@@ -6,13 +6,13 @@
  * instance holds the window, so moving a window between them keeps its state.
  */
 
-import { useEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { DockviewReact, type DockviewApi, type DockviewOptions, type DockviewReadyEvent, type IDockviewPanelProps, type IWatermarkPanelProps } from "dockview-react";
 import { dimWhileDragging, edgeResolver, floatingMouseMove, refuseTabDrops } from "./drop";
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "./fold";
 import { WorkspaceCanvas, bandEdgeResizing, pushDownResizing, scrollWhileDragging } from "./scroll";
-import { ControllerContext, TitleTab, WindowControls, WindowGhost, windowMenuEntries } from "./TitleBar";
+import { ControllerContext, TitleTab, WindowControls, WindowGhost, WindowMenuExtrasContext, windowMenuEntries } from "./TitleBar";
 import { t } from "../../i18n";
 import { useContextMenu, type MenuEntry } from "../../ui/Menu";
 import type { HostId, WorkspaceController, WorkspaceLayout } from "./controller";
@@ -71,6 +71,7 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
   workspaceMenu: () => MenuEntry[];
 }) {
   const showMenu = useContextMenu();
+  const menuExtras = useContext(WindowMenuExtrasContext);
   const frame = useRef<HTMLDivElement>(null);
   const elements = useRef<Partial<Record<HostId, HTMLDivElement | null>>>({});
   const apis = useRef<Partial<Record<HostId, DockviewApi>>>({});
@@ -169,6 +170,9 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
   // Stable handlers, so Dockview never sees a new onReady.
   const handlers = useMemo(() => Object.fromEntries(HOSTS.map((h) => [h, ready(h)])) as Record<HostId, (e: DockviewReadyEvent) => void>, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Layout changes wait while the workspace is hidden; showing it applies them.
+  useEffect(() => { controller.setShown(visible); }, [controller, visible]);
+
   useEffect(() => () => {
     for (const dispose of disposers.current) dispose();
     disposers.current = [];
@@ -182,7 +186,7 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     if (!showMenu || target.closest("input, textarea, select, [contenteditable='true']")) return;
     if (target.closest(".dv-tabs-and-actions-container")) {
       const group = controller.groupContaining(target);
-      if (group) showMenu(e, t("workspace.windowMenu"), windowMenuEntries(controller, group, { full: true }));
+      if (group) showMenu(e, t("workspace.windowMenu"), windowMenuEntries(controller, group, { full: true, extras: menuExtras }));
       return;
     }
     if (target.closest(".dv-content-container, .dv-render-overlay, .phx-float-layer")) return;

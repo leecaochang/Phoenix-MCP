@@ -3,7 +3,7 @@
  * the windows: each keeps its own behavior, data loading and safety checks.
  */
 
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -28,7 +28,8 @@ import { usePanelData } from "./PanelData";
 import type { GlobalSettings } from "../types";
 import type { Slot } from "./dock/geometry";
 import type { WorkspaceId } from "./storage";
-import { WindowVisibleContext } from "./visibility";
+import { WindowVisibleContext, WorkspaceVisibleContext } from "./visibility";
+import { CHAT_WINDOW, ChatDockWindow } from "./chatDock";
 import { WindowPlaceContext } from "./tools";
 import { LogDetailsContent } from "./logDetails";
 import { TableSettingsContext } from "../ui/table/settings";
@@ -61,6 +62,7 @@ export const WINDOW_TITLE_KEYS = {
   conversationLog: "conversations.title",
   logDetails: "workspace.logDetails",
   ...SETTINGS_WINDOW_TITLE_KEYS,
+  agentChat: "agentchat.title",
   attention: "attention.title",
   notifications: "notifications.title",
   help: "help.title",
@@ -207,6 +209,15 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       api.getPanel("logDetails")?.group.api.setSize({ height: Math.round(api.height * 0.4) });
     },
   },
+  my: {
+    labelKey: "workspace.myWorkspace",
+    helpKey: "help.wsMy",
+    icon: "star",
+    // The windows the user added; the shell sets them (see `myWorkspaceWindows`).
+    windows: ["attention"],
+    // The shell lays out the added windows in the order they were added.
+    arrange: () => {},
+  },
   settings: {
     labelKey: "shell.tabSettings",
     helpKey: "help.wsSettings",
@@ -251,8 +262,48 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = Object.fromEntries(
   }]),
 ) as Record<WorkspaceId, WorkspaceDef>;
 
-/** Whether this workspace is on screen; windows in a hidden workspace stay mounted but pause. */
-export const WorkspaceVisibleContext = createContext(true);
+export { WorkspaceVisibleContext };
+
+/**
+ * The workspace each window belongs to; My Workspace shows a second copy of
+ * it, sharing its selection through the workspace's shell-level state. Agent
+ * Chat belongs to no workspace: it docks only in My Workspace.
+ */
+export const SOURCE_OF: Partial<Record<WindowId, WorkspaceId>> = Object.fromEntries(
+  (Object.entries(OWN_WINDOWS) as [WorkspaceId, WorkspaceDef][])
+    .filter(([ws]) => ws !== "my")
+    .flatMap(([ws, def]) => def.windows.filter((w) => w !== ATTENTION_WINDOW).map((w) => [w, ws])),
+);
+
+/** Whether a window can be added to My Workspace from its window menu. */
+export const canAddToMy = (id: string): boolean => id in SOURCE_OF;
+
+/** Comfortable heights for windows opened in My Workspace: each one's own, else enough for a list. */
+const MY_HEIGHTS: Partial<Record<WindowId, number>> = {
+  ...Object.fromEntries(Object.keys(SOURCE_OF).map((id) => [id, 420])),
+  ...Object.assign({}, ...Object.values(OWN_WINDOWS).map((def) => def.heights ?? {})),
+  [CHAT_WINDOW]: 560,
+};
+
+/** Conditional windows in My Workspace open along the bottom once they are allowed. */
+const MY_CONDITIONAL: Partial<Record<WindowId, Slot>> = Object.fromEntries(
+  Object.values(OWN_WINDOWS).flatMap((def) => Object.keys(def.conditional ?? {})).map((id) => [id, { neighbor: "", side: "bottom" as const }]),
+);
+
+/** My Workspace's controller settings for the windows the user added, in the order added. */
+export function myWorkspaceWindows(members: readonly string[]): string[] {
+  return [...members.filter((id) => canAddToMy(id) || id === CHAT_WINDOW), ...WORKSPACES.my.windows];
+}
+
+/** My Workspace's default arrangement: its windows one below another in the order they were added, then Help. */
+export function arrangeMy(members: () => readonly string[]): WorkspaceDef["arrange"] {
+  return (api, add) => {
+    members().forEach((id, i) => add(id, i ? { direction: "below" } : undefined));
+    WORKSPACES.my.arrange(api, add);
+  };
+}
+
+export const MY_EXTRAS = { heights: MY_HEIGHTS, conditional: MY_CONDITIONAL, collect: (id: string) => canAddToMy(id) || id === CHAT_WINDOW };
 
 /** A window's content frame: one error boundary per window, hidden but mounted while folded. */
 export function WindowBody({ id, children }: { id: string; children: ReactNode }) {
@@ -354,6 +405,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   settingsLogs: LogsSettingsWindow,
   settingsGeneral: GeneralSettingsWindow,
   logDetails: LogDetailsWindowContent,
+  agentChat: ChatDockWindow,
   attention: AttentionContent,
   notifications: NotificationsWindow,
   help: HelpWindow,
@@ -389,18 +441,23 @@ export function EmptyWorkspace(_props: IWatermarkPanelProps) {
   const controller = useContext(ControllerContext);
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
   if (!controller) return null;
+  const mine = controller.id === "my";
+  const closed = controller.closedWindows();
   return (
     <div className="phx-workspace-empty">
-      <p>{t("workspace.empty")}</p>
+      {/* My Workspace without any added window explains how to add one. */}
+      <p>{t(mine && !closed.some((id) => canAddToMy(id) || id === CHAT_WINDOW) ? "workspace.myEmpty" : "workspace.empty")}</p>
       <div className="phx-workspace-empty-actions">
-        {controller.closedWindows().map((id) => (
+        {closed.map((id) => (
           <button key={id} type="button" className="btn btn-outline btn-sm" onClick={() => controller.reopen(id)}>
             {t("workspace.reopen", { window: windowTitle(id) })}
           </button>
         ))}
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => controller.restoreOriginal()}>
-          {t("workspace.restoreOriginal")}
-        </button>
+        {!mine && (
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => controller.restoreOriginal()}>
+            {t("workspace.restoreOriginal")}
+          </button>
+        )}
       </div>
     </div>
   );

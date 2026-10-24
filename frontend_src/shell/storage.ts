@@ -12,7 +12,7 @@
 import type { WorkspaceLayout } from "./dock/controller";
 
 export type Env = "desktop" | "mobile";
-export const WORKSPACE_IDS = ["accessKeys", "approvals", "changes", "mesa", "logs", "settings"] as const;
+export const WORKSPACE_IDS = ["accessKeys", "approvals", "changes", "mesa", "logs", "settings", "my"] as const;
 export type WorkspaceId = (typeof WORKSPACE_IDS)[number];
 
 export const SHELL_SCHEMA = 1;
@@ -74,6 +74,18 @@ export interface ShellRecord {
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
   /** Arrangements the user saved as My Default, one per workspace; automatic saving never changes them. */
   myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
+  /** The windows added to My Workspace, in the order they were added; arranging it never changes them. */
+  myWindows?: string[];
+}
+
+/** Most windows My Workspace keeps; more than every window there is, so only damage is cut off. */
+const MAX_MY_WINDOWS = 64;
+
+/** Saved My Workspace windows: unique window ids, with anything unreadable left out. */
+export function readMyWindows(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.filter((id): id is string => typeof id === "string" && /^[A-Za-z][A-Za-z0-9]{0,40}$/.test(id));
+  return [...new Set(ids)].slice(0, MAX_MY_WINDOWS);
 }
 
 /** A saved toolbar state, with anything unreadable replaced by the default. */
@@ -166,6 +178,7 @@ export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
     ...(parsed.guide !== undefined ? { guide: readGuide(parsed.guide) } : {}),
     workspaces: layouts(parsed.workspaces),
     ...(Object.keys(myDefaults).length ? { myDefaults } : {}),
+    ...(parsed.myWindows !== undefined ? { myWindows: readMyWindows(parsed.myWindows) } : {}),
   };
 }
 

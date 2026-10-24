@@ -93,6 +93,13 @@ export interface WorkspaceExtras {
   closedAt?: Readonly<Record<string, Slot>>;
   /** Raised when the default arrangement changes so much that older saved ones should not load. */
   layoutVersion?: number;
+  /**
+   * Windows the user chose for this workspace (My Workspace): one the
+   * arrangement leaves out was added since it was saved, so it opens along the
+   * bottom instead of counting as closed. Other windows (Notifications) keep
+   * the usual rule.
+   */
+  collect?: (id: string) => boolean;
 }
 
 export class WorkspaceController {
@@ -121,16 +128,89 @@ export class WorkspaceController {
   private version = 0;
   private quiet = 0;
 
+  private allowed: readonly string[];
+  /** Whether the workspace is on screen. */
+  private shown = true;
+  /** The windows changed while the workspace was hidden or not yet laid out. */
+  private windowsChanged = false;
+
   constructor(
     readonly id: string,
     /** The windows this workspace may hold, in default order. */
-    readonly windows: readonly string[],
+    windows: readonly string[],
     /** Lay out the default arrangement on an empty instance. */
     private readonly arrange: (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void,
     /** Current title for a window id. */
     private readonly titleOf: (id: string) => string,
     private readonly extras: WorkspaceExtras = {},
-  ) {}
+  ) {
+    this.allowed = [...windows];
+  }
+
+  /** The windows this workspace may hold, in default order. */
+  get windows(): readonly string[] { return this.allowed; }
+
+  /**
+   * Change the windows this workspace may hold (My Workspace). A window taken
+   * away closes without being remembered as closed; with `collect`, one added
+   * opens along the bottom. Both wait until the workspace is on screen: a
+   * hidden workspace measures nothing, and laying it out then would collapse
+   * its pinned bands.
+   */
+  setWindows(ids: readonly string[]): void {
+    const changed = ids.length !== this.allowed.length || ids.some((id, i) => id !== this.allowed[i]);
+    this.allowed = [...ids];
+    if (!changed) return;
+    if (!this.api || !this.shown) {
+      this.windowsChanged = true;
+      this.changed();
+      return;
+    }
+    this.batch(() => this.applyWindows());
+  }
+
+  /** Whether the workspace is on screen; changes to its windows made while it was hidden apply now. */
+  setShown(shown: boolean): void {
+    this.shown = shown;
+    if (!shown || !this.windowsChanged || !this.api) return;
+    this.windowsChanged = false;
+    this.batch(() => this.applyWindows());
+  }
+
+  /** Close the windows no longer held and open the chosen ones that are missing. */
+  private applyWindows(): void {
+    for (const [, host] of this.attached()) {
+      for (const panel of [...host.api.panels]) {
+        if (!this.allowed.includes(panel.id) && !this.transient.has(panel.id)) this.forget(panel.id);
+      }
+    }
+    for (const id of [...this.closed.keys()]) if (!this.allowed.includes(id)) this.closed.delete(id);
+    for (const id of this.allowed) this.collectOne(id);
+  }
+
+  /** Close a window that may no longer be here, without remembering where it was. */
+  private forget(id: string): void {
+    const host = this.hostOf(id);
+    const panel = host ? this.apiOf(host)?.getPanel(id) : undefined;
+    if (this.folds.isFolded(id)) this.folds.setFolded(id, false);
+    this.folds.setCollapsed(id, undefined);
+    this.floatedFrom.delete(id);
+    this.pinnedFrom.delete(id);
+    if (panel) this.keepHeights(() => panel.api.close());
+  }
+
+  /** Open a chosen window the arrangement does not show and the user did not close. */
+  private collectOne(id: string): void {
+    if (!this.extras.collect?.(id)) return;
+    if (this.transient.has(id) || this.wanted.has(id) || this.closed.has(id) || this.hostOf(id)) return;
+    if (this.availability(id) !== true) return;
+    this.place(id);
+  }
+
+  /** With `collect`, open every chosen window the arrangement left out. */
+  private collectAll(): void {
+    for (const id of this.allowed) this.collectOne(id);
+  }
 
   private get transient(): ReadonlySet<string> { return this.extras.transient ?? EMPTY; }
   private get conditional(): Readonly<Record<string, Slot>> { return this.extras.conditional ?? {}; }
@@ -274,6 +354,7 @@ export class WorkspaceController {
           this.retitle();
           this.syncAvailable();
           this.applyWanted();
+          this.collectAll();
         });
         return;
       } catch {
@@ -349,6 +430,7 @@ export class WorkspaceController {
       for (const id of keep) this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: TRANSIENT_HEIGHT });
       this.syncAvailable();
       this.applyWanted();
+      this.collectAll();
       // Bands emptied above are measured again, so an empty band takes no space.
       for (const band of BANDS) this.canvasOf(band)?.apply();
     });
@@ -386,6 +468,7 @@ export class WorkspaceController {
     if (!api) return;
     let changed = false;
     for (const [id, home] of Object.entries(this.conditional)) {
+      if (!this.allowed.includes(id)) continue;
       const allowed = this.availability(id);
       if (allowed === null) continue;
       const host = this.hostOf(id);
@@ -554,7 +637,7 @@ export class WorkspaceController {
     return this.windows.filter((id) => {
       if (this.transient.has(id) || this.availability(id) === false) return false;
       if (this.closed.has(id)) return !live || !this.hostOf(id);
-      return live && !this.hostOf(id) && !(id in this.conditional);
+      return live && !this.hostOf(id) && !(id in this.conditional) && !this.extras.collect?.(id);
     });
   }
 

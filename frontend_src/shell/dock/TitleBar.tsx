@@ -10,6 +10,10 @@ import type { WorkspaceController } from "./controller";
 
 export const ControllerContext = createContext<WorkspaceController | null>(null);
 
+/** Items the shell adds to every window's menu, such as Add to My Workspace. */
+export type WindowMenuExtras = (controller: WorkspaceController, windowId: string) => MenuEntry[];
+export const WindowMenuExtrasContext = createContext<WindowMenuExtras | null>(null);
+
 function useController(): WorkspaceController {
   const controller = useContext(ControllerContext);
   if (!controller) throw new Error("window title bar rendered outside its workspace");
@@ -65,10 +69,10 @@ function refocusWindowMenu(controller: WorkspaceController, windowId: string) {
  * The window's moves, Float or Dock, and pinning, built when a menu opens so
  * availability reflects the current layout. Moves stay within the window's own
  * area: the scrolling grid or its pinned band. `onResize` adds Resize with
- * Keyboard; `full` adds Fold, Maximize and Close for the right-click menu on a
- * title bar.
+ * Keyboard; `extras` adds the shell's items; `full` adds Fold, Maximize and
+ * Close for the right-click menu on a title bar.
  */
-export function windowMenuEntries(controller: WorkspaceController, group: DockviewGroupPanel, opts: { onResize?: () => void; full?: boolean } = {}): MenuEntry[] {
+export function windowMenuEntries(controller: WorkspaceController, group: DockviewGroupPanel, opts: { onResize?: () => void; full?: boolean; extras?: WindowMenuExtras | null } = {}): MenuEntry[] {
   const windowId = group.activePanel?.id;
   if (!windowId) return [];
   const host = controller.hostOfGroup(group);
@@ -93,6 +97,8 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
     if (host !== "top") entries.push({ id: "pin-top", label: t("workspace.pinTop"), onSelect: then(() => controller.pin(group, "top")) });
     if (host !== "bottom") entries.push({ id: "pin-bottom", label: t("workspace.pinBottom"), onSelect: then(() => controller.pin(group, "bottom")) });
   }
+  const extra = opts.extras?.(controller, windowId) ?? [];
+  if (extra.length) entries.push("separator", ...extra);
   if (opts.full) {
     const folded = controller.folds.isFolded(windowId);
     const maximized = group.api.isMaximized();
@@ -108,6 +114,7 @@ const RESIZE_STEP = 24;
 /** Window controls: the window menu, Float or Dock, Maximize or Restore, Close. */
 export function WindowControls(props: IDockviewHeaderActionsProps) {
   const controller = useController();
+  const extras = useContext(WindowMenuExtrasContext);
   const group = props.group;
   const panel = props.activePanel;
   const [floating, setFloating] = useState(group.api.location.type === "floating");
@@ -127,7 +134,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
   const host = controller.hostOfGroup(group);
   const pinned = host === "top" || host === "bottom";
   const thenRefocus = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
-  const items = () => windowMenuEntries(controller, group, { onResize: () => { setResizing(true); menuButton.current?.focus(); } });
+  const items = () => windowMenuEntries(controller, group, { extras, onResize: () => { setResizing(true); menuButton.current?.focus(); } });
 
   const resizeKeys = (e: KeyboardEvent<HTMLButtonElement>): boolean => {
     if (!resizing) return false;

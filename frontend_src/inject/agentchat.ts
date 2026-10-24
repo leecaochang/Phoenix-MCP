@@ -42,7 +42,10 @@ let bridge: {
   close: typeof close;
   toggle: typeof toggle;
   isVisible: () => boolean;
+  setDock: typeof setDock;
 } | null = null;
+/** The newest dock state from the panel, applied once the window module has loaded. */
+let latestDock: import("./AgentChatWindow").AgentChatDock | null = null;
 
 function trackedTimeout(fn: () => void, delay: number): number {
   const id = window.setTimeout(() => {
@@ -54,7 +57,14 @@ function trackedTimeout(fn: () => void, delay: number): number {
 }
 
 async function ensureMod(): Promise<typeof import("./AgentChatWindow")> {
-  if (!winMod) winMod = await import("./AgentChatWindow");
+  if (!winMod) {
+    const module = await import("./AgentChatWindow");
+    if (!winMod) {
+      winMod = module;
+      // The panel may have sent its dock state before the window module loaded.
+      module.setAgentChatDock(latestDock);
+    }
+  }
   return winMod;
 }
 
@@ -94,6 +104,22 @@ async function restore(): Promise<void> {
 function close(): void {
   // If the window module was never loaded, there is nothing open to close.
   winMod?.hideAgentChat();
+}
+
+/**
+ * The Phoenix MCP panel's My Workspace slot for Agent Chat, or null when the
+ * panel offers none. The window module loads only once a slot asks for Chat.
+ */
+function setDock(next: import("./AgentChatWindow").AgentChatDock | null): void {
+  latestDock = next;
+  if (disposed) return;
+  if (winMod) { winMod.setAgentChatDock(latestDock); return; }
+  // Without a slot nothing needs the window module yet; it takes the latest state when it loads.
+  if (!next?.slot) return;
+  const generation = identityGeneration;
+  void ensureMod().then((module) => {
+    if (!disposed && generation === identityGeneration && getHass()?.user?.is_admin) module.setAgentChatDock(latestDock);
+  }).catch(() => { /* the slot keeps its Open Agent Chat button */ });
 }
 
 async function toggle(): Promise<void> {
@@ -137,6 +163,7 @@ function start(): void {
     close,
     toggle,
     isVisible: () => Boolean(winMod?.isAgentChatVisible()),
+    setDock,
   };
   (window as any).__phxAgentChat = bridge;
   unregisterShortcut = registerAgentChatShortcut(getHass, toggle);

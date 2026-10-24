@@ -34,12 +34,23 @@ interface BootData {
   scrollback: number;
 }
 
+/** My Workspace's Agent Chat slot and dock state, from the Phoenix MCP panel while it is open. */
+export interface AgentChatDock {
+  /** The slot while My Workspace shows it; null while Chat should float. */
+  slot: HTMLElement | null;
+  /** Agent Chat belongs in My Workspace. */
+  docked: boolean;
+  /** Add Agent Chat to My Workspace, or float it again. */
+  toggle: () => void;
+}
+
 function Boot({
-  accessKeyId, onClose, summonVersion,
+  accessKeyId, onClose, summonVersion, dock,
 }: {
   accessKeyId: string;
   onClose: () => void;
   summonVersion: number;
+  dock: AgentChatDock | null;
 }) {
   const [data, setData] = useState<BootData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -96,6 +107,8 @@ function Boot({
       hass={getHass()}
       getHass={getHass}
       summonVersion={summonVersion}
+      dockMount={dock?.slot ?? null}
+      dock={dock ? { docked: dock.docked, toggle: dock.toggle } : null}
     />
   );
 }
@@ -108,6 +121,7 @@ let themeObserver: MutationObserver | null = null;
 let activeAccessKeyId = "";
 let summonVersion = 0;
 let reviewResumeFrame: number | null = null;
+let dockState: AgentChatDock | null = null;
 
 function suspendForApprovalReview(): void {
   if (reviewResumeFrame !== null) {
@@ -155,9 +169,24 @@ function paintAgentChat(): void {
       accessKeyId={activeAccessKeyId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
+      dock={dockState}
     />
     </ErrorBoundary>,
   );
+}
+
+/**
+ * Follow My Workspace's Agent Chat slot. A slot on screen shows Chat in it,
+ * opening Chat if it was closed; without one, an open Chat floats again. The
+ * conversation stays mounted throughout.
+ */
+export function setAgentChatDock(next: AgentChatDock | null): void {
+  dockState = next;
+  if (next?.slot && !host) {
+    showAgentChat();
+    return;
+  }
+  if (host) paintAgentChat();
 }
 
 export function isAgentChatVisible(): boolean {
