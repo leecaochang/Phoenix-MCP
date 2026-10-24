@@ -29,6 +29,8 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, Perm
 from custom_components.phoenix_mcp.history_summary import (
     SummaryUnavailableError, cursor_cut, group_cut, scan_state_changes,
 )
+from custom_components.phoenix_mcp.const import CONVERSATION_LOG_PAYLOAD_BYTES, TOOL_RESULT_MAX_BYTES
+from custom_components.phoenix_mcp.conversation_log import json_size
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
 
@@ -476,11 +478,91 @@ async def test_a_list_outside_plain_summary_is_refused(hass: HomeAssistant, extr
     assert outcome == "invalid_request" and message in content["content"][0]["text"]
 
 
-@pytest.mark.parametrize("ids", [[], [f"light.l{index}" for index in range(51)], ["light.a", 3], [" "]])
+@pytest.mark.parametrize("ids", [[], [f"light.l{index}" for index in range(501)], ["light.a", 3], [" "]])
 async def test_a_malformed_entity_list_is_refused(hass: HomeAssistant, ids) -> None:
+    # The longest list is the most one search_entities page hands over.
     content, outcome, _ = await _call_tool(
         "get_history", {"entity_id": ids, "mode": "summary"}, _key(), hass, MagicMock(), "r", None)
-    assert outcome == "invalid_request" and "list of 1 to 50" in content["content"][0]["text"]
+    assert outcome == "invalid_request" and "list of 1 to 500" in content["content"][0]["text"]
+
+
+def _stored(body: dict) -> int:
+    return json_size(json.dumps(body))
+
+
+async def test_every_entity_that_fits_one_result_is_summarized(recorder_mock, hass: HomeAssistant) -> None:
+    # No entity count caps a call: 120 small rows fit one result, so the model asks once.
+    _anchor(hass)
+    ids = [f"sensor.probe_{index:03d}" for index in range(120)]
+    for entity_id in ids:
+        _set(hass, entity_id, "1", -60)
+    await async_wait_recording_done(hass)
+    body = await _summary(hass, ids, 0, 400)
+    assert body["count"] == 120 and "not_summarized" not in body
+
+
+@pytest.mark.parametrize("budget", [5000, 7000, 9000])
+async def test_rows_fill_the_result_budget_and_name_the_rest(recorder_mock, hass: HomeAssistant, budget) -> None:
+    _anchor(hass)
+    # Enough names that leaving them out of the estimate would overrun the warning reserve.
+    ids = [f"light.lamp_along_the_upstairs_hallway_{index:02d}" for index in range(48)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 3)
+    await async_wait_recording_done(hass)
+    scanned: list[str] = []
+    real = mcp_view._scan_summary
+
+    async def recording(instance, hass_, entity_id, *rest):
+        scanned.append(entity_id)
+        return await real(instance, hass_, entity_id, *rest)
+
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", budget), \
+            patch.object(mcp_view, "_scan_summary", side_effect=recording):
+        body = await _summary(hass, ids, 0, 400)
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert rows and rows + body["not_summarized"] == ids
+    assert _stored(body) <= budget
+    assert any("summarize not_summarized" in warning for warning in body["warnings"])
+    # The estimate counts what is still to come, so the one entity that did not fit is
+    # the only Recorder read that produced no row; the rest are named unread.
+    assert scanned == rows + body["not_summarized"][:1]
+
+
+async def test_the_built_result_is_measured_and_trimmed_when_the_estimate_misses(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # The running estimate only saves Recorder reads; the bound comes from measuring the built body.
+    _anchor(hass)
+    ids = [f"light.lamp_{index:02d}" for index in range(16)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 3)
+    await async_wait_recording_done(hass)
+    real = mcp_view._stored_bytes
+
+    def blind(value):
+        return real(value) if isinstance(value, dict) and "mode" in value else 0
+
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000), patch.object(mcp_view, "_stored_bytes", side_effect=blind):
+        body = await _summary(hass, ids, 0, 400)
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert rows and body["not_summarized"] and rows + body["not_summarized"] == ids
+    assert _stored(body) <= 3000
+
+
+async def test_a_full_result_stays_whole_in_the_conversation_log(recorder_mock, hass: HomeAssistant) -> None:
+    # The budget is what the Conversation Log keeps unclipped, envelope and longest tool call ID included.
+    _anchor(hass)
+    ids = [f"light.a_rather_long_entity_name_for_the_hallway_{index:03d}" for index in range(260)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 4)
+    await async_wait_recording_done(hass)
+    content, outcome, _ = await _call(hass, ids, 0, 400)
+    body = json.loads(content["content"][0]["text"])
+    assert outcome == "allowed" and body["not_summarized"] and body["count"] > 50
+    message = {"jsonrpc": "2.0", "id": "x" * 256, "result": content}
+    assert json_size(message) <= CONVERSATION_LOG_PAYLOAD_BYTES
+    # Room for the envelope around the longest tool call ID Agent Chat dispatches.
+    envelope = {"jsonrpc": "2.0", "id": "x" * 256, "result": {"content": [{"type": "text", "text": ""}], "isError": False}}
+    assert TOOL_RESULT_MAX_BYTES + json_size(envelope) - 2 <= CONVERSATION_LOG_PAYLOAD_BYTES
 
 
 async def test_entities_past_the_call_budget_are_listed_not_dropped(recorder_mock, hass: HomeAssistant) -> None:
@@ -590,14 +672,16 @@ async def test_select_by_radio_reads_the_device_registry(recorder_mock, hass: Ho
     assert body["matched"] == 1 and [row["entity_id"] for row in body["entities"]] == ["binary_sensor.leak"]
 
 
-async def test_select_past_one_call_names_the_rest(recorder_mock, hass: HomeAssistant) -> None:
+async def test_select_past_one_result_names_the_rest(recorder_mock, hass: HomeAssistant) -> None:
     _anchor(hass)
     for index in range(53):
         _set(hass, f"sensor.probe_{index:02d}", "1", -60)
     await async_wait_recording_done(hass)
-    body = json.loads((await _select(hass, {"query": "probe"}))[0]["content"][0]["text"])
-    assert body["matched"] == 53 and body["count"] == 50
-    assert body["not_summarized"] == ["sensor.probe_50", "sensor.probe_51", "sensor.probe_52"]
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000):
+        body = json.loads((await _select(hass, {"query": "probe"}))[0]["content"][0]["text"])
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert body["matched"] == 53 and 0 < len(rows) < 53
+    assert rows + body["not_summarized"] == [f"sensor.probe_{index:02d}" for index in range(53)]
     assert any("summarize not_summarized" in warning for warning in body["warnings"])
 
 

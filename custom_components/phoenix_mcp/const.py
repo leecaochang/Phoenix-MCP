@@ -61,6 +61,9 @@ SERVICE_TARGET_MAX_GROUPS = 32
 SERVICE_TARGET_MAX_IDS = 1024
 # One get_state call reads at most this many explicit entity IDs.
 GET_STATE_MAX_IDS = 1024
+# Rows one search_entities page returns at most: the largest set of entities one
+# listing hands over, so also the most one get_history summary takes.
+SEARCH_ENTITIES_MAX_LIMIT = 500
 # get_history summary mode: Recorder rows per database page, rows one call may
 # fold (so at most this many divided by the page size queries), wall-clock
 # seconds before no further page starts, and states listed individually.
@@ -68,10 +71,9 @@ HISTORY_SUMMARY_PAGE_ROWS = 1000
 HISTORY_SUMMARY_MAX_ROWS = 20000
 HISTORY_SUMMARY_MAX_SECONDS = 10.0
 HISTORY_SUMMARY_MAX_STATES = 50
-# A summary of several entities: how many one call takes, and the wall-clock
-# seconds after which no further entity's scan starts (each scan keeps its own
-# row and time budget within that).
-HISTORY_SUMMARY_MAX_ENTITIES = 50
+# A summary of several entities: the wall-clock seconds after which no further
+# entity's scan starts (each scan keeps its own row and time budget within that).
+# How many rows one result holds is set by TOOL_RESULT_MAX_BYTES, not a count.
 HISTORY_SUMMARY_BATCH_SECONDS = 20.0
 # States listed per entity in that call; the rest are combined, so a numeric
 # sensor's hundreds of distinct values do not crowd out the other entities.
@@ -2842,6 +2844,11 @@ CONVERSATION_LOG_MAX_DEPTH = 25
 CONVERSATION_LOG_FLUSH_SECONDS = 30
 CONVERSATION_LOG_ENTRY_BYTES = 1_000_000
 CONVERSATION_LOG_PAYLOAD_BYTES = 64_000
+# Bytes one tool result may take as the Conversation Log stores it: its text as an
+# escaped JSON string inside the JSON-RPC envelope, which the rest leaves room for.
+# A larger payload is clipped there, so a read that adds rows up to this budget and
+# names the rest stays auditable whole.
+TOOL_RESULT_MAX_BYTES = CONVERSATION_LOG_PAYLOAD_BYTES - 512
 CONVERSATION_LOG_SCAN_BYTES = 8_000_000
 CONVERSATION_LOG_MAX_EVENTS = 256
 CONVERSATION_LOG_MAX_OPERATIONS = 256

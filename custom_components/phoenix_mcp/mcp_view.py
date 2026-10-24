@@ -64,7 +64,7 @@ from .device_semantics import (
 )
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
-from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ENTITIES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -1096,8 +1096,11 @@ async def _scan_summary(
 # search_entities filters select accepts; it finds the entities, so their scope,
 # Assist exposure and child-device rules are exactly that tool's.
 _SUMMARY_SELECT_FILTERS = ("query", "domain", "device_class", "integration", "radio", "area")
-# Rows read from search_entities to resolve select: enough to say how many matched.
-_SUMMARY_SELECT_SCAN = 500
+
+
+def _stored_bytes(value: Any) -> int:
+    """Bytes a tool result's JSON text takes as the Conversation Log stores it."""
+    return json_size(json.dumps(value))
 
 
 async def _history_summary_select(
@@ -1108,9 +1111,9 @@ async def _history_summary_select(
     "Which Zigbee sensors did not trigger this week" is then one call with no
     listing first. Diagnostic and configuration entities are left out unless
     asked for, since a battery or link-quality sensor is not what such a question
-    means. More matches than one call summarizes are named in not_summarized
-    rather than dropped, and an approximate (typo-tolerant) name match selects
-    nothing, because summarizing a guessed entity would answer the wrong question.
+    means. Matches past what one result holds are named in not_summarized rather
+    than dropped, and an approximate (typo-tolerant) name match selects nothing,
+    because summarizing a guessed entity would answer the wrong question.
     """
     tool = "get_history"
     if "entity_id" in args:
@@ -1133,7 +1136,7 @@ async def _history_summary_select(
     from .tools.discovery import _tool_search_entities
 
     found, outcome, _resource = await _tool_search_entities(
-        {**filters, "limit": _SUMMARY_SELECT_SCAN, "registry_state": "enabled"}, access_key, hass,
+        {**filters, "limit": SEARCH_ENTITIES_MAX_LIMIT, "registry_state": "enabled"}, access_key, hass,
         data if data is not None else hass.data[DOMAIN])
     text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
     if outcome != "allowed":
@@ -1149,21 +1152,15 @@ async def _history_summary_select(
     diagnostic = [row for row in rows if row.get("entity_category") in ("config", "diagnostic")]
     chosen = sorted(row["entity_id"] for row in rows if include_diagnostic or row not in diagnostic)
     if listed.get("has_more"):
-        warnings.append(f"More than {_SUMMARY_SELECT_SCAN} entities matched select; narrow it.")
+        warnings.append(f"More than {SEARCH_ENTITIES_MAX_LIMIT} entities matched select; narrow it.")
     selection: dict[str, Any] = {"select": {**filters, **({"include_diagnostic": True} if include_diagnostic else {})},
                                  "matched": len(chosen)}
     if diagnostic and not include_diagnostic:
         selection["diagnostic_excluded"] = len(diagnostic)
-    if len(chosen) > HISTORY_SUMMARY_MAX_ENTITIES:
-        selection["not_summarized"] = chosen[HISTORY_SUMMARY_MAX_ENTITIES:]
-        warnings.append(
-            f"{len(chosen)} entities matched; the first {HISTORY_SUMMARY_MAX_ENTITIES} by entity_id are summarized. "
-            "Narrow select, or summarize not_summarized as an entity_id list.")
     if not chosen:
         warnings.append("No entity matched select.")
     selection["warnings"] = warnings
-    return await _history_summary_many(chosen[:HISTORY_SUMMARY_MAX_ENTITIES], args, access_key, hass,
-                                       selection=selection)
+    return await _history_summary_many(chosen, args, access_key, hass, selection=selection)
 
 
 async def _history_summary_many(
@@ -1175,10 +1172,13 @@ async def _history_summary_many(
     "Which of these sensors did not trigger this week" then takes one call
     instead of one per entity. Every entity is access-checked before any Recorder
     read and again after the scans; inaccessible and missing ones share
-    not_found. One time budget bounds the call: entities it does not reach are
-    listed as unscanned, never dropped, and an entity whose own scan stops at its
-    budget keeps a next_cursor to continue alone. A selection resolved by select
-    adds its own fields and warnings, and may legitimately match nothing.
+    not_found. One time budget bounds the scans and TOOL_RESULT_MAX_BYTES the
+    result, so the Conversation Log keeps it whole: rows are added in order while
+    they fit, counting every entity still to come as a name, and the entities past
+    either budget are named (unscanned, not_summarized), never dropped. An entity
+    whose own scan stops at its budget keeps a next_cursor to continue alone. A
+    selection resolved by select adds its own fields and warnings, and may
+    legitimately match nothing.
     """
     tool = "get_history"
     if str(args.get("mode") or "").strip().lower() != "summary":
@@ -1190,10 +1190,10 @@ async def _history_summary_many(
             "limit, order and cursor do not apply to a summary of several entities; continue an entity that "
             "returned next_cursor in a single-entity call."
         ), "invalid_request", tool
-    if ((not raw_ids and selection is None) or len(raw_ids) > HISTORY_SUMMARY_MAX_ENTITIES
+    if ((not raw_ids and selection is None) or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
             or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
         return _tool_error(
-            f"entity_id must be one entity ID or a list of 1 to {HISTORY_SUMMARY_MAX_ENTITIES} entity ID strings."
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
         ), "invalid_request", tool
     try:
         window = parse_recorder_window(args, default_range=timedelta(hours=24))
@@ -1210,30 +1210,94 @@ async def _history_summary_many(
 
     ids = list(dict.fromkeys(item.strip() for item in raw_ids))
     scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
-    summaries: dict[str, Any] = {}
+    selected = dict(selection or {})
+    selection_warnings = list(selected.pop("warnings", []))
+    rows: dict[str, Any] = {}
     not_recorded: list[str] = []
     unscanned: list[str] = []
     unavailable: list[str] = []
+    not_summarized: list[str] = []
+    keep_days: Any = None
+
+    def build(still: set[str]) -> dict[str, Any]:
+        warnings = selection_warnings + retention_warnings("short_term", window.start, keep_days, now)
+        kept = [row for entity_id, row in rows.items() if entity_id in still]
+        if window.end > now:
+            warnings.append("end_time is in the future; the summary stops at the current time.")
+        if any("other_states" in row for row in kept):
+            warnings.append(
+                f"Rows list their {HISTORY_SUMMARY_MANY_MAX_STATES} longest states and combine the rest in "
+                "other_states; for a numeric sensor use get_statistics.")
+        if any("next_cursor" in row for row in kept):
+            warnings.append(
+                "An entity with next_cursor stopped at its scan budget: continue it in a single-entity call with "
+                "that cursor and add the totals.")
+        if not_summarized:
+            warnings.append(
+                "The result is full: summarize not_summarized as an entity_id list in another call.")
+        if unscanned:
+            warnings.append(
+                "The call's time budget ended before the unscanned entities; summarize them in another call.")
+        if unavailable:
+            warnings.append(
+                "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
+        body: dict[str, Any] = {
+            "mode": "summary",
+            "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+            **selected,
+            "count": len(kept),
+            "entities": kept,
+        }
+        for key, values in (("not_found", [e for e in ids if e not in still]),
+                            ("not_summarized", [e for e in not_summarized if e in still]),
+                            ("not_recorded", [e for e in not_recorded if e in still]),
+                            ("unscanned", [e for e in unscanned if e in still]),
+                            ("unavailable", [e for e in unavailable if e in still])):
+            if values:
+                body[key] = values
+        body["retention"] = retention_metadata("short_term", keep_days)
+        body["warnings"] = warnings
+        return body
+
     try:
         from homeassistant.components.recorder import get_instance, is_entity_recorded
 
         instance = get_instance(hass)
         keep_days = instance.keep_days
         deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
-        for entity_id in scan_ids:
+        # Whatever does not fit is named, so every entity still to come counts as
+        # its name; the envelope estimate leaves room for the warnings. The built
+        # body is measured exactly below.
+        names = [_stored_bytes(entity_id) for entity_id in scan_ids]
+        to_come = sum(names)
+        used = _stored_bytes(build(set(scan_ids))) + 1024
+        for entity_id, name in zip(scan_ids, names):
+            to_come -= name
             if not is_entity_recorded(hass, entity_id):
                 not_recorded.append(entity_id)
-                continue
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            elif not_summarized:
+                not_summarized.append(entity_id)
+            elif (remaining := deadline - time.monotonic()) <= 0:
                 unscanned.append(entity_id)
-                continue
-            try:
-                summaries[entity_id] = await _scan_summary(
-                    instance, hass, entity_id, to_us(window.start), to_us(end),
-                    min(HISTORY_SUMMARY_MAX_SECONDS, remaining))
-            except SummaryUnavailableError:
-                unavailable.append(entity_id)
+            else:
+                try:
+                    summary = await _scan_summary(
+                        instance, hass, entity_id, to_us(window.start), to_us(end),
+                        min(HISTORY_SUMMARY_MAX_SECONDS, remaining))
+                except SummaryUnavailableError:
+                    unavailable.append(entity_id)
+                else:
+                    row = compact_summary_row(summary_body(
+                        entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
+                        retention={}, warnings=[],
+                    ))
+                    size = _stored_bytes(row)
+                    if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
+                        rows[entity_id] = row
+                        used += size
+                        continue
+                    not_summarized.append(entity_id)
+            used += name
     except Exception:
         _LOGGER.warning("MCP history summary of several entities failed", exc_info=True)
         return _tool_error("History call failed."), "invalid_request", tool
@@ -1242,46 +1306,10 @@ async def _history_summary_many(
     if authority is not None:
         access_key = authority.current_access_key()
     still = {entity_id for entity_id in scan_ids if readable(entity_id)}
-    rows = [
-        compact_summary_row(summary_body(
-            entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
-            retention={}, warnings=[],
-        ))
-        for entity_id, summary in summaries.items() if entity_id in still
-    ]
-    warnings = retention_warnings("short_term", window.start, keep_days, now)
-    if window.end > now:
-        warnings.append("end_time is in the future; the summary stops at the current time.")
-    if any("other_states" in row for row in rows):
-        warnings.append(
-            f"Rows list their {HISTORY_SUMMARY_MANY_MAX_STATES} longest states and combine the rest in other_states; "
-            "for a numeric sensor use get_statistics.")
-    if any("next_cursor" in row for row in rows):
-        warnings.append(
-            "An entity with next_cursor stopped at its scan budget: continue it in a single-entity call with that "
-            "cursor and add the totals.")
-    if unscanned:
-        warnings.append("The call's time budget ended before the unscanned entities; summarize them in another call.")
-    if unavailable:
-        warnings.append(
-            "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
-    if selection is not None:
-        warnings = list(selection.pop("warnings", [])) + warnings
-    body: dict[str, Any] = {
-        "mode": "summary",
-        "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
-        **(selection or {}),
-        "count": len(rows),
-        "entities": rows,
-    }
-    for key, values in (("not_found", [e for e in ids if e not in still]),
-                        ("not_recorded", [e for e in not_recorded if e in still]),
-                        ("unscanned", [e for e in unscanned if e in still]),
-                        ("unavailable", [e for e in unavailable if e in still])):
-        if values:
-            body[key] = values
-    body["retention"] = retention_metadata("short_term", keep_days)
-    body["warnings"] = warnings
+    body = build(still)
+    while rows and _stored_bytes(body) > TOOL_RESULT_MAX_BYTES:
+        not_summarized.insert(0, rows.popitem()[0])
+        body = build(still)
     return _tool_success(json.dumps(body)), "allowed", tool
 
 
@@ -8858,7 +8886,7 @@ _MCP_MODERN_METHODS = _MCP_METHODS - {
 _MCP_LEGACY_METHODS = _MCP_METHODS - {"server/discover"}
 
 
-from .conversation_log import recorded_exchange, transport_session, record_event
+from .conversation_log import json_size, recorded_exchange, transport_session, record_event
 
 
 @recorded_exchange

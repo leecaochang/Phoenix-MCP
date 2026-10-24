@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, HISTORY_SUMMARY_MAX_ENTITIES, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -150,16 +150,16 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "covered_range and data_range describe only this page; with has_more, unread_range may hold "
             "more history, so neither shows where history begins. state_changes also lists the same-state row "
             "Home Assistant records at each restart; use summary to learn whether something entered a state. "
-            "In summary mode entity_id may be a list of up to 50, one compact row each, or select may "
-            "name them by search_entities filters instead: the way to ask which sensors entered a state "
-            "in a period, in one call."
+            "In summary mode entity_id may be a list, one compact row each, or select may name them by "
+            "search_entities filters instead: the way to ask which sensors entered a state in a period, "
+            "in one call. Entities past what one result holds are named in not_summarized."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "entity_id": {"oneOf": [
                     {"type": "string", "description": "Accessible entity whose Recorder history to read."},
-                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": HISTORY_SUMMARY_MAX_ENTITIES,
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SEARCH_ENTITIES_MAX_LIMIT,
                      "description": "Several entities, summary mode only."},
                 ], "description": "Entity ID, or in summary mode a list of entity IDs."},
                 "start_time": {
@@ -201,7 +201,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "additionalProperties": False,
                     "description": (
                         "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
-                        "match (up to 50; diagnostic and configuration entities only with include_diagnostic)."
+                        "match (diagnostic and configuration entities only with include_diagnostic)."
                     ),
                     "properties": {
                         "query": {"type": "string", "description": "Words matched against entity_id, name and aliases."},
@@ -1941,7 +1941,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "boolean", "default": False,
                     "description": "Add is_group and visible direct member_entity_ids. Lists may be incomplete; hidden HA entities remain visible when permitted. is_group false means no valid explicit membership, not proof of a leaf; null means no live state or resource bounds prevented inspection. Discovery only, not execution or approval scope.",
                 },
-                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum matching entities to return."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": SEARCH_ENTITIES_MAX_LIMIT, "default": 100, "description": "Maximum matching entities to return."},
                 "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Number of ranked matches to skip; pass next_offset from the previous page."},
             },
         },
