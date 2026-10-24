@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -110,14 +110,16 @@ class TestCapabilitySummary:
 class TestAuditSummary:
     async def test_returns_own_entries(self, hass):
         access_key = _access_key()
-        entry = SimpleNamespace(request_id="r1", timestamp="2026-01-01", method="tools/call",
-                                resource="get_state", outcome="allowed", mesa_advisory=False)
+        entry = SimpleNamespace(request_id="r1", timestamp=datetime(2026, 1, 1, 8, 30, tzinfo=timezone.utc),
+                                method="tools/call", resource="get_state", outcome="allowed", mesa_advisory=False)
         data = _data()
         data.audit.query.return_value = [entry]
         content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["entries"][0]["request_id"] == "r1"
+        # ISO 8601 like every other tool's times, not Python's space-separated str().
+        assert body["entries"][0]["timestamp"] == "2026-01-01T08:30:00+00:00"
         # mesa_advisory omitted when false (matches AuditEntry.to_dict)
         assert "mesa_advisory" not in body["entries"][0]
         # query must be scoped to this access key
@@ -125,8 +127,8 @@ class TestAuditSummary:
 
     async def test_surfaces_mesa_advisory_flag(self, hass):
         access_key = _access_key()
-        entry = SimpleNamespace(request_id="r2", timestamp="2026-01-01", method="tools/call",
-                                resource="call_service", outcome="allowed", mesa_advisory=True)
+        entry = SimpleNamespace(request_id="r2", timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                                method="tools/call", resource="call_service", outcome="allowed", mesa_advisory=True)
         data = _data()
         data.audit.query.return_value = [entry]
         content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)

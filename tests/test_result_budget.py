@@ -128,7 +128,8 @@ async def test_logbook_keeps_the_newest_and_names_where_older_ones_continue(hass
                                    lambda body: {"end_time": body["older_end_time"]} if body["truncated"] else None,
                                    extra=extra)
     assert len(pages) > 1
-    assert pages[0]["entries"][-1]["when"] == entries[-1]["when"]
+    # Entry times are ISO 8601 like every other tool's, the same instant Home Assistant stamped.
+    assert datetime.fromisoformat(pages[0]["entries"][-1]["when"]).timestamp() == entries[-1]["when"]
     assert sorted(row["message"] for row in rows) == [entry["message"] for entry in entries]
     assert all(len({row["when"] for row in page["entries"]}) * 3 == len(page["entries"]) for page in pages)
 

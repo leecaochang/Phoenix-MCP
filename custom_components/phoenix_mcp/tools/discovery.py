@@ -2617,7 +2617,7 @@ async def _tool_get_audit_summary(
     for e in entries:
         item = {
             "request_id": e.request_id,
-            "timestamp": e.timestamp,
+            "timestamp": e.timestamp.isoformat(),
             "method": e.method,
             "resource": e.resource,
             "outcome": e.outcome,

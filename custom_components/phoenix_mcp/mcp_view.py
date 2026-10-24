@@ -2975,7 +2975,10 @@ async def _tool_get_logbook(
                 "search": search,
                 "limit": limit,
             },
-            "entries": kept,
+            # Home Assistant's own logbook stamps entries in epoch seconds; every
+            # other tool's time is ISO 8601, so the same key reads the same way.
+            "entries": [{**entry, "when": iso_utc(datetime.fromtimestamp(float(entry["when"]), tz=timezone.utc))}
+                        for entry in kept],
         }
         if not_found:
             body["not_found"] = not_found
