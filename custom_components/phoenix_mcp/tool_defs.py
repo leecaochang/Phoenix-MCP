@@ -109,7 +109,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "name": "get_state",
         "description": (
             "Get the current state of one Home Assistant entity, or of several in one call by passing a list of "
-            "entity IDs. Required projection.kind selects compact (state plus domain-specific key attributes), "
+            "entity IDs. projection.kind selects compact (state plus domain-specific key attributes, the default), "
             "full, or fields with fields=[...] for exact fields (e.g. \"state\", \"attr.brightness\"). A list "
             "returns states in request order plus not_found for IDs that do not exist or are outside this access "
             "key's scope. To find entities by name, domain, area or state use search_entities; for everything "
@@ -123,9 +123,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": GET_STATE_MAX_IDS,
                      "description": "Several entity IDs, read in one call."},
                 ], "description": "Entity ID, e.g. light.living_room, or a list of entity IDs."},
-                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields; only with kind fields, and refused with compact or full."}}, "required": ["kind"]},
+                "projection": {"type": "object", "description": "Output projection: compact (the default), full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields; only with kind fields, and refused with compact or full."}}, "required": ["kind"]},
             },
-            "required": ["entity_id", "projection"],
+            "required": ["entity_id"],
         },
     },
     {

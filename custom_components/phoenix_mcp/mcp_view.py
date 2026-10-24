@@ -55,7 +55,7 @@ from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
 from .tool_common import _create_registry_mesa_approval, _lean_state, _normalize_fields, _project_state, _select_state_fields, fitted_offset_page, longest_fitting, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
-from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
+from .tool_input import _argument_notes, decode_container_strings, note_argument_adjustment, scalar_arguments, tool_arguments_error, with_argument_notes
 from .device_semantics import (
     device_entry_value,
     device_registry_snapshot,
@@ -64,7 +64,7 @@ from .device_semantics import (
     update_device_registry_entry,
 )
 from .service_targets import secondary_target_error, unsupported_secondary_targets
-from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
+from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
     RegistryMesaDecision,
@@ -863,6 +863,20 @@ async def _tool_get_history(
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one bounded page of state history, or summarize several entities."""
     args = _without_empty_placeholder(args)
+    several = "select" in args or isinstance(args.get("entity_id"), list)
+    mode = str(args.get("mode") or "").strip().lower()
+    if several and mode in ("state_changes", "significant_states") and "select" not in args and len(args["entity_id"]) == 1:
+        note_argument_adjustment("Read a one-item entity_id list as that entity.")
+        args = {**args, "entity_id": args["entity_id"][0]}
+    elif several:
+        if not mode:
+            note_argument_adjustment("Several entities are summarized, so mode summary was used; call one entity for rows.")
+            args = {**args, "mode": "summary"}
+        ignored = [key for key in ("limit", "order", "cursor") if key in args]
+        if ignored and mode in ("", "summary"):
+            note_argument_adjustment(f"Ignored {', '.join(ignored)}, which do not apply to a summary of several entities; "
+                                     "continue an entity that returned next_cursor in a single-entity call.")
+            args = {key: value for key, value in args.items() if key not in ignored}
     if "select" in args:
         return await _history_summary_select(args["select"], args, access_key, hass, data)
     if isinstance(args.get("entity_id"), list):
@@ -8662,6 +8676,25 @@ async def _call_tool(
         raise
     if not household_tool_access(tool_name):
         return _tool_error("Forbidden."), "denied", tool_name
+    notes: list[str] = []
+    notes_context = _argument_notes.set(notes)
+    try:
+        return with_argument_notes(await _call_tool_checked(
+            tool_name, arguments, access_key, hass, data, request_id, client_ip), notes)
+    finally:
+        _argument_notes.reset(notes_context)
+
+
+async def _call_tool_checked(
+    tool_name: str,
+    arguments: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    data: PhoenixData,
+    request_id: str,
+    client_ip: str | None,
+) -> tuple[dict, Outcome, str]:
+    """_call_tool after its authority checks, with argument notes being collected."""
     # Every refusal below precedes the handler, so nothing can have been written.
     if error := tool_arguments_error(arguments):
         return _tool_refused_before_write(error), "invalid_request", tool_name
@@ -8698,6 +8731,7 @@ async def _call_tool(
     # misspelt required argument is named as such. Retired forms keep the
     # handler's migration guidance.
     if tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS:
+        arguments = adopt_near_misses(tool_name, arguments)
         if error := unknown_argument_error(tool_name, arguments):
             return _tool_refused_before_write(error), "invalid_request", tool_name
         if not set(arguments) & set(_RETIRED_REPLACEMENTS.get(tool_name, {})):

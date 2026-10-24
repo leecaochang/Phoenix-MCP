@@ -1,9 +1,11 @@
-"""Normalize structured Tool Catalog v2 inputs to the executors' flat shape and diagnose retired v1 shapes."""
+"""Normalize structured Tool Catalog v2 inputs to the executors' flat shape, reading retired v1 shapes that name one request."""
 
 from __future__ import annotations
 
 import json
 from typing import Any
+
+from homeassistant.core import valid_entity_id
 
 from .const import (
     PATCH_DASHBOARD_MAX_CHANGES,
@@ -14,7 +16,7 @@ from .const import (
     UNKNOWN_ARGUMENT_MAX_NAME,
     UNKNOWN_ARGUMENT_PROTECTED_FIELDS,
 )
-from .tool_input import _PUBLIC_SCHEMAS, nested_argument_error
+from .tool_input import _PUBLIC_SCHEMAS, nested_argument_error, note_argument_adjustment
 
 
 _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
@@ -100,9 +102,165 @@ _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
     },
     "compare_states": {"entity_id": "entity_ids: [...]"},
 }
+_RETIRED_REPLACEMENTS["get_logbook"]["entity_id"] = 'target: {"kind":"resources","entity_ids":[...]}'
+
+# The current fields each retired form stands in for. When none is present the
+# retired form names one request: it is read in place (the executors take that
+# flat shape) and the result says so. With both, the call is ambiguous and keeps
+# its migration guidance.
+_CURRENT_FIELDS: dict[str, set[str]] = {
+    "get_state": {"projection"},
+    "get_calendar_events": {"entity_id"},
+    "wait_for_approval": {"approval_ids"},
+    "get_relationships": {"scope"},
+    "get_logbook": {"target"},
+    "get_esphome_job": {"lookup"},
+    "edit_energy_config": {"operation", "target", "changes"},
+    "patch_yaml_config": {"address", "change"},
+    "patch_dashboard": {"changes"},
+    "set_entity": {"changes"},
+    "set_device": {"changes"},
+    "set_integration": {"changes"},
+    "compare_states": {"entity_ids"},
+}
+
+
+def _listed(value: Any) -> Any:
+    return value if isinstance(value, list) else [value]
+
+
+def _adopt_retired(tool: str, args: dict[str, Any], retired: set[str]) -> dict[str, Any]:
+    """The executors' flat shape for a retired form that names one request."""
+    out = dict(args)
+    if tool == "get_calendar_events":
+        out["entity_id"] = out.pop("calendar_id")
+    elif tool == "wait_for_approval":
+        out["approval_ids"] = _listed(out.pop("approval_id"))
+    elif tool == "get_logbook" and "entity_id" in out:
+        out["entity_ids"] = _listed(out.pop("entity_id"))
+    elif tool == "patch_dashboard":
+        change = out.pop("change", None)
+        single = {key: out.pop(key) for key in ("path", "op", "value") if key in out}
+        if isinstance(change, dict):
+            change = {("op" if key == "kind" else key): value for key, value in change.items()}
+            out["changes"] = [{**change, **single}]
+        elif single:
+            out["changes"] = [single]
+    elif tool == "compare_states":
+        out["entity_id"] = out.pop("entity_id")
+    note_argument_adjustment(
+        "; ".join(f"{field} was read as {_RETIRED_REPLACEMENTS[tool][field]}" for field in sorted(retired))
+        + ". Send that shape next time."
+    )
+    return out
 
 
 _SERVICE_OBJECT_SYNTAX = 'service: {"domain":"...","name":"...","data":{...}}'
+_TARGET_SELECTORS = {"entity_id": "entity", "device_id": "device", "area_id": "area"}
+_TARGET_SYNONYMS = {"entity_ids": "entity_id", "entities": "entity_id", "device_ids": "device_id", "area_ids": "area_id"}
+_EMPTY = (None, "", [], {})
+
+
+def _target_groups(selectors: dict[str, Any]) -> list[dict[str, Any]]:
+    """Target groups for flat selectors; entity_id "all" is a whole-domain target."""
+    groups: list[dict[str, Any]] = []
+    for key, kind in _TARGET_SELECTORS.items():
+        if key in selectors:
+            ids = _listed(selectors[key])
+            groups.append({"kind": "all"} if kind == "entity" and ids == ["all"] else {"kind": kind, "ids": ids})
+    return groups
+
+
+def _service_call_shape(args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """call_service and dry_run_service in the current shape, from Home Assistant's own or a retired one.
+
+    Home Assistant's call shape (service "light.turn_on", target, data) and the
+    retired flat one (domain, service, service_data, entity_id) each name one call
+    exactly, so they are read as service and targets, which then go through every
+    check the current shape does. Sending both shapes for one part is refused,
+    with the arguments as far as they were read, so the handler can still let a
+    denied capability answer first.
+    """
+    out = dict(args)
+    read: list[str] = []
+    service = out.get("service")
+    domain = out.pop("domain", None)
+    if isinstance(service, dict):
+        if domain is not None:
+            return out, "Pass the domain inside service, not beside it: " + _SERVICE_OBJECT_SYNTAX + "."
+        if "name" not in service and isinstance(service.get("service"), str):
+            service = {**{key: value for key, value in service.items() if key != "service"}, "name": service["service"]}
+            read.append("service.service as service.name")
+    elif isinstance(service, str) and service.strip():
+        name = service.strip()
+        if not (isinstance(domain, str) and domain.strip()):
+            domain, separator, name = name.partition(".")
+            if not separator:
+                return out, "service names no domain: " + _SERVICE_OBJECT_SYNTAX + "."
+        service = {"domain": domain.strip(), "name": name}
+        read.append(f'service "{args["service"]}"' + (f' and domain "{args["domain"]}"' if "domain" in args else "")
+                    + f' as service: {{"domain":"{service["domain"]}","name":"{service["name"]}"}}')
+    elif domain is not None:
+        return out, "service must contain string domain and name: " + _SERVICE_OBJECT_SYNTAX + "."
+    for key in ("service_data", "data"):
+        if key in out:
+            if not isinstance(service, dict) or "data" in service:
+                return out, f"Pass {key} as service.data, not beside service: " + _SERVICE_OBJECT_SYNTAX + "."
+            service = {**service, "data": out.pop(key)}
+            read.append(f"{key} as service.data")
+    if service is not None:
+        out["service"] = service
+
+    selectors = {key: out.pop(key) for key in _TARGET_SELECTORS if key in out}
+    for key, selector in _TARGET_SYNONYMS.items():
+        if key in out and selector not in selectors:
+            selectors[selector] = out.pop(key)
+            read.append(f"{key} as {selector}")
+    # Home Assistant's target is an object; a list there is a misspelt targets,
+    # which unknown_argument_error names.
+    ha_target = out.pop("target") if isinstance(out.get("target"), dict) else None
+    if ha_target is not None:
+        if not ha_target or set(ha_target) - set(_TARGET_SELECTORS):
+            return out, ("target supports entity_id, device_id and area_id only; send them as "
+                          'targets: [{"kind":"entity","ids":[...]}].')
+        if set(ha_target) & set(selectors):
+            return out, "Pass each selector once, in target or beside it."
+        selectors.update(ha_target)
+        read.append("target as targets")
+    elif selectors:
+        read.append(", ".join(sorted(selectors)) + " as targets")
+    targets = out.get("targets")
+    if selectors:
+        if targets is not None:
+            return out, 'Pass targets or entity_id, device_id and area_id, not both: targets: [{"kind":"entity","ids":[...]}].'
+        targets = _target_groups(selectors)
+    if isinstance(targets, dict):
+        targets = [targets]
+        read.append("one targets object as a list")
+    if isinstance(targets, list):
+        fixed = []
+        for group in targets:
+            if isinstance(group, dict):
+                kind, ids = group.get("kind"), group.get("ids")
+                if isinstance(kind, str) and kind in _TARGET_SELECTORS:
+                    group = {**group, "kind": _TARGET_SELECTORS[kind]}
+                    read.append(f"kind {kind} as {_TARGET_SELECTORS[kind]}")
+                if isinstance(ids, str):
+                    group = {**group, "ids": [ids]}
+                    read.append("ids text as a list")
+            fixed.append(group)
+        targets = fixed
+    if targets is None and isinstance(service, dict) and isinstance(service.get("data"), dict):
+        lifted = {key: service["data"][key] for key in _TARGET_SELECTORS if key in service["data"]}
+        if lifted:
+            out["service"] = {**service, "data": {k: v for k, v in service["data"].items() if k not in lifted}}
+            targets = _target_groups(lifted)
+            read.append(", ".join(f"service.data.{key}" for key in sorted(lifted)) + " as targets")
+    if targets is not None:
+        out["targets"] = targets
+    if read:
+        note_argument_adjustment("Read " + "; ".join(dict.fromkeys(read)) + ". Send the current shape next time.")
+    return out, None
 
 
 def _migration_error(
@@ -136,6 +294,45 @@ def _near_parameter(name: str, candidate: str) -> bool:
         )
     shorter, longer = sorted((name, candidate), key=len)
     return any(longer[:i] + longer[i + 1:] == shorter for i in range(len(longer)))
+
+
+def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Read an undeclared argument as the one parameter it plainly means.
+
+    On a read-only tool, a synonym or one-edit near miss with exactly one
+    candidate that was not also sent is renamed; a write keeps refusing it,
+    since a guessed parameter there could act on something unintended. On any
+    tool an undeclared argument holding only an empty placeholder is dropped,
+    which changes nothing. Each reading is noted on the result; anything else
+    stays for unknown_argument_error to refuse. Retired forms keep their own
+    handling.
+    """
+    schema = _PUBLIC_SCHEMAS.get(tool)
+    if schema is None:
+        return args
+    from .agent_recovery import tool_is_read_only
+
+    # A preview must refuse what the call it predicts refuses.
+    renames = tool_is_read_only(tool) and tool != "dry_run_service"
+    properties = schema.get("properties", {})
+    fields = UNKNOWN_ARGUMENT_PROTECTED_FIELDS.get(tool, tuple(properties))
+    out = dict(args)
+    read: list[str] = []
+    for name in args:
+        if (not isinstance(name, str) or name in properties or len(name) > UNKNOWN_ARGUMENT_MAX_NAME
+                or name in _RETIRED_REPLACEMENTS.get(tool, {})):
+            continue
+        candidates = [field for field in fields if (
+            name in UNKNOWN_ARGUMENT_ALIASES.get(field, ()) or _near_parameter(name, field))]
+        if renames and len(candidates) == 1 and candidates[0] not in out:
+            out[candidates[0]] = out.pop(name)
+            read.append(f"{json.dumps(name)} as {candidates[0]}")
+        elif not candidates and args[name] in _EMPTY:
+            del out[name]
+            read.append(f"empty {json.dumps(name)}, which this tool does not take, as absent")
+    if read:
+        note_argument_adjustment("Read " + "; ".join(read) + ". Send the declared parameter names next time.")
+    return out
 
 
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
@@ -195,6 +392,52 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
     return " ".join(findings) + f" Valid parameters: {', '.join(sorted(properties))}. Correct the arguments and retry."
 
 
+def _implied_kind(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Add a selector's missing kind when its other keys decide it, and say so.
+
+    A logbook target holding entity_ids or device_ids names resources, an
+    ESPHome lookup whose id is a YAML file name is a file and any other id a job,
+    and a relationships scope whose ids are all entity IDs is an entity scope.
+    Anything still ambiguous is left for the shape check to refuse.
+    """
+    field = {"get_logbook": "target", "get_esphome_job": "lookup", "get_relationships": "scope"}.get(tool)
+    kind: str | None = None
+    value = args.get(field) if field else None
+    if not isinstance(value, dict) or "kind" in value:
+        return args
+    if tool == "get_logbook" and {"entity_ids", "device_ids"} & set(value) and "id" not in value:
+        kind = "resources"
+    elif tool == "get_esphome_job" and isinstance(value.get("id"), str):
+        kind = "file" if value["id"].lower().endswith((".yaml", ".yml")) else "job"
+    elif tool == "get_relationships":
+        ids = value.get("id")
+        ids = [ids] if isinstance(ids, str) else ids
+        if isinstance(ids, list) and ids and all(isinstance(item, str) and valid_entity_id(item) for item in ids):
+            kind = "entity"
+    if kind is None:
+        return args
+    note_argument_adjustment(f'{field} had no kind, so its keys were read as kind "{kind}".')
+    return {**args, field: {**value, "kind": kind}}
+
+
+def _state_projection_shape(args: dict[str, Any]) -> dict[str, Any]:
+    """get_state's projection object from an omitted one, a bare kind or a field list."""
+    projection = args.get("projection", None)
+    if projection is None:
+        note_argument_adjustment('No projection was sent, so compact was used: projection {"kind":"compact"}.')
+        return {**args, "projection": {"kind": "compact"}}
+    if isinstance(projection, str) and projection in ("compact", "full"):
+        note_argument_adjustment(f'Read projection "{projection}" as {{"kind":"{projection}"}}.')
+        return {**args, "projection": {"kind": projection}}
+    if isinstance(projection, list) and projection and all(isinstance(item, str) for item in projection):
+        note_argument_adjustment('Read a projection list as {"kind":"fields","fields":[...]}.')
+        return {**args, "projection": {"kind": "fields", "fields": projection}}
+    if isinstance(projection, dict) and "kind" not in projection and isinstance(projection.get("fields"), list):
+        note_argument_adjustment('Read projection with fields as {"kind":"fields","fields":[...]}.')
+        return {**args, "projection": {**projection, "kind": "fields"}}
+    return args
+
+
 def state_projection(projection: dict) -> tuple[list | None, bool, str | None]:
     """Read a get_state-style projection: (fields, detailed, error).
 
@@ -218,16 +461,42 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
     fields get migration guidance and targeted selector mistakes get correction
     errors.
     """
+    shape_error = None
+    if tool in {"call_service", "dry_run_service"}:
+        # Like an unknown argument, a shape error is returned after the
+        # translation below, so the handler can still let a denied capability
+        # answer first from the recognized service and selectors.
+        args, shape_error = _service_call_shape(args)
     replacements = _RETIRED_REPLACEMENTS.get(tool, {})
     retired = set(replacements) & set(args)
     service_string = tool in {"call_service", "dry_run_service"} and isinstance(
         args.get("service"), str
     )
+    if retired and tool in _CURRENT_FIELDS:
+        current = _CURRENT_FIELDS[tool] & set(args)
+        if tool == "patch_dashboard":
+            # A top-level url_path stands beside current changes; it belongs in target.
+            target = args.get("target")
+            if "url_path" in retired and not (isinstance(target, dict) and "url_path" in target):
+                note_argument_adjustment("url_path was read as target.url_path. Send that shape next time.")
+                args = {**{key: value for key, value in args.items() if key not in ("url_path", "target")},
+                        "target": {**(target if isinstance(target, dict) else {}), "url_path": args["url_path"]}}
+                retired.discard("url_path")
+                if not retired:
+                    return normalize_tool_args(tool, args)
+        if current:
+            return args, _migration_error(tool, retired)
+        adopted = _adopt_retired(tool, args, retired)
+        return adopted, unknown_argument_error(tool, adopted)
     if retired or service_string:
         extra = {"service": _SERVICE_OBJECT_SYNTAX} if service_string else None
         return args, _migration_error(
             tool, retired | ({"service"} if service_string else set()), extra
         )
+    args = adopt_near_misses(tool, args)
+    if tool == "get_state":
+        args = _state_projection_shape(args)
+    args = _implied_kind(tool, args)
     error = unknown_argument_error(tool, args)
     if error and tool not in {"call_service", "dry_run_service"}:
         return args, error
@@ -238,7 +507,7 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
     if tool == "get_state":
         projection = out.pop("projection", None)
         if not isinstance(projection, dict):
-            return out, "projection is required and must be an object."
+            return out, "projection must be an object: {\"kind\":\"compact\"}, {\"kind\":\"full\"} or {\"kind\":\"fields\",\"fields\":[...]}."
         fields, detailed, error = state_projection(projection)
         if error:
             return out, error
@@ -363,4 +632,4 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if not isinstance(ids, list) or not ids:
             return out, "entity_ids must be a non-empty array."
         out["entity_id"] = ids
-    return out, error or nested_error
+    return out, shape_error or error or nested_error

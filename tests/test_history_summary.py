@@ -604,14 +604,37 @@ async def test_several_entities_summarize_in_one_call_with_the_single_entity_tot
     assert porch["transitions"] == 0 and [item["state"] for item in porch["states"]] == ["off"]
 
 
-@pytest.mark.parametrize(("extra", "message"), [
-    ({"mode": "state_changes"}, "accepted only with mode summary"),
-    ({"cursor": "x"}, "do not apply to a summary of several entities"),
-])
-async def test_a_list_outside_plain_summary_is_refused(hass: HomeAssistant, extra, message) -> None:
-    args = {"entity_id": ["light.desk"], "mode": "summary", "start_time": "1h", **extra}
+async def test_an_explicit_row_mode_for_several_entities_is_refused(hass: HomeAssistant) -> None:
+    args = {"entity_id": ["light.desk", "light.lamp"], "mode": "state_changes", "start_time": "1h"}
     content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
-    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+    assert outcome == "invalid_request" and "accepted only with mode summary" in content["content"][0]["text"]
+
+
+async def test_a_list_without_mode_is_summarized_and_paging_is_ignored(recorder_mock, hass: HomeAssistant) -> None:
+    """Refusing these cost a round for a request that names one answer."""
+    _anchor(hass)
+    _set(hass, "light.desk", "on", -3600)
+    _set(hass, "light.lamp", "off", -3600)
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["light.desk", "light.lamp"], "start_time": _at(0).isoformat(), "end_time": _at(600).isoformat(),
+            "limit": 5, "cursor": "x"}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["mode"] == "summary" and body["count"] == 2
+    assert any("mode summary was used" in note for note in body["arguments_adjusted"])
+    assert any(note.startswith("Ignored limit, cursor") for note in body["arguments_adjusted"])
+
+
+async def test_a_one_item_list_with_a_row_mode_is_that_entity(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _set(hass, "light.desk", "on", 100)
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["light.desk"], "mode": "state_changes", "start_time": _at(0).isoformat(), "end_time": _at(600).isoformat()}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["entity_id"] == "light.desk" and body["arguments_adjusted"] == ["Read a one-item entity_id list as that entity."]
 
 
 @pytest.mark.parametrize("ids", [[], [f"light.l{index}" for index in range(501)], ["light.a", 3], [" "]])
@@ -833,7 +856,7 @@ async def test_an_approximate_name_selects_nothing(recorder_mock, hass: HomeAssi
 
 @pytest.mark.parametrize(("args", "message"), [
     ({"select": {"domain": "light"}, "entity_id": "light.desk", "mode": "summary"}, "entity_id or select, not both"),
-    ({"select": {"domain": "light"}}, "select is accepted only with mode summary"),
+    ({"select": {"domain": "light"}, "mode": "state_changes"}, "select is accepted only with mode summary"),
     ({"select": {"colour": "red"}, "mode": "summary"}, "search_entities filters"),
     ({"select": {}, "mode": "summary"}, "at least one filter"),
     ({"select": {"domain": "light", "include_diagnostic": "yes"}, "mode": "summary"}, "must be a boolean"),

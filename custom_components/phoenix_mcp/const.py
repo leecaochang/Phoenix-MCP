@@ -2653,9 +2653,14 @@ UNKNOWN_ARGUMENT_ALIASES = {
     "file": ("filename", "file_name", "file_path", "path"),
     "path": ("filename", "file_name", "file_path", "directory"),
     "targets": ("target", "entity_ids", "device_ids", "area_ids", "entities"),
-    "entity_id": ("entity", "entity_ids"),
+    "entity_id": ("entity", "entity_ids", "entities", "statistic_id"),
     "device_id": ("device", "device_ids"),
     "entry_id": ("integration_id", "config_entry_id"),
+    "start_time": ("start",),
+    "end_time": ("end",),
+    "statistic_types": ("types", "statistic_type", "stat_types"),
+    "device_class": ("device_classes",),
+    "query": ("name",),
 }
 UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8

@@ -840,8 +840,16 @@ async def test_detail_capability_denial_precedes_argument_validation_even_in_pas
 
 
 @pytest.mark.asyncio
+async def test_an_empty_placeholder_for_a_key_get_logs_does_not_take_is_absent():
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    for placeholder in (None, []):
+        body, result, outcome = await _call("get_logs", {"detail_ref": placeholder}, access_key=access_key)
+        assert outcome == "allowed" and "detail_ref" in body["arguments_adjusted"][0]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("args", [
-    {"detail_ref": None}, {"detail_ref": []}, {"detail_ref": "x" * 64},
+    {"detail_ref": "x" * 64},
     {"detail_field": "exception"}, {"detail_offset": 0}, {"message_index": 0},
     {"detail_ref": "a" * 64, "limit": 1}, {"detail_ref": "a" * 64, "search": "x"},
     {"detail_ref": "a" * 64, "cursor": "x"}, {"detail_ref": "a" * 64, "detail_field": []},
