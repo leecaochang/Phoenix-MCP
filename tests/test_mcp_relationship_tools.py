@@ -793,6 +793,22 @@ class TestRelationshipCoverage:
             assert matches[0]["kind"] == "config_entry"
             assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": [helper.domain]}]
 
+    async def test_a_config_entry_consumer_name_is_scrubbed(self, hass, rel_env):
+        """An entry titled by its host shows the same scrubbed title as list_integrations."""
+        helper = MockConfigEntry(
+            domain="derivative", entry_id="helper3", title="Rate from 192.168.1.50",
+            options={"source": "light.kitchen"},
+        )
+        helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "sensor", helper.domain, "rate3", config_entry=helper, suggested_object_id="kitchen_rate3")
+        hass.states.async_set(entity.entity_id, "1")
+        access_key = _access_key(cap_integration_write="allow")
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+        content, _, _ = await _call("get_relationships", {"entity_id": "light.kitchen"}, access_key, hass)
+        matches = [c for c in _json(content)["consumers"] if c["id"] == "helper3"]
+        assert [m["name"] for m in matches] == ["Rate from <redacted-ip>"]
+
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor
         the registry can never resolve again, for anyone."""

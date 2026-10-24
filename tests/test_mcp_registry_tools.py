@@ -489,6 +489,13 @@ class TestGetDevice:
             "supports_remove_device": None,
         }]
 
+    async def test_owner_title_gets_the_list_integrations_scrub(self, hass, reg_env):
+        device = reg_env["hub"]
+        entry = hass.config_entries.async_get_entry("e1")
+        hass.config_entries.async_update_entry(entry, title="Hub 192.168.1.50 http://hub.local/admin")
+        content, _, _ = await _call("get_device", {"device_id": device.id}, _access_key(), hass)
+        assert _result_json(content)["config_entries"][0]["title"] == "Hub <redacted-ip> <redacted-url>"
+
     async def test_missing_device_not_found(self, hass, reg_env):
         content, outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _access_key(), hass)
         assert outcome == "not_found"

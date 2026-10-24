@@ -1155,7 +1155,11 @@ def _device_list_projection(
 
 
 def _device_config_entry_summaries(device: Any, hass: HomeAssistant) -> list[dict]:
-    """Allowlisted, non-secret summaries of a device's owners."""
+    """Allowlisted, non-secret summaries of a device's owners.
+
+    Titles get the same scrub as list_integrations: integrations often title an
+    entry by its host address or URL.
+    """
     summaries: list[dict] = []
     for entry_id in device_config_entry_ids(device):
         entry = hass.config_entries.async_get_entry(entry_id)
@@ -1164,7 +1168,7 @@ def _device_config_entry_summaries(device: Any, hass: HomeAssistant) -> list[dic
         summaries.append({
             "entry_id": entry.entry_id,
             "domain": entry.domain,
-            "title": entry.title,
+            "title": _redact_diagnostics(entry.title),
             "disabled_by": _registry_value(entry.disabled_by),
             "supports_remove_device": entry.supports_remove_device,
         })
@@ -2290,13 +2294,14 @@ def _relationship_config_entries(hass: HomeAssistant) -> list[dict]:
     """Snapshot config-entry payloads on the event loop for the executor to walk.
 
     The entries hold credentials; only entity ids are ever read back out of
-    `payload`, and only ids already in the caller's scope reach a response.
+    `payload`, and only ids already in the caller's scope reach a response. The
+    title becomes a consumer name, so it gets list_integrations' scrub.
     """
     return [
         {
             "entry_id": entry.entry_id,
             "domain": entry.domain,
-            "title": entry.title,
+            "title": _redact_diagnostics(entry.title),
             "payload": {"data": dict(entry.data), "options": dict(entry.options)},
         }
         for entry in hass.config_entries.async_entries()

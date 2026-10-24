@@ -4519,7 +4519,7 @@ def _device_owner_summary(entry: Any, *, supports_removal: bool | None = None) -
     return {
         "entry_id": entry.entry_id,
         "domain": entry.domain,
-        "title": entry.title,
+        "title": redact_diagnostics(entry.title),
         "disabled_by": getattr(entry.disabled_by, "value", entry.disabled_by),
         "supports_remove_device": (
             supports_removal

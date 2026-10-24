@@ -678,3 +678,10 @@ async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, pha
             await task
     assert dr.async_get(hass).async_get(device_id) is not None
     assert called_hook.await_count == (1 if phase == "hook" else 0)
+
+
+def test_owner_summary_title_gets_the_list_integrations_scrub():
+    from custom_components.phoenix_mcp.mcp_view import _device_owner_summary
+
+    owner = MockConfigEntry(domain="test_integration", entry_id="titled", title="NAS at http://10.0.0.5:5000")
+    assert _device_owner_summary(owner)["title"] == "NAS at <redacted-url>"
