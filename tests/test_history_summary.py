@@ -283,6 +283,21 @@ async def test_in_state_keeps_only_the_entities_that_were_in_it(recorder_mock, h
     assert "not_summarized" not in body
 
 
+async def test_a_row_without_a_starting_state_says_when_its_record_begins(recorder_mock, hass: HomeAssistant) -> None:
+    """A state held since before the record began is known only from then; the row says when."""
+    _anchor(hass)
+    _set(hass, "light.desk", "on", -3600)
+    _set(hass, "light.new", "on", 600)
+    _set(hass, "light.later", "on", 5000)
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 1200, entity_id=["light.desk", "light.new", "light.later"])
+    rows = {row["entity_id"]: row for row in body["entities"]}
+    alone = await _summary(hass, "light.new", 0, 1200)
+    assert rows["light.new"]["recorded_from"] == alone["recorded_range"]["start"] == _at(600).isoformat()
+    # A baseline at the start, or no record in the range at all, has no such time.
+    assert "recorded_from" not in rows["light.desk"] and "recorded_from" not in rows["light.later"]
+
+
 async def test_in_state_sees_a_state_a_row_combines(recorder_mock, hass: HomeAssistant) -> None:
     """A brief state past the listed ones still counts, since the filter reads the full totals."""
     _anchor(hass)

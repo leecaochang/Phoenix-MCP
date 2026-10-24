@@ -257,12 +257,16 @@ def compact_summary_row(body: dict[str, Any]) -> dict[str, Any]:
 
     The ranges are the same for every entity in the call, so they are stated once
     by the caller. Durations, entry counts and the last entry per state are what
-    "which of these did not do X" needs; an incomplete row keeps its reasons, and
-    a scan that hit its budget keeps the cursor to continue that entity alone.
+    "which of these did not do X" needs; an incomplete row keeps its reasons, a
+    row with nothing recorded before the range says when its record begins (so
+    "home since at least then" needs no further read), and a scan that hit its
+    budget keeps the cursor to continue that entity alone.
     """
     row: dict[str, Any] = {"entity_id": body["entity_id"], "complete": body["complete"]}
     if body["incomplete_reasons"]:
         row["incomplete_reasons"] = body["incomplete_reasons"]
+    if body["state_at_start"] is None and body["recorded_range"] is not None:
+        row["recorded_from"] = body["recorded_range"]["start"]
     row.update(
         state_at_start=body["state_at_start"], state_at_end=body["state_at_end"],
         transitions=body["transitions"], last_transition=body["last_transition"],
