@@ -1382,6 +1382,13 @@ LOG_LEVEL_ERROR_MESSAGE = (
     "and above only, so INFO and DEBUG entries never enter it and cannot be read "
     "through this tool. They are written to home-assistant.log on the server."
 )
+# get_logs can read them from its other source, so it says how instead.
+GET_LOGS_LEVEL_ERROR_MESSAGE = (
+    "level must be WARNING or ERROR. Home Assistant's system log holds WARNING "
+    "and above only. To read an integration's INFO or DEBUG records, raise its "
+    "level with set_integration_log_level, then call get_logs with source "
+    "integration_debug and that integration."
+)
 
 # Cap on a tools/call request's "name" field before it is used for dispatch or
 # logged as the audit method/resource. Every real tool name is well under this;

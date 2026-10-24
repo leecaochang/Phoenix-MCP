@@ -890,3 +890,16 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
                                              access_key=access_key, hass=hass, data=data)
     assert outcome == "denied" and result["isError"]
     assert "must-not-disclose" not in json.dumps(error)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["INFO", "debug"])
+async def test_a_debug_level_points_get_logs_at_the_source_that_holds_it(level):
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    access_key.cap_diagnostics = "allow"
+    body, _result, outcome = await _call("get_logs", {"level": level}, access_key=access_key)
+    assert outcome == "invalid_request"
+    assert "set_integration_log_level" in body and "source integration_debug" in body
+    assert "cannot be read through this tool" not in body
+    body, _result, _outcome = await _call("get_phoenix_diagnostics", {"level": level}, access_key=access_key)
+    assert "cannot be read through this tool" in body
