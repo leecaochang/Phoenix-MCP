@@ -176,7 +176,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Home Assistant records at each restart; use summary to learn whether something entered a state. "
             "In summary mode entity_id may be a list, one compact row each, or select may name them by "
             "search_entities filters instead: the way to ask which sensors entered a state in a period, "
-            "in one call. Entities past what one result holds are named in not_summarized. With attribute, "
+            "in one call; with in_state only the entities that were in that state are listed, and select {} with "
+            "in_state checks every entity (which went unavailable today). Each row names the entity and its area. "
+            "A state's last_entered is when it last began, such as when someone last arrived home. "
+            "Entities past what one result holds are named in not_summarized. With attribute, "
             "summary totals that attribute's values instead of the state, such as how long each thermostat's "
             "hvac_action was heating or cooling."
         ),
@@ -228,8 +231,14 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 },
                 "select": _select_schema(
                     "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
-                    "match (diagnostic and configuration entities only with include_diagnostic)."
+                    "match (diagnostic and configuration entities only with include_diagnostic). With in_state, "
+                    "an empty select scans every accessible entity."
                 ),
+                "in_state": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                    "description": "Summary of several entities only: keep the entities that were in one of these "
+                                   "states at some point in the range, e.g. unavailable; the rest are only counted in scanned.",
+                },
             },
         },
     },

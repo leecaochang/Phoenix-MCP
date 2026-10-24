@@ -256,6 +256,89 @@ async def test_attribute_totals_for_several_entities_and_only_in_summary(recorde
     assert result[1] == "invalid_request" and "only with mode summary" in result[0]["content"][0]["text"]
 
 
+async def _many(hass: HomeAssistant, start: float, end: float, key: AccessKeyRecord | None = None, **extra) -> dict:
+    args = {"mode": "summary", "start_time": _at(start).isoformat(), "end_time": _at(end).isoformat(), **extra}
+    result = await _call_tool("get_history", args, key or _key(), hass, MagicMock(), "r", None)
+    assert result[1] == "allowed", result
+    return json.loads(result[0]["content"][0]["text"])
+
+
+def _flappers(hass: HomeAssistant) -> None:
+    """Of three sensors, one goes unavailable inside the window and one starts it unavailable."""
+    _set(hass, "sensor.steady", "1", -3600)
+    _set(hass, "sensor.dropped", "1", -3600)
+    _set(hass, "sensor.dropped", "unavailable", 600)
+    _set(hass, "sensor.dropped", "1", 900)
+    _set(hass, "sensor.already", "unavailable", -3600)
+    _set(hass, "sensor.already", "1", 300)
+
+
+async def test_in_state_keeps_only_the_entities_that_were_in_it(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _flappers(hass)
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 3600, entity_id=["sensor.steady", "sensor.dropped", "sensor.already"], in_state="unavailable")
+    assert [row["entity_id"] for row in body["entities"]] == ["sensor.dropped", "sensor.already"]
+    assert body["in_state"] == ["unavailable"] and body["scanned"] == 3 and body["count"] == 2
+    assert "not_summarized" not in body
+
+
+async def test_in_state_sees_a_state_a_row_combines(recorder_mock, hass: HomeAssistant) -> None:
+    """A brief state past the listed ones still counts, since the filter reads the full totals."""
+    _anchor(hass)
+    _set(hass, "sensor.busy", "0", -3600)
+    for index in range(12):
+        _set(hass, "sensor.busy", str(index + 1), 100 + index * 200)
+    _set(hass, "sensor.busy", "unavailable", 2500)
+    _set(hass, "sensor.busy", "20", 2501)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "HISTORY_SUMMARY_MANY_MAX_STATES", 3):
+        body = await _many(hass, 0, 3600, entity_id=["sensor.busy"], in_state="unavailable")
+    row = body["entities"][0]
+    assert "unavailable" not in {item["state"] for item in row["states"]} and row["other_states"]["count"] > 0
+
+
+async def test_an_empty_select_scans_every_entity_only_with_in_state(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.const import EntityCategory
+
+    _anchor(hass)
+    _flappers(hass)
+    entry = er.async_get(hass).async_get_or_create("sensor", "test", "diag", suggested_object_id="diag",
+                                                    entity_category=EntityCategory.DIAGNOSTIC)
+    _set(hass, entry.entity_id, "unavailable", 600)
+    _set(hass, "light.hidden", "unavailable", 600)
+    await async_wait_recording_done(hass)
+    args = {"mode": "summary", "select": {}, "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    refused = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert refused[1] == "invalid_request" and "in_state" in refused[0]["content"][0]["text"]
+    # Like any select, scanning every entity needs the search capability.
+    denied = await _call_tool("get_history", {**args, "in_state": "unavailable"}, _key(), hass, MagicMock(), "r", None)
+    assert denied[1] == "denied"
+    key = _key()
+    key.cap_search = "allow"
+    key.permissions.domains.pop("light")
+    # The cap on a caller's own list does not bound a selection.
+    with patch.object(mcp_view, "SEARCH_ENTITIES_MAX_LIMIT", 2):
+        body = await _many(hass, 0, 3600, key=key, select={}, in_state="unavailable")
+    assert [row["entity_id"] for row in body["entities"]] == ["sensor.already", "sensor.dropped"]
+    assert body["select"] == {} and body["diagnostic_excluded"] == 1
+    assert "light.hidden" not in json.dumps(body)
+
+
+async def test_rows_name_the_entity_and_its_area(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import entity_registry as er
+
+    _anchor(hass)
+    entry = er.async_get(hass).async_get_or_create("light", "test", "lamp", suggested_object_id="lamp")
+    er.async_get(hass).async_update_entity(entry.entity_id, area_id=ar.async_get(hass).async_create("Den").id)
+    _set(hass, entry.entity_id, "on", -3600, {"friendly_name": "Den lamp"})
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 3600, entity_id=[entry.entity_id])
+    assert body["entities"][0]["name"] == "Den lamp" and body["entities"][0]["area"] == "Den"
+
+
 async def test_state_carries_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:
     _anchor(hass)
     _alternate(hass, "light.desk", 25)

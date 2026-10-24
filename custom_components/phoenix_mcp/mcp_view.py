@@ -75,7 +75,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, str_list_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from .history_summary import SummaryUnavailableError, compact_summary_row, read_attribute_change_page, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
@@ -1102,7 +1102,8 @@ def _without_empty_placeholder(args: dict) -> dict:
 
 
 async def _resolve_select(
-    select: Any, tool: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
+    select: Any, tool: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None,
+    *, every: bool = False,
 ) -> tuple[list[str], dict[str, Any]] | tuple[dict, str, str]:
     """The entities a search_entities filter selects for a summary, and the fields describing them.
 
@@ -1110,8 +1111,10 @@ async def _resolve_select(
     listing first. Diagnostic and configuration entities are left out unless
     asked for, since a battery or link-quality sensor is not what such a question
     means, and an approximate (typo-tolerant) name match selects nothing, because
-    summarizing a guessed entity would answer the wrong question. Returns the
-    sorted entity IDs and the selection fields, or a tool error.
+    summarizing a guessed entity would answer the wrong question. With `every`
+    (a summary that keeps only rows in a given state), a select with no filter
+    selects every accessible entity. Returns the sorted entity IDs and the
+    selection fields, or a tool error.
     """
     allowed = (*_SUMMARY_SELECT_FILTERS, "include_diagnostic")
     if not isinstance(select, dict) or any(key not in allowed for key in select):
@@ -1122,23 +1125,34 @@ async def _resolve_select(
     if not isinstance(include_diagnostic, bool):
         return _tool_error("select.include_diagnostic must be a boolean."), "invalid_request", tool
     filters = {key: select[key] for key in _SUMMARY_SELECT_FILTERS if select.get(key) not in (None, "", [])}
-    if not filters:
+    if not filters and not every:
         return _tool_error(
-            'select needs at least one filter, for example {"radio": "zigbee", "domain": "binary_sensor"}.'
+            'select needs at least one filter, for example {"radio": "zigbee", "domain": "binary_sensor"}, '
+            "or in_state, which keeps only the entities that were in a state and lets an empty select scan every entity."
         ), "invalid_request", tool
-    from .tools.discovery import _tool_search_entities
+    denied = "select uses search_entities, which this access key cannot use; pass entity_id instead."
+    if not filters:
+        if effective_cap(access_key, "cap_search") == CAP_DENY:
+            return _tool_error(denied), "denied", tool
+        registry = er.async_get(hass)
+        listed: dict[str, Any] = {}
+        rows = [{"entity_id": state["entity_id"], "entity_category": getattr(
+                    registry.async_get(state["entity_id"]), "entity_category", None)}
+                for state in filter_entities_for_access_key(hass.states.async_all(), access_key, hass)]
+    else:
+        from .tools.discovery import _tool_search_entities
 
-    found, outcome, _resource = await _tool_search_entities(
-        {**filters, "limit": SEARCH_ENTITIES_MAX_LIMIT, "registry_state": "enabled"}, access_key, hass,
-        data if data is not None else hass.data[DOMAIN])
-    text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
-    if outcome != "allowed":
-        if outcome == "denied":
-            text = "select uses search_entities, which this access key cannot use; pass entity_id instead."
-        return _tool_error(text if text.startswith("select") else f"select: {text}"), outcome, tool
-    listed = json.loads(text)
+        found, outcome, _resource = await _tool_search_entities(
+            {**filters, "limit": SEARCH_ENTITIES_MAX_LIMIT, "registry_state": "enabled"}, access_key, hass,
+            data if data is not None else hass.data[DOMAIN])
+        text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
+        if outcome != "allowed":
+            if outcome == "denied":
+                text = denied
+            return _tool_error(text if text.startswith("select") else f"select: {text}"), outcome, tool
+        listed = json.loads(text)
+        rows = listed.get("entities", [])
     warnings: list[str] = []
-    rows = listed.get("entities", [])
     if listed.get("fuzzy_fallback"):
         rows = []
         warnings.append("No entity name contains every query word; search_entities shows the closest matches.")
@@ -1169,7 +1183,7 @@ async def _history_summary_select(
         return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
     if str(args.get("mode") or "").strip().lower() != "summary":
         return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
-    resolved = await _resolve_select(select, tool, access_key, hass, data)
+    resolved = await _resolve_select(select, tool, access_key, hass, data, every=bool(args.get("in_state")))
     if not isinstance(resolved[0], list):
         return cast(tuple[dict, str, str], resolved)
     chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
@@ -1203,11 +1217,16 @@ async def _history_summary_many(
             "limit, order and cursor do not apply to a summary of several entities; continue an entity that "
             "returned next_cursor in a single-entity call."
         ), "invalid_request", tool
-    if ((not raw_ids and selection is None) or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
+    # A selection is bounded by the scan and result budgets instead, which name what they leave out.
+    if ((not raw_ids and selection is None) or (selection is None and len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT)
             or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
         return _tool_error(
             f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
         ), "invalid_request", tool
+    raw_in_state = args.get("in_state")
+    in_state = {item.strip() for item in str_list_arg(raw_in_state)}
+    if raw_in_state not in (None, "", []) and (not in_state or "" in in_state):
+        return _tool_error("in_state must be a state or a list of states."), "invalid_request", tool
     try:
         window = parse_recorder_window(args, default_range=timedelta(hours=24))
     except ValueError as err:
@@ -1225,6 +1244,11 @@ async def _history_summary_many(
     scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
     attribute = args.get("attribute") or None
     selected = dict(selection or {})
+    # "Which room had no motion" is answered by room, so each row names its entity and area.
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    scanned = 0
     selection_warnings = list(selected.pop("warnings", []))
     rows: dict[str, Any] = {}
     not_recorded: list[str] = []
@@ -1258,6 +1282,7 @@ async def _history_summary_many(
         body: dict[str, Any] = {
             "mode": "summary",
             **({"attribute": attribute} if attribute is not None else {}),
+            **({"in_state": sorted(in_state), "scanned": scanned} if in_state else {}),
             "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
             **selected,
             "count": len(kept),
@@ -1302,10 +1327,19 @@ async def _history_summary_many(
                 except SummaryUnavailableError:
                     unavailable.append(entity_id)
                 else:
+                    scanned += 1
+                    # Decided on the full totals, which a row's state list may combine.
+                    if in_state and not any(totals.duration_us or totals.entered
+                                            for state, totals in summary.totals.items() if state in in_state):
+                        continue
                     row = compact_summary_row(summary_body(
                         entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
                         retention={}, warnings=[],
                     ))
+                    state = hass.states.get(entity_id)
+                    row = {"entity_id": entity_id, "name": state.name if state is not None else None,
+                           "area": _area_name_for_entity(entity_id, *registries),
+                           **{key: value for key, value in row.items() if key != "entity_id"}}
                     size = _stored_bytes(row)
                     if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
                         rows[entity_id] = row
