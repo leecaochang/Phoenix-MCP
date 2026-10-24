@@ -1376,6 +1376,13 @@ MAX_LOGBOOK_NARROWED_DAYS = 31
 # "nothing was logged" rather than "that level is not available here". Distinct
 # from helpers._LOG_LEVEL_RANK, which ranks the level of a RECORD; this is the
 # narrower set a CALLER may ask for.
+# When to read get_capability_summary, said the same way on every surface that
+# steers it: models told to orient first spent a call on it before every read.
+ORIENTATION_GUIDANCE = (
+    "Call get_capability_summary before a write or after a permission refusal; "
+    "a question that only reads needs no orientation call."
+)
+
 LOG_LEVELS = ("WARNING", "ERROR")
 LOG_LEVEL_ERROR_MESSAGE = (
     "level must be WARNING or ERROR. Home Assistant's system log holds WARNING "

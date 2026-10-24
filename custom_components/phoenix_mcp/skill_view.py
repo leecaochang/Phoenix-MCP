@@ -5,7 +5,7 @@ from aiohttp import web
 
 from .view_base import PhoenixView
 
-from .const import DOMAIN
+from .const import DOMAIN, ORIENTATION_GUIDANCE
 
 PHOENIX_SKILL_MARKDOWN = """---
 name: phoenix
@@ -41,7 +41,7 @@ grain of the model gives the smoothest results and avoids dead ends.
 ### 1. Orient
 - `get_capability_summary` (no special capability needed): your persona, which
   capabilities are allowed, which are gated behind admin approval ("confirm"),
-  whether you can write at all, and your rate limits. Call it once at the start.
+  whether you can write at all, and your rate limits. {orientation}
 - `mesa_get_caller_context`: who this access key is from MESA's perspective.
 - `get_audit_summary`: your own recent calls, useful to avoid repeating work.
 
@@ -694,7 +694,7 @@ For a deeper Home Assistant authoring guide (blueprints, YAML-only integrations,
 helper selection), see the community Agent Skill at
 https://github.com/homeassistant-ai/skills. Phoenix MCP's permission tree, approval
 gate, and MESA remain the enforcement regardless of any external guidance.
-"""
+""".replace("{orientation}", ORIENTATION_GUIDANCE)
 
 
 class PhoenixSkillView(PhoenixView):

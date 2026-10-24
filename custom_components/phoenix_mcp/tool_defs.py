@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -555,7 +555,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "capabilities are Confirm-gated (will require admin approval), write scope, rate limits, and a "
             "tool-level gate map (tools.usable / tools.needs_approval / tools.unavailable) so you know "
             "which tools run directly, which return pending_approval, and which you cannot use. "
-            "Call this at session start to orient. No capability required; an access key only ever sees itself."
+            + ORIENTATION_GUIDANCE + " No capability required; an access key only ever sees itself."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -2030,7 +2030,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "(off | advisory | enforced) so you know whether to expect confirm/read-only gates. "
             "When MESA is active it also lists the operator-set prohibited and read-only entities "
             "with reasons, so this is the fastest way to learn what is off-limits or must not be "
-            "controlled, prefer it over enumerating profiles. Good for orienting at session start."
+            "controlled, prefer it over enumerating profiles. Use it for a question about the home as a "
+            "whole; a question about particular entities can go straight to search_entities."
         ),
         "cap": "cap_search",
         "inputSchema": {"type": "object", "properties": {}},
