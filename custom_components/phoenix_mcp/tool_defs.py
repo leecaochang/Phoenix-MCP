@@ -599,10 +599,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "records this nowhere else, so call it before removing an integration or deleting an energy "
             "sensor to see whether the Energy dashboard depends on it; referenced_entities lists every "
             "entity the configuration points at. configured is false when Energy was never set up. "
+            "With start_time or end_time it also returns usage: how much each source measured (grid imported "
+            "and exported, solar produced, battery discharged and charged, gas and water used) and each "
+            "device consumed in that range, plus electricity_used, the home's use as the Energy dashboard "
+            "sums it, so how much energy the house or each device used is this one call. "
             "Read-only: this cannot change the Energy dashboard."
         ),
         "cap": "cap_config_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "start_time": {"type": "string", "description": "ISO timestamp or relative string (24h, 7d); adds usage from then. Defaults to 24h before end_time."},
+            "end_time": {"type": "string", "description": "ISO timestamp or relative string; adds usage until then. Defaults to now."},
+        }},
     },
     {
         "name": "get_solar_forecast",

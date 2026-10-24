@@ -3746,6 +3746,7 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "recent_activity": frozenset({"when"}),
     "get_automation_traces": frozenset({"start", "finish"}),
     "list_automations": frozenset({"last_triggered"}),
+    "get_energy_config": frozenset({"start", "end"}),
     "get_logs": frozenset({
         "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
     }),
@@ -3871,6 +3872,7 @@ _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
     "compare_states": frozenset({"t1", "t2"}),
     "get_logs": frozenset({"since", "until"}),
     "get_phoenix_diagnostics": frozenset({"since", "until"}),
+    "get_energy_config": frozenset({"start_time", "end_time"}),
 }
 
 

@@ -21,6 +21,7 @@ reproducing the snapshot IS the operation. mcp_view registers these tools.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 import copy
 import json
@@ -28,6 +29,7 @@ import logging
 import math
 
 from homeassistant.core import HomeAssistant, valid_entity_id
+from homeassistant.util.dt import utcnow
 
 from ..const import CAP_DENY, REDACTION_SENTINEL
 from ..data import PhoenixData
@@ -40,7 +42,7 @@ from ..helpers import (
     str_arg,
     version_summary_fields as _version_summary,
 )
-from ..policy_engine import Permission, filter_service_response, resolve
+from ..policy_engine import Permission, filter_service_response, resolve, resolve_read
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
@@ -52,6 +54,7 @@ from ..tool_common import (
     redaction_sentinel_path,
 )
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
+from ..recorder_queries import parse_recorder_window, read_statistic_window
 from ..request_authority import check_request_authority
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, validate_ws_payload
 
@@ -151,11 +154,102 @@ async def _tool_get_energy_config(
         _LOGGER.warning("get_energy_config: unexpected prefs type %s", type(prefs).__name__)
         prefs, configured = _default_prefs(), False
 
+    window = None
+    if any(args.get(key) for key in ("start_time", "end_time")):
+        try:
+            window = parse_recorder_window(
+                {key: args[key] for key in ("start_time", "end_time") if args.get(key)},
+                default_range=timedelta(hours=24))
+        except ValueError as err:
+            return _tool_error(str(err)), "invalid_request", "get_energy_config"
+
     body = _scoped_body(prefs, configured, access_key, hass)
     # Included on every read rather than behind a flag: a caller asking what the
     # dashboard depends on needs to know which dependencies are ALREADY dead.
     body["issues"] = await _energy_issues(prefs, access_key, hass) if configured else []
+    if window is not None:
+        body["usage"] = await _energy_usage(body, window.start, min(window.end, utcnow()), access_key, hass)
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_energy_config"
+
+
+# What each meter of a source measures, as the Energy dashboard counts it.
+_SOURCE_METERS = {
+    "grid": {"stat_energy_from": "imported", "stat_energy_to": "exported"},
+    "solar": {"stat_energy_from": "produced"},
+    "battery": {"stat_energy_from": "discharged", "stat_energy_to": "charged"},
+    "gas": {"stat_energy_from": "used"},
+    "water": {"stat_energy_from": "used"},
+}
+
+
+async def _energy_usage(
+    body: dict, start: datetime, end: datetime, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> dict[str, Any]:
+    """How much each configured source and device measured over [start, end).
+
+    "How much energy did the house use yesterday" is then this one read rather
+    than a statistics call per meter. Only statistics of entities the key can
+    read are read, as get_statistics would; the rest are named in not_read. The
+    home's electricity use is the Energy dashboard's sum, imported plus produced
+    plus discharged minus exported and charged, given only when every meter it
+    needs was read in one unit.
+    """
+    from homeassistant.components.recorder import get_instance
+
+    instance = get_instance(hass)
+    not_read: list[str] = []
+
+    async def change(statistic: Any) -> tuple[float | None, str | None]:
+        if (not isinstance(statistic, str) or not valid_entity_id(statistic)
+                or resolve_read(statistic, access_key, hass) not in (Permission.READ, Permission.WRITE)):
+            if isinstance(statistic, str) and REDACTION_SENTINEL not in statistic:
+                not_read.append(statistic)
+            return None, None
+        found = await instance.async_add_executor_job(
+            read_statistic_window, hass, start, end, statistic, {"change"})
+        if found is None or "change" not in found[0]:
+            not_read.append(statistic)
+            return None, None
+        return round(found[0]["change"], 4), found[1]
+
+    sources: list[dict[str, Any]] = []
+    for source in body.get("energy_sources") or []:
+        if not isinstance(source, dict):
+            continue
+        for field, measured in _SOURCE_METERS.get(source.get("type"), {}).items():
+            if source.get(field):
+                value, unit = await change(source[field])
+                if value is not None:
+                    sources.append({"type": source["type"], "measured": measured, "statistic": source[field],
+                                    "change": value, "unit": unit})
+    devices: list[dict[str, Any]] = []
+    for key in _DEVICE_KEYS:
+        for entry in body.get(key) or []:
+            if isinstance(entry, dict) and entry.get("stat_consumption"):
+                value, unit = await change(entry["stat_consumption"])
+                if value is not None:
+                    state = hass.states.get(entry["stat_consumption"])
+                    devices.append({"name": entry.get("name") or (state.name if state is not None else None),
+                                    "statistic": entry["stat_consumption"], "water": key.endswith("_water"),
+                                    "change": value, "unit": unit})
+    check_request_authority()
+    usage: dict[str, Any] = {"range": {"start": start.isoformat(), "end": end.isoformat()},
+                             "sources": sources, "devices": sorted(devices, key=lambda d: -d["change"])}
+    # Per meter, since a home may have several sources of one type (two solar arrays).
+    electric = [row for row in sources if row["type"] in ("grid", "solar", "battery")]
+    needed = [source[field] for source in body.get("energy_sources") or []
+              if isinstance(source, dict) and source.get("type") in ("grid", "solar", "battery")
+              for field in _SOURCE_METERS[source["type"]] if source.get(field)]
+    units = {row["unit"] for row in electric}
+    if needed and len(electric) == len(needed) and len(units) == 1:
+        sign = {"imported": 1, "produced": 1, "discharged": 1, "exported": -1, "charged": -1}
+        usage["electricity_used"] = {
+            "value": round(sum(sign[row["measured"]] * row["change"] for row in electric), 4),
+            "unit": units.pop(),
+        }
+    if not_read:
+        usage["not_read"] = not_read
+    return usage
 
 
 async def _tool_get_solar_forecast(
