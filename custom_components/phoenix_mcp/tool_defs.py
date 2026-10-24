@@ -220,7 +220,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "minimum": 1,
                     "maximum": 1000,
                     "default": 100,
-                    "description": "Maximum rows in this page.",
+                    "description": "Maximum rows in this page: the earliest in the range, or the latest with order newest_first.",
                 },
                 "order": {
                     "type": "string",
@@ -287,7 +287,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "minimum": 1,
                     "maximum": 1000,
                     "default": 100,
-                    "description": "Requested page size. Safe per-period caps can lower effective_limit.",
+                    "description": "Requested page size, counted from the start of the range. Safe per-period caps can lower effective_limit.",
                 },
                 "cursor": {
                     "type": "string",
