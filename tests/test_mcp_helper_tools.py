@@ -80,7 +80,7 @@ class TestCreateHelper:
             "create_helper", {"helper_type": "input_boolean", "config": {"name": "Guest mode"}}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["helper"]["name"] == "Guest mode"
+        assert body["helper"]["name"] == "Guest mode" and body["verified"] is True
         helper_id = body["helper"]["id"]
         await hass.async_block_till_done()
         # The returned id must map to a real entity, not just "some input_boolean
@@ -92,6 +92,18 @@ class TestCreateHelper:
         assert entity_id is not None
         assert hass.states.get(entity_id) is not None
         assert hass.states.get(entity_id).attributes.get("friendly_name") == "Guest mode"
+
+    @pytest.mark.parametrize(("rows", "verified"), [([], False), (None, None)])
+    async def test_a_create_that_does_not_read_back_is_not_claimed(self, hass, helper_env, hass_admin_user,
+                                                                  rows, verified):
+        # Missing from storage after HA reported it created is false; unreadable storage is unknown.
+        from custom_components.phoenix_mcp.tools import helper as helper_module
+        with patch.object(helper_module, "_storage_helper_rows", AsyncMock(return_value=rows)):
+            content, outcome, _ = await _call(
+                "create_helper", {"helper_type": "input_boolean", "config": {"name": "Porch"}}, _access_key(), hass)
+        body = _json(content)
+        assert outcome == "allowed" and body["verified"] is verified and body["helper"]["name"] == "Porch"
+        assert ("note" in body) is (verified is False)
 
     async def test_bad_type(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(

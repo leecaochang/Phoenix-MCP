@@ -1707,6 +1707,14 @@ async def _execute_create_helper(
     assert isinstance(post_mesa, _HelperMesaContext)
     if post_mesa.warnings:
         _mesa_advisory_ctx.set(True)
+    # Read the stored row back: it must hold what Home Assistant reported creating,
+    # which already carries HA's own normalization of the request. Unreadable
+    # storage leaves the create unconfirmed rather than failed.
+    rows = await _storage_helper_rows(hass, str(helper_type))
+    stored = next((row for row in rows if row.get("id") == new_id), None) if rows and new_id is not None else None
+    verified = None if rows is None else stored is not None and (not isinstance(item, dict) or stored == item)
+    if stored is not None:
+        item = stored
     public_item = (
         _public_helper_config(str(helper_type), item)
         if helper_type == "person" and isinstance(item, dict)
@@ -1717,7 +1725,10 @@ async def _execute_create_helper(
         data, access_key, resource_type="helper", resource_id=f"{helper_type}:{new_id}",
         action="create", before=None, after=version_after, alias=config.get("name"),
     )
-    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}"
+    body: dict[str, Any] = {"helper_type": helper_type, "helper": public_item, "verified": verified}
+    if verified is False:
+        body["note"] = "Home Assistant reported the helper created, but its stored configuration does not read back as reported."
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"helper:{helper_type}"
 
 
 async def _execute_config_flow_helper(
