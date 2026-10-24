@@ -221,7 +221,6 @@ class TestPathJail:
             ".hidden/x.yaml",
             "author/.hidden.yaml",
             "author/notes.txt",
-            "author/noext",
             "",
             "   ",
         ],
@@ -335,11 +334,27 @@ class TestCreate:
         assert outcome == "invalid_request"
         assert "already exists" in _text(content)
 
-    async def test_yaml_suffix_added_by_ha_is_not_our_concern(self, hass, bp_env):
-        # An explicit .yaml/.yml is required, so HA's suffix fallback never fires.
+    @pytest.mark.parametrize(("path", "stored"), [
+        ("author/nosuffix", "author/nosuffix.yaml"),
+        ("blueprints/automation/author/prefixed.yaml", "author/prefixed.yaml"),
+    ])
+    async def test_suffix_and_config_relative_prefix_name_the_same_file(self, hass, bp_env, path, stored):
+        # As HA's own blueprint save does, a missing suffix becomes .yaml.
+        data, _versions = _data()
+        with _patch_ws(return_value={"overrides_existing": False}) as ws, _patch_consumers([]):
+            content, outcome, resource = await _call(
+                "create_blueprint",
+                {"domain": "automation", "path": path, "content": VALID},
+                _access_key(), hass, data)
+        assert outcome == "allowed", _text(content)
+        assert resource == f"blueprint:automation/{stored}"
+        assert ws.await_args.args[2]["path"] == stored
+
+    @pytest.mark.parametrize("path", ["author/notes.txt", "../escape", "author/.hidden"])
+    async def test_other_extensions_and_escapes_stay_refused(self, hass, bp_env, path):
         _, outcome, _ = await _call(
             "create_blueprint",
-            {"domain": "automation", "path": "author/nosuffix", "content": VALID},
+            {"domain": "automation", "path": path, "content": VALID},
             _access_key(), hass)
         assert outcome == "invalid_request"
 

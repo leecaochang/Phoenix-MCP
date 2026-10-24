@@ -126,7 +126,9 @@ def _resolve_blueprint_path(hass: HomeAssistant, domain: str, path: Any) -> tupl
     get_blueprint only accepts paths HA already enumerated, but a create names a
     file that does not exist yet, so this is a real jail: relative only,
     .yaml/.yml, no dot-segments, and the realpath must land under
-    <config>/blueprints/<domain>/.
+    <config>/blueprints/<domain>/. A file name without an extension gets .yaml,
+    as HA's own blueprint save adds it, and a leading blueprints/<domain>/ (the
+    config-relative spelling) names the same folder.
     """
     if _usable_path_arg(path) is None:
         return None
@@ -136,6 +138,10 @@ def _resolve_blueprint_path(hass: HomeAssistant, domain: str, path: Any) -> tupl
         return None
     if any(p.startswith(".") for p in parts):
         return None
+    if [p.lower() for p in parts[:2]] == ["blueprints", domain] and len(parts) > 2:
+        parts = parts[2:]
+    if "." not in parts[-1]:
+        parts[-1] += ".yaml"
     if not parts[-1].lower().endswith((".yaml", ".yml")):
         return None
     base = os.path.realpath(os.path.join(hass.config.config_dir, "blueprints", domain))
