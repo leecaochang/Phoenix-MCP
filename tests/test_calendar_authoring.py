@@ -461,3 +461,99 @@ async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calen
     rows = await tools.CalendarWriteJournal(hass).load()
     assert [row["status"] for row in rows] == ["not_applied"]
     assert not any(domain == DOMAIN and issue.startswith("calendar_recovery_") for domain, issue in ir.async_get(hass).issues)
+
+
+class _ReadCalendar(CalendarEntity):
+    """A read-only calendar with fixed events, or one that never answers."""
+
+    def __init__(self, entity_id, events, *, hang=False):
+        self.entity_id = entity_id
+        self._events = events
+        self._hang = hang
+
+    async def async_get_events(self, hass, start_date, end_date):
+        if self._hang:
+            raise TimeoutError
+        return list(self._events)
+
+
+@pytest.fixture
+async def calendars_env(hass):
+    from datetime import datetime, timedelta, timezone
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+    store = AccessKeyStore(hass, AsyncMock())
+    access_key, _ = await store.async_create_access_key('calendars-tests', 'admin', rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={"calendar": PermissionNode(state="GREEN")},
+                                            entities={"calendar.secret": PermissionNode(state="RED")})
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    day = datetime(2026, 10, 26, tzinfo=timezone.utc)
+    entities = {
+        # Different offsets and an all-day event: start order must compare real instants.
+        "calendar.home": _ReadCalendar("calendar.home", [
+            CalendarEvent(summary="Dentist", start=day + timedelta(hours=9), end=day + timedelta(hours=10)),
+            CalendarEvent(summary="Holiday", start=date(2026, 10, 27), end=date(2026, 10, 28))]),
+        "calendar.work": _ReadCalendar("calendar.work", [
+            CalendarEvent(summary="Standup", start=(day + timedelta(hours=8)).astimezone(timezone(timedelta(hours=7))),
+                          end=(day + timedelta(hours=8, minutes=15)).astimezone(timezone(timedelta(hours=7))))]),
+        "calendar.secret": _ReadCalendar("calendar.secret", [
+            CalendarEvent(summary="Hidden", start=day, end=day + timedelta(hours=1))]),
+        "calendar.slow": _ReadCalendar("calendar.slow", [], hang=True),
+    }
+    registry = er.async_get(hass)
+    for entity_id in entities:
+        registry.async_get_or_create('calendar', 'local_calendar', entity_id, suggested_object_id=entity_id.split('.')[1])
+        hass.states.async_set(entity_id, 'off')
+    hass.data[DATA_COMPONENT] = SimpleNamespace(get_entity=entities.get)
+    return hass, data, access_key, entities
+
+
+WINDOW = {"start_time": "2026-10-25T00:00:00+00:00", "end_time": "2026-10-30T00:00:00+00:00"}
+
+
+async def test_every_readable_calendar_in_one_call_in_start_order(calendars_env):
+    body = payload(await call(calendars_env, 'get_calendar_events', dict(WINDOW)))
+    assert body["calendars"] == ["calendar.home", "calendar.slow", "calendar.work"]
+    assert [(event["calendar"], event["summary"]) for event in body["events"]] == [
+        ("calendar.work", "Standup"), ("calendar.home", "Dentist"), ("calendar.home", "Holiday")]
+    assert body["unreadable"] == [{"calendar": "calendar.slow", "reason": "The calendar did not answer in time."}]
+    assert "Hidden" not in json.dumps(body) and "not_found" not in body
+
+
+async def test_a_merged_event_keeps_its_single_calendar_hash(calendars_env):
+    merged = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.home"]}))
+    single = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": "calendar.home"}))
+    assert [event["content_hash"] for event in merged["events"]] == [event["content_hash"] for event in single["events"]]
+
+
+async def test_a_listed_calendar_out_of_scope_is_not_found(calendars_env):
+    body = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.work", "calendar.secret"]}))
+    assert body["not_found"] == ["calendar.secret"] and [event["summary"] for event in body["events"]] == ["Standup"]
+
+
+async def test_a_page_past_one_result_continues_without_skipping(calendars_env):
+    from unittest.mock import patch
+    from custom_components.phoenix_mcp import tool_common
+    from custom_components.phoenix_mcp.conversation_log import json_size
+    args = {**WINDOW, "entity_id": ["calendar.home", "calendar.work"]}
+    whole = json_size((await call(calendars_env, 'get_calendar_events', dict(args)))[0]['content'][0]['text'])
+    with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", whole - 1):
+        first = payload(await call(calendars_env, 'get_calendar_events', dict(args)))
+        rest = payload(await call(calendars_env, 'get_calendar_events', {**args, "offset": first["next_offset"]}))
+    assert first["has_more"] is True and first["next_offset"] == first["count"] < 3
+    assert [event["summary"] for event in first["events"] + rest["events"]] == ["Standup", "Dentist", "Holiday"]
+
+
+async def test_a_calendar_out_of_scope_is_never_asked_for_events(calendars_env):
+    _hass, _data, _key, entities = calendars_env
+    asked: list[str] = []
+    for entity in entities.values():
+        original = entity.async_get_events
+
+        async def recording(hass, start, end, _entity=entity, _original=original):
+            asked.append(_entity.entity_id)
+            return await _original(hass, start, end)
+
+        entity.async_get_events = recording
+    await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.secret", "calendar.work"]})
+    assert asked == ["calendar.work"]

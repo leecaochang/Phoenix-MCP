@@ -116,6 +116,21 @@ def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
     return build(low)
 
 
+def fitted_offset_page(page: list, envelope: dict, build: Callable[[list, dict], dict]) -> dict:
+    """An offset page shrunk to what fits TOOL_RESULT_MAX_BYTES, continuing at the first row left out.
+
+    build(rows, envelope) makes the body; a shorter page sets has_more and the
+    next_offset that resumes exactly where it stopped, so nothing is skipped.
+    """
+    def make(count: int) -> dict:
+        trimmed = dict(envelope, count=count)
+        if count < len(page):
+            trimmed.update(has_more=True, next_offset=envelope["offset"] + count)
+        return build(page[:count], trimmed)
+
+    return longest_fitting(make, len(page))
+
+
 def offset_page(rows: list, args: dict, *, default_limit: int, max_limit: int) -> tuple[list, dict] | str:
     """Slice one offset page; returns (page, envelope) or a caller-facing error.
 

@@ -433,12 +433,15 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "description": (
             "List events from an accessible calendar entity within a time window (defaults to the next 7 "
             "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity. "
-            "Events are paged in start order (total, has_more, next_offset)."
+            "Events are paged in start order (total, has_more, next_offset). Omit entity_id, or pass a list, "
+            "to read every accessible calendar, or those, in one call: events merged in start order, each "
+            "naming its calendar."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "A calendar.* entity ID."},
+                "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                              "description": "A calendar.* entity ID, or a list of them; omit for every calendar."},
                 "start_time": {
                     "type": "string",
                     "description": "ISO timestamp or relative string (24h, 7d). Defaults to now.",
@@ -450,7 +453,6 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum events to return."},
                 "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Events to skip; pass next_offset from the previous page."},
             },
-            "required": ["entity_id"],
         },
     },
     {
