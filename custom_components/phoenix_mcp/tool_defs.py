@@ -2664,7 +2664,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "entity_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 100, "description": "One or more entity IDs."},
                 "t1": {"type": "string", "description": "Earlier time (ISO or relative: 24h, 7d, 2w, 1m)."},
-                "t2": {"type": "string", "description": "Later time. Defaults to now."},
+                "t2": {"type": "string", "description": "Later time (ISO or relative). Defaults to now."},
             },
             "required": ["entity_ids", "t1"],
         },

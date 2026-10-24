@@ -3745,6 +3745,12 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_logbook": frozenset({"start_time", "end_time", "when"}),
     "recent_activity": frozenset({"when"}),
     "get_automation_traces": frozenset({"start", "finish"}),
+    "get_logs": frozenset({
+        "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
+    }),
+    "get_phoenix_diagnostics": frozenset({
+        "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
+    }),
 }
 
 
@@ -3840,10 +3846,16 @@ def _agentcli_add_resource_match_guidance(
     return f"{text}\n\nPhoenix Agent Chat factual guard: {guidance}"
 
 
+# Every absolute time argument a read takes, so the wall-time rule the prompt
+# states holds for each tool it names. Calendar reads already take a naive time
+# as Home Assistant local time, and keep accepting the offsets events carry.
 _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
     "get_history": frozenset({"start_time", "end_time"}),
     "get_statistics": frozenset({"start_time", "end_time"}),
     "get_logbook": frozenset({"start_time", "end_time"}),
+    "compare_states": frozenset({"t1", "t2"}),
+    "get_logs": frozenset({"since", "until"}),
+    "get_phoenix_diagnostics": frozenset({"since", "until"}),
 }
 
 
@@ -4287,15 +4299,17 @@ def _agentcli_time_context(hass: HomeAssistant) -> str:
     now = dt_util.now()
     offset = now.strftime("%z")
     offset_label = f"UTC{offset[:3]}:{offset[3:]}" if len(offset) == 5 else "UTC"
+    *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
+    tools = f"{', '.join(leading)} and {last}"
     return (
         "\n\nHome Assistant's local time zone is "
         f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
         f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}. Common temporal tool "
         "results preserve their canonical timestamps and add authoritative companion fields "
         "whose names end in _local. Use the _local value when reasoning or reporting; never "
-        "calculate a local value from its canonical counterpart. For get_history, "
-        "get_statistics, and get_logbook absolute time arguments, send the intended Home "
-        "Assistant wall time without a timezone suffix, for example 2026-08-14T05:00:00. "
+        f"calculate a local value from its canonical counterpart. For {tools} absolute "
+        "time arguments, send the intended Home Assistant wall time without a timezone "
+        "suffix, for example 2026-08-14T05:00:00. "
         "Phoenix applies the configured zone; do not shift the window yourself. State dates "
         "and times matter-of-factly. Do not mention local time, UTC, offsets, or conversion "
         "unless the operator explicitly asks."

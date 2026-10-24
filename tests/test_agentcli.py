@@ -1977,26 +1977,62 @@ def test_agentcli_leaves_non_temporal_tool_results_unchanged():
     ) == text
 
 
-def test_agentcli_applies_home_zone_to_naive_query_bounds_and_rejects_shifted_ones():
+@pytest.mark.parametrize(("tool", "first", "second"), [
+    ("get_logbook", "start_time", "end_time"),
+    ("get_history", "start_time", "end_time"),
+    ("get_statistics", "start_time", "end_time"),
+    ("compare_states", "t1", "t2"),
+    ("get_logs", "since", "until"),
+    ("get_phoenix_diagnostics", "since", "until"),
+])
+def test_agentcli_applies_home_zone_to_naive_query_bounds_and_rejects_shifted_ones(tool, first, second):
+    # The prompt tells the model to send wall times to each of these; any of them
+    # left out would read "6 this morning" as a UTC time or refuse it.
     local_tz = timezone(timedelta(hours=7))
 
     prepared, error = agentcli._agentcli_prepare_time_args(
-        "get_logbook",
-        {"start_time": "2026-08-14T05:00:00", "end_time": "2h"},
-        local_tz,
+        tool, {first: "2026-08-14T05:00:00", second: "2h"}, local_tz,
     )
     assert error is None
-    assert prepared == {
-        "start_time": "2026-08-14T05:00:00+07:00",
-        "end_time": "2h",
-    }
+    assert prepared == {first: "2026-08-14T05:00:00+07:00", second: "2h"}
 
-    original = {"start_time": "2026-08-13T22:00:00Z"}
-    prepared, error = agentcli._agentcli_prepare_time_args(
-        "get_logbook", original, local_tz,
-    )
+    original = {first: "2026-08-13T22:00:00Z"}
+    prepared, error = agentcli._agentcli_prepare_time_args(tool, original, local_tz)
     assert prepared == original
     assert "without a timezone suffix" in str(error)
+
+
+def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule():
+    """A new read tool time parameter must join the table or be named here with its reason."""
+    from tests.test_mcp_tool_catalog import _all_defs
+
+    # Calendar reads already take a naive time as local and keep the offsets events carry.
+    exempt = {("get_calendar_events", "start_time"), ("get_calendar_events", "end_time")}
+    taken = set()
+    for definition in _all_defs():
+        if not (definition.get("annotations") or {}).get("readOnlyHint"):
+            continue
+        for name, schema in (definition["inputSchema"].get("properties") or {}).items():
+            description = schema.get("description", "") if isinstance(schema, dict) else ""
+            if "ISO" in description and "next_cursor" not in description:
+                taken.add((definition["name"], name))
+    covered = {(tool, field) for tool, fields in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS.items() for field in fields}
+    assert taken - exempt == covered
+    prompt = agentcli._agentcli_time_context(MagicMock(config=MagicMock(time_zone="Asia/Bangkok")))
+    assert all(tool in prompt for tool in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS)
+
+
+def test_agentcli_adds_local_companions_to_log_occurrences():
+    text = json.dumps({"source": {"latest_occurred": "2026-08-13T22:14:17+00:00", "read_at": "2026-08-13T23:00:00+00:00"},
+                       "filters": {"since": "2026-08-13T21:00:00+00:00"},
+                       "entries": [{"first_occurred": "2026-08-13T22:00:00+00:00"}]})
+    for tool in ("get_logs", "get_phoenix_diagnostics"):
+        augmented = json.loads(agentcli._agentcli_add_local_time_fields(tool, text, timezone(timedelta(hours=7))))
+        assert augmented["source"]["latest_occurred"] == "2026-08-13T22:14:17+00:00"
+        assert augmented["source"]["latest_occurred_local"] == "2026-08-14T05:14:17+07:00"
+        assert augmented["source"]["read_at_local"] == "2026-08-14T06:00:00+07:00"
+        assert augmented["filters"]["since_local"] == "2026-08-14T04:00:00+07:00"
+        assert augmented["entries"][0]["first_occurred_local"] == "2026-08-14T05:00:00+07:00"
 
 
 @pytest.mark.asyncio
