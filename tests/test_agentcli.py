@@ -331,8 +331,10 @@ async def test_claude_stream_reports_usage_from_message_start_and_delta():
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
     usage = [e for e in events if e["type"] == agentcli.EV_USAGE]
-    assert usage[0] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 2}
-    assert usage[-1] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 55}
+    # Cache reads and writes stay inside input_tokens and are also reported apart.
+    cache = {"cache_read_tokens": 300, "cache_write_tokens": 20}
+    assert usage[0] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 2, **cache}
+    assert usage[-1] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 55, **cache}
 
 
 @pytest.mark.asyncio
@@ -1934,6 +1936,10 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
     assert "without a timezone suffix" in prompt
     assert "State dates and times matter-of-factly" in prompt
     assert [tool["name"] for tool in provider.tool_catalogs[0]] == ["get_logbook"]
+    # The time context, the one part that changes every turn, ends the prompt so the cache stops before it.
+    lead = prompt.rfind(agentcli._TIME_CONTEXT_LEAD)
+    assert lead > 0 and agentcli._AGENTCLI_ADDENDUM.strip()[:60] in prompt[:lead]
+    assert prompt[lead:].count("\n\n") == 1
 
 
 def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
@@ -2240,10 +2246,11 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
         )
 
     usage = [p for n, p in events if n == "usage"]
-    assert usage[0] == {"input_tokens": 1000, "output_tokens": 5, "context_tokens": 1000}
-    assert usage[1] == {"input_tokens": 1000, "output_tokens": 50, "context_tokens": 1000}
+    none = {"cache_read_tokens": 0, "cache_write_tokens": 0}
+    assert usage[0] == {"input_tokens": 1000, "output_tokens": 5, "context_tokens": 1000, **none}
+    assert usage[1] == {"input_tokens": 1000, "output_tokens": 50, "context_tokens": 1000, **none}
     # Second call: prior call folded (1000 in / 50 out) + new call's report.
-    assert usage[2] == {"input_tokens": 2600, "output_tokens": 80, "context_tokens": 1600}
+    assert usage[2] == {"input_tokens": 2600, "output_tokens": 80, "context_tokens": 1600, **none}
 
 
 @pytest.mark.asyncio
@@ -5357,3 +5364,34 @@ def test_agentcli_states_when_each_automation_last_triggered_locally():
     text = json.dumps({"automations": [{"entity_id": "automation.a", "last_triggered": "2026-08-13T22:00:00+00:00"}]})
     augmented = json.loads(agentcli._agentcli_add_local_time_fields("list_automations", text, timezone(timedelta(hours=7))))
     assert augmented["automations"][0]["last_triggered_local"] == "2026-08-14T05:00:00+07:00"
+
+
+
+def test_the_cached_prefix_ends_before_the_time_context():
+    """The time changes every turn; before this split it rewrote the whole cached prefix."""
+    system = "stable instructions" + agentcli._TIME_CONTEXT_LEAD + "Asia/Bangkok (UTC+07:00). The current ..."
+    blocks, _ = agentcli._cache_marked(system, [])
+    assert blocks[0] == {"type": "text", "text": "stable instructions", "cache_control": {"type": "ephemeral"}}
+    assert blocks[1]["text"].startswith(agentcli._TIME_CONTEXT_LEAD) and "cache_control" not in blocks[1]
+    assert "".join(block["text"] for block in blocks) == system
+    plain, _ = agentcli._cache_marked("no time here", [])
+    assert plain == [{"type": "text", "text": "no time here", "cache_control": {"type": "ephemeral"}}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("extra", "cached"), [
+    ('"prompt_tokens_details":{"cached_tokens":64}', 64),  # OpenAI
+    ('"prompt_cache_hit_tokens":32,"prompt_cache_miss_tokens":68', 32),  # DeepSeek
+    ('"total_tokens":105', 0),
+])
+async def test_openai_compatible_cached_prompt_tokens_are_reported(extra, cached):
+    body = _sse(
+        'data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}',
+        'data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":5,' + extra + '}}',
+        "data: [DONE]",
+    )
+    cfg = ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k")
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    usage = next(e for e in events if e["type"] == agentcli.EV_USAGE)
+    assert usage["input_tokens"] == 100 and usage["cache_read_tokens"] == cached

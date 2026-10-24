@@ -1647,15 +1647,20 @@ def _use_enabled_thinking(body: dict) -> None:
 def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[dict]]:
     """Add Anthropic prompt-cache breakpoints (Claude only, never MiniMax).
 
-    Two ephemeral markers: one on the system block, which caches the stable
-    prefix (the tools array plus the system prompt, both large and unchanged
-    across turns unless the access key's caps change), and one on the last message
-    block, so each agentic-loop iteration and each later turn reuses the prior
-    message history instead of re-billing it. Markers go on copies only; the
+    Two ephemeral markers: one closing the stable system block, which caches the
+    tools array plus the system prompt up to the time context (large, and
+    unchanged across turns unless the access key's caps change), and one on the
+    last message block, so each agentic-loop iteration reuses the prior message
+    history instead of re-billing it. The time context, which changes every turn,
+    ends the system prompt and goes in its own block after the first marker, so
+    it no longer rewrites the cached prefix. Markers go on copies only; the
     stored transcript round-trips through the browser and must stay clean.
     """
     marker = {"cache_control": {"type": "ephemeral"}}
-    system = [{"type": "text", "text": system_prompt, **marker}]
+    cut = system_prompt.rfind(_TIME_CONTEXT_LEAD)
+    system = ([{"type": "text", "text": system_prompt[:cut], **marker},
+               {"type": "text", "text": system_prompt[cut:]}]
+              if cut > 0 else [{"type": "text", "text": system_prompt, **marker}])
     if not messages:
         return system, messages
     last = messages[-1]
@@ -2033,7 +2038,7 @@ class ClaudeProvider:
         parsed_tools: list[dict] = []
         # message_start reports the call's input tokens; the closing
         # message_delta reports the final cumulative output tokens.
-        input_tokens = 0
+        input_tokens = cache_read = cache_write = 0
         async for line in _sse_lines(resp):
             if not line.startswith("data:"):
                 if line.lstrip().startswith(("{", "[")):
@@ -2092,13 +2097,12 @@ class ClaudeProvider:
                 if usage:
                     # Context actually sent = fresh input + cache writes + cache
                     # reads (all three are prompt tokens on the wire).
-                    input_tokens = (
-                        _usage_int(usage.get("input_tokens"))
-                        + _usage_int(usage.get("cache_creation_input_tokens"))
-                        + _usage_int(usage.get("cache_read_input_tokens"))
-                    )
+                    cache_read = _usage_int(usage.get("cache_read_input_tokens"))
+                    cache_write = _usage_int(usage.get("cache_creation_input_tokens"))
+                    input_tokens = _usage_int(usage.get("input_tokens")) + cache_write + cache_read
                     yield _norm(EV_USAGE, input_tokens=input_tokens,
-                                output_tokens=_usage_int(usage.get("output_tokens")))
+                                output_tokens=_usage_int(usage.get("output_tokens")),
+                                cache_read_tokens=cache_read, cache_write_tokens=cache_write)
             elif etype == "message_delta":
                 sr = ev.get("delta", {}).get("stop_reason")
                 if sr:
@@ -2107,7 +2111,8 @@ class ClaudeProvider:
                 usage = ev.get("usage") or {}
                 if "output_tokens" in usage:
                     yield _norm(EV_USAGE, input_tokens=input_tokens,
-                                output_tokens=_usage_int(usage.get("output_tokens")))
+                                output_tokens=_usage_int(usage.get("output_tokens")),
+                                cache_read_tokens=cache_read, cache_write_tokens=cache_write)
             elif etype == "message_stop":
                 saw_stop = True
                 break
@@ -3205,8 +3210,11 @@ class OpenAICompatProvider:
             if isinstance(usage, dict):
                 pt = _usage_int(usage.get("prompt_tokens"))
                 ct = _usage_int(usage.get("completion_tokens"))
+                details = usage.get("prompt_tokens_details")
+                cached = _usage_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
+                cached = cached or _usage_int(usage.get("prompt_cache_hit_tokens"))
                 if pt or ct:
-                    yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct)
+                    yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
             choices = chunk.get("choices")
             if not isinstance(choices, list):
                 raise _ProviderResponseError()
@@ -4311,6 +4319,11 @@ _AGENTCLI_ADDENDUM = (
 )
 
 
+# The time context opens with this and closes the system prompt; the prompt cache
+# splits there, since it is the only part that changes between turns.
+_TIME_CONTEXT_LEAD = "\n\nHome Assistant's local time zone is "
+
+
 def _agentcli_time_context(hass: HomeAssistant) -> str:
     """Tell Agent Chat how to present Home Assistant timestamps locally."""
     now = dt_util.now()
@@ -4319,8 +4332,8 @@ def _agentcli_time_context(hass: HomeAssistant) -> str:
     *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
     tools = f"{', '.join(leading)} and {last}"
     return (
-        "\n\nHome Assistant's local time zone is "
-        f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
+        _TIME_CONTEXT_LEAD
+        + f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
         f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}. Common temporal tool "
         "results preserve their canonical timestamps and add authoritative companion fields "
         "whose names end in _local. Use the _local value when reasoning or reporting; never "
@@ -4460,6 +4473,8 @@ class _ModelCallResult:
     usage_output: int
     context_tokens: int
     focus_declined: bool
+    # (cache read, cache write) prompt tokens, included in usage_input.
+    usage_cache: tuple[int, int] = (0, 0)
     # The EV_INVALID_TOOLS event when the response's tool arguments did not parse.
     invalid_tools: dict | None = None
 
@@ -4552,6 +4567,7 @@ async def _consume_model_stream(
     usage_done_input: int,
     usage_done_output: int,
     context_tokens: int,
+    usage_done_cache: tuple[int, int] = (0, 0),
     detect_focus_refusal: bool = False,
     dispatch_started: bool = False,
     write_started: bool = False,
@@ -4571,6 +4587,7 @@ async def _consume_model_stream(
     errored = False
     saw_text = False
     usage_cur_input = usage_cur_output = 0
+    usage_cur_cache = (0, 0)
     focus = _FocusPrefixBuffer(enabled=detect_focus_refusal)
     focus_event_emitted = False
 
@@ -4597,12 +4614,16 @@ async def _consume_model_stream(
         elif etype == EV_USAGE:
             usage_cur_input = _usage_int(ev.get("input_tokens"))
             usage_cur_output = _usage_int(ev.get("output_tokens"))
+            usage_cur_cache = (_usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
             if usage_cur_input:
                 context_tokens = usage_cur_input
             await emit("usage", {
                 "input_tokens": usage_done_input + usage_cur_input,
                 "output_tokens": usage_done_output + usage_cur_output,
                 "context_tokens": context_tokens,
+                # Parts of input_tokens: read from and written to the provider's prompt cache.
+                "cache_read_tokens": usage_done_cache[0] + usage_cur_cache[0],
+                "cache_write_tokens": usage_done_cache[1] + usage_cur_cache[1],
             })
         elif etype == EV_DONE:
             stop_reason = ev["stop_reason"]
@@ -4656,6 +4677,7 @@ async def _consume_model_stream(
         usage_input=usage_cur_input, usage_output=usage_cur_output,
         context_tokens=context_tokens,
         focus_declined=focus.declined,
+        usage_cache=usage_cur_cache,
         invalid_tools=invalid_tools,
     )
 
@@ -4959,12 +4981,13 @@ async def async_run_agent_turn(
 
     system = (
         _build_instructions(access_key, data, base_url, hass)
-        + _agentcli_time_context(hass)
         + _conversation_behavior_prompt(
             conversation_style, detail_level, home_focused=home_focused,
         )
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
+        # Last: it changes every turn, and the prompt cache ends before it.
+        + _agentcli_time_context(hass)
     )
     agent_tools = build_agent_tool_list(access_key, data, "chat")
     tools = provider.format_tools(agent_tools)
@@ -5009,6 +5032,7 @@ async def async_run_agent_turn(
     # last-known context size (the newest call's input tokens).
     usage_done_input = usage_done_output = 0
     usage_cur_input = usage_cur_output = 0
+    usage_done_cache = (0, 0)
     context_tokens = 0
     # Rounds spent handing malformed tool-call JSON back to the model.
     corrections = 0
@@ -5029,7 +5053,7 @@ async def async_run_agent_turn(
             provider, session, system=system, messages=messages, tools=tools,
             options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
-            context_tokens=context_tokens,
+            context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
             write_started=write_started,
         )
@@ -5045,6 +5069,7 @@ async def async_run_agent_turn(
         # a partial call still consumed the tokens it reported).
         usage_done_input += usage_cur_input
         usage_done_output += usage_cur_output
+        usage_done_cache = (usage_done_cache[0] + call.usage_cache[0], usage_done_cache[1] + call.usage_cache[1])
         usage_cur_input = usage_cur_output = 0
         if errored:
             # An upstream error is already emitted to the browser. Mark the
