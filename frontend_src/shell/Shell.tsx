@@ -27,6 +27,8 @@ import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
 import { MesaProvider, type MesaFindings } from "./mesa";
+import { SettingsProvider } from "./settings";
+import type { SettingsWindowId } from "./settingsIndex";
 import { DOCS_BASE_URL } from "../components/common";
 import { ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, WORKSPACES, WorkspaceVisibleContext, renderWindow, windowAvailable, windowTitle } from "./workspaces";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
@@ -144,6 +146,13 @@ export function Shell() {
   const revealPermissions = useCallback(() => {
     if (env === "desktop") controllerFor("accessKeys").ensureOpen("permissions");
   }, [env, controllerFor]);
+
+  // Find Setting and the kill-switch warning open a Settings window, unfolding it first.
+  const revealSettings = useCallback((id: SettingsWindowId) => {
+    if (env === "desktop") controllerFor("settings").ensureOpen(id);
+  }, [env, controllerFor]);
+  const navigate = d.navigate;
+  const showSettings = useCallback(() => navigate("settings"), [navigate]);
 
   // Toolbar placement, display mode and collapsed state, remembered with the arrangement.
   const [toolbar, setToolbar] = useState<ToolbarState>(() => record?.toolbar ?? DEFAULT_TOOLBAR);
@@ -411,6 +420,9 @@ export function Shell() {
     >
     <ChangesProvider hass={d.hass} active={d.workspace === "changes"}>
     <MesaProvider active={d.workspace === "mesa"} onFindings={setMesaFindings}>
+    <SettingsProvider settings={d.settings} onSettingsChange={d.setSettings} theme={d.theme} onThemeChange={d.onThemeChange}
+      language={d.language} onLanguageChange={d.onLanguageChange} active={d.workspace === "settings"} root={rootEl}
+      revealWindow={revealSettings} onNavigate={showSettings}>
     <WorkspaceActionsContext.Provider value={actions}>
     <WizardGuideContext.Provider value={wizardGuide}>
     <AccessKeyDetailProvider
@@ -485,6 +497,7 @@ export function Shell() {
     </AccessKeyDetailProvider>
     </WizardGuideContext.Provider>
     </WorkspaceActionsContext.Provider>
+    </SettingsProvider>
     </MesaProvider>
     </ChangesProvider>
     </ApprovalsProvider>

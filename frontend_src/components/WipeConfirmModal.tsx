@@ -4,29 +4,41 @@ import { api } from "../api";
 import { Modal } from "./Modal";
 import { t } from "../i18n";
 
+/** What a wipe deletes, chosen in Data Management before the typed confirmation. */
+export interface WipeScopes {
+  core: boolean;
+  providers: boolean;
+  mesa: boolean;
+}
+
+/** The two credential-bearing scopes start selected; MESA (authored safety policy, not
+ *  credentials) does not, so a reset never silently discards hand-authored profiles. */
+export const DEFAULT_WIPE_SCOPES: WipeScopes = { core: true, providers: true, mesa: false };
+
+export const WIPE_SCOPES: { key: keyof WipeScopes; labelKey: string; helpKey: string }[] = [
+  { key: "core", labelKey: "settings.wipeCoreLabel", helpKey: "settings.wipeCoreHelp" },
+  { key: "providers", labelKey: "settings.wipeProvidersLabel", helpKey: "settings.wipeProvidersHelp" },
+  { key: "mesa", labelKey: "settings.wipeMesaLabel", helpKey: "settings.wipeMesaHelp" },
+];
+
 interface Props {
+  scopes: WipeScopes;
   onWiped: () => void;
   onClose: () => void;
 }
 
-export function WipeConfirmModal({ onWiped, onClose }: Props) {
+/** The typed WIPE confirmation, kept as a dialog because the deletion cannot be undone. */
+export function WipeConfirmModal({ scopes, onWiped, onClose }: Props) {
   const [typed, setTyped] = useState("");
   const [wiping, setWiping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Scope toggles: the two credential-bearing scopes default on; MESA (authored
-  // safety policy, not credentials) defaults off so a reset does not silently
-  // discard hand-authored profiles.
-  const [core, setCore] = useState(true);
-  const [providers, setProviders] = useState(true);
-  const [mesa, setMesa] = useState(false);
-
-  const nothingSelected = !core && !providers && !mesa;
+  const nothingSelected = !scopes.core && !scopes.providers && !scopes.mesa;
 
   async function doWipe() {
     setWiping(true);
     setError(null);
     try {
-      await api.wipe({ wipe_core: core, wipe_providers: providers, wipe_mesa: mesa });
+      await api.wipe({ wipe_core: scopes.core, wipe_providers: scopes.providers, wipe_mesa: scopes.mesa });
       onWiped();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("settings.wipeFailed"));
@@ -40,44 +52,11 @@ export function WipeConfirmModal({ onWiped, onClose }: Props) {
         {t("settings.wipeTitle")}
       </h3>
       <div className="banner banner-error mb-16">
-        {t("settings.wipeWarning")}
+        {t("settings.wipeWarningSelected")}
       </div>
-
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.wipeCoreLabel")}</span>
-          <small>{t("settings.wipeCoreHelp")}</small>
-        </div>
-        <label className="toggle-switch">
-          <input type="checkbox" aria-label={t("settings.wipeCoreLabel")} checked={core}
-                 onChange={(e) => setCore(e.target.checked)} />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
-
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.wipeProvidersLabel")}</span>
-          <small>{t("settings.wipeProvidersHelp")}</small>
-        </div>
-        <label className="toggle-switch">
-          <input type="checkbox" aria-label={t("settings.wipeProvidersLabel")} checked={providers}
-                 onChange={(e) => setProviders(e.target.checked)} />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
-
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.wipeMesaLabel")}</span>
-          <small>{t("settings.wipeMesaHelp")}</small>
-        </div>
-        <label className="toggle-switch">
-          <input type="checkbox" aria-label={t("settings.wipeMesaLabel")} checked={mesa}
-                 onChange={(e) => setMesa(e.target.checked)} />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
+      <ul className="phx-wipe-scopes">
+        {WIPE_SCOPES.filter((scope) => scopes[scope.key]).map((scope) => <li key={scope.key}>{t(scope.labelKey)}</li>)}
+      </ul>
 
       <div className="field settings-toggle-mt">
         <label htmlFor="wipe-confirm-input">{t("settings.wipeTypeConfirm")}</label>

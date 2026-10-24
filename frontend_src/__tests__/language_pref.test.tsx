@@ -36,7 +36,8 @@ import {
   primeTranslations,
 } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
-import { SettingsView } from "../views/SettingsView";
+import { SettingsProvider } from "../shell/settings";
+import { GeneralSettingsWindow } from "../views/SettingsWindows";
 import type { GlobalSettings } from "../types";
 
 beforeEach(() => localStorage.clear());
@@ -171,19 +172,21 @@ describe("syncTranslations", () => {
 });
 
 describe("the dropdown in Settings", () => {
-  // The real SettingsView, so a change to the row itself is caught. Rendering a
+  // The real General window, so a change to the row itself is caught. Rendering a
   // hand-built select here would pass against a component that never shipped one.
   async function renderSettings(language = LANGUAGE_AUTO) {
     const onLanguageChange = vi.fn();
     render(
-      <SettingsView
+      <SettingsProvider
         settings={{} as GlobalSettings}
         onSettingsChange={vi.fn()}
         theme="auto"
         onThemeChange={vi.fn()}
         language={language}
         onLanguageChange={onLanguageChange}
-      />,
+      >
+        <GeneralSettingsWindow />
+      </SettingsProvider>,
     );
     const select = (await screen.findByLabelText("Language")) as HTMLSelectElement;
     return { onLanguageChange, select };

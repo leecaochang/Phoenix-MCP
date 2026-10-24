@@ -1,10 +1,10 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import { BusyButton } from "./BusyButton";
-import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { Modal } from "./Modal";
-import { DocsHelpLink } from "./common";
+import { ActionButton } from "../ui/ActionButton";
+import { InlineConfirm } from "../ui/InlineConfirm";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { effortLevelLabel, formatDateTime } from "../utils";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
 import { t } from "../i18n";
@@ -155,6 +155,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   // otherwise be indistinguishable from one that dropped every model.
   const [liveModels, setLiveModels] = useState<Record<string, string[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modelDraft, setModelDraft] = useState("");
   const [probeOnSave, setProbeOnSave] = useState(true);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -319,6 +320,8 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   };
 
   const providerCreated = async (instance: AgentCliInstance, probe: boolean) => {
+    // A new account is shown below the table, so the result of its check lands where it can be read.
+    if (instance.id) setSelectedId(instance.id);
     if (probe && instance.id) await runProbe(instance.id);
     await load();
     notifyChanged();
@@ -364,15 +367,36 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   useEffect(() => () => window.clearTimeout(hoursTimer.current), []);
   const checksOn = settings.provider_catalog_refresh_enabled !== false;
 
+  // The account shown below the table: the one picked there, else the first.
+  const selected = (instances ?? []).find((inst) => inst.id === selectedId) ?? instances?.[0] ?? null;
+  const pick = (id: string) => {
+    if (id === selected?.id) return;
+    setSelectedId(id);
+    setEditing(null);
+    setModelError(null);
+    setConfirmProbe(null);
+    setConfirmRemove(null);
+    setRemoveError(null);
+  };
+  const typeLabel = (kind: string) => {
+    const type = providerTypes.find((p) => p.kind === kind);
+    return type ? (type.label_key ? t(type.label_key) : type.label) : kind;
+  };
+  const modelText = (inst: AgentCliInstance) => inst.model_mode === "auto"
+    ? (inst.model ? t("settings.agentcliDefaultModelAuto", { model: inst.model }) : t("settings.agentcliDefaultModelAutoPending"))
+    : t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") });
+  const columns: Column<AgentCliInstance>[] = [
+    { id: "name", label: t("settings.colAccount"), cell: (inst) => inst.name, sortValue: (inst) => inst.name },
+    { id: "provider", label: t("settings.colProvider"), cell: (inst) => typeLabel(inst.kind), sortValue: (inst) => typeLabel(inst.kind) },
+    {
+      id: "model", label: t("settings.colModel"), sortValue: (inst) => inst.model ?? "",
+      cell: (inst) => inst.model_mode === "auto" ? `${inst.model || t("settings.agentcliNotSet")} (${t("settings.modelAutomatic")})` : (inst.model || t("settings.agentcliNotSet")),
+    },
+  ];
+
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.providersCard")}
-        <DocsHelpLink path="agentcli.html#providers" label={t("settings.providersCard")} />
-      </h3>
-      <p className="settings-info-note" style={{ marginTop: 0 }}>
-        {t("settings.providersIntro")}
-      </p>
+    <div className="phx-providers" data-settings-anchor="providers">
+      <p className="settings-info-note phx-settings-intro">{t("settings.providersIntro")}</p>
 
       <ProviderAddForm
         providerTypes={providerTypes}
@@ -383,14 +407,24 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
         onCreated={providerCreated}
       />
 
-      {/* Configured accounts. */}
-      <div className="agentcli-settings-providers">
-        {(instances ?? []).map((inst) => (
-          <div key={inst.id} className="agentcli-settings-provider">
-            <div className="agentcli-settings-provider-main">
-            <div className="agentcli-settings-provider-head">
-              <span>{inst.name}</span>
-            </div>
+      {/* Configured accounts; the selected one is shown, changed and checked below. */}
+      <ConfigTable
+        id="settingsProviders"
+        label={t("settings.providersCard")}
+        columns={columns}
+        rows={instances ?? []}
+        rowKey={(inst) => inst.id}
+        selectedKey={selected?.id ?? null}
+        onSelect={(inst) => pick(inst.id)}
+        rowLabel={(inst) => `${inst.name}, ${typeLabel(inst.kind)}`}
+        empty={instances ? <p className="audit-empty">{t("settings.agentcliNoAccounts")}</p> : null}
+      />
+
+      {selected && (() => {
+        const inst = selected;
+        return (
+          <section className="phx-provider-account" aria-label={inst.name}>
+            <h3 className="phx-section-title">{inst.name}</h3>
             {modelIsStale(inst) && !isDismissed(inst, "retired") && (
               <DismissibleWarning
                 text={t("settings.agentcliModelRetired", { model: inst.model })}
@@ -445,11 +479,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
               </div>
             ) : (
               <span className="agentcli-settings-model">
-                  {inst.model_mode === "auto"
-                    ? (inst.model
-                      ? t("settings.agentcliDefaultModelAuto", { model: inst.model })
-                      : t("settings.agentcliDefaultModelAutoPending"))
-                    : t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") })}
+                  {modelText(inst)}
                   {modelIsStale(inst) && isDismissed(inst, "retired") && (
                     <WarningBadge text={t("settings.agentcliModelRetired", { model: inst.model })}
                                   onShow={() => setDismissedFlag(inst, "retired", false)} />
@@ -474,104 +504,85 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
             {editing === inst.id && modelError && (
               <div className="banner banner-error" role="alert">{modelError}</div>
             )}
-            </div>
-            {editing !== inst.id && (
-              <div className="agentcli-account-actions">
-                  <IconButton label={t("settings.agentcliChangeModel")} blocked={busy}
-                              onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); }}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton label={t("settings.agentcliRefresh")} busy={refreshing === inst.id}
-                              busyLabel={t("settings.agentcliRefreshing")}
-                              blocked={busy || refreshing !== null} onClick={() => void refresh(inst)}>
-                    <RefreshIcon />
-                  </IconButton>
-                  {/* The last-checked time rides on this button's own tooltip
-                      rather than a separate status line, to keep the card's
-                      controls uncluttered. */}
-                  <IconButton busy={probing === inst.id}
-                              busyLabel={t("settings.agentcliProbing")}
-                              label={inst.capabilities_checked_at
-                                ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
-                                : t("settings.agentcliProbeCaps")}
-                              blocked={busy || probing !== null} disabled={!inst.model}
-                              onClick={() => setConfirmProbe(inst)}>
-                    <ProbeIcon />
-                  </IconButton>
-                  <IconButton label={t("settings.agentcliRemoveAccount", { name: inst.name })} danger
-                              blocked={busy} onClick={() => setConfirmRemove(inst)}>
-                    <TrashIcon />
-                  </IconButton>
+            {editing !== inst.id && !confirmProbe && !confirmRemove && (
+              <div className="phx-window-actions agentcli-account-actions">
+                <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy}
+                  onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); }} />
+                <ActionButton icon="refresh" className="btn btn-outline btn-sm"
+                  label={refreshing === inst.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
+                  busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
+                {/* The last-checked time rides on this button's own tooltip rather
+                    than a separate status line, to keep the account uncluttered. */}
+                <ActionButton icon="probe" className="btn btn-outline btn-sm"
+                  label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.accountCheckOptions")}
+                  title={inst.capabilities_checked_at
+                    ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
+                    : t("settings.agentcliProbeCaps")}
+                  busy={busy || probing !== null} disabled={!inst.model}
+                  onClick={() => setConfirmProbe(inst)} />
+                <ActionButton icon="delete" className="btn btn-outline btn-sm phx-action-danger"
+                  label={t("settings.agentcliRemoveAccount", { name: inst.name })}
+                  busy={busy} onClick={() => setConfirmRemove(inst)} />
               </div>
             )}
+            {/* Unlike everything else here, the check spends the operator's credit, so it says so first. */}
+            {confirmProbe && (
+              <InlineConfirm label={t("settings.agentcliProbeTitle")} confirmLabel={t("settings.agentcliProbeRun")} confirmIcon="probe"
+                cancelLabel={t("settings.cancel")} busy={busy || probing !== null}
+                onConfirm={() => void probeCaps(confirmProbe)} onCancel={() => setConfirmProbe(null)}>
+                <p>{tRich("settings.agentcliProbeBody", { strong: (c) => <strong>{c}</strong> },
+                        { model: confirmProbe.model, name: confirmProbe.name })}</p>
+              </InlineConfirm>
+            )}
+            {confirmRemove && (
+              <InlineConfirm label={t("settings.agentcliRemoveTitle")} tone="danger" confirmLabel={t("settings.remove")} confirmIcon="delete"
+                confirmClassName="btn btn-danger btn-sm" cancelLabel={t("settings.cancel")} busy={busy} error={removeError}
+                onConfirm={() => void remove(confirmRemove.id)} onCancel={() => { setConfirmRemove(null); setRemoveError(null); }}>
+                <p>{tRich("settings.agentcliRemoveBody", { strong: (c) => <strong>{c}</strong> }, { name: confirmRemove.name })}</p>
+              </InlineConfirm>
+            )}
+          </section>
+        );
+      })()}
+
+      <details className="phx-disclosure">
+        <summary>{t("settings.catalogChecks")}</summary>
+        <div className="phx-disclosure-body">
+          <div className="toggle-row toggle-row-plain">
+            <div className="toggle-label">
+              <span>{t("settings.providerChecksLabel")}</span>
+              <small>{t("settings.providerChecksHelp")}</small>
+            </div>
+            <label className={`toggle-switch${saving ? " disabled" : ""}`}>
+              <BusyInput
+                type="checkbox"
+                aria-label={t("settings.providerChecksLabel")}
+                checked={checksOn}
+                busy={saving}
+                onChange={(e) => onChange("provider_catalog_refresh_enabled", e.target.checked)}
+              />
+              <span className="toggle-switch-track" />
+            </label>
           </div>
-        ))}
-        {instances && instances.length === 0 && (
-          <div className="agentcli-settings-hint">{t("settings.agentcliNoAccounts")}</div>
-        )}
-      </div>
-
-      {confirmProbe && (
-        <Modal titleId="agentcli-probe-title" onClose={() => setConfirmProbe(null)}>
-          <h3 className="modal-title" id="agentcli-probe-title">{t("settings.agentcliProbeTitle")}</h3>
-          <p>{tRich("settings.agentcliProbeBody", { strong: (c) => <strong>{c}</strong> },
-                    { model: confirmProbe.model, name: confirmProbe.name })}</p>
-          <div className="modal-actions">
-            <BusyButton className="btn btn-primary btn-sm" busy={busy}
-                    onClick={() => void probeCaps(confirmProbe)}>{t("settings.agentcliProbeRun")}</BusyButton>
-            <BusyButton className="btn btn-text" busy={busy}
-                    onClick={() => setConfirmProbe(null)}>{t("settings.cancel")}</BusyButton>
+          <div className="toggle-row toggle-row-plain settings-toggle-mt">
+            <div className="toggle-label">
+              <span>{t("settings.providerChecksHoursLabel")}</span>
+              <small>{t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}</small>
+            </div>
+            <BusyInput
+              className="input input-auto"
+              type="number" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}
+              aria-label={t("settings.providerChecksHoursAria")}
+              value={hoursInput}
+              busy={saving}
+              disabled={!checksOn}
+              onChange={(e) => onHoursInput(e.target.value)}
+              onBlur={() => commitHoursNow(hoursInput)}
+              onKeyDown={(e) => { if (e.key === "Enter") commitHoursNow(hoursInput); }}
+            />
           </div>
-        </Modal>
-      )}
-
-      {confirmRemove && (
-        <Modal titleId="agentcli-remove-title" onClose={() => { setConfirmRemove(null); setRemoveError(null); }}>
-          <h3 className="modal-title" id="agentcli-remove-title">{t("settings.agentcliRemoveTitle")}</h3>
-          <p>{tRich("settings.agentcliRemoveBody", { strong: (c) => <strong>{c}</strong> }, { name: confirmRemove.name })}</p>
-          {removeError && <div className="banner banner-error" role="alert">{removeError}</div>}
-          <div className="modal-actions">
-            <BusyButton className="btn btn-danger btn-sm" busy={busy} onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</BusyButton>
-            <BusyButton className="btn btn-text" busy={busy} onClick={() => { setConfirmRemove(null); setRemoveError(null); }}>{t("settings.cancel")}</BusyButton>
-          </div>
-        </Modal>
-      )}
-
-
-      <hr className="settings-divider" />
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.providerChecksLabel")}</span>
-          <small>{t("settings.providerChecksHelp")}</small>
         </div>
-        <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-          <BusyInput
-            type="checkbox"
-            aria-label={t("settings.providerChecksLabel")}
-            checked={checksOn}
-            busy={saving}
-            onChange={(e) => onChange("provider_catalog_refresh_enabled", e.target.checked)}
-          />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
-      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }}>
-        <div className="toggle-label">
-          <span>{t("settings.providerChecksHoursLabel")}</span>
-          <small>{t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}</small>
-        </div>
-        <BusyInput
-          className="input input-auto"
-          type="number" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}
-          aria-label={t("settings.providerChecksHoursAria")}
-          value={hoursInput}
-          busy={saving}
-          disabled={!checksOn}
-          onChange={(e) => onHoursInput(e.target.value)}
-          onBlur={() => commitHoursNow(hoursInput)}
-          onKeyDown={(e) => { if (e.key === "Enter") commitHoursNow(hoursInput); }}
-        />
-      </div>
+      </details>
     </div>
   );
 }

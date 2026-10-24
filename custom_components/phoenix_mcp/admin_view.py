@@ -2093,7 +2093,7 @@ def _settings_response(settings, hass=None) -> dict:
     from .ai_task import ai_task_supported  # noqa: PLC0415
     from .assist_api import assist_api_supported  # noqa: PLC0415
     from .tools.esphome import esphome_availability  # noqa: PLC0415
-    from .voice_agent import assist_pipeline_supported  # noqa: PLC0415
+    from .voice_agent import assist_pipeline_preferred, assist_pipeline_supported  # noqa: PLC0415
 
     from .agentcli import loaded_decision_account
     from .tool_routing import qualified_languages
@@ -2103,6 +2103,9 @@ def _settings_response(settings, hass=None) -> dict:
     body["tool_routing_qualified_languages"] = qualified_languages(cfg)
     body["assist_api_supported"] = assist_api_supported()
     body["voice_agent_pipeline_supported"] = assist_pipeline_supported()
+    body["voice_agent_pipeline_preferred"] = (
+        assist_pipeline_preferred(hass, settings.voice_agent_pipeline_id) if hass else False
+    )
     body["ai_task_supported"] = ai_task_supported()
     esphome = esphome_availability(hass)
     body["esphome_integration"] = esphome.integration
@@ -2713,6 +2716,44 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
             await async_remove_assist_pipeline(self.hass, data)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok({"ok": True}, request_id=rid)
+
+
+class PhoenixAdminVoiceAgentPreferredView(PhoenixView):
+    """POST/DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred.
+
+    POST makes the Phoenix-created Assist pipeline Home Assistant's preferred
+    assistant; DELETE stops it being preferred while keeping it. The settings
+    response reports the current state as voice_agent_pipeline_preferred.
+    Admin session auth only.
+    """
+
+    url = "/api/phoenix-mcp/admin/voice_agent/pipeline/preferred"
+    name = "api:phoenix-mcp:admin:voice_agent:pipeline:preferred"
+    requires_auth = True
+
+    async def _change(self, request: web.Request, preferred: bool) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        from .voice_agent import async_set_assist_pipeline_preferred, VoicePipelineError  # noqa: PLC0415
+        try:
+            async with data.settings_update_lock:
+                result = await async_set_assist_pipeline_preferred(self.hass, data, preferred=preferred)
+        except VoicePipelineError as err:
+            _LOGGER.warning("Assist pipeline preference change failed", exc_info=True)
+            return _err(
+                "invalid_request", str(err), 400, rid,
+                key="assistPipelineFailed",
+            )
+        _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
+        return _ok(result, request_id=rid)
+
+    @require_admin
+    async def post(self, request: web.Request) -> web.Response:
+        return await self._change(request, True)
+
+    @require_admin
+    async def delete(self, request: web.Request) -> web.Response:
+        return await self._change(request, False)
 
 
 class PhoenixAdminAiTaskPreferredView(PhoenixView):
@@ -5213,6 +5254,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminCommandPreviewView,
     PhoenixAdminRoutingStatisticsView,
     PhoenixAdminVoiceAgentPipelineView,
+    PhoenixAdminVoiceAgentPreferredView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
     PhoenixAdminApprovalsView,

@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
-import { Modal } from "./Modal";
+import { InlineConfirm } from "../ui/InlineConfirm";
 import type { RoutingSurfaceStatistics } from "../types";
 
 const OUTCOME_LABELS = {
@@ -66,20 +66,15 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
         <p className="agentcli-settings-hint">{t("routingStats.note")}</p>
       </>}
       {busy && <p role="status">{t("common.loading")}</p>}
-      {error && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
-      <div className="routing-statistics-actions">
+      {error && !confirm && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
+      {confirm ? <InlineConfirm label={t("routingStats.reset")} tone="danger" confirmLabel={t("routingStats.reset")} confirmIcon="restoreVersion"
+        confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={busy}
+        error={error ? t("routingStats.error") : null} onConfirm={() => void load(true)} onCancel={() => setConfirm(false)}>
+        <p>{t("routingStats.confirm")}</p>
+      </InlineConfirm> : <div className="routing-statistics-actions">
         <BusyButton type="button" className="btn btn-text btn-sm" busy={busy} onClick={() => void load()}>{t("common.refresh")}</BusyButton>
         <BusyButton type="button" className="btn btn-text btn-sm" busy={busy} disabled={!stats} onClick={() => setConfirm(true)}>{t("routingStats.reset")}</BusyButton>
-      </div>
+      </div>}
     </div>}
-    {confirm && <Modal titleId={`routing-stats-reset-${surface}`} onClose={busy ? undefined : () => setConfirm(false)}>
-      <h3 id={`routing-stats-reset-${surface}`} className="modal-title">{t("routingStats.reset")}</h3>
-      <p>{t("routingStats.confirm")}</p>
-      {error && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
-      <div className="modal-actions">
-        <BusyButton type="button" className="btn btn-danger" busy={busy} onClick={() => void load(true)}>{t("routingStats.reset")}</BusyButton>
-        <BusyButton type="button" className="btn btn-text" busy={busy} onClick={() => setConfirm(false)}>{t("common.cancel")}</BusyButton>
-      </div>
-    </Modal>}
   </details>;
 }

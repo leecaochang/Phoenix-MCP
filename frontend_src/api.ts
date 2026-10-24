@@ -252,6 +252,9 @@ export const api = {
     ),
   deleteVoiceAgentPipeline: () =>
     req<{ ok: boolean }>("DELETE", "/voice_agent/pipeline"),
+  // Whether that pipeline is Home Assistant's preferred assistant; the pipeline stays either way.
+  setVoiceAgentPreferred: (preferred: boolean) =>
+    req<{ pipeline_id: string; preferred: boolean }>(preferred ? "POST" : "DELETE", "/voice_agent/pipeline/preferred"),
 
   // The AI Task "Data generation tasks" default entity (one-click set/clear/status).
   getAiTaskPreferred: () =>

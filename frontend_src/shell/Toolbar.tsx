@@ -17,6 +17,7 @@ import { usePanelData } from "./PanelData";
 import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState } from "./storage";
 import { chooseFit, fitClass, rowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
+import { useSettings } from "./settings";
 import { WORKSPACES, windowTitle } from "./workspaces";
 
 /** The shell's arrangement actions, shared by every Workspace Options menu. */
@@ -100,7 +101,7 @@ function ToolRow({ registry, workspace, order, groups, hide }: { registry: ToolR
               <span className="phx-toolbar-label">{tool.short ?? tool.label}</span>
             </MenuButton>
           ) : (
-            <button key={tool.id} type="button" className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`}
+            <button key={tool.id} type="button" className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`} data-tool={tool.id}
               aria-label={tool.label} title={tool.label} disabled={tool.disabled} aria-pressed={tool.pressed}
               onClick={() => run(group, tool)}>
               <Icon name={tool.icon} size={16} />
@@ -148,15 +149,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   const order = controller ? controller.windowOrder() : WORKSPACES[d.workspace].windows;
   const groups: ToolGroup[] = registry ? registry.groupsFor(d.workspace, order, t(WORKSPACES[d.workspace].labelKey)) : [];
 
-  // The kill-switch warning opens Settings at the kill switch.
-  const openKillSwitch = () => {
-    d.navigate("settings");
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const card = shellRoot.current?.querySelector<HTMLElement>("#phx-kill-switch-card");
-      card?.scrollIntoView?.({ block: "start" });
-      card?.querySelector<HTMLElement>("input, button")?.focus();
-    }));
-  };
+  // The kill-switch warning opens Settings at the kill switch, in the Safety window.
+  const settings = useSettings();
+  const openKillSwitch = () => settings?.reveal("killSwitch");
 
   // Drag the grip to float the toolbar; a docked toolbar floats where it is dropped.
   const startMove = (e: ReactPointerEvent<HTMLButtonElement>) => {

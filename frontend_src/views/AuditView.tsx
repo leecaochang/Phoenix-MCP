@@ -1,9 +1,10 @@
 /**
  * The Audit Log window: requests to Phoenix in a configurable table, newest
- * first, loaded a page at a time with server-side filters. Choosing an entry
- * shows it in Log Details. In the workspace shell, Refresh and Filters sit on
- * the toolbar; the filters open in a panel above the table, and a column's
- * menu can open its filter.
+ * first, loaded a page at a time with server-side filters, and updated every
+ * five seconds while visible unless updates are paused. Choosing an entry
+ * shows it in Log Details. In the workspace shell, Refresh, Filters, Pause
+ * Updates and Recording Settings sit on the toolbar; the filters open in a
+ * panel above the table, and a column's menu can open its filter.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -17,6 +18,8 @@ import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "..
 import { useLatestRequest } from "../utils/latest_request";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
+import { pauseUpdatesTool, useRecordingSettingsTool } from "../shell/settings";
+import { useWindowVisible } from "../shell/visibility";
 import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
@@ -36,6 +39,8 @@ const TIME_WINDOW_MS: Record<Exclude<TimeWindow, "">, number> = {
 };
 
 const PAGE_SIZE = 100;
+/** How often a visible, unpaused Audit Log checks for new entries. */
+const UPDATE_MS = 5000;
 /** The server's own order, newest first; any other sort covers only the loaded entries. */
 const SERVER_SORT = { column: "time", dir: "desc" } as const;
 
@@ -89,9 +94,14 @@ export function AuditView({ accessKeys }: Props) {
   }), [outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
 
   const beginLoad = useLatestRequest();
+  // Each load starts a generation; a background update applies only within the one it began in.
+  const loadGeneration = useRef(0);
+  const loadsRunning = useRef(0);
 
   const load = useCallback(async (offset: number) => {
     const isLatest = beginLoad();
+    loadGeneration.current++;
+    loadsRunning.current++;
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
       const resp = await api.getAudit({ ...filterParams, limit: PAGE_SIZE, offset });
@@ -111,6 +121,7 @@ export function AuditView({ accessKeys }: Props) {
       }
       setError(t("audit.loadFailed"));
     } finally {
+      loadsRunning.current--;
       if (isLatest()) {
         setLoading(false);
         setLoadingMore(false);
@@ -120,6 +131,36 @@ export function AuditView({ accessKeys }: Props) {
 
   // (Re)load from the top whenever a filter changes.
   useEffect(() => { load(0); }, [load]);
+
+  // New entries arrive while the log is visible, unless updates are paused. The newest
+  // page is read again; with more pages loaded, only entries not shown yet are added
+  // at the top, so the pages below stay where they are.
+  const [paused, setPaused] = useState(false);
+  const windowVisible = useWindowVisible();
+  const updateQuietly = useCallback(async () => {
+    if (loadsRunning.current > 0) return;
+    const generation = loadGeneration.current;
+    try {
+      const resp = await api.getAudit({ ...filterParams, limit: PAGE_SIZE, offset: 0 });
+      if (generation !== loadGeneration.current || loadsRunning.current > 0) return;
+      setEntries((prev) => {
+        if (prev.length <= PAGE_SIZE) return resp.entries;
+        const shown = new Set(prev.map(auditEntryKey));
+        return [...resp.entries.filter((e) => !shown.has(auditEntryKey(e))), ...prev];
+      });
+      setTotal(resp.total);
+      setHasMore((more) => more || resp.entries.length < resp.total);
+      setError(null);
+    } catch {
+      // A failed background update keeps what is shown; the next one or Refresh retries.
+    }
+  }, [filterParams]);
+  useEffect(() => {
+    if (paused || !windowVisible) return;
+    const timer = window.setInterval(() => { if (!document.hidden) void updateQuietly(); }, UPDATE_MS);
+    return () => clearInterval(timer);
+  }, [paused, windowVisible, updateQuietly]);
+  const recordingSettings = useRecordingSettingsTool();
 
   const activeFilters = [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter].filter(Boolean).length;
   const clearFilters = () => {
@@ -143,6 +184,8 @@ export function AuditView({ accessKeys }: Props) {
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
+      pauseUpdatesTool(paused, setPaused),
+      ...recordingSettings,
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;

@@ -235,7 +235,7 @@ it("repairs an existing unavailable model through the fetched picker", async () 
   mocks.setModel.mockResolvedValue({ instance: { id: "decision", model: "jev-latest" } });
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Default model: abcdefg");
-  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
   await screen.findByRole("option", { name: "jev-latest" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-latest" } });
   expect(mocks.setModel).not.toHaveBeenCalled();
@@ -250,13 +250,13 @@ it("shows the default model and shared actions, with cancellable edits", async (
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Default model: jev-latest");
   expect(screen.queryByLabelText("Model for JEV")).toBeNull();
-  for (const name of ["Change default model", "Refresh models", "Check options", "Remove JEV"]) {
+  for (const name of ["Change Model", "Refresh Models", "Check Options", "Remove JEV"]) {
     const button = screen.getByRole("button", { name });
-    expect(button).toHaveClass("agentcli-account-btn");
+    expect(button).toHaveClass("phx-action");
     expect(button).toHaveAttribute("title", name);
     expect(button.querySelector("svg")).not.toBeNull();
   }
-  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
   await screen.findByRole("option", { name: "jev-1.13.0" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -269,14 +269,14 @@ it("refreshes the catalog and explains decision options without inference", asyn
   mocks.refresh.mockResolvedValue({ models: ["jev-latest", "jev-1.13.0"], declared: false });
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Default model: jev-latest");
-  fireEvent.click(screen.getByRole("button", { name: "Check options" }));
+  fireEvent.click(screen.getByRole("button", { name: "Check Options" }));
   expect(screen.getByText(/Decision providers use fixed routing choices/)).toBeVisible();
   expect(mocks.probe).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Refresh models" }));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh Models" }));
   await screen.findByText(/Refreshed: 2 models/);
   expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("decision");
-  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
   expect(screen.getByRole("option", { name: "jev-1.13.0" })).toBeVisible();
 });
 
@@ -286,7 +286,7 @@ it("preserves the model and draft after a failed save", async () => {
   mocks.setModel.mockRejectedValue(new Error("Model check failed"));
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Default model: jev-latest");
-  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
   await screen.findByRole("option", { name: "jev-1.13.0" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -312,7 +312,7 @@ it("opens saved accounts without contacting an offline decision server", async (
   expect(screen.getByRole("radio", { name: "JEV" })).toBeChecked();
   expect(screen.getByRole("checkbox", { name: "Use decision provider" })).toBeChecked();
   const row = screen.getByRole("radio", { name: "Second JEV account" }).closest(".agentcli-settings-provider") as HTMLElement;
-  fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
+  fireEvent.click(within(row).getByRole("button", { name: "Change Model" }));
   await screen.findByText("Connection failed.");
   expect(mocks.models).toHaveBeenCalledExactlyOnceWith("second");
   expect(screen.getByLabelText("Model for Second JEV account")).toHaveValue("jev-1.13.0");
@@ -321,7 +321,7 @@ it("opens saved accounts without contacting an offline decision server", async (
   expect(screen.queryByRole("alert")).toBeNull();
   expect(change).not.toHaveBeenCalled();
   mocks.models.mockResolvedValue({ models: ["jev-1.13.0", "new-model"] });
-  fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
+  fireEvent.click(within(row).getByRole("button", { name: "Change Model" }));
   await screen.findByRole("option", { name: "new-model" });
   expect(screen.queryByRole("alert")).toBeNull();
 });
@@ -353,7 +353,7 @@ it("hides setup after JEV is configured and retains account management", async (
   expect(screen.getByRole("checkbox", { name: "Use decision provider" })).toBeChecked();
   expect(screen.queryByLabelText("Provider type")).toBeNull();
   expect(screen.queryByRole("option", { name: "TypeSafe / JEV" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Change default model" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Change Model" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Remove TypeSafe / JEV" })).toBeEnabled();
 });
 
@@ -377,18 +377,18 @@ it("keeps refresh focused while blocking duplicate provider actions", async () =
   let release!: (value: unknown) => void;
   mocks.refresh.mockReturnValue(new Promise(resolve => { release = resolve; }));
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
-  const button = await screen.findByRole("button", { name: "Refresh models" });
+  const button = await screen.findByRole("button", { name: "Refresh Models" });
   await userEvent.click(button);
   expect(button).toHaveFocus();
   expect(button).not.toBeDisabled();
   expect(button).toHaveAttribute("aria-disabled", "true");
   await userEvent.keyboard("{Enter} ");
   fireEvent.click(button);
-  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
   expect(mocks.models).not.toHaveBeenCalled();
   expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("decision");
   await act(async () => release({ models: ["jev-latest"], declared: false }));
-  await screen.findByRole("button", { name: "Refresh models" });
+  await screen.findByRole("button", { name: "Refresh Models" });
   expect(button).toHaveFocus();
   expect(button).not.toHaveAttribute("aria-disabled", "true");
 });

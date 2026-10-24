@@ -1,40 +1,44 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { BusyButton } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance } from "../types";
 import { api } from "../api";
-import { Modal } from "./Modal";
-import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
+import { useNotify } from "../ui/notify";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
-// Voice Agent settings card. Registers Phoenix MCP as a Home Assistant conversation agent
+// Voice Agent settings. Registers Phoenix MCP as a Home Assistant conversation agent
 // so "Phoenix MCP" appears in Settings > Voice assistants and runs Phoenix MCP's own model loop on
 // the chosen access key's scope. Needs an access key (scope), an Agent Chat provider account,
-// and a model. Independent of the Assist bridge toggle in the card below.
+// and a model. Independent of the Assist tool provider.
 //
-// One-click setup: rather than making the operator wire up an Assist pipeline by
-// hand, Phoenix MCP can create one pointed at itself (optionally the preferred assistant).
-// The tracked pipeline is torn down again when the voice agent is disabled or its
-// access key/provider goes away (backend); the kill switch leaves it in place (the agent
-// stays registered but declines, so the assistant degrades gracefully).
+// Three adjacent switches apply directly, as accepted for Settings: the agent itself, the
+// Assist assistant Phoenix MCP creates for it, and whether that assistant is Home
+// Assistant's preferred one. Each needs the one before it, and turning one off clears
+// what depends on it: the backend removes the tracked assistant when the agent is
+// disabled or its access key or provider goes away, and removing the assistant ends its
+// preference. Clearing the preference keeps the assistant. The kill switch leaves the
+// assistant in place (the agent stays registered but declines).
 export function VoiceAgentSettings({
   settings,
   onChange,
   saving,
+  onRefresh,
 }: {
   settings: GlobalSettings;
-  onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
+  /** Save a setting; false when it failed (the window reports why). */
+  onChange: (key: keyof GlobalSettings, value: boolean | string) => Promise<boolean> | void;
   saving: boolean;
+  /** Read the settings again; otherwise a refresh is asked for by event. */
+  onRefresh?: () => Promise<void>;
 }) {
+  const notify = useNotify();
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
-  const [showSetup, setShowSetup] = useState(false);
-  const [showRemove, setShowRemove] = useState(false);
-  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const enabled = !!settings.voice_agent_enabled;
   const providerId = settings.voice_agent_provider_id ?? "";
@@ -42,6 +46,7 @@ export function VoiceAgentSettings({
   const model = settings.voice_agent_model ?? "";
   const pipelineId = settings.voice_agent_pipeline_id ?? "";
   const pipelineSupported = settings.voice_agent_pipeline_supported ?? true;
+  const preferred = !!pipelineId && !!settings.voice_agent_pipeline_preferred;
   const noProviders = instances.length === 0;
   const fullyConfigured = !!(enabled && accessKeyId && providerId && model);
   const companion = accessKeys.some(accessKey => accessKey.id === accessKeyId && accessKey.persona === "home_companion");
@@ -51,7 +56,7 @@ export function VoiceAgentSettings({
     const loadProviders = () =>
       api.getAgentCliProviders().then((r) => setInstances(r.instances)).catch(() => setInstances([]));
     loadProviders();
-    // Reload when a provider account is added or removed in the Agent Chat card, so
+    // Reload when a provider account is added or removed in AI Providers, so
     // the dropdowns here never show a stale (or deleted) account.
     window.addEventListener("phx-agentcli-providers-changed", loadProviders);
     return () => window.removeEventListener("phx-agentcli-providers-changed", loadProviders);
@@ -67,56 +72,111 @@ export function VoiceAgentSettings({
     return () => { cancelled = true; };
   }, [providerId]);
 
-  // Re-pull the parent's settings so a created/removed pipeline id is reflected.
-  const refreshSettings = () => window.dispatchEvent(new Event("phx-settings-refresh"));
+  // Re-read settings so a created or removed assistant, or a changed preference, shows its real state.
+  const refreshSettings = async () => {
+    if (onRefresh) await onRefresh();
+    else window.dispatchEvent(new Event("phx-settings-refresh"));
+  };
 
-  function handleEnableToggle(checked: boolean) {
-    // Disabling unregisters the agent, so a one-click Assist pipeline pointed at Phoenix MCP
-    // would break; Phoenix MCP removes it automatically. Confirm first when one exists so the
-    // "my assistant disappeared" consequence is explicit rather than silent.
-    if (!checked && pipelineId) {
-      setShowDisableConfirm(true);
-      return;
-    }
-    onChange("voice_agent_enabled", checked);
-    // Offer the one-click setup the first time the agent is enabled (no pipeline
-    // yet). The modal itself handles the not-yet-fully-configured case.
-    setShowSetup(checked && !pipelineId && pipelineSupported);
+  async function setEnabled(on: boolean) {
+    const hadAssistant = !!pipelineId;
+    if ((await onChange("voice_agent_enabled", on)) === false) return;
+    if (!on && hadAssistant) await refreshSettings();
+    notify(on ? t("settings.voiceEnabledToast") : hadAssistant ? t("settings.voiceDisabledRemovedToast") : t("settings.voiceDisabledToast"));
   }
 
-  async function removePipeline() {
+  /** Run one Home Assistant change, then show the settings it left. */
+  async function apply(run: () => Promise<unknown>, done: string, failed: string) {
+    setBusy(true);
+    setError(null);
     try {
-      await api.deleteVoiceAgentPipeline();
+      await run();
+      notify(done);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : failed);
     } finally {
-      refreshSettings();
+      await refreshSettings();
+      setBusy(false);
     }
   }
+  const setAssistant = (on: boolean) => apply(
+    () => (on ? api.createVoiceAgentPipeline(false) : api.deleteVoiceAgentPipeline()),
+    on ? t("settings.voiceAssistantAddedToast") : t("settings.voiceAssistantRemovedToast"),
+    on ? t("settings.voiceSetUpFailed") : t("settings.voiceRemoveFailed"),
+  );
+  const setPreferred = (on: boolean) => apply(
+    () => api.setVoiceAgentPreferred(on),
+    on ? t("settings.voicePreferredSetToast") : t("settings.voicePreferredClearedToast"),
+    t("settings.voicePreferredFailed"),
+  );
 
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.voiceCard")}
-        <DocsHelpLink path="connect.html#voice-agent" label={t("settings.voiceCard")} />
-      </h3>
-      <p className="agentcli-settings-hint">
+    <div className="phx-settings-form">
+      <p className="settings-info-note phx-settings-intro">
         {t("settings.voiceIntro")}
       </p>
-      <div className="toggle-row">
-        <div className="toggle-label">
-          <span>{t("settings.voiceEnableLabel")}</span>
-          <small>{t("settings.voiceEnableHelp")}</small>
+      <div className="phx-setting-checks">
+        <div className="toggle-row">
+          <div className="toggle-label">
+            <span>{t("settings.voiceEnableLabel")}</span>
+            <small>{t("settings.voiceEnableHelp")}</small>
+          </div>
+          <label className="toggle-switch">
+            <BusyInput
+              type="checkbox"
+              aria-label={t("settings.voiceEnableLabel")}
+              data-help={pipelineId ? "help.settingsVoiceDisable" : undefined}
+              checked={enabled}
+              busy={saving || busy}
+              onChange={(e) => void setEnabled(e.target.checked)}
+            />
+            <span className="toggle-switch-track" />
+          </label>
         </div>
-        <label className="toggle-switch">
-          <BusyInput
-            type="checkbox"
-            aria-label={t("settings.voiceEnableLabel")}
-            checked={enabled}
-            busy={saving}
-            onChange={(e) => handleEnableToggle(e.target.checked)}
-          />
-          <span className="toggle-switch-track" />
-        </label>
+        {pipelineSupported && (
+          <div className={`toggle-row${!pipelineId && !fullyConfigured ? " toggle-row-greyed" : ""}`}>
+            <div className="toggle-label">
+              <span>{t("settings.voiceAssistSetup")}</span>
+              <small>
+                {pipelineId
+                  ? t("settings.voiceAssistSetupCreated")
+                  : fullyConfigured ? t("settings.voiceAssistSetupNone") : t("settings.voiceConfigureFirst")}
+              </small>
+            </div>
+            <label className="toggle-switch">
+              <BusyInput
+                type="checkbox"
+                aria-label={t("settings.voiceAssistSetup")}
+                data-help={pipelineId ? "help.settingsVoiceRemoveAssistant" : undefined}
+                checked={!!pipelineId}
+                busy={saving || busy} disabled={!pipelineId && !fullyConfigured}
+                onChange={(e) => void setAssistant(e.target.checked)}
+              />
+              <span className="toggle-switch-track" />
+            </label>
+          </div>
+        )}
+        {pipelineSupported && (
+          <div className={`toggle-row${!pipelineId ? " toggle-row-greyed" : ""}`}>
+            <div className="toggle-label">
+              <span>{t("settings.voicePreferredLabel")}</span>
+              <small>{t("settings.voicePreferredHelp")}</small>
+            </div>
+            <label className="toggle-switch">
+              <BusyInput
+                type="checkbox"
+                aria-label={t("settings.voicePreferredLabel")}
+                data-help={preferred ? "help.settingsVoiceClearPreferred" : undefined}
+                checked={preferred}
+                busy={saving || busy} disabled={!pipelineId}
+                onChange={(e) => void setPreferred(e.target.checked)}
+              />
+              <span className="toggle-switch-track" />
+            </label>
+          </div>
+        )}
       </div>
+      {error && <div className="banner banner-error" role="alert">{error}</div>}
 
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
@@ -189,187 +249,7 @@ export function VoiceAgentSettings({
         onHomeFocusedChange={(value) => onChange("voice_agent_home_focused", value)}
       />
 
-      {pipelineSupported && (
-        <div className="toggle-row toggle-row-plain settings-toggle-mt">
-          <div className="toggle-label">
-            <span>{t("settings.voiceAssistSetup")}</span>
-            <small>
-              {pipelineId
-                ? t("settings.voiceAssistSetupCreated")
-                : t("settings.voiceAssistSetupNone")}
-            </small>
-          </div>
-          {pipelineId ? (
-            <BusyButton className="btn btn-text" onClick={() => setShowRemove(true)} busy={saving}>
-              {t("settings.voiceRemoveAssistant")}
-            </BusyButton>
-          ) : (
-            <BusyButton
-              className="btn btn-secondary"
-              onClick={() => setShowSetup(true)}
-              busy={saving} disabled={!fullyConfigured}
-              title={fullyConfigured ? undefined : t("settings.voiceConfigureFirst")}
-            >
-              {t("settings.voiceSetUpAssistant")}
-            </BusyButton>
-          )}
-        </div>
-      )}
-
       <RoutingStatistics surface="voice" />
-
-      {showSetup && (
-        <VoiceAgentSetupModal
-          fullyConfigured={fullyConfigured}
-          onClose={() => setShowSetup(false)}
-          onCreated={() => { setShowSetup(false); refreshSettings(); }}
-        />
-      )}
-
-      {showRemove && (
-        <VoiceAgentRemoveModal
-          onRemove={removePipeline}
-          onClose={() => setShowRemove(false)}
-        />
-      )}
-
-      {showDisableConfirm && (
-        <VoiceAgentDisableModal
-          onClose={() => setShowDisableConfirm(false)}
-          onConfirm={() => { onChange("voice_agent_enabled", false); setShowDisableConfirm(false); }}
-        />
-      )}
     </div>
-  );
-}
-
-// Confirm disabling the voice agent when a one-click Assist pipeline exists: disabling
-// unregisters the agent, so Phoenix MCP removes the assistant it added to Home Assistant (a
-// kept pipeline would point at a dead agent). Makes that consequence explicit.
-function VoiceAgentDisableModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
-  return (
-    <Modal titleId="voice-disable-title" onClose={onClose}>
-      <h3 className="modal-title" id="voice-disable-title">{t("settings.voiceDisableTitle")}</h3>
-      <p className="mb-16">
-        {t("settings.voiceDisableBody")}
-      </p>
-      <div className="modal-actions">
-        <button className="btn btn-danger" onClick={onConfirm}>{t("settings.voiceDisableConfirm")}</button>
-        <button className="btn btn-text" onClick={onClose}>{t("settings.cancel")}</button>
-      </div>
-    </Modal>
-  );
-}
-
-// First-run setup modal: create an Assist pipeline pointed at Phoenix MCP (optionally the
-// preferred assistant), or dismiss to wire it up manually. Preferred defaults ON;
-// the operator can turn it off before creating.
-function VoiceAgentSetupModal({
-  fullyConfigured,
-  onClose,
-  onCreated,
-}: {
-  fullyConfigured: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [preferred, setPreferred] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function setupAutomatically() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.createVoiceAgentPipeline(preferred);
-      onCreated();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("settings.voiceSetUpFailed"));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal titleId="va-setup-title" onClose={busy ? undefined : onClose}>
-      <h3 className="modal-title" id="va-setup-title">{t("settings.voiceSetupTitle")}</h3>
-      <p className="mb-16">
-        {t("settings.voiceSetupBody")}
-      </p>
-      {!fullyConfigured && (
-        <div className="banner banner-warn mb-16">
-          {t("settings.voiceSetupNotReady")}
-        </div>
-      )}
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.voicePreferredLabel")}</span>
-          <small>{t("settings.voicePreferredHelp")}</small>
-        </div>
-        <label className="toggle-switch">
-          <BusyInput
-            type="checkbox"
-            aria-label={t("settings.voicePreferredLabel")}
-            checked={preferred}
-            busy={busy}
-            onChange={(e) => setPreferred(e.target.checked)}
-          />
-          <span className="toggle-switch-track" />
-        </label>
-      </div>
-      {error && <div className="banner banner-error" role="alert">{error}</div>}
-      <div className="modal-actions">
-        <BusyButton
-          className="btn btn-primary"
-          onClick={setupAutomatically}
-          busy={busy} disabled={!fullyConfigured}
-        >
-          {busy ? t("settings.voiceSettingUp") : t("settings.voiceSetUpAutomatically")}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>
-          {t("settings.voiceSetUpManually")}
-        </BusyButton>
-      </div>
-    </Modal>
-  );
-}
-
-// Confirm removing the Phoenix-created Assist assistant. Removal does not disable the
-// voice agent, and the assistant can be set up again from the card.
-function VoiceAgentRemoveModal({
-  onRemove,
-  onClose,
-}: {
-  onRemove: () => Promise<void>;
-  onClose: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirm() {
-    setBusy(true);
-    setError(null);
-    try {
-      await onRemove();
-      onClose();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("settings.voiceRemoveFailed"));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal titleId="va-remove-title" onClose={busy ? undefined : onClose}>
-      <h3 className="modal-title" id="va-remove-title">{t("settings.voiceRemoveTitle")}</h3>
-      <p className="mb-16">
-        {t("settings.voiceRemoveBody")}
-      </p>
-      {error && <div className="banner banner-error" role="alert">{error}</div>}
-      <div className="modal-actions">
-        <BusyButton className="btn btn-danger" onClick={confirm} busy={busy}>
-          {busy ? t("settings.voiceRemoving") : t("settings.voiceRemoveConfirm")}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>{t("settings.cancel")}</BusyButton>
-      </div>
-    </Modal>
   );
 }

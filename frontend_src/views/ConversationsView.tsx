@@ -1,7 +1,7 @@
 /**
  * The Conversation Log window: recorded conversations in a configurable
  * table, newest first, with server-side search and filters, refreshed every
- * five seconds while visible. Choosing a conversation shows its evidence in
+ * five seconds while visible unless updates are paused. Choosing a conversation shows its evidence in
  * Log Details. Clearing the log asks first and names what it removes.
  */
 
@@ -15,6 +15,7 @@ import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
+import { pauseUpdatesTool, useRecordingSettingsTool } from "../shell/settings";
 import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
@@ -82,14 +83,16 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     finally { if (own === generation.current) setLoading(false); }
   }, [limit, debouncedSearch, source, outcome, days]);
   const windowVisible = useWindowVisible();
-  const windowVisibleRef = useRef(windowVisible);
-  windowVisibleRef.current = windowVisible;
+  const [paused, setPaused] = useState(false);
+  const updatingRef = useRef(true);
+  updatingRef.current = windowVisible && !paused;
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { if (!document.hidden && windowVisibleRef.current) void load(true); }, 5000);
+    const timer = window.setInterval(() => { if (!document.hidden && updatingRef.current) void load(true); }, 5000);
     const invalidate = () => { generation.current++; };
     return () => { clearInterval(timer); invalidate(); };
   }, [load]);
+  const recordingSettings = useRecordingSettingsTool();
   const resetPage = () => setLimit(25);
   const activeFilters = [source, outcome, days].filter(Boolean).length;
   const clearFilters = () => { setSource(""); setOutcome(""); setDays(""); resetPage(); };
@@ -103,6 +106,8 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
+      pauseUpdatesTool(paused, setPaused),
+      ...recordingSettings,
       { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
     ],
   }]);

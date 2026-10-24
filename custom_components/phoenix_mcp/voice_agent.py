@@ -524,6 +524,47 @@ async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> None:
         await data.store.async_patch_settings(voice_agent_pipeline_id=None)
 
 
+def assist_pipeline_preferred(hass: HomeAssistant, pipeline_id: str | None) -> bool:
+    """Whether Phoenix MCP's tracked Assist pipeline is Home Assistant's preferred one."""
+    store = _pipeline_store(hass)
+    return bool(
+        store is not None and pipeline_id is not None
+        and pipeline_id in getattr(store, "data", {}) and _is_preferred(store, pipeline_id)
+    )
+
+
+async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *, preferred: bool) -> dict:
+    """Make Phoenix MCP's Assist pipeline the preferred one, or stop it being preferred.
+
+    The pipeline stays either way. Home Assistant always has one preferred
+    pipeline, so clearing hands the preference to the first other pipeline, the
+    same choice removal makes; with no other pipeline it cannot be cleared.
+    Raises VoicePipelineError when there is no tracked pipeline or the change fails.
+    """
+    store = _pipeline_store(hass)
+    if store is None:
+        raise VoicePipelineError("Assist pipeline support is not available.")
+    pipeline_id = data.store.get_settings().voice_agent_pipeline_id
+    if pipeline_id is None or pipeline_id not in getattr(store, "data", {}):
+        raise VoicePipelineError("Set up the Phoenix MCP assistant first.")
+    try:
+        if preferred:
+            if not _is_preferred(store, pipeline_id):
+                store.async_set_preferred_item(pipeline_id)
+        elif _is_preferred(store, pipeline_id):
+            other = next((pid for pid in store.data if pid != pipeline_id), None)
+            if other is None:
+                raise VoicePipelineError(
+                    "The Phoenix MCP assistant is the only one, so Home Assistant keeps it preferred."
+                )
+            store.async_set_preferred_item(other)
+    except VoicePipelineError:
+        raise
+    except Exception as err:  # noqa: BLE001 - HA store errors become one clear failure
+        raise VoicePipelineError("Could not change the preferred assistant.") from err
+    return {"pipeline_id": pipeline_id, "preferred": _is_preferred(store, pipeline_id)}
+
+
 def _is_preferred(store: Any, pipeline_id: str) -> bool:
     try:
         return store.async_get_preferred_item() == pipeline_id

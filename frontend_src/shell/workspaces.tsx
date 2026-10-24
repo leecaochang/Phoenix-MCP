@@ -18,8 +18,9 @@ import { ChangesListWindow, ComparisonWindow, ItemHistoryWindow } from "../views
 import { ConversationsView } from "../views/ConversationsView";
 import { AdvisoryWindow, DiagnosticsWindow, MesaImportWindow, MesaProfilesWindow, OrphanedProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow } from "../views/MesaWindows";
 import type { MesaFindings } from "./mesa";
+import { SETTINGS_WINDOW_TITLE_KEYS } from "./settingsIndex";
 import { OnboardingWizard } from "../views/OnboardingWizard";
-import { SettingsView } from "../views/SettingsView";
+import { AgentChatSettingsWindow, AiProvidersWindow, GeneralSettingsWindow, HomeAssistantWindow, LogsSettingsWindow, SafetyWindow } from "../views/SettingsWindows";
 import { t } from "../i18n";
 import type { IconName } from "../ui/Icon";
 import { ControllerContext } from "./dock/TitleBar";
@@ -59,7 +60,7 @@ export const WINDOW_TITLE_KEYS = {
   auditLog: "shell.tabAudit",
   conversationLog: "conversations.title",
   logDetails: "workspace.logDetails",
-  settings: "shell.tabSettings",
+  ...SETTINGS_WINDOW_TITLE_KEYS,
   attention: "attention.title",
   notifications: "notifications.title",
   help: "help.title",
@@ -206,7 +207,27 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       api.getPanel("logDetails")?.group.api.setSize({ height: Math.round(api.height * 0.4) });
     },
   },
-  settings: { labelKey: "shell.tabSettings", helpKey: "help.wsSettings", icon: "settings", windows: ["settings", "attention"], arrange: (_, add) => add("settings") },
+  settings: {
+    labelKey: "shell.tabSettings",
+    helpKey: "help.wsSettings",
+    icon: "settings",
+    windows: ["settingsProviders", "settingsChat", "settingsHome", "settingsSafety", "settingsLogs", "settingsGeneral", "attention"],
+    // AI Providers over Home Assistant on the left, Agent Chat over Safety on the right;
+    // Logs and Notifications and General along the bottom, folded, as accepted for Settings.
+    arrange: (api, add) => {
+      add("settingsProviders");
+      add("settingsChat", { referencePanel: "settingsProviders", direction: "right" });
+      add("settingsHome", { referencePanel: "settingsProviders", direction: "below" });
+      add("settingsSafety", { referencePanel: "settingsChat", direction: "below" });
+      add("settingsLogs", { direction: "below" });
+      add("settingsGeneral", { referencePanel: "settingsLogs", direction: "below" });
+      size(api, "settingsProviders", { width: Math.round(api.width * 0.55) });
+    },
+    folded: ["settingsLogs", "settingsGeneral"],
+    heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520 },
+    // 2: the Settings windows replaced the single Settings window.
+    layoutVersion: 2,
+  },
 };
 
 /**
@@ -297,20 +318,6 @@ function AccessKeysContent() {
 function AuditLogContent() { return <AuditView accessKeys={usePanelData().accessKeys} />; }
 function ConversationLogContent() { return <ConversationsView accessKeys={usePanelData().accessKeys} />; }
 
-function SettingsContent() {
-  const d = usePanelData();
-  return (
-    <SettingsView
-      settings={d.settings}
-      onSettingsChange={d.setSettings}
-      theme={d.theme}
-      onThemeChange={d.onThemeChange}
-      language={d.language}
-      onLanguageChange={d.onLanguageChange}
-    />
-  );
-}
-
 function LogDetailsWindowContent() { return <LogDetailsContent />; }
 
 function AttentionContent() {
@@ -340,7 +347,12 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   mesaDiagnostics: DiagnosticsWindow,
   auditLog: AuditLogContent,
   conversationLog: ConversationLogContent,
-  settings: SettingsContent,
+  settingsProviders: AiProvidersWindow,
+  settingsChat: AgentChatSettingsWindow,
+  settingsHome: HomeAssistantWindow,
+  settingsSafety: SafetyWindow,
+  settingsLogs: LogsSettingsWindow,
+  settingsGeneral: GeneralSettingsWindow,
   logDetails: LogDetailsWindowContent,
   attention: AttentionContent,
   notifications: NotificationsWindow,

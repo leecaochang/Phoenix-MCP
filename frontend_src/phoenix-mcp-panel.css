@@ -679,6 +679,52 @@
 .phx-inline-confirm-ack { flex: 1 1 100%; padding: 8px 0 0; border-top: 1px solid var(--phx-divider); border-bottom: none; }
 .phx-inline-confirm > .banner { flex: 1 1 100%; margin: 0; }
 .phx-inline-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Settings windows: native field rows, folded sections, local tabs, Find Setting. */
+.phx-settings > * + * { margin-top: 12px; }
+.phx-settings-intro { margin: 0 0 8px; }
+.phx-settings-form > .banner { margin: 8px 0; }
+.phx-settings-section > .phx-section-title { margin-top: 4px; }
+.phx-disclosure { border-top: 1px solid var(--phx-divider); }
+.phx-disclosure > summary { padding: 12px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-disclosure > summary:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 2px; border-radius: var(--phx-radius-xs); }
+.phx-disclosure-body { padding: 0 0 12px; }
+.phx-provider-account { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); }
+.phx-provider-account > * + * { margin-top: 6px; }
+.phx-provider-account .phx-inline-confirm { margin: 8px 0 0; }
+.phx-action.phx-action-danger { color: var(--phx-error); }
+.phx-local-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--phx-border); }
+.phx-local-tab { margin-bottom: -1px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--phx-radius-sm) var(--phx-radius-sm) 0 0; background: none; color: var(--phx-text-2); font: 500 13px var(--phx-font); cursor: pointer; }
+.phx-local-tab:hover { color: var(--phx-text); }
+.phx-local-tab[aria-selected="true"] { border-color: var(--phx-border); border-bottom-color: var(--phx-surface); background: var(--phx-surface); color: var(--phx-text); }
+.phx-local-tab:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }
+.phx-setting-checks { border-bottom: 1px solid var(--phx-divider); }
+.phx-setting-checks > .toggle-row { padding: 8px 0; border-bottom: none; }
+/* Audit and Conversation recording side by side once the window has 620 px inside, stacked below that. */
+.phx-settings { container-type: inline-size; }
+.phx-settings-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 24px; }
+@container (min-width: 620px) { .phx-settings-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.phx-retention { margin: 8px 0 0; padding: 0; border: none; min-width: 0; }
+.phx-retention-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.phx-retention-fields .conversation-limit { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0; font-size: 12px; }
+.phx-retention .phx-window-actions { margin: 8px 0 0; }
+.phx-wipe-scopes { margin: 0 0 12px; padding-left: 20px; font-size: 13px; }
+.phx-setting-found { border-radius: var(--phx-radius-xs); box-shadow: 0 0 0 2px var(--phx-focus); transition: box-shadow 0.2s; }
+@media (prefers-reduced-motion: reduce) { .phx-setting-found { transition: none; } }
+.phx-find-setting {
+  position: fixed; z-index: var(--phx-z-modal); display: flex; flex-direction: column; gap: 6px;
+  width: min(360px, calc(100vw - 16px)); padding: 8px; box-sizing: border-box;
+  background: var(--phx-raised); color: var(--phx-text); border: 1px solid var(--phx-line-strong);
+  border-radius: var(--phx-radius); box-shadow: var(--phx-shadow-lg); font: 400 13px var(--phx-font);
+}
+.phx-find-setting-field { display: flex; align-items: center; gap: 6px; color: var(--phx-text-2); }
+.phx-find-setting-field .input { flex: 1; min-width: 0; }
+.phx-find-setting-results { display: flex; flex-direction: column; max-height: min(360px, 60vh); overflow-y: auto; }
+.phx-find-result { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border: none; border-radius: var(--phx-radius-xs); background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.phx-find-result small { color: var(--phx-text-2); font-size: 12px; }
+.phx-find-result:hover, .phx-find-result:focus { background: var(--phx-hover); outline: none; }
+.phx-find-result:focus-visible { box-shadow: inset 0 0 0 2px var(--phx-focus); }
+.phx-find-setting-empty { margin: 4px 8px; color: var(--phx-text-2); }
 .change-action-create { color: var(--phx-success); }
 .change-action-delete { color: var(--phx-error); }
 .change-action-rollback { color: var(--phx-warning); }
@@ -1332,18 +1378,6 @@ select.input {
   .two-col { grid-template-columns: minmax(0,1fr); }
   .two-col > *:first-child { order: 2; }
   .two-col > *:last-child  { order: 1; }
-}
-
-/* Settings two-column layout */
-.settings-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-  align-items: start;
-}
-.settings-grid > * { min-width: 0; }
-@media (max-width: 768px) {
-  .settings-grid { grid-template-columns: 1fr; }
 }
 
 /* ============================================================
@@ -3027,30 +3061,9 @@ hui-card { display: block; min-width: 0; }
 .routing-disclosure > summary:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: 2px; border-radius: 4px; }
 .routing-disclosure > .agentcli-settings-hint:first-of-type { margin-top: 0; }
 
-/* These were once .agentcli-icon-btn, which the chat window's TITLEBAR buttons
-   have used since long before. Defined later, they silently won, and the
-   titlebar's gear/minimize/maximize/close picked up a border and a fixed box.
-   A shared prefix is not a namespace; put the surface in the name.
-
-   Square icon actions on a provider account. Four labelled buttons plus a status
-   line had grown into more than a card can carry, so the actions became icons and
-   the status moved onto the tooltip of the button it belongs to. Every one keeps
-   a real accessible name; the icon is decoration, never the label. */
-.agentcli-account-actions { display: flex; align-items: center; gap: 4px; flex: none; }
-.agentcli-account-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; padding: 0; cursor: pointer;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface); color: var(--phx-text-2);
-}
-.agentcli-account-btn:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--phx-text); border-color: var(--phx-text-2); }
-.agentcli-account-btn:disabled { opacity: 0.4; cursor: default; }
-/* Destructive, so it reads as different BEFORE it is hovered: an icon row is
-   scanned, and a delete that looks like its neighbours is a delete that gets
-   clicked by mistake. */
-.agentcli-account-btn.is-danger { color: var(--phx-error); border-color: var(--phx-error); }
-.agentcli-account-btn.is-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); color: var(--phx-error); }
-.agentcli-account-btn.is-busy { opacity: 0.6; }
+/* A provider account's actions: labelled buttons below its model line. */
+.agentcli-account-actions { margin: 8px 0 0; }
+.agentcli-settings-provider > .phx-inline-confirm { flex: 1 1 100%; margin: 0; }
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   color: var(--phx-text-2); line-height: 1.4;

@@ -27,6 +27,7 @@ from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminAccessKeysView,
     PhoenixAdminAccessKeyView,
     PhoenixAdminVoiceAgentPipelineView,
+    PhoenixAdminVoiceAgentPreferredView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
     ALL_ADMIN_VIEWS,
@@ -1798,7 +1799,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 66
+    assert len(ALL_ADMIN_VIEWS) == 67
 
 
 def test_archived_views_before_access_key_view():
@@ -3368,3 +3369,33 @@ async def test_conversation_settings_reject_invalid_limits(key, value):
     view.hass = _make_hass(data)
     response = await view.patch(_make_admin_request(body=json.dumps({key: value}).encode()))
     assert response.status == 400
+
+
+@pytest.mark.asyncio
+async def test_voice_preferred_post_sets_and_delete_clears():
+    data, _ = _settings_data([])
+    view = PhoenixAdminVoiceAgentPreferredView()
+    view.hass = _make_hass(data)
+    change = AsyncMock(side_effect=lambda hass, data, preferred: {"pipeline_id": "pl1", "preferred": preferred})
+    with patch("custom_components.phoenix_mcp.voice_agent.async_set_assist_pipeline_preferred", change):
+        on = await view.post(_make_admin_request(body=b"{}"))
+        off = await view.delete(_make_admin_request())
+    assert (on.status, json.loads(on.text)["preferred"]) == (200, True)
+    assert (off.status, json.loads(off.text)["preferred"]) == (200, False)
+    assert [c.kwargs["preferred"] for c in change.call_args_list] == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_voice_preferred_surfaces_why_it_could_not_change():
+    from custom_components.phoenix_mcp.voice_agent import VoicePipelineError
+
+    data, _ = _settings_data([])
+    view = PhoenixAdminVoiceAgentPreferredView()
+    view.hass = _make_hass(data)
+    boom = AsyncMock(side_effect=VoicePipelineError("The Phoenix MCP assistant is the only one."))
+    with patch("custom_components.phoenix_mcp.voice_agent.async_set_assist_pipeline_preferred", boom):
+        resp = await view.delete(_make_admin_request())
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert "only one" in body["message"]
+

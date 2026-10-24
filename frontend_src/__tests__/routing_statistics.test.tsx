@@ -15,15 +15,21 @@ it("loads only on expansion and never presents missing usage as zero", async () 
   expect(screen.getByText("1 requests missing usage")).toBeVisible();
   expect(screen.getByText(/External MCP clients/)).toBeVisible();
 });
-it("requires confirmation and resets only the selected surface", async () => {
+it("confirms in place and resets only the selected surface", async () => {
   get.mockResolvedValue({ voice: empty }); reset.mockResolvedValue({ voice: empty });
   render(<RoutingStatistics surface="voice" />); expand();
   await screen.findByText("No requests recorded yet.");
   fireEvent.click(screen.getByRole("button", { name: "Reset Statistics" }));
   expect(reset).not.toHaveBeenCalled();
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reset Statistics" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  const confirm = screen.getByRole("group", { name: "Reset Statistics" });
+  expect(confirm).toHaveTextContent("Clear statistics for this card only");
+  fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("group", { name: "Reset Statistics" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Reset Statistics" }));
+  fireEvent.click(within(screen.getByRole("group", { name: "Reset Statistics" })).getByRole("button", { name: "Reset Statistics" }));
   await waitFor(() => expect(reset).toHaveBeenCalledExactlyOnceWith("voice"));
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("group", { name: "Reset Statistics" })).toBeNull());
 });
 it("keeps an error recoverable without discarding prior counters", async () => {
   get.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ chat: empty });

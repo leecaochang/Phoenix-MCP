@@ -2,7 +2,6 @@ import { BusySelect } from "./BusyButton";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord } from "../types";
 import { api } from "../api";
-import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
@@ -29,12 +28,8 @@ export function AssistBridgeSettings({
   }, []);
 
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.assistCard")}
-        <DocsHelpLink path="connect.html#assist-tool-provider" label={t("settings.assistCard")} />
-      </h3>
-      <p className="agentcli-settings-hint">
+    <div className="phx-settings-form">
+      <p className="settings-info-note phx-settings-intro">
         {tRich("settings.assistIntro", { strong: (c) => <strong>{c}</strong> })}
       </p>
       <div className="toggle-row toggle-row-stacked-control">

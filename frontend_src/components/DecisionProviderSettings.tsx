@@ -3,8 +3,8 @@ import { BusyButton } from "./BusyButton";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
-import { Modal } from "./Modal";
-import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
+import { ActionButton } from "../ui/ActionButton";
+import { InlineConfirm } from "../ui/InlineConfirm";
 import { ProviderAddForm } from "./ProviderAddForm";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
 
@@ -203,29 +203,25 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         </p>}
         {options === account.id && <p className="agentcli-settings-hint" role="status">{t("routing.providerOptions")}</p>}
         </div>
-        {editing !== account.id && <div className="agentcli-account-actions">
-          <IconButton label={t("settings.agentcliChangeModel")} blocked={saving || busy}
-            onClick={() => void editModel(account)}><EditIcon /></IconButton>
-          <IconButton label={t("settings.agentcliRefresh")} busyLabel={t("settings.agentcliRefreshing")}
-            busy={refreshing === account.id} blocked={saving || busy} onClick={() => void refresh(account.id)}><RefreshIcon /></IconButton>
-          <IconButton label={t("settings.agentcliProbeCaps")} expanded={options === account.id} blocked={saving || busy}
-            onClick={() => setOptions(options === account.id ? null : account.id)}><ProbeIcon /></IconButton>
-          <IconButton label={t("settings.agentcliRemoveAccount", { name: account.name })} danger blocked={saving || busy}
-            onClick={() => { setConfirmRemove(account); setError(""); }}><TrashIcon /></IconButton>
+        {editing !== account.id && confirmRemove?.id !== account.id && <div className="phx-window-actions agentcli-account-actions">
+          <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={saving || busy}
+            onClick={() => void editModel(account)} />
+          <ActionButton icon="refresh" className="btn btn-outline btn-sm"
+            label={refreshing === account.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
+            busy={saving || busy} onClick={() => void refresh(account.id)} />
+          <ActionButton icon="probe" label={t("settings.accountCheckOptions")} className="btn btn-outline btn-sm" pressed={options === account.id}
+            busy={saving || busy} onClick={() => setOptions(options === account.id ? null : account.id)} />
+          <ActionButton icon="delete" label={t("settings.agentcliRemoveAccount", { name: account.name })} className="btn btn-outline btn-sm phx-action-danger"
+            busy={saving || busy} onClick={() => { setConfirmRemove(account); setError(""); }} />
         </div>}
+        {confirmRemove?.id === account.id && <InlineConfirm label={t("settings.agentcliRemoveTitle")} tone="danger"
+          confirmLabel={t("settings.remove")} confirmIcon="delete" confirmClassName="btn btn-danger btn-sm"
+          cancelLabel={t("settings.cancel")} busy={saving || busy} error={error || null}
+          onConfirm={() => void remove(account.id)} onCancel={() => setConfirmRemove(null)}>
+          <p>{t("routing.removeAccount", { name: account.name })}?</p>
+        </InlineConfirm>}
       </div>)}
     </div>
-    {confirmRemove && <Modal titleId="decision-remove-title" onClose={busy ? undefined : () => setConfirmRemove(null)}>
-      <h3 className="modal-title" id="decision-remove-title">{t("settings.agentcliRemoveTitle")}</h3>
-      <p>{t("routing.removeAccount", { name: confirmRemove.name })}?</p>
-      {error && <p className="banner banner-error" role="alert">{error}</p>}
-      <div className="modal-actions">
-        <BusyButton type="button" className="btn btn-danger btn-sm" busy={saving || busy}
-          onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</BusyButton>
-        <BusyButton type="button" className="btn btn-text" busy={busy}
-          onClick={() => setConfirmRemove(null)}>{t("settings.cancel")}</BusyButton>
-      </div>
-    </Modal>}
     {accountsLoaded && accounts.length === 0 && <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
       idPrefix="decision-add" requireModel allowCapabilityProbe={false}
       completeLabel={t("settings.agentcliDone")} addingLabelKey="settings.agentcliAdding"

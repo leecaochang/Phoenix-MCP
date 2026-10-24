@@ -1,33 +1,36 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { BusyButton } from "./BusyButton";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
-import { Modal } from "./Modal";
-import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { useNotify } from "../ui/notify";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
-// AI Task settings card. Registers Phoenix MCP as a Home Assistant AI Task entity ("Phoenix MCP AI
+// AI Task settings. Registers Phoenix MCP as a Home Assistant AI Task entity ("Phoenix MCP AI
 // Task") so ai_task.generate_data can target Phoenix MCP and run its own model on the chosen
 // access key's scope, with MESA safety, approvals, and audit. Independent of the Voice
-// Agent and the Assist bridge; needs an access key, an Agent Chat provider account, a model.
+// Agent and the Assist tool provider; needs an access key, an Agent Chat provider account, a model.
+//
+// Enable and Use as Default apply directly, as accepted for Settings. Home Assistant has one
+// default data-generation entity, so making Phoenix MCP the default replaces another one and
+// the toast names it; disabling the AI Task also clears its default (backend).
 export function AiTaskSettings({
   settings,
   onChange,
   saving,
 }: {
   settings: GlobalSettings;
-  onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
+  /** Save a setting; false when it failed (the window reports why). */
+  onChange: (key: keyof GlobalSettings, value: boolean | string) => Promise<boolean> | void;
   saving: boolean;
 }) {
+  const notify = useNotify();
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [pref, setPref] = useState<AiTaskPreferredStatus | null>(null);
-  const [showSetDefault, setShowSetDefault] = useState(false);
-  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const supported = settings.ai_task_supported !== false;
   const enabled = !!settings.ai_task_enabled;
@@ -55,8 +58,8 @@ export function AiTaskSettings({
   }, [providerId]);
 
   // The AI Task entity (and thus its eligibility to be the default) exists only when
-  // fully configured, so re-pull the "default data-gen entity" status whenever the
-  // config changes, not just on mount.
+  // fully configured, so re-read the default data-generation entity whenever the
+  // configuration changes, not just on mount.
   const loadPref = () => {
     if (!supported) { setPref(null); return; }
     api.getAiTaskPreferred().then(setPref).catch(() => setPref(null));
@@ -66,62 +69,83 @@ export function AiTaskSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, enabled, accessKeyId, providerId, model]);
 
-  // Throws on error so the confirm modal can surface it; updates status on success.
-  async function setDefault() {
-    setPref(await api.setAiTaskPreferred());
+  async function setEnabled(on: boolean) {
+    const wasDefault = !!pref?.is_preferred;
+    if ((await onChange("ai_task_enabled", on)) === false) return;
+    notify(on ? t("settings.aiTaskEnabledToast") : wasDefault ? t("settings.aiTaskDisabledDefaultToast") : t("settings.aiTaskDisabledToast"));
   }
-  async function removeDefault() {
+
+  async function setDefault(on: boolean) {
+    // Home Assistant has one default; name the one this replaces, read before the change.
+    const replaced = on && pref?.gen_data_entity_id && !pref.is_preferred ? (pref.gen_data_name ?? pref.gen_data_entity_id) : null;
+    setBusy(true);
+    setError(null);
     try {
-      setPref(await api.clearAiTaskPreferred());
-    } catch {
+      setPref(await (on ? api.setAiTaskPreferred() : api.clearAiTaskPreferred()));
+      notify(on
+        ? (replaced ? t("settings.aiTaskDefaultReplacedToast", { name: replaced }) : t("settings.aiTaskDefaultSetToast"))
+        : t("settings.aiTaskDefaultClearedToast"));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t("settings.aiTaskSetDefaultFailed"));
       loadPref();
+    } finally {
+      setBusy(false);
     }
   }
 
-  function handleEnableToggle(checked: boolean) {
-    // Disabling removes the Phoenix MCP AI Task entity, and clearing it as the default is a
-    // visible HA change, so confirm first when Phoenix MCP is currently the default.
-    if (!checked && pref?.is_preferred) {
-      setShowDisableConfirm(true);
-      return;
-    }
-    onChange("ai_task_enabled", checked);
-    // On enable, immediately offer to make Phoenix MCP the default (mirrors the voice agent's
-    // first-enable modal); the modal handles the not-yet-configured case.
-    if (checked && !pref?.is_preferred && (pref?.supported ?? false)) {
-      setShowSetDefault(true);
-    }
-  }
-
+  const defaultReady = !!pref?.entity_id;
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.aiTaskCard")}
-        <DocsHelpLink path="connect.html#ai-task" label={t("settings.aiTaskCard")} />
-      </h3>
-      <p className="agentcli-settings-hint">
+    <div className="phx-settings-form">
+      <p className="settings-info-note phx-settings-intro">
         {t("settings.aiTaskIntro")}
       </p>
-      <div className="toggle-row">
-        <div className="toggle-label">
-          <span>{t("settings.aiTaskEnableLabel")}</span>
-          <small>
-            {supported
-              ? t("settings.aiTaskEnableHelp")
-              : t("settings.aiTaskUnsupported")}
-          </small>
+      <div className="phx-setting-checks">
+        <div className="toggle-row">
+          <div className="toggle-label">
+            <span>{t("settings.aiTaskEnableLabel")}</span>
+            <small>
+              {supported
+                ? t("settings.aiTaskEnableHelp")
+                : t("settings.aiTaskUnsupported")}
+            </small>
+          </div>
+          <label className={`toggle-switch${saving || !supported ? " disabled" : ""}`}>
+            <BusyInput
+              type="checkbox"
+              aria-label={t("settings.aiTaskEnableLabel")}
+              data-help={pref?.is_preferred ? "help.settingsAiTaskDisable" : undefined}
+              checked={enabled}
+              busy={saving || busy} disabled={!supported}
+              onChange={(e) => void setEnabled(e.target.checked)}
+            />
+            <span className="toggle-switch-track" />
+          </label>
         </div>
-        <label className={`toggle-switch${saving || !supported ? " disabled" : ""}`}>
-          <BusyInput
-            type="checkbox"
-            aria-label={t("settings.aiTaskEnableLabel")}
-            checked={enabled}
-            busy={saving} disabled={!supported}
-            onChange={(e) => handleEnableToggle(e.target.checked)}
-          />
-          <span className="toggle-switch-track" />
-        </label>
+        {supported && (pref?.supported ?? false) && (
+          <div className={`toggle-row${!defaultReady && !pref?.is_preferred ? " toggle-row-greyed" : ""}`}>
+            <div className="toggle-label">
+              <span>{t("settings.aiTaskDefaultLabel")}</span>
+              <small>
+                {pref?.is_preferred
+                  ? t("settings.aiTaskDefaultOn")
+                  : defaultReady ? t("settings.aiTaskDefaultOff") : t("settings.aiTaskConfigureFirst")}
+              </small>
+            </div>
+            <label className="toggle-switch">
+              <BusyInput
+                type="checkbox"
+                aria-label={t("settings.aiTaskDefaultLabel")}
+                data-help={!pref?.is_preferred && pref?.gen_data_entity_id ? "help.settingsAiTaskReplaceDefault" : undefined}
+                checked={!!pref?.is_preferred}
+                busy={saving || busy} disabled={!defaultReady && !pref?.is_preferred}
+                onChange={(e) => void setDefault(e.target.checked)}
+              />
+              <span className="toggle-switch-track" />
+            </label>
+          </div>
+        )}
       </div>
+      {error && <div className="banner banner-error" role="alert">{error}</div>}
 
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
@@ -189,126 +213,6 @@ export function AiTaskSettings({
         onDetailChange={(value) => onChange("ai_task_detail_level", value)}
         aiTaskFreeTextOnly
       />
-
-      {supported && (pref?.supported ?? false) && (
-        <div className="toggle-row toggle-row-plain settings-toggle-mt">
-          <div className="toggle-label">
-            <span>{t("settings.aiTaskDefaultLabel")}</span>
-            <small>
-              {pref?.is_preferred
-                ? t("settings.aiTaskDefaultOn")
-                : t("settings.aiTaskDefaultOff")}
-            </small>
-          </div>
-          {pref?.is_preferred ? (
-            <BusyButton className="btn btn-text" onClick={removeDefault} busy={saving}>
-              {t("settings.aiTaskRemoveDefault")}
-            </BusyButton>
-          ) : (
-            <BusyButton
-              className="btn btn-secondary"
-              onClick={() => setShowSetDefault(true)}
-              busy={saving} disabled={!pref?.entity_id}
-              title={pref?.entity_id ? undefined : t("settings.aiTaskConfigureFirst")}
-            >
-              {t("settings.aiTaskMakeDefault")}
-            </BusyButton>
-          )}
-        </div>
-      )}
-
-      {showSetDefault && (
-        <AiTaskDefaultModal
-          entityReady={!!pref?.entity_id}
-          currentName={pref?.gen_data_entity_id && !pref?.is_preferred ? (pref?.gen_data_name ?? pref?.gen_data_entity_id) : null}
-          onClose={() => setShowSetDefault(false)}
-          onConfirm={setDefault}
-        />
-      )}
-
-      {showDisableConfirm && (
-        <AiTaskDisableModal
-          onClose={() => setShowDisableConfirm(false)}
-          onConfirm={() => { onChange("ai_task_enabled", false); setShowDisableConfirm(false); }}
-        />
-      )}
     </div>
-  );
-}
-
-// Confirm making Phoenix MCP the default AI Task data-gen entity. Since HA allows only one,
-// this overwrites any prior default, so the modal names it when there is one. Also the
-// first-enable prompt: when the entity is not ready yet (no access key/provider/model), it
-// guides the operator to finish configuring first rather than failing the set.
-function AiTaskDefaultModal({
-  entityReady,
-  currentName,
-  onClose,
-  onConfirm,
-}: {
-  entityReady: boolean;
-  currentName: string | null;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirm() {
-    setBusy(true);
-    setError(null);
-    try {
-      await onConfirm();
-      onClose();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("settings.aiTaskSetDefaultFailed"));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal titleId="ai-task-default-title" onClose={busy ? undefined : onClose}>
-      <h3 className="modal-title" id="ai-task-default-title">{t("settings.aiTaskDefaultModalTitle")}</h3>
-      <p className="mb-16">
-        {tRich("settings.aiTaskDefaultModalBody", { strong: (c) => <strong>{c}</strong> })}
-      </p>
-      {!entityReady && (
-        <div className="banner banner-warn mb-16">
-          {t("settings.aiTaskDefaultModalNotReady")}
-        </div>
-      )}
-      {entityReady && currentName && (
-        <div className="banner banner-warn mb-16">
-          {tRich("settings.aiTaskDefaultModalReplaces", { strong: (c) => <strong>{c}</strong> }, { name: currentName })}
-        </div>
-      )}
-      {error && <div className="banner banner-error" role="alert">{error}</div>}
-      <div className="modal-actions">
-        <BusyButton className="btn btn-primary" onClick={confirm} busy={busy} disabled={!entityReady}>
-          {busy ? t("settings.aiTaskSetting") : t("settings.aiTaskSetAsDefault")}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>
-          {entityReady ? t("settings.cancel") : t("settings.aiTaskSetUpLater")}
-        </BusyButton>
-      </div>
-    </Modal>
-  );
-}
-
-// Confirm disabling the AI Task when Phoenix MCP is HA's current data-gen default: disabling
-// removes the entity, so the default cannot be kept (it would dangle); this makes that
-// consequence explicit rather than silent.
-function AiTaskDisableModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
-  return (
-    <Modal titleId="ai-task-disable-title" onClose={onClose}>
-      <h3 className="modal-title" id="ai-task-disable-title">{t("settings.aiTaskDisableTitle")}</h3>
-      <p className="mb-16">
-        {t("settings.aiTaskDisableBody")}
-      </p>
-      <div className="modal-actions">
-        <button className="btn btn-danger" onClick={onConfirm}>{t("settings.aiTaskDisableConfirm")}</button>
-        <button className="btn btn-text" onClick={onClose}>{t("settings.cancel")}</button>
-      </div>
-    </Modal>
   );
 }

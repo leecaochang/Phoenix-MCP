@@ -787,3 +787,71 @@ async def test_remove_pipeline_noop_when_untracked():
     with patch.object(voice_agent, "_pipeline_store", return_value=store):
         await voice_agent.async_remove_assist_pipeline(MagicMock(), data)  # must not raise
     assert data.store.get_settings().voice_agent_pipeline_id is None
+
+
+async def _two_pipelines(*, phoenix_preferred: bool):
+    """A store holding Home Assistant's own pipeline and Phoenix MCP's tracked one."""
+    store = _FakePipelineStore()
+    other = await store.async_create_item({"name": "Home Assistant"})  # first item is preferred
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})
+    if phoenix_preferred:
+        store.async_set_preferred_item(phoenix.id)
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    return store, other, phoenix, data
+
+
+@pytest.mark.asyncio
+async def test_set_preferred_makes_the_tracked_pipeline_preferred():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=False)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        assert voice_agent.assist_pipeline_preferred(MagicMock(), phoenix.id) is False
+        res = await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=True)
+        assert voice_agent.assist_pipeline_preferred(MagicMock(), phoenix.id) is True
+    assert res == {"pipeline_id": phoenix.id, "preferred": True}
+    assert store.async_get_preferred_item() == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_keeps_the_pipeline_and_hands_preference_on():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=True)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        res = await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert res["preferred"] is False
+    assert store.async_get_preferred_item() == other.id
+    # Clearing the preference is not removal.
+    assert phoenix.id in store.data
+    assert data.store.get_settings().voice_agent_pipeline_id == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_leaves_another_preferred_pipeline_alone():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=False)
+    third = await store.async_create_item({"name": "Kitchen"})
+    store.async_set_preferred_item(third.id)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert store.async_get_preferred_item() == third.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_is_refused_when_phoenix_is_the_only_pipeline():
+    store = _FakePipelineStore()
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        with pytest.raises(voice_agent.VoicePipelineError, match="only one"):
+            await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert store.async_get_preferred_item() == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_preference_needs_a_tracked_pipeline_that_still_exists():
+    store = _FakePipelineStore()
+    await store.async_create_item({"name": "Home Assistant"})
+    for tracked in (None, "gone"):
+        data = _make_pipeline_data(voice_agent_pipeline_id=tracked, **_FULL_CFG)
+        with patch.object(voice_agent, "_pipeline_store", return_value=store):
+            with pytest.raises(voice_agent.VoicePipelineError, match="Set up"):
+                await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=True)
+            assert voice_agent.assist_pipeline_preferred(MagicMock(), tracked) is False
+

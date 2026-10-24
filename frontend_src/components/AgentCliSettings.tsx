@@ -2,7 +2,6 @@ import { BusyInput } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useRef, useState } from "react";
-import { DocsHelpLink } from "./common";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
@@ -81,12 +80,8 @@ export function AgentCliSettings({
   useEffect(() => () => window.clearTimeout(maxIterTimer.current), []);
 
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.agentcliCard")}
-        <DocsHelpLink path="agentcli.html" label={t("settings.agentcliCard")} />
-      </h3>
-      <p className="settings-info-note" style={{ marginTop: 0 }}>
+    <div className="phx-settings-form">
+      <p className="settings-info-note phx-settings-intro">
         {t("settings.agentcliIntro")}
       </p>
 

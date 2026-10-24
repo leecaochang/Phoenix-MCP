@@ -141,7 +141,9 @@ LITERALS: dict[str, tuple[str, ...]] = {
     # ai_task.py hardcodes _attr_name = "Phoenix MCP AI Task"; the entity is not
     # localized, so a translated mention would name something the operator
     # cannot find in Home Assistant.
-    "panel.settings.aiTaskDefaultModalBody": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultSetToast": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultReplacedToast": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultClearedToast": ("Phoenix MCP AI Task",),
 }
 
 # Values a locale may legitimately leave byte-identical to English. Anything
@@ -322,7 +324,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesa.privNormal",                    # privacy level, masculine
         "panel.mesa.privPublic",                    # privacy level
         "panel.mesaSuggestion.noun.script",         # "script"
-        "panel.settings.notificationsCard",         # "Notifications"
         "panel.notifications.title",                # "Notifications"
         "panel.shell.documentation",                # "Documentation"
         "panel.accessKeys.expiryMinutes",               # "Minutes"
@@ -436,7 +437,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.perms.colType",  # "Type"
         "panel.settings.agentcliRegion",  # "Region"
         "panel.settings.agentcliRegionGlobal",  # "Global"
-        "panel.settings.loggingCard",  # "Logging", used unchanged in Norwegian
         "panel.wizard.agentTablist",  # "Agent"
         "panel.wizard.stepPersona",  # "Persona"
         "panel.wizard.stepTest",  # "Test"
