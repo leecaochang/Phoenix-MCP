@@ -373,16 +373,20 @@ def read_statistic_window(
 
     Core combines hourly and five-minute statistics for an exact window and converts
     the values to the display unit, which is the label; None when the entity has no
-    statistics. A type the statistic does not keep (a mean of a total) is absent.
+    statistics. A type the statistic does not keep (a mean of a total) is absent:
+    it is never asked for, since Core's query fails outright when none of the
+    requested mean, min or max columns exists.
     """
     from homeassistant.components.recorder import statistics as recorder_stats
 
-    values = recorder_stats.statistic_during_period(hass, start, end, statistic_id, types, None)
     metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
     if metadata is None:
         return None
-    unit = recorder_stats.get_display_unit(
-        hass, statistic_id, metadata[1].get("unit_class"), metadata[1].get("unit_of_measurement"))
+    meta = metadata[1]
+    kept = {kind for kind in types if (meta.get("has_sum") if kind == "change"
+                                       else meta.get("mean_type", meta.get("has_mean")))}
+    values = recorder_stats.statistic_during_period(hass, start, end, statistic_id, kept, None) if kept else {}
+    unit = recorder_stats.get_display_unit(hass, statistic_id, meta.get("unit_class"), meta.get("unit_of_measurement"))
     return {key: value for key, value in values.items() if value is not None}, unit
 
 

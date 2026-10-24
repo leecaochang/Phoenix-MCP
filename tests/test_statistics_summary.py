@@ -118,6 +118,16 @@ async def test_select_names_the_entities_and_types_narrow_the_row(hass: HomeAssi
     assert "max" not in body["entities"][0]
 
 
+@pytest.mark.parametrize("types", [["mean"], ["change", "mean"], ["min", "max"]])
+async def test_a_type_a_total_does_not_keep_is_left_out_not_a_failure(hass: HomeAssistant, stats_env, types) -> None:
+    """Core's window query fails outright when asked only for columns a total lacks."""
+    result = await _summary(hass, stats_env, entity_id=["sensor.meter", "sensor.temp_a"], statistic_types=types)
+    assert result[1] == "allowed", result
+    rows = {row["entity_id"]: row for row in json.loads(result[0]["content"][0]["text"])["entities"]}
+    assert set(rows["sensor.meter"]) == {"entity_id", "name", "area", "unit", *({"change"} & set(types))}
+    assert set(types) - {"change"} <= set(rows["sensor.temp_a"])
+
+
 async def test_page_options_carried_over_are_ignored_and_named(hass: HomeAssistant, stats_env) -> None:
     # Models used to a page request add period or sum; refusing them cost a round for nothing.
     result = await _summary(hass, stats_env, entity_id=["sensor.meter"], period="day", statistic_types=["change", "sum"])
