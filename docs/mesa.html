@@ -64,6 +64,7 @@
             </tbody>
           </table>
         </div>
+        <p>When MESA refuses every target of a <code>call_service</code> call or a Zigbee change, the agent is told that MESA policy blocked it and that neither reconnecting nor <code>get_capability_summary</code> will change that, so it does not mistake the refusal for a missing capability. Native control tools answer that no accessible entity matched, and registry, device and integration changes name the MESA rule that applied.</p>
 
         <h2 id="deployment-mode">Deployment mode</h2>
         <p>A single deployment setting, <code>mesa_mode</code>, decides how strict MESA is overall. It is set in the panel's <strong>Settings</strong> tab and reported by <code>get_overview</code> (which, when MESA is active, also lists the operator-set prohibited and read-only entities so an agent learns what is off-limits up front).</p>

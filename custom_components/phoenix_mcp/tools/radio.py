@@ -47,6 +47,7 @@ from ..helpers import (
 )
 from .discovery import _accessible_entity_ids
 from ..tool_common import (
+    MESA_DENIED_MESSAGE,
     _CAP_FORBIDDEN_MESSAGE,
     _approved_exec_ctx,
     _gate,
@@ -2451,7 +2452,7 @@ async def _tool_set_zigbee_device_property(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -2524,7 +2525,7 @@ async def _execute_set_zigbee_device_property(
             hass, data, access_key, mesa_outcome.approval
         )
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 
@@ -2630,7 +2631,7 @@ async def _tool_set_zigbee_binding(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.source.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.source.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -2702,7 +2703,7 @@ async def _execute_set_zigbee_binding(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.source.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.source.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 
@@ -2989,7 +2990,7 @@ async def _tool_zigbee_group_change(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -3071,7 +3072,7 @@ async def _execute_zigbee_group_change(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 

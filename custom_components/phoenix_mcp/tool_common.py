@@ -371,6 +371,15 @@ _CAP_FORBIDDEN_MESSAGE = (
     "your tool list (reconnect) if it changed, or ask the operator to grant it."
 )
 
+# A MESA policy refusal of every target an action had left after Phoenix's own
+# scope checks. Unlike a capability denial, neither reconnecting nor
+# get_capability_summary changes it, so it says so instead of sending the agent
+# there. MESA only ever sees permitted targets, so naming it reveals nothing hidden.
+MESA_DENIED_MESSAGE = (
+    "Blocked by MESA policy for these targets. This is not a capability: reconnecting or "
+    "get_capability_summary will not change it; only the operator's MESA policy can."
+)
+
 
 # Appended to the executed result when an interactive wait returns an
 # operator-APPROVED action. Without it an agent iterating toward a goal reads an

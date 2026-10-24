@@ -1087,7 +1087,7 @@ async def async_apply_mesa_to_call(
 
     Returns an outcome the caller maps to its own response shape:
     - allow: proceed with ``outcome.entities`` (a subset of the input).
-    - deny: every entity was blocked; caller returns its standard Forbidden.
+    - deny: every entity was blocked; caller returns tool_common.MESA_DENIED_MESSAGE or its own MESA refusal.
     - pending: at least one entity needs confirmation; an approval was created.
 
     ``mesa_mode == off`` short-circuits to allow-all. A production setup failure

@@ -258,7 +258,7 @@ from .tool_defs import (
     _TOOL_ANNOTATIONS,
 )
 from .audit import Outcome
-from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
+from .tool_common import MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
 from .policy_engine import (Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
@@ -1988,7 +1988,7 @@ async def _tool_call_service(
 
     if domain == "calendar" and service != "get_events":
         if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     secondary_targets = await unsupported_secondary_targets(
@@ -2010,7 +2010,7 @@ async def _tool_call_service(
             and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id")))):
         if (call_needs_physical_gate(domain=domain, service=service, access_key=access_key, hass=hass)
                 and effective_cap(access_key, "cap_physical_control") == CAP_DENY):
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return (
             _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
             "invalid_request", "call_service",
@@ -2142,7 +2142,7 @@ async def _execute_call_service(
 
     if domain == "calendar" and service != "get_events":
         if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     from .approval_targets import TARGETS_CHANGED, targets_current
@@ -2294,7 +2294,7 @@ async def _execute_call_service(
         # one definition, so the two kinds of gate cannot answer differently.
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error("Forbidden."), "denied", resource
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
     check_request_authority()
     permitted_entities = mesa_outcome.entities
     if not service_target_binding_valid(domain, service, permitted_entities, hass):
@@ -8778,7 +8778,7 @@ async def _tool_mesa(
 
 _TOOL_DEFS_BY_NAME: dict[str, dict] = {
     definition["name"]: definition
-    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS)
+    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *mesa_tool_defs())
 }
 
 

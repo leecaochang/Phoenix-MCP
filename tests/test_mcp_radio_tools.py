@@ -15,7 +15,7 @@ import asyncio
 import json
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -1697,6 +1697,25 @@ class TestSetZigbeeDeviceProperty:
         )
         assert result[1] == "denied"
         assert broker.published == []
+
+    async def test_a_mesa_deny_says_mesa_not_capability(self, hass, radio_env, broker):
+        # A capability text would send the agent to get_capability_summary and a
+        # reconnect, neither of which can change a MESA policy.
+        from custom_components.phoenix_mcp.mesa import MesaGateOutcome
+        from custom_components.phoenix_mcp.tool_common import MESA_DENIED_MESSAGE
+
+        access_key = _light_access_key(
+            cap_diagnostics="allow", cap_radio_write="allow", cap_physical_control="allow")
+        current = await self._current(hass, radio_env, access_key)
+        with patch("custom_components.phoenix_mcp.tools.radio.async_apply_mesa_to_call",
+                   AsyncMock(return_value=MesaGateOutcome(decision="deny"))):
+            result = await _call_tool(
+                "set_zigbee_device_property",
+                {"device_id": radio_env["z2m_bulb"], "property": "led_mode", "value": "on",
+                 "expected_hash": current["content_hash"]},
+                access_key, hass, _data())
+        assert result[1] == "denied" and not any(topic.endswith("/set") for topic, _ in broker.published)
+        assert result[0]["content"][0]["text"] == MESA_DENIED_MESSAGE
 
     async def test_allow_changes_and_exactly_confirms_property(
         self, hass, radio_env, broker

@@ -1059,3 +1059,15 @@ async def test_scoped_tools_explain_and_query_the_parent_device_level(hass, stri
     )
     assert outcome == "allowed"
     assert [row["entity_id"] for row in queried["results"]] == ["switch.outlet"]
+
+
+@pytest.mark.asyncio
+async def test_a_denied_capability_gets_the_shared_capability_text(env):
+    # The same refusal every other tool gives, so an agent knows what would change it.
+    from custom_components.phoenix_mcp.mcp_view import _call_tool
+    from custom_components.phoenix_mcp.tool_common import _CAP_FORBIDDEN_MESSAGE
+
+    data = await _data_with_profiles(env)
+    access_key = _access_key(cap_config_read="deny", domains={"light": "GREEN"})
+    result, outcome, _ = await _call_tool("mesa_get_profile", {"entity_id": "light.a"}, access_key, env, data)
+    assert outcome == "denied" and result["content"][0]["text"] == _CAP_FORBIDDEN_MESSAGE

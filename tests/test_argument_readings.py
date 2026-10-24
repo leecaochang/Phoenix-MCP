@@ -180,3 +180,30 @@ def test_an_enum_in_another_case_is_read_on_reads_only(tool, field, sent, read):
     assert error is None and arguments[field] == read
     # A write takes its enum exactly as declared; the handler refuses another spelling.
     assert scalar_arguments(tool, {field: sent}, read_only=False)[0][field] == sent
+
+
+@pytest.mark.parametrize(("args", "cap"), [
+    ({"service": {"domain": "calendar", "name": "create_event"},
+      "targets": [{"kind": "entity", "ids": ["calendar.home"]}]}, "cap_calendar_write"),
+    ({"service": {"domain": "lock", "name": "unlock"}}, "cap_physical_control"),
+])
+async def test_a_denied_secondary_capability_says_so_whatever_the_arguments(home, args, cap):
+    from custom_components.phoenix_mcp.tool_common import _CAP_FORBIDDEN_MESSAGE
+
+    result = await _call_tool("call_service", args, _key(**{cap: "deny"}), home.hass, _data())
+    assert result[1] == "denied" and result[0]["content"][0]["text"] == _CAP_FORBIDDEN_MESSAGE
+
+
+async def test_a_mesa_deny_says_mesa_not_capability(home):
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp.mesa import MesaGateOutcome
+    from custom_components.phoenix_mcp.tool_common import MESA_DENIED_MESSAGE
+
+    with patch("custom_components.phoenix_mcp.mcp_view.async_apply_mesa_to_call",
+               AsyncMock(return_value=MesaGateOutcome(decision="deny"))):
+        result = await _call_tool("call_service", {"service": {"domain": "light", "name": "turn_on"},
+                                                   "targets": [{"kind": "entity", "ids": ["light.allowed"]}]},
+                                  _key(), home.hass, _data())
+    assert result[1] == "denied" and result[0]["content"][0]["text"] == MESA_DENIED_MESSAGE
+    assert home.calls.await_count == 0
