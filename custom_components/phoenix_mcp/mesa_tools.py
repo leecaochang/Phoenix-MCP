@@ -389,6 +389,18 @@ def _build_handlers(
     )
 
 
+# mesa-core answers a refused or failed query with a success-shaped
+# {error, message, details} body. Phoenix marks it isError and audits what it
+# was, so a refusal neither reads as data to the agent nor as "allowed" to the
+# operator. The out-of-scope not_found above is built to the same envelope and
+# flag, so hidden and genuinely unprofiled stay indistinguishable.
+_ERROR_OUTCOMES: dict[str, str] = {"not_found": "not_found", "lease_not_found": "not_found", "forbidden": "denied"}
+
+
+def _is_error_envelope(result: Any) -> bool:
+    return isinstance(result, dict) and set(result) == {"error", "message", "details"} and isinstance(result["error"], str)
+
+
 def _tool_error(message: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": message}], "isError": True}
 
@@ -443,11 +455,7 @@ async def async_call_mesa_tool(
         # scoped store keeps the plain resolver: hiding an addressable entity's
         # layer there would relax the policy it resolves.
         if entity_id and resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
-            return (
-                _tool_success(json.dumps(_not_found_envelope(entity_id))),
-                "not_found",
-                entity_id,
-            )
+            return _tool_error(json.dumps(_not_found_envelope(entity_id))), "not_found", entity_id
         # mesa-core's get_semantic_moments callback is synchronous, but HA's
         # purpose-specific trigger lookup is async, so pre-compute here (the
         # visibility check above already ran, so out-of-scope entities never
@@ -465,4 +473,7 @@ async def async_call_mesa_tool(
     )
     handler = getattr(handlers, tool_name)
     result = await handler(args)
-    return _tool_success(json.dumps(result, default=str)), "allowed", tool_name
+    text = json.dumps(result, default=str)
+    if _is_error_envelope(result):
+        return _tool_error(text), _ERROR_OUTCOMES.get(result["error"], "invalid_request"), tool_name
+    return _tool_success(text), "allowed", tool_name

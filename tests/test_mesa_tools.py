@@ -97,12 +97,16 @@ async def test_get_out_of_scope_is_identical_to_nonexistent(env):
     data = await _data_with_profiles(env)
     access_key = _access_key(domains={"light": "GREEN"})
 
-    out_of_scope, _, _ = await _call("mesa_get_profile", {"entity_id": "switch.b"}, access_key, env, data)
+    out_of_scope, hidden_outcome, hidden_error = await _call(
+        "mesa_get_profile", {"entity_id": "switch.b"}, access_key, env, data)
     # An in-scope but unprofiled entity hits mesa-core's own not_found path.
-    in_scope_missing, _, _ = await _call("mesa_get_profile", {"entity_id": "light.unprofiled"}, access_key, env, data)
+    in_scope_missing, missing_outcome, missing_error = await _call(
+        "mesa_get_profile", {"entity_id": "light.unprofiled"}, access_key, env, data)
 
     assert out_of_scope == _not_found_envelope("switch.b")
     assert in_scope_missing == _not_found_envelope("light.unprofiled")
+    # Both are flagged as errors, so the flag tells the two apart no more than the body does.
+    assert hidden_error is missing_error is True and hidden_outcome == missing_outcome == "not_found"
 
 
 @pytest.mark.asyncio
@@ -1071,3 +1075,14 @@ async def test_a_denied_capability_gets_the_shared_capability_text(env):
     access_key = _access_key(cap_config_read="deny", domains={"light": "GREEN"})
     result, outcome, _ = await _call_tool("mesa_get_profile", {"entity_id": "light.a"}, access_key, env, data)
     assert outcome == "denied" and result["content"][0]["text"] == _CAP_FORBIDDEN_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_a_mesa_core_refusal_is_an_error_with_its_real_outcome(env):
+    # mesa-core answers in a success-shaped body; the agent and the audit log must still see a refusal.
+    data = await _data_with_profiles(env)
+    access_key = _access_key(domains={"light": "GREEN"})
+    payload, outcome, is_error = await _call("mesa_query_profiles", {"cursor": "not-a-cursor"}, access_key, env, data)
+    assert payload["error"] == "invalid_cursor" and is_error is True and outcome == "invalid_request"
+    payload, outcome, is_error = await _call("mesa_release_lease", {"lease_id": "nope"}, access_key, env, data)
+    assert payload["error"] == "lease_not_found" and is_error is True and outcome == "not_found"

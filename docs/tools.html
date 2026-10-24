@@ -553,7 +553,7 @@
         <!-- ===== MESA profiles ===== -->
         <section class="tool-group" data-cap="mesa">
           <div class="tool-group-head"><h2 id="mesa-tools">MESA profiles</h2>
-          <p>Access-key-scoped reads of the per-entity safety profiles, plus the advisory lease pair. All require <strong>Configuration read</strong>, only ever see entities the access key can read, and return an identical "not found" for a missing or out-of-scope entity, so they cannot probe for existence. See <a href="mesa.html">MESA</a>.</p></div>
+          <p>Access-key-scoped reads of the per-entity safety profiles, plus the advisory lease pair. All require <strong>Configuration read</strong>, only ever see entities the access key can read, and return an identical "not found" for a missing or out-of-scope entity, so they cannot probe for existence. A refusal, such as "not found" or an invalid cursor, is an error result whose JSON body carries <code>error</code>, <code>message</code> and <code>details</code>. See <a href="mesa.html">MESA</a>.</p></div>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_explain_profile why resolved conflict inheritance">
             <div class="tool-head"><span class="tool-name">mesa_explain_profile</span><span class="badge badge-cap">Configuration read</span></div>
