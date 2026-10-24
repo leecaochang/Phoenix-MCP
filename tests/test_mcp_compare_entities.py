@@ -82,7 +82,8 @@ class TestScopeRefusalsAreIndistinguishable:
         out_of_scope, o1, r1 = await _compare(hass, access_key, compare_to="lock.secret")
         nonexistent, o2, r2 = await _compare(hass, access_key, compare_to="lock.absent")
         assert (o1, o2) == ("not_found", "not_found")
-        assert out_of_scope == nonexistent
+        # Identical apart from echoing the caller's own id back.
+        assert json.dumps(out_of_scope).replace("lock.secret", "<id>") == json.dumps(nonexistent).replace("lock.absent", "<id>")
 
     async def test_refusal_never_names_which_side_failed(self, hass):
         """The resource lands in the audit log, so naming the id there would make

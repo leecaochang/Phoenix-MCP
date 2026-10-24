@@ -836,6 +836,21 @@ class TestRelationshipCoverage:
         assert matches[0]["entity_id"] == entity.entity_id
         assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": ["group"]}]
 
+    async def test_a_list_scope_names_the_values_that_cover_nothing_readable(self, hass, rel_env):
+        """Hidden and missing alike, instead of narrowing the answer silently."""
+        access_key = _access_key()
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "entity", "id": [
+            "light.kitchen", "sensor.secret", "light.nowhere"]}}, access_key, hass)
+        scope = _json(content)["scope"]
+        assert scope["entity_ids"] == ["light.kitchen"]
+        assert scope["not_found"] == ["sensor.secret", "light.nowhere"]
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "integration", "id": [
+            "test_integration", "nothing_here"]}}, access_key, hass)
+        assert _json(content)["scope"]["not_found"] == ["nothing_here"]
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "entity", "id": "light.kitchen"}},
+                                    access_key, hass)
+        assert "not_found" not in _json(content)["scope"]
+
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor
         the registry can never resolve again, for anyone."""

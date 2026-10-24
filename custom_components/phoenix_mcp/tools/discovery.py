@@ -2209,6 +2209,7 @@ class _Scope:
     selector: str
     value: str | list[str]
     entity_ids: set[str]
+    not_found: list[str]
 
 
 def _relationship_scope(
@@ -2249,25 +2250,25 @@ def _relationship_scope(
         ), "invalid_request", "get_relationships"
     value: str | list[str] = values if isinstance(raw, list) else values[0]
 
+    # Each value's candidates, so a list scope can name the values that cover
+    # nothing readable, hidden and missing alike, instead of narrowing silently.
+    per_value: dict[str, list[str]] = {}
     if selector == "entity_id":
-        candidates = list(values)
+        per_value = {name: [name] for name in values}
     elif selector == "integration":
-        platforms = set(values)
-        candidates = [
-            e.entity_id for e in er.async_get(hass).entities.values()
-            if e.platform in platforms and e.disabled_by is None
-        ]
+        for entry in er.async_get(hass).entities.values():
+            if entry.platform in values and entry.disabled_by is None:
+                per_value.setdefault(entry.platform, []).append(entry.entity_id)
     elif selector == "area":
-        candidates = []
         for name in values:
             area = _resolve_area(hass, name)
-            candidates += build_expand_target(hass)("area_id", area.id) if area is not None else []
+            per_value[name] = build_expand_target(hass)("area_id", area.id) if area is not None else []
     else:
         kind = "device_id" if selector == "device_id" else "label_id"
-        candidates = [eid for name in values for eid in build_expand_target(hass)(kind, name)]
+        per_value = {name: build_expand_target(hass)(kind, name) for name in values}
 
     scope = {
-        eid for eid in candidates
+        eid for candidates in per_value.values() for eid in candidates
         if resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
     }
     if not scope:
@@ -2275,7 +2276,8 @@ def _relationship_scope(
         # single-entity form uses the standard "Entity not found.".
         message = "Entity not found." if selector == "entity_id" else _SCOPE_NOT_FOUND
         return _tool_error(message), "not_found", f"{selector}:{','.join(values)}"
-    return _Scope(selector, value, scope)
+    not_found = [name for name in values if not set(per_value.get(name, ())) & scope]
+    return _Scope(selector, value, scope, not_found)
 
 
 async def _relationship_dashboards(
@@ -2414,6 +2416,7 @@ async def _tool_get_relationships(
     if isinstance(resolved, tuple):
         return resolved
     selector, value, scope = resolved.selector, resolved.value, resolved.entity_ids
+    scope_not_found = resolved.not_found if isinstance(value, list) else None
 
     searched = ["automation", "script", "scene", "group"]
     not_searched: list[dict] = []
@@ -2464,7 +2467,8 @@ async def _tool_get_relationships(
         listed, dead = consumers[:count], dangling[:max(0, count - len(consumers))]
         body: dict[str, Any] = {
             "scope": {"selector": selector, "value": value,
-                      "entity_ids": sorted(scope), "count": len(scope)},
+                      "entity_ids": sorted(scope), "count": len(scope),
+                      **({"not_found": scope_not_found} if scope_not_found is not None else {})},
             "consumers": listed,
             "consumer_count": len(consumers),
             "unreferenced": sorted(scope - touched),
@@ -2832,7 +2836,9 @@ async def _tool_compare_state(
             changed = None if s1 is None or s2 is None else s1 != s2
             comparisons.append({"entity_id": eid, "state_at_t1": s1, "state_at_t2": s2, "changed": changed})
 
-    body = {"t1": t1, "t2": t2, "comparisons": comparisons}
+    # Named like get_state's list: hidden and missing alike, never silently dropped.
+    body = {"t1": t1.isoformat(), "t2": t2.isoformat(), "comparisons": comparisons,
+            "not_found": [eid for eid in ids if eid not in accessible]}
     return _tool_success(json.dumps(body, default=str)), "allowed", "compare_states"
 
 
@@ -2945,11 +2951,12 @@ async def _tool_compare_entities(
         # Both sides answer with the same body whether the entity is absent or
         # merely out of scope, and the resource names the tool rather than the
         # id, so a refusal is not an existence oracle.
+        missing = _tool_error(f"Entity not found: {json.dumps(eid[:80])}."), "not_found", "compare_entities"
         if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
-            return _tool_error("Entity not found."), "not_found", "compare_entities"
+            return missing
         state = hass.states.get(eid)
         if state is None:
-            return _tool_error("Entity not found."), "not_found", "compare_entities"
+            return missing
         states.append(scrub_sensitive_attributes(state))
 
     # Scrubbing runs before the diff, so an attribute Phoenix strips from a

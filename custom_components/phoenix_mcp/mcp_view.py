@@ -1302,8 +1302,9 @@ async def _history_summary_many(
             "count": len(kept),
             "entities": kept,
         }
-        for key, values in (("not_found", [e for e in ids if e not in still]),
-                            ("not_summarized", [e for e in not_summarized if e in still]),
+        # not_found is always present, as on get_state's list; the rest when non-empty.
+        body["not_found"] = [e for e in ids if e not in still]
+        for key, values in (("not_summarized", [e for e in not_summarized if e in still]),
                             ("not_recorded", [e for e in not_recorded if e in still]),
                             ("unscanned", [e for e in unscanned if e in still]),
                             ("unavailable", [e for e in unavailable if e in still])):
@@ -1529,8 +1530,8 @@ async def _statistics_summary_many(
             "count": count,
             "entities": rows[:count],
         }
-        for key, values in (("not_found", [e for e in ids if e not in still]),
-                            ("not_summarized", [row["entity_id"] for row in rows[count:]]),
+        body["not_found"] = [e for e in ids if e not in still]
+        for key, values in (("not_summarized", [row["entity_id"] for row in rows[count:]]),
                             ("no_statistics", [e for e in no_statistics if e in still]),
                             ("unscanned", [e for e in unscanned if e in still])):
             if values:
@@ -1753,8 +1754,8 @@ async def _calendar_events_many(
             body["unreadable"] = [item for item in unreadable if item["calendar"] in still]
         body = _safe_calendar_data(body, access_key, hass)
         # The caller's own IDs, echoed as other summaries do: redacting them would only hide which.
-        if raw is not None and (missing := [entity_id for entity_id in ids if entity_id not in still]):
-            body["not_found"] = missing
+        if raw is not None:
+            body["not_found"] = [entity_id for entity_id in ids if entity_id not in still]
         return body
 
     return _tool_success(json.dumps(fitted_offset_page(page, envelope, build))), "allowed", tool
@@ -2689,9 +2690,6 @@ async def _tool_get_logbook(
         return _tool_error(
             "context_id cannot be combined with entity_ids or device_ids."
         ), "invalid_request", "get_logbook"
-    if any(not valid_entity_id(entity_id) for entity_id in entity_ids):
-        return _tool_error("Requested resource not found."), "not_found", "get_logbook"
-
     raw_search = args.get("search")
     if raw_search is not None and not isinstance(raw_search, str):
         return _tool_error("search must be a string."), "invalid_request", "get_logbook"
@@ -2733,22 +2731,22 @@ async def _tool_get_logbook(
             f"This logbook query supports at most {max_days} days."
         ), "invalid_request", "get_logbook"
 
-    requested_permissions: list[Permission] = [
-        resolve_read(entity_id, access_key, hass) for entity_id in entity_ids
-    ]
-    requested_permissions.extend(
-        resolve_device_registry_access(device_id, access_key, hass)
-        for device_id in device_ids
-    )
-    if any(
-        permission not in (Permission.READ, Permission.WRITE)
-        for permission in requested_permissions
-    ):
-        return (
-            _tool_error("Requested resource not found."),
-            "not_found",
-            "get_logbook",
-        )
+    # Unreadable resources are named, hidden and missing alike, and the rest are
+    # read; with none left the query is refused rather than widened home-wide.
+    entity_access = {entity_id: resolve_read(entity_id, access_key, hass) if valid_entity_id(entity_id)
+                     else Permission.NOT_FOUND for entity_id in entity_ids}
+    device_access = {device_id: resolve_device_registry_access(device_id, access_key, hass)
+                     for device_id in device_ids}
+    not_found = [item for item, permission in (*entity_access.items(), *device_access.items())
+                 if permission not in (Permission.READ, Permission.WRITE)]
+    entity_ids = [item for item in entity_ids if item not in not_found]
+    device_ids = [item for item in device_ids if item not in not_found]
+    if not_found and not entity_ids and not device_ids:
+        return _tool_error(
+            "Requested resource not found: " + ", ".join(json.dumps(item[:80]) for item in not_found) + "."
+        ), "not_found", "get_logbook"
+    requested_permissions: list[Permission] = [entity_access[item] for item in entity_ids]
+    requested_permissions.extend(device_access[item] for item in device_ids)
 
     payload: dict[str, Any] = {
         "start_time": start_time.isoformat(),
@@ -2838,6 +2836,8 @@ async def _tool_get_logbook(
             },
             "entries": kept,
         }
+        if not_found:
+            body["not_found"] = not_found
         if total > count and kept:
             body["older_end_time"] = iso_utc(datetime.fromtimestamp(float(kept[0]["when"]), tz=timezone.utc))
         if crowded:
@@ -5926,13 +5926,20 @@ async def _wait_for_many_approvals(
         )
 
     records = {}
+    unknown = []
     for approval_id in ids:
         record = get_approval(data.store, approval_id)
         # Unknown and belonging-to-another-access-key answer identically, so a refusal
-        # is not an existence oracle for another access key's queue.
+        # is not an existence oracle for another access key's queue. Naming the
+        # caller's own ids tells it which to drop.
         if record is None or record.access_key_id != access_key.id:
-            return _tool_error("Approval not found."), "not_found", "wait_for_approval"
-        records[approval_id] = record
+            unknown.append(approval_id)
+        else:
+            records[approval_id] = record
+    if unknown:
+        return _tool_error(
+            "Approval not found: " + ", ".join(json.dumps(item[:80]) for item in unknown) + "."
+        ), "not_found", "wait_for_approval"
 
     outstanding = {i for i, r in records.items() if r.status == STATUS_PENDING}
     if outstanding:

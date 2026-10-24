@@ -4033,7 +4033,8 @@ async def test_wait_for_many_refuses_another_access_keys_approval(hass):
         {"approval_ids": ["appr-nope"]}, access_key, hass, data)
 
     assert outcome_theirs == outcome_ghost == "not_found"
-    assert theirs == ghost
+    # Identical apart from echoing the caller's own id back.
+    assert json.dumps(theirs).replace("appr-1", "<id>") == json.dumps(ghost).replace("appr-nope", "<id>")
 
 
 @pytest.mark.asyncio

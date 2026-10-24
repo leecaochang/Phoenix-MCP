@@ -245,7 +245,7 @@ async def test_inaccessible_and_missing_requested_resources_are_wire_identical()
         responses.append((body, result["content"], result["isError"], outcome))
         command.assert_not_awaited()
     assert responses[0] == responses[1] == responses[2]
-    assert responses[0][0] == "Requested resource not found."
+    assert responses[0][0] == 'Requested resource not found: "light.hidden".'
     assert responses[0][3] == "not_found"
 
 
@@ -266,12 +266,12 @@ async def test_inaccessible_and_missing_requested_devices_are_identical():
         responses.append((body, result["content"], result["isError"], outcome))
         command.assert_not_awaited()
     assert responses[0] == responses[1] == responses[2]
-    assert responses[0][0] == "Requested resource not found."
+    assert responses[0][0] == 'Requested resource not found: "device-hidden".'
     assert responses[0][3] == "not_found"
 
 
 @pytest.mark.asyncio
-async def test_any_inaccessible_resource_rejects_the_whole_combined_request():
+async def test_an_inaccessible_resource_is_named_and_the_rest_is_read():
     def entity_permission(entity_id, _access_key, _hass):
         return Permission.READ if entity_id == "light.ok" else Permission.NO_ACCESS
 
@@ -283,7 +283,7 @@ async def test_any_inaccessible_resource_rejects_the_whole_combined_request():
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
-        new=AsyncMock(),
+        new=AsyncMock(return_value=[]),
     ) as command:
         body, _result, outcome = await _call(
             {
@@ -291,9 +291,11 @@ async def test_any_inaccessible_resource_rejects_the_whole_combined_request():
                 "device_ids": ["device-ok"],
             }
         )
-    assert outcome == "not_found"
-    assert body == "Requested resource not found."
-    command.assert_not_awaited()
+    # Hidden and missing are named alike; narrowing to the readable rest widens nothing.
+    assert outcome == "allowed"
+    assert body["not_found"] == ["light.hidden"]
+    sent = command.await_args.args[2]
+    assert sent["entity_ids"] == ["light.ok"] and sent["device_ids"] == ["device-ok"]
 
 
 @pytest.mark.asyncio

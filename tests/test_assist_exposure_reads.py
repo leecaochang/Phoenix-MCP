@@ -83,7 +83,8 @@ async def _assert_gated(hass, tool, args_for, data, *, shown=SHOWN, hidden=HIDDE
     refused = await _call_tool(tool, args_for(hidden), _key(), hass, data)
     absent = await _call_tool(tool, args_for(ghost), _key(), hass, data)
     assert refused[0].get("isError") is True, refused
-    assert refused[0] == absent[0]
+    # Identical apart from echoing the caller's own id back.
+    assert json.dumps(refused[0]).replace(hidden, "<id>") == json.dumps(absent[0]).replace(ghost, "<id>")
 
 
 async def test_resolve_read_canonicalizes_and_never_records_a_ghost(home):
@@ -221,6 +222,9 @@ async def test_compare_states_drops_an_unexposed_entity_like_a_missing_one(home)
     assert [row["entity_id"] for row in _body(filtered)["comparisons"]] == [SHOWN]
     assert [row["entity_id"] for row in _body(unfiltered)["comparisons"]] == [SHOWN, HIDDEN]
     assert seen[:2] == [[SHOWN], [SHOWN]]
+    # Named, not silently dropped: hidden and missing alike, as on get_state's list.
+    assert _body(filtered)["not_found"] == [HIDDEN, GHOST]
+    assert _body(unfiltered)["not_found"] == [GHOST]
 
 
 async def test_watch_entity(home):
