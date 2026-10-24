@@ -1099,7 +1099,7 @@ async def _scan_summary(
 
 # search_entities filters select accepts; it finds the entities, so their scope,
 # Assist exposure and child-device rules are exactly that tool's.
-_SUMMARY_SELECT_FILTERS = ("query", "domain", "device_class", "integration", "radio", "area")
+_SUMMARY_SELECT_FILTERS = ("query", "domain", "device_class", "integration", "radio", "power", "area")
 
 
 def _stored_bytes(value: Any) -> int:

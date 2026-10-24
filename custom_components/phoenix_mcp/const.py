@@ -1465,6 +1465,8 @@ MAX_SEARCH_QUERY_LEN = 512
 # (Z-Wave JS), matter (Matter over Thread or Wi-Fi) and bluetooth (devices
 # reached by a Bluetooth address).
 SEARCH_RADIO_TYPES = ("zigbee", "zwave", "matter", "bluetooth")
+# Home Assistant records a battery reading but no mains or other power source.
+SEARCH_POWER_TYPES = ("battery",)
 # Bound opt-in membership normalization and disclosure across one search page.
 MAX_SEARCH_MEMBERS = 256
 MAX_SEARCH_MEMBER_CHECKS = 4096

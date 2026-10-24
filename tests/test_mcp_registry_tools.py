@@ -971,6 +971,62 @@ class TestSearchByRadioAndIntegration:
         assert outcome == "invalid_request" and content["content"][0]["text"] == message
 
 
+def _add_battery(hass, device_name: str, domain: str = "sensor") -> str:
+    """A battery entity on one radio_env device, as integrations register them."""
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    device = next(d for d in dev_reg.devices if d.name == device_name)
+    entry = ent_reg.async_get_or_create(domain, "test", f"{device_name}_battery", device_id=device.id,
+                                        suggested_object_id=f"{device_name}_battery",
+                                        original_device_class="battery", entity_category=er.EntityCategory.DIAGNOSTIC)
+    hass.states.async_set(entry.entity_id, "80" if domain == "sensor" else "off", {"device_class": "battery"})
+    return entry.entity_id
+
+
+class TestSearchByPower:
+    @pytest.fixture
+    def power_env(self, radio_env):
+        hass = radio_env
+        _add_battery(hass, "zha_leak")
+        _add_battery(hass, "z2m_door", "binary_sensor")
+        hidden = _add_battery(hass, "mqtt_strimmer")
+        return hass, hidden
+
+    def _key(self, hidden: str) -> AccessKeyRecord:
+        return _access_key(permissions=PermissionTree(
+            domains={"binary_sensor": PermissionNode(state="GREEN"), "sensor": PermissionNode(state="GREEN")},
+            entities={hidden: PermissionNode(state="RED")}))
+
+    async def test_battery_selects_devices_with_a_readable_battery_entity(self, power_env):
+        hass, hidden = power_env
+        content, outcome, _ = await _call("search_entities", {"power": "battery", "domain": "binary_sensor"},
+                                          self._key(hidden), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        # A child device counts with its main device; a device whose only battery
+        # entity the key cannot read is left out, so the hidden entity stays unrevealed.
+        assert outcome == "allowed" and ids == {"zha_leak", "z2m_door", "z2m_door_l2", "z2m_door_battery"}
+
+    async def test_battery_combines_with_radio_and_drops_diagnostics_in_a_summary_select(self, power_env):
+        hass, hidden = power_env
+        content, _, _ = await _call("search_entities", {"power": "battery", "radio": "zwave"}, self._key(hidden), hass)
+        assert _result_json(content)["total"] == 0
+        from custom_components.phoenix_mcp.mcp_view import _resolve_select
+        data = MagicMock()
+        data.mesa = None
+        chosen, selection = await _resolve_select({"power": "battery", "radio": "zigbee"}, "get_history",
+                                                  self._key(hidden), hass, data)
+        assert [eid.split(".")[1] for eid in chosen] == ["z2m_door", "z2m_door_l2", "zha_leak"]
+        assert selection["select"] == {"power": "battery", "radio": "zigbee"}
+
+    @pytest.mark.parametrize(("power", "message"), [
+        ("mains", "power must be battery. Home Assistant records a battery reading but no mains or other power source."),
+        (["battery"], "power must be a string."),
+    ])
+    async def test_an_unknown_power_source_is_refused(self, power_env, power, message):
+        hass, hidden = power_env
+        content, outcome, _ = await _call("search_entities", {"power": power}, self._key(hidden), hass)
+        assert outcome == "invalid_request" and content["content"][0]["text"] == message
+
+
 class TestGetOverview:
     async def test_deny_without_cap(self, hass, reg_env):
         _, outcome, _ = await _call("get_overview", {}, _access_key(cap_search="deny"), hass)

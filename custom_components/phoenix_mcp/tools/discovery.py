@@ -49,7 +49,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -1351,6 +1351,7 @@ class _SearchFilters:
     device_classes: set[str] | None
     integrations: set[str] | None
     radios: set[str] | None
+    power: str | None
     state: Any
     area: str
     has_area: bool | None
@@ -1373,6 +1374,36 @@ def _entity_radio_types(entry: Any, cache: dict[str, set[str]], hass: HomeAssist
             device = registry.async_get(chain_id)
             if device is not None:
                 found |= device_radio_types(device)
+        cache[device_id] = found
+    return cache[device_id]
+
+
+def _device_reports_battery(entry: Any, cache: dict[str, bool], access_key: AccessKeyRecord,
+                            hass: HomeAssistant, expose: Any) -> bool:
+    """Whether an entity's device, or its main parent, has a battery entity the access key can read.
+
+    A battery level or low-battery entity is the only power evidence Home Assistant
+    records, and it also marks phones, cars and home battery storage. One the
+    access key cannot read never counts, so the filter cannot reveal it exists.
+    """
+    device_id = getattr(entry, "device_id", None)
+    if not device_id:
+        return False
+    if device_id not in cache:
+        registry = er.async_get(hass)
+        found = False
+        for chain_id in device_authority_chain(hass, device_id) or (device_id,):
+            for sibling in er.async_entries_for_device(registry, chain_id, include_disabled_entities=True):
+                state = hass.states.get(sibling.entity_id)
+                device_class = (sibling.device_class or sibling.original_device_class
+                                or (state.attributes.get("device_class") if state is not None else None))
+                if (device_class == "battery"
+                        and resolve_registry_access(sibling.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+                        and (expose is None or expose(sibling.entity_id))):
+                    found = True
+                    break
+            if found:
+                break
         cache[device_id] = found
     return cache[device_id]
 
@@ -1429,6 +1460,7 @@ def _parse_search_args(args: dict) -> _SearchFilters:
         device_classes=_search_names(args.get("device_class")),
         integrations=_search_names(args.get("integration")),
         radios=_search_names(args.get("radio")),
+        power=str(args["power"]).strip().lower() if args.get("power") not in (None, "") else None,
         state=args.get("state") or None,
         area=str(args.get("area") or "").strip().lower(),
         has_area=args.get("has_area"),
@@ -1579,6 +1611,8 @@ async def _tool_search_entities(
         if error:
             return _tool_error(error), "invalid_request", "search_entities"
 
+    if args.get("power") not in (None, "") and not isinstance(args.get("power"), str):
+        return _tool_error("power must be a string."), "invalid_request", "search_entities"
     for name in ("domain", "device_class", "integration", "radio"):
         raw = args.get(name)
         if raw not in (None, "") and not isinstance(raw, str) and not (
@@ -1590,6 +1624,10 @@ async def _tool_search_entities(
     if f.radios is not None and not f.radios <= set(SEARCH_RADIO_TYPES):
         return _tool_error(
             "radio must be one or more of: " + ", ".join(SEARCH_RADIO_TYPES) + "."
+        ), "invalid_request", "search_entities"
+    if f.power is not None and f.power not in SEARCH_POWER_TYPES:
+        return _tool_error(
+            "power must be battery. Home Assistant records a battery reading but no mains or other power source."
         ), "invalid_request", "search_entities"
     if f.registry_state not in {"enabled", "disabled", "all"}:
         return _tool_error(
@@ -1611,6 +1649,7 @@ async def _tool_search_entities(
     # which is the horizon a stale_hours search cannot see past.
     oldest_change: datetime | None = None
     radio_cache: dict[str, set[str]] = {}
+    battery_cache: dict[str, bool] = {}
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
@@ -1640,6 +1679,8 @@ async def _tool_search_entities(
         if f.integrations is not None and (entry is None or entry.platform not in f.integrations):
             continue
         if f.radios is not None and not f.radios & _entity_radio_types(entry, radio_cache, hass):
+            continue
+        if f.power is not None and not _device_reports_battery(entry, battery_cache, access_key, hass, expose):
             continue
         state_val = e.get("state")
         if f.state is not None and state_val != f.state:

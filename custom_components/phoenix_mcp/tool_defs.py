@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -98,6 +98,8 @@ def _select_schema(description: str) -> dict:
                 {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
                 {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
             ], "description": "How the device connects."},
+            "power": {"type": "string", "enum": list(SEARCH_POWER_TYPES),
+                      "description": "battery: devices that report a battery level or low battery."},
             "area": {"type": "string", "description": "An area or floor."},
             "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
         },
@@ -2100,6 +2102,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": (
                         "Only entities whose device connects this way: zigbee (ZHA or Zigbee2MQTT), zwave, matter "
                         "(Thread or Wi-Fi) or bluetooth."
+                    ),
+                },
+                "power": {
+                    "type": "string", "enum": list(SEARCH_POWER_TYPES),
+                    "description": (
+                        "battery: only entities whose device reports a battery level or low battery, which includes "
+                        "phones, cars and home battery storage. Home Assistant records no mains or other power source."
                     ),
                 },
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},

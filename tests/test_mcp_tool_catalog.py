@@ -192,21 +192,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 54,
-            "canonical_bytes": 62790,
-            "claude_bytes": 57217,
-            "openai_bytes": 58783,
+            "canonical_bytes": 63280,
+            "claude_bytes": 57707,
+            "openai_bytes": 59273,
         },
         "write_capable": {
             "tool_count": 102,
-            "canonical_bytes": 126580,
-            "claude_bytes": 115324,
-            "openai_bytes": 118282,
+            "canonical_bytes": 127070,
+            "claude_bytes": 115814,
+            "openai_bytes": 118772,
         },
         "announce_all": {
             "tool_count": 171,
-            "canonical_bytes": 203874,
-            "claude_bytes": 185651,
-            "openai_bytes": 190610,
+            "canonical_bytes": 204364,
+            "claude_bytes": 186141,
+            "openai_bytes": 191100,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 171
@@ -606,4 +606,4 @@ def test_set_questions_are_steered_to_one_summary_call():
     history = defs["get_history"]
     assert "select may name them by search_entities filters" in history["description"]
     assert set(history["inputSchema"]["properties"]["select"]["properties"]) == {
-        "query", "domain", "device_class", "integration", "radio", "area", "include_diagnostic"}
+        "query", "domain", "device_class", "integration", "radio", "power", "area", "include_diagnostic"}
