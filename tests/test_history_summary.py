@@ -54,7 +54,7 @@ BASE = dt_util.utcnow().replace(microsecond=0) - timedelta(days=2)
 
 
 def _key() -> AccessKeyRecord:
-    domains = {domain: PermissionNode(state="GREEN") for domain in ("light", "sensor", "zone")}
+    domains = {domain: PermissionNode(state="GREEN") for domain in ("light", "sensor", "zone", "climate")}
     return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=dt_util.utcnow(),
                            created_by="u", permissions=PermissionTree(domains=domains))
 
@@ -201,6 +201,59 @@ def _alternate(hass: HomeAssistant, entity_id: str, count: int) -> None:
     _set(hass, entity_id, "off", -60)
     for index in range(count):
         _set(hass, entity_id, "on" if index % 2 == 0 else "off", 10 + index * 10 + index % 3)
+
+
+def _hvac(hass: HomeAssistant) -> None:
+    """A thermostat in heat mode throughout whose hvac_action alone changes, once while unavailable."""
+    _set(hass, "climate.hall", "heat", -3600, {"hvac_action": "idle", "temperature": 21})
+    for action, seconds in (("heating", 600), ("idle", 1500), ("heating", 2400)):
+        _set(hass, "climate.hall", "heat", seconds, {"hvac_action": action, "temperature": 21})
+    _set(hass, "climate.hall", "unavailable", 3000)
+    _set(hass, "climate.hall", "heat", 3300, {"hvac_action": "idle", "temperature": 21})
+
+
+async def test_attribute_totals_follow_attribute_only_updates(recorder_mock, hass: HomeAssistant) -> None:
+    """How long hvac_action was heating, though the state stayed heat; an absent attribute counts as the state."""
+    _anchor(hass)
+    _hvac(hass)
+    await async_wait_recording_done(hass)
+    state = await _summary(hass, "climate.hall", 0, 3600)
+    assert _states(state) == {"heat": (3300.0, 1), "unavailable": (300.0, 1)}
+    body = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    assert body["attribute"] == "hvac_action"
+    assert body["state_at_start"] == "idle" and body["state_at_end"] == "idle"
+    assert _states(body) == {"heating": (1500.0, 2), "idle": (1800.0, 2), "unavailable": (300.0, 1)}
+    assert body["complete"] is True
+
+
+async def test_attribute_totals_are_the_same_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _hvac(hass)
+    for index in range(12):
+        _set(hass, "climate.hall", "heat", 3400 + index * 10, {"hvac_action": "heating" if index % 2 else "idle"})
+    await async_wait_recording_done(hass)
+    whole = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    with (patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3),
+          patch.object(mcp_view, "read_attribute_change_page", wraps=mcp_view.read_attribute_change_page) as page):
+        paged = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    assert page.call_count >= 5
+    assert paged == whole and whole["complete"] is True
+
+
+async def test_attribute_totals_for_several_entities_and_only_in_summary(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _hvac(hass)
+    _set(hass, "climate.den", "cool", -3600, {"hvac_action": "cooling"})
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["climate.hall", "climate.den"], "mode": "summary", "attribute": "hvac_action",
+            "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    result = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    body = json.loads(result[0]["content"][0]["text"])
+    assert body["attribute"] == "hvac_action"
+    rows = {row["entity_id"]: {item["state"]: item["duration_seconds"] for item in row["states"]} for row in body["entities"]}
+    assert rows == {"climate.den": {"cooling": 3600.0}, "climate.hall": {"idle": 1800.0, "heating": 1500.0, "unavailable": 300.0}}
+    result = await _call(hass, "climate.hall", 0, 3600, mode="state_changes", attribute="hvac_action")
+    assert result[1] == "invalid_request" and "only with mode summary" in result[0]["content"][0]["text"]
 
 
 async def test_state_carries_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:

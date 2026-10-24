@@ -77,7 +77,7 @@ from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
 from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
-from .history_summary import SummaryUnavailableError, compact_summary_row, read_state_change_page, scan_state_changes, summary_body
+from .history_summary import SummaryUnavailableError, compact_summary_row, read_attribute_change_page, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     read_statistic_window,
@@ -923,6 +923,10 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
         return _tool_error(
             "limit and order do not apply to summary mode, which returns per-state totals instead of rows."
         ), "invalid_request", entity_id
+    if args.get("attribute") and mode != "summary":
+        return _tool_error(
+            "attribute is accepted only with mode summary, which totals how long the attribute held each value."
+        ), "invalid_request", entity_id
     order = str(args.get("order") or "oldest_first").strip().lower()
     if order not in ("oldest_first", "newest_first"):
         return _tool_error(
@@ -933,7 +937,7 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
     except ValueError as err:
         return _tool_error(str(err)), "invalid_request", entity_id
     if mode == "summary":
-        return await _history_summary(entity_id, window, access_key, hass)
+        return await _history_summary(entity_id, window, access_key, hass, args.get("attribute") or None)
     if mode == "significant_states" and window.end - window.start > MAX_SIGNIFICANT_STATES_RANGE:
         return _tool_error(
             "significant_states supports at most 7 days per request because Home Assistant cannot bound this query in the database. Use state_changes for longer ranges."
@@ -1055,9 +1059,16 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
 
 async def _scan_summary(
     instance: Any, hass: HomeAssistant, entity_id: str, start_us: int, end_us: int, max_seconds: float,
+    attribute: str | None = None,
 ) -> Any:
-    """Fold one entity's Recorder changes over [start_us, end_us) within the summary budgets."""
+    """Fold one entity's Recorder changes over [start_us, end_us) within the summary budgets.
+
+    With attribute, the fold runs over that attribute's values instead of the state.
+    """
     async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
+        if attribute is not None:
+            return cast(list[tuple[int, str]], await instance.async_add_executor_job(
+                read_attribute_change_page, hass, entity_id, attribute, after_us, before_us, limit, include_start))
         return cast(list[tuple[int, str]], await instance.async_add_executor_job(
             read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
 
@@ -1212,6 +1223,7 @@ async def _history_summary_many(
 
     ids = list(dict.fromkeys(item.strip() for item in raw_ids))
     scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    attribute = args.get("attribute") or None
     selected = dict(selection or {})
     selection_warnings = list(selected.pop("warnings", []))
     rows: dict[str, Any] = {}
@@ -1245,6 +1257,7 @@ async def _history_summary_many(
                 "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
         body: dict[str, Any] = {
             "mode": "summary",
+            **({"attribute": attribute} if attribute is not None else {}),
             "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
             **selected,
             "count": len(kept),
@@ -1285,7 +1298,7 @@ async def _history_summary_many(
                 try:
                     summary = await _scan_summary(
                         instance, hass, entity_id, to_us(window.start), to_us(end),
-                        min(HISTORY_SUMMARY_MAX_SECONDS, remaining))
+                        min(HISTORY_SUMMARY_MAX_SECONDS, remaining), attribute)
                 except SummaryUnavailableError:
                     unavailable.append(entity_id)
                 else:
@@ -1316,9 +1329,13 @@ async def _history_summary_many(
 
 
 async def _history_summary(
-    entity_id: str, window: RecorderWindow, access_key: AccessKeyRecord, hass: HomeAssistant
+    entity_id: str, window: RecorderWindow, access_key: AccessKeyRecord, hass: HomeAssistant,
+    attribute: str | None = None,
 ) -> tuple[dict, str, str]:
     """get_history summary mode: one budgeted scan folded into per-state totals.
+
+    With attribute, the totals are per value of that attribute (how long a
+    thermostat's hvac_action was heating), named in the body's attribute field.
 
     The scan stops at the current time, because a future end would attribute time
     that has not happened. An entity Recorder excludes is refused: carrying its
@@ -1339,7 +1356,7 @@ async def _history_summary(
             ), "invalid_request", entity_id
         keep_days = instance.keep_days
         summary = await _scan_summary(
-            instance, hass, entity_id, to_us(window.page_start), to_us(end), HISTORY_SUMMARY_MAX_SECONDS)
+            instance, hass, entity_id, to_us(window.page_start), to_us(end), HISTORY_SUMMARY_MAX_SECONDS, attribute)
     except SummaryUnavailableError:
         return _tool_error(
             "Recorder holds too many changes for this entity within a few microseconds to summarize this range."
@@ -1361,6 +1378,8 @@ async def _history_summary(
         retention=retention_metadata("short_term", keep_days), warnings=warnings,
         continued=window.page_start > window.start,
     )
+    if attribute is not None:
+        body = {"attribute": attribute, **body}
     return _tool_success(json.dumps(body)), "allowed", entity_id
 
 

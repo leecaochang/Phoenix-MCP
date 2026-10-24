@@ -176,7 +176,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Home Assistant records at each restart; use summary to learn whether something entered a state. "
             "In summary mode entity_id may be a list, one compact row each, or select may name them by "
             "search_entities filters instead: the way to ask which sensors entered a state in a period, "
-            "in one call. Entities past what one result holds are named in not_summarized."
+            "in one call. Entities past what one result holds are named in not_summarized. With attribute, "
+            "summary totals that attribute's values instead of the state, such as how long each thermostat's "
+            "hvac_action was heating or cooling."
         ),
         "inputSchema": {
             "type": "object",
@@ -202,6 +204,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                         "state_changes: compact state transitions. significant_states: scrubbed significant state "
                         "records. summary: per-state totals; omit limit and order."
                     ),
+                },
+                "attribute": {
+                    "type": "string", "maxLength": 255,
+                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state.",
                 },
                 "limit": {
                     "type": "integer",

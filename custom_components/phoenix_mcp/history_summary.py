@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
 import time
 from typing import Any
 
@@ -46,6 +47,35 @@ def read_state_change_page(
         hass, from_us(after_us), from_us(before_us), entity_id, True, False, limit, include_start_state,
     ).get(entity_id, [])
     return [(ceil_us(state.last_updated_timestamp), state.state) for state in states]
+
+
+def read_attribute_change_page(
+    hass: Any, entity_id: str, attribute: str, after_us: int, before_us: int, limit: int,
+    include_start_state: bool,
+) -> list[Row]:
+    """One ascending page of one attribute's values. Recorder executor only.
+
+    An attribute-only update (a thermostat's hvac_action going from heating to
+    idle in the same heat mode) never reaches read_state_change_page, so this
+    reads every recorded update with its attributes, inside (after, before) and
+    with the same start row, and keeps the first `limit`. A row without the
+    attribute counts under the entity's state, such as unavailable.
+    """
+    from homeassistant.components.recorder import history
+
+    states = history.get_significant_states(
+        hass, from_us(after_us), from_us(before_us), [entity_id], None,
+        include_start_time_state=include_start_state, significant_changes_only=False,
+        minimal_response=False, no_attributes=False,
+    ).get(entity_id, [])
+    rows: list[Row] = []
+    # As in Core's change query, the start row comes on top of the limit.
+    start = int(bool(states) and include_start_state and ceil_us(states[0].last_updated_timestamp) <= after_us)
+    for state in states[:start + limit]:
+        value = state.attributes.get(attribute, state.state)
+        rows.append((ceil_us(state.last_updated_timestamp),
+                     value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)))
+    return rows
 
 
 def group_cut(rows: list[Row]) -> int | None:
