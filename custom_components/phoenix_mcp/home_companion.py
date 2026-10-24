@@ -339,6 +339,25 @@ def _parse_final_answer(text: str, evidence: ResponseEvidence) -> dict | None:
         return None
 
 
+def _read_only_answer(text: str) -> dict | None:
+    """The answer in a read-only reply that missed the required object: its prose, or a malformed object's message."""
+    body = text.strip()
+    start = body.find("{")
+    if start >= 0:
+        try:
+            value, _ = json.JSONDecoder().raw_decode(body, start)
+        except ValueError:
+            value = None
+        if isinstance(value, dict):
+            message, status = value.get("message"), value.get("status")
+            # A count reference that failed validation means the model supplied its own count.
+            if not isinstance(message, str) or not message.strip() or "read_answer" in value:
+                return None
+            return {"status": status if status in {"completed", "clarification_needed", "refused"} else "completed",
+                    "message": message.strip()}
+    return {"status": "completed", "message": body} if body else None
+
+
 def invalid_read_report(access_key: Any, text: str) -> bool:
     """Let the bounded loop correct the final formatting of a read-only answer.
 
@@ -491,6 +510,12 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
         if result.outcome != TURN_OK:
             return _result("completed", outcomes=turn.outcomes)
         answer = _parse_final_answer(result.text, turn.evidence)
+        if (answer is None and turn.evidence.model_answer and not turn.evidence.attempts
+                and not turn.evidence.control_proposed):
+            # A model-authored read answer (history and the like) whose format the
+            # bounded loop could not correct is still the answer; the report still
+            # says nothing was executed. Counts and plain state reads stay server-built.
+            answer = _read_only_answer(result.text)
         if answer is None:
             return _result("invalid_output", outcomes=turn.outcomes)
         if "read_answer" in answer:

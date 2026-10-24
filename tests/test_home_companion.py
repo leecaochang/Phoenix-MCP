@@ -337,20 +337,30 @@ async def test_repeated_write_never_reexecutes(hass,companion,monkeypatch):
     assert result['execution']=='partial'
 
 
-@pytest.mark.parametrize('answer,expected', [
-    ('```json\n{"status":"completed","message":"23 degrees."}\n```', 'completed'),
-    ('The value is 23 degrees.\n\n{"status":"completed","message":"23 degrees."}', 'completed'),
-    ('{"status":"completed","message":"ok"}\nActually the task failed.', 'invalid_output'),
-    ('{"status":"completed","message":"ok"}{"status":"refused","message":"no"}', 'invalid_output'),
-    ('{"status":"completed","message":"ok","extra":true}', 'invalid_output'),
-    ('{"status":"success","message":"ok"}', 'invalid_output'),
-    ('not JSON', 'invalid_output'),
+@pytest.mark.parametrize('answer,message', [
+    ('```json\n{"status":"completed","message":"It is 23 degrees."}\n```', 'It is 23 degrees.'),
+    ('The value is 23 degrees.\n\n{"status":"completed","message":"It is 23 degrees."}', 'It is 23 degrees.'),
+    ('{"status":"completed","message":"It is 23 degrees."}\nActually the task failed.', 'It is 23 degrees.'),
+    ('{"status":"completed","message":"It is 23 degrees.","extra":true}', 'It is 23 degrees.'),
+    ('{"status":"success","message":"It is 23 degrees."}', 'It is 23 degrees.'),
+    ('It is 23 degrees in the office.', 'It is 23 degrees in the office.'),
 ])
-async def test_final_envelope_accepts_fences_but_rejects_wrong_shapes(hass,companion,monkeypatch,answer,expected):
-    # A rejected shape gets one tools-free correction; the same shape again is still rejected.
-    catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],answer,answer])
-    assert payload(await rpc(hass,companion))['status']==expected
-    assert len(catalogs)==(2 if expected=='completed' else 3)
+async def test_a_read_only_reply_keeps_its_answer_when_the_format_is_wrong(hass,companion,monkeypatch,answer,message):
+    # A wrong shape gets one tools-free correction; repeated, the answer in it is still kept,
+    # never the raw object, and the report still says nothing was executed.
+    scripted(monkeypatch,[[('list_areas',{})],answer,answer])
+    report=payload(await rpc(hass,companion))
+    assert report['status']=='completed' and report['message']==message and report['execution']=='not_attempted'
+
+
+@pytest.mark.parametrize('answer', ['{"status":"success","message":"Done."}', 'I turned it on.', '{"status":"completed"}'])
+async def test_a_reply_after_a_proposed_command_must_keep_the_required_shape(hass,companion,monkeypatch,answer):
+    # Vetoed by the preflight check, so nothing ran, but a command was proposed.
+    scripted(monkeypatch,[[('intent__HassTurnOn',{'entity_id':'light.selected'})],answer,answer])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report=payload(await rpc(hass,companion,args={'request':'Turn on the selected lamp.'}))
+    assert report['status']=='invalid_output' and 'Done' not in report['message'] and 'turned' not in report['message']
+    service.assert_not_awaited()
 
 
 async def test_a_read_answered_in_prose_is_corrected_once_instead_of_discarded(hass,companion,monkeypatch):
