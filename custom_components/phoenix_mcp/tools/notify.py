@@ -175,7 +175,11 @@ async def _tool_get_notifications(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: Home Assistant's persistent notifications, newest first, without Phoenix's own."""
-    rows = await async_ws_command(hass, "persistent_notification/get", {})
+    if _PERSISTENT not in hass.config.components:
+        # Without the component there is no notification list, so none to show.
+        rows: Any = []
+    else:
+        rows = await async_ws_command(hass, "persistent_notification/get", {})
     shown = []
     for row in rows or ():
         if not isinstance(row, dict) or str(row.get("notification_id") or "").startswith(_OPERATOR_PREFIX):

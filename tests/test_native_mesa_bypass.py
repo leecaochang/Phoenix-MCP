@@ -196,6 +196,7 @@ MESA_EXEMPT_ACTUATORS = {
     "tools/authoring.py::_execute_delete_script": "script.reload after a config write",
     "tools/authoring.py::_finish_entity_write": "script.reload or scene.reload after a gated config write; domain supplied by the owning executor",
     "tools/authoring.py::_execute_delete_scene": "scene.reload after a config write",
+    "tools/todo.py::_items": "todo.get_items only reads a list the key can READ; item changes run through call_service and its MESA gate",
     "tools/config_files.py::_execute_write_file": "frontend.reload_themes after an approved theme-file write; no entity target",
 }
 
