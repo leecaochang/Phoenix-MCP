@@ -329,3 +329,15 @@ def test_a_read_only_clarification_keeps_the_models_question_before_the_guidance
     # The model cannot turn a reply without any read into its own clarification.
     report=build_report('completed','I turned everything on.',ResponseEvidence(),'en')
     assert report['status']=='clarification_needed' and 'turned' not in report['message']
+
+
+@pytest.mark.parametrize('history', [False, True])
+def test_a_count_reference_answers_only_a_counting_question(history):
+    evidence=ResponseEvidence()
+    search(evidence)
+    if history:
+        evidence.observe('get_history','allowed',result({'entities':[{'entity_id':'binary_sensor.gate','transitions':0}]}))
+    assert evidence.select_read_answer({'kind':'count','source':0})
+    report=build_report('completed','The gate sensor never triggered this week.',evidence,'en')
+    assert ('never triggered' in report['message']) is history
+    assert ('2 matching' in report['message']) is not history

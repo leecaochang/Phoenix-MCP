@@ -343,7 +343,9 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         next_step = 'full_request'
         parts.append(voice_text(language, 'companion_read_failed'))
     else:
-        if evidence.selected_count is not None:
+        # A count answers only a counting question; after a history or other
+        # interpreted read the model's answer is the reply, even if it cites a count.
+        if evidence.selected_count is not None and not evidence.model_answer:
             kind = voice_text(language, HOME_COMPANION_COUNT_KIND_TEMPLATES[evidence.selected_kind])
             parts.append(voice_text(language, HOME_COMPANION_COUNT_TEMPLATES[style], count=evidence.selected_count, kind=kind))
             if detail != 'concise':
