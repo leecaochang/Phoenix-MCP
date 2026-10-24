@@ -49,6 +49,7 @@ from .audit import generate_request_id
 from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
+from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
 from .template_render import TemplateRenderError, async_render_template_for_access_key
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
@@ -340,7 +341,7 @@ def tool_catalog_counts() -> dict[str, int]:
 # always announced. The announce_all_tools access key flag overrides this gating
 # entirely.
 _WRITE_GATED_TOOLS = frozenset({
-    "call_service",
+    "call_service", "set_todo_item",
     "HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed",
     "HassClimateSetTemperature", "HassSetPosition", "HassSetVolume",
     "HassSetVolumeRelative", "HassMediaPause", "HassMediaUnpause",
@@ -11051,6 +11052,8 @@ _register_tool("get_camera_image", _tool_get_camera_image)
 _register_tool("get_history", _tool_get_history)
 _register_tool("get_statistics", _tool_get_statistics)
 _register_tool("get_calendar_events", _tool_get_calendar_events)
+_register_tool("get_todo_items", _tool_get_todo_items)
+_register_tool("set_todo_item", _tool_set_todo_item)
 _register_tool("call_service", _tool_call_service)
 _register_tool("get_config", _tool_get_config)
 _register_tool("render_template", _tool_render_template)

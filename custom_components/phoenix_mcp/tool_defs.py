@@ -447,6 +447,52 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                                                   'calendar write.'}},
                      'required': ['entity_id']}},
     {
+        "name": "get_todo_items",
+        "description": (
+            "Read the items on todo lists (shopping lists and the like) the access key can READ: one list, a list of "
+            "them, or every one when entity_id is omitted. Items keep each list's own order and carry uid, summary, "
+            "status (needs_action or completed), and due and description when set; each names its list. status "
+            "narrows to open or completed items. Pages with limit and offset (total, has_more, next_offset)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                              "description": "A todo.* entity ID, or a list of them; omit for every list."},
+                "status": {"oneOf": [{"type": "string", "enum": ["needs_action", "completed"]},
+                                     {"type": "array", "items": {"type": "string", "enum": ["needs_action", "completed"]},
+                                      "minItems": 1}],
+                           "description": "needs_action for open items, completed, or both (the default)."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum items to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Items to skip; pass next_offset from the previous page."},
+            },
+        },
+    },
+    {
+        "name": "set_todo_item",
+        "description": (
+            "Add, update or remove one item on a todo list the access key can WRITE. add takes summary (the "
+            "item's text) and optional due and description. update renames (summary), completes or reopens (status), "
+            "or sets due or description of the item named by item: its uid from get_todo_items, or its exact "
+            "summary when only one item has it. remove deletes that item. Runs as the todo service through "
+            "call_service, with the same scope, MESA and approval checks, then reads the list back: the result "
+            "gives the item as the list now holds it and verified."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"type": "string", "description": "The todo.* entity ID of the list."},
+                "action": {"type": "string", "enum": ["add", "update", "remove"], "description": "What to do."},
+                "item": {"type": "string", "description": "update and remove: the item's uid, or its exact summary."},
+                "summary": {"type": "string", "maxLength": 1000, "description": "add: the item's text. update: its new text."},
+                "status": {"type": "string", "enum": ["needs_action", "completed"], "description": "update: completed or needs_action."},
+                "due": {"type": "string", "description": "A date (2026-11-02) or a date and time (2026-11-02T18:00), in Home Assistant's local time when no offset is given."},
+                "description": {"type": "string", "maxLength": 4000, "description": "A longer note on the item, where the list supports one."},
+            },
+            "required": ["entity_id", "action"],
+        },
+    },
+    {
         "name": "get_calendar_events",
         "description": (
             "List events from an accessible calendar entity within a time window (defaults to the next 7 "
@@ -4079,6 +4125,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_history": _annot(True, False, True),
     "get_statistics": _annot(True, False, True),
     "get_calendar_events": _annot(True, False, True),
+    "get_todo_items": _annot(True, False, True),
+    "set_todo_item": _annot(False, True, False),
     "get_calendar_write": _annot(True, False, True),
     "create_calendar_event": _annot(False, False, False),
     "update_calendar_event": _annot(False, True, False),
