@@ -22,6 +22,7 @@ import binascii
 import dataclasses
 import codecs
 from contextlib import aclosing
+from contextvars import ContextVar
 from copy import deepcopy
 import functools
 import hashlib
@@ -4944,8 +4945,9 @@ async def async_run_agent_turn(
             await emit("messages", {"messages": messages})
             await emit("done", {"stop_reason": "error"})
             return messages
+        usage = HeadlessUsage()
         task = asyncio.create_task(async_delegate(hass, data, access_key, request, routing_language, base_url,
-                                                   style=conversation_style, detail=detail_level))
+                                                   style=conversation_style, detail=detail_level, usage=usage))
         stopped = asyncio.create_task(cancel.wait())
         try:
             done, _ = await asyncio.wait({task, stopped}, return_when=asyncio.FIRST_COMPLETED)
@@ -4955,6 +4957,8 @@ async def async_run_agent_turn(
                 await emit("error", {"code": "cancelled", "message": voice_text(routing_language, "local_cancelled") + " " + voice_text(routing_language, "companion_unverified")})
             else:
                 report = await task
+                if (frame := usage.frame()) is not None:
+                    await emit("usage", frame)
                 messages.append({"role": "assistant", "content": report["message"]})
                 if report["status"] in HOME_COMPANION_REPORT_STATUSES:
                     await emit("assistant_delta", {"text": report["message"]})
@@ -5226,6 +5230,43 @@ TURN_TRUNCATED = "truncated"
 
 
 @dataclasses.dataclass
+class HeadlessUsage:
+    """Provider-reported tokens over a headless turn's model calls.
+
+    A provider's usage report is cumulative within one call, so each call keeps
+    only its latest report and the totals add the calls together. Context is the
+    newest call's input, as in Agent Chat's own footer.
+    """
+
+    calls: list[tuple[int, int, int, int]] = dataclasses.field(default_factory=list)
+
+    def start_call(self) -> None:
+        self.calls.append((0, 0, 0, 0))
+
+    def report(self, ev: dict) -> None:
+        if not self.calls:
+            self.start_call()
+        self.calls[-1] = (_usage_int(ev.get("input_tokens")), _usage_int(ev.get("output_tokens")),
+                          _usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
+
+    def frame(self) -> dict | None:
+        """The Agent Chat usage frame, or None when the provider reported nothing."""
+        if not any(any(call) for call in self.calls):
+            return None
+        return {
+            "input_tokens": sum(call[0] for call in self.calls),
+            "output_tokens": sum(call[1] for call in self.calls),
+            "context_tokens": next((call[0] for call in reversed(self.calls) if call[0]), 0),
+            "cache_read_tokens": sum(call[2] for call in self.calls),
+            "cache_write_tokens": sum(call[3] for call in self.calls),
+        }
+
+
+# Set by a caller that shows a headless turn's usage (Home Companion in Agent Chat).
+headless_usage: ContextVar[HeadlessUsage | None] = ContextVar("phoenix_headless_usage", default=None)
+
+
+@dataclasses.dataclass
 class _HeadlessTurnResult:
     """What one headless turn produced, and how it ended.
 
@@ -5335,6 +5376,8 @@ async def _run_headless_turn(
             round_system += _FINAL_ROUND_SYSTEM
         if not check_turn_context(access_key, round_system, messages):
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
+        if (usage := headless_usage.get()) is not None:
+            usage.start_call()
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         invalid: dict | None = None
@@ -5363,6 +5406,9 @@ async def _run_headless_turn(
                 call_text += ev["text"]
             elif etype == EV_TOOL:
                 tool_calls.append(ev)
+            elif etype == EV_USAGE:
+                if usage is not None:
+                    usage.report(ev)
             elif etype == EV_DONE:
                 stop_reason = ev["stop_reason"]
                 assistant_msg = ev["assistant_msg"]

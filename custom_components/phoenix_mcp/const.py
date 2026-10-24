@@ -2830,7 +2830,6 @@ HOME_COMPANION_MAX_ROUNDS = 4
 HOME_COMPANION_MAX_CALLS = 8
 HOME_COMPANION_MAX_REQUEST_BYTES = 4096
 HOME_COMPANION_MAX_CATALOG_BYTES = 65536
-HOME_COMPANION_MAX_CONTEXT_BYTES = 65536
 HOME_COMPANION_MAX_REPORT_ENTITIES = 128
 HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120
@@ -2888,6 +2887,12 @@ CONVERSATION_LOG_PAYLOAD_BYTES = 64_000
 # A larger payload is clipped there, so a read that adds rows up to this budget and
 # names the rest stays auditable whole.
 TOOL_RESULT_MAX_BYTES = CONVERSATION_LOG_PAYLOAD_BYTES - 512
+# Home Companion's context is bounded by its call and result limits rather than a
+# smaller guess: every permitted call may return a full-size result, plus room for
+# the system prompt, operator notes, the request and the model's own tool calls.
+# Anything past it (oversized model output) is withheld for the model to narrow.
+HOME_COMPANION_PROMPT_BYTES = 32768
+HOME_COMPANION_MAX_CONTEXT_BYTES = HOME_COMPANION_MAX_CALLS * TOOL_RESULT_MAX_BYTES + HOME_COMPANION_PROMPT_BYTES
 CONVERSATION_LOG_SCAN_BYTES = 8_000_000
 CONVERSATION_LOG_MAX_EVENTS = 256
 CONVERSATION_LOG_MAX_OPERATIONS = 256

@@ -1157,8 +1157,15 @@ async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(h
     assert route['result'] == 'completed'
 
 
+def test_every_permitted_call_may_return_a_full_size_result():
+    from custom_components.phoenix_mcp.const import HOME_COMPANION_MAX_CALLS, TOOL_RESULT_MAX_BYTES
+    assert HOME_COMPANION_MAX_CONTEXT_BYTES > HOME_COMPANION_MAX_CALLS * TOOL_RESULT_MAX_BYTES
+
+
 async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_narrow_it(hass, companion, monkeypatch):
-    # One full-size result used to fill the whole request and end it with an information limit.
+    # The call and result limits keep ordinary reads within the context; this exercises
+    # the safety net with a smaller budget, as when the model's own output is oversized.
+    monkeypatch.setattr(home, 'HOME_COMPANION_MAX_CONTEXT_BYTES', 65536)
     _, access_key, _, _ = companion
     access_key.permissions.domains['binary_sensor'] = PermissionNode('YELLOW')
     for i in range(400):
@@ -1173,7 +1180,7 @@ async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_nar
     report = payload(await rpc(hass, companion, args={'request': 'Which zigbee sensors do I have?'}))
     withheld = json.dumps(transcripts[1][-1])
     assert 'too large for this request' in withheld and 'long hallway' not in withheld
-    assert len(json.dumps(transcripts[1]).encode()) < HOME_COMPANION_MAX_CONTEXT_BYTES
+    assert len(json.dumps(transcripts[1]).encode()) < 65536
     # The model's answer is used: the states listed while finding the sensors are not an answer.
     assert report['status'] == 'completed' and report['message'] == 'You have 400 zigbee contact sensors.'
     assert report['tool_outcomes'] == [{'tool': 'search_entities', 'outcome': 'allowed'}] * 2
@@ -1194,3 +1201,38 @@ async def test_only_a_clarification_without_a_proposed_command_keeps_the_models_
     assert 'complete request' in report['message']
     assert (question in report['message']) is not control
     service.assert_not_awaited()
+
+
+@pytest.mark.parametrize('reported', [True, False])
+async def test_agent_chat_shows_the_companion_turns_token_usage(hass, companion, monkeypatch, reported):
+    data, access_key, _, _ = companion
+    scripted(monkeypatch, [
+        [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
+        json.dumps({'status': 'completed', 'message': '23 degrees.'}),
+    ])
+    provider = agentcli.build_provider(None)
+    inner, calls = provider.stream_turn, []
+    async def stream(session, **kwargs):
+        calls.append(1)
+        async for ev in inner(session, **kwargs):
+            if reported and ev['type'] == agentcli.EV_DONE:
+                # A provider's report is cumulative within one call: only the last one counts.
+                for output in (5, 50):
+                    yield {'type': agentcli.EV_USAGE, 'input_tokens': 1000 * len(calls),
+                           'output_tokens': output, 'cache_read_tokens': 400}
+            yield ev
+    monkeypatch.setattr(provider, 'stream_turn', stream)
+    events = []
+    async def emit(name, value):
+        events.append((name, value))
+    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+        messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
+        emit=emit, cancel=asyncio.Event())
+    usage = [value for name, value in events if name == 'usage']
+    if reported:
+        assert usage == [{'input_tokens': 3000, 'output_tokens': 100, 'context_tokens': 2000,
+                          'cache_read_tokens': 800, 'cache_write_tokens': 0}]
+        # Usage never enters the report, which AI Task hands to its own model.
+        assert 'tokens' not in json.dumps([value for name, value in events if name == 'assistant_delta'])
+    else:
+        assert usage == []

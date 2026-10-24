@@ -510,15 +510,22 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
 
 
 async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, language: object,
-                         base_url: str, *, style: str | None = None, detail: str | None = None) -> dict:
-    """Delegate original ingress text once through normal MCP and recovery gates."""
+                         base_url: str, *, style: str | None = None, detail: str | None = None,
+                         usage: Any = None) -> dict:
+    """Delegate original ingress text once through normal MCP and recovery gates.
+
+    usage, a HeadlessUsage, collects the inner turn's provider-reported tokens for
+    a caller that shows them; it never enters the report.
+    """
     from .agent_recovery import dispatch_agent_tool
+    from .agentcli import headless_usage
     from .mcp_view import _dispatch_mcp
     from .audit import generate_request_id
     from .helpers import voice_text
     check_request_authority()
     settings = data.store.get_settings()
     presentation = _presentation.set((style or settings.voice_agent_conversation_style, detail or settings.voice_agent_detail_level))
+    sink = headless_usage.set(usage)
     try:
         response, _, _, _ = await dispatch_agent_tool(
             _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="home_request",
@@ -527,6 +534,7 @@ async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, la
             request_id=generate_request_id(),
         )
     finally:
+        headless_usage.reset(sink)
         _presentation.reset(presentation)
     check_request_authority()
     result = response.get("result", {})
