@@ -1096,11 +1096,14 @@ def template_blocklist_vars() -> dict:
 def parse_relative_time(value: str) -> datetime:
     """Parse a relative time string to a UTC datetime.
 
-    Supported formats: '24h' (hours), '7d' (days), '2w' (weeks), '1m' (30-day months).
+    Supported formats: '24h' (hours), '7d' (days), '2w' (weeks), '1m' (30-day months),
+    and 'now', which models send for the current time as readily as an amount ago.
     Raises ValueError for unrecognized formats.
     """
     if not isinstance(value, str):
         raise ValueError(f"Unrecognized relative time format: {value!r}")
+    if value.strip().lower() == "now":
+        return utcnow()
     match = _RELATIVE_TIME_RE.match(value.strip())
     if not match:
         raise ValueError(f"Unrecognized relative time format: {value!r}")

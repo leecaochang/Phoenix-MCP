@@ -557,3 +557,9 @@ async def test_a_calendar_out_of_scope_is_never_asked_for_events(calendars_env):
         entity.async_get_events = recording
     await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.secret", "calendar.work"]})
     assert asked == ["calendar.work"]
+
+
+async def test_now_starts_a_window(calendars_env):
+    # Models send "now" for the current time as readily as an amount ago.
+    result = await call(calendars_env, 'get_calendar_events', {"start_time": "now", "entity_id": ["calendar.work"]})
+    assert result[1] == "allowed", result

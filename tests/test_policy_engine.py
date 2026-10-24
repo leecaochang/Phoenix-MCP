@@ -1521,6 +1521,12 @@ class TestParseRelativeTime:
             result = parse_relative_time("1m")
         assert result == datetime(2026, 3, 11, 0, 0, 0)
 
+    @pytest.mark.parametrize("value", ["now", " NOW "])
+    def test_now_is_the_current_time(self, value):
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
+            mock_now.return_value = datetime(2026, 4, 10, 12, 0, 0)
+            assert parse_relative_time(value) == datetime(2026, 4, 10, 12, 0, 0)
+
     def test_whitespace_stripped(self):
         result = parse_relative_time("  6h  ")
         assert isinstance(result, datetime)
