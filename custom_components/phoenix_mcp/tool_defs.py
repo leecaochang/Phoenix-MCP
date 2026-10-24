@@ -681,10 +681,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "List Home Assistant automations with the id needed to read or edit each one "
             "(entity_id, alias, automation id, and current state). Use get_automation to read "
-            "one's full configuration."
+            "one's full configuration. trigger and query search every configuration in one call, "
+            "instead of reading each automation: only the matches are listed, each with its "
+            "triggers (type and when it fires) and, for query, where the text appears. They need "
+            "the capability get_automation needs."
         ),
         "cap": "cap_registry_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "trigger": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                        "description": "Trigger types to match, such as time, sun, time_pattern or state."},
+            "query": {"type": "string", "description": "Text that must appear in the configuration, such as an action or entity ID."},
+        }},
     },
     {
         "name": "get_automation",

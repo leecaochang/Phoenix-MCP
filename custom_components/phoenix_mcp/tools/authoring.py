@@ -270,25 +270,124 @@ def _delete_cas_conflict(
     return _cas_conflict(expected, current, tool_name)
 
 
+# Trigger fields that say when an automation runs; anything else (a webhook id is a
+# credential) stays in get_automation.
+_TRIGGER_SUMMARY_KEYS = ("at", "event", "offset", "hours", "minutes", "seconds", "entity_id",
+                         "from", "to", "above", "below", "for", "event_type")
+_AUTOMATION_QUERY_MATCHES = 3
+
+
+def _automation_triggers(config: dict) -> list[dict]:
+    """Each trigger's type and the fields that say when it fires."""
+    raw = config.get("triggers", config.get("trigger")) or []
+    summary = []
+    for trigger in raw if isinstance(raw, list) else [raw]:
+        if isinstance(trigger, dict):
+            kind = trigger.get("trigger", trigger.get("platform"))
+            summary.append({"trigger": kind, **{key: trigger[key] for key in _TRIGGER_SUMMARY_KEYS if key in trigger}})
+    return summary
+
+
+def _query_matches(config: Any, needle: str) -> list[dict]:
+    """The first configuration values containing needle, with where they sit."""
+    found: list[dict] = []
+
+    def walk(node: Any, path: list) -> None:
+        if len(found) >= _AUTOMATION_QUERY_MATCHES:
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, [*path, key])
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, [*path, index])
+        elif needle in str(node).lower() or (path and needle in str(path[-1]).lower()):
+            found.append({"path": path, "value": str(node)[:200]})
+
+    walk(config, [])
+    return found
+
+
 async def _tool_list_automations(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: list accessible automation.* entities with their editable id."""
+    """MCP tool: list accessible automation.* entities with their editable id.
+
+    With trigger or query it reads every configuration once, so "which automations
+    run at a fixed time" or "which ones notify my phone" is one call instead of one
+    get_automation per automation, and needs the capability get_automation needs.
+    A blueprint automation's triggers live in its blueprint, so it is named rather
+    than silently left out of a trigger search.
+    """
+    tool = "list_automations"
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "list_automations"
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+    raw_triggers, query = args.get("trigger"), args.get("query")
+    if raw_triggers not in (None, "", []) and not isinstance(raw_triggers, str) and not (
+            isinstance(raw_triggers, list) and all(isinstance(item, str) for item in raw_triggers)):
+        return _tool_error("trigger must be a trigger type or a list of them."), "invalid_request", tool
+    if query is not None and (not isinstance(query, str) or len(query) > 200):
+        return _tool_error("query must be text of at most 200 characters."), "invalid_request", tool
+    wanted = {item.strip().lower() for item in ([raw_triggers] if isinstance(raw_triggers, str) else raw_triggers or [])
+              if item.strip()}
+    needle = (query or "").strip().lower()
+    searching = bool(wanted or needle)
+    configs: dict[str, dict] = {}
+    unreadable: list[str] = []
+    if searching:
+        if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
+            return _tool_error(
+                "trigger and query read automation configurations, which this access key cannot do."
+            ), "denied", tool
+        found = await hass.async_add_executor_job(
+            yaml_includes.read_all_entries, hass.config.config_dir, "automation")
+        configs = {str(config.get("id")): config for config in found.entries
+                   if isinstance(config, dict) and config.get("id") is not None}
+        unreadable = list(found.unreadable)
     items: list[dict] = []
+    blueprints: list[str] = []
     for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("automation."):
             continue
         attrs = e.get("attributes", {})
-        items.append({
+        item = {
             "entity_id": e["entity_id"],
             "alias": attrs.get("friendly_name"),
             "automation_id": attrs.get("id"),
             "state": e.get("state"),
-        })
+        }
+        if searching:
+            config = configs.get(str(attrs.get("id")))
+            if config is None:
+                continue
+            if "use_blueprint" in config and wanted:
+                blueprints.append(e["entity_id"])
+                continue
+            triggers = _automation_triggers(config)
+            if wanted and not wanted & {str(trigger["trigger"]).lower() for trigger in triggers}:
+                continue
+            if needle and needle not in json.dumps(config, default=str).lower():
+                continue
+            item["triggers"] = triggers
+            if needle:
+                item["matches"] = _query_matches(config, needle)
+        items.append(item)
     items.sort(key=lambda a: a["entity_id"])
-    return _tool_success(json.dumps({"count": len(items), "automations": items}, default=str)), "allowed", "list_automations"
+
+    def build(count: int) -> dict:
+        body: dict[str, Any] = {"count": count, "automations": items[:count]}
+        if count < len(items):
+            body["not_listed"] = [item["entity_id"] for item in items[count:]]
+            body["warnings"] = ["The result is full: narrow trigger or query to list the rest."]
+        if blueprints:
+            body["blueprint_automations"] = blueprints
+            body.setdefault("warnings", []).append(
+                "blueprint_automations take their triggers from a blueprint; read them with get_automation.")
+        if unreadable:
+            body["not_searched"] = unreadable
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(items)), default=str)), "allowed", tool
 
 
 async def _tool_get_automation(
