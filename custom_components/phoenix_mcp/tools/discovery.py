@@ -66,7 +66,7 @@ from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
-from ..tool_common import _resolve_area_id, _tool_error, _tool_success, longest_fitting, offset_page
+from ..tool_common import _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
@@ -1051,7 +1051,8 @@ async def _tool_list_devices(
     if isinstance(paged, str):
         return _tool_error(paged), "invalid_request", "list_devices"
     page, envelope = paged
-    return _tool_success(json.dumps({**envelope, "devices": page}, default=str)), "allowed", "list_devices"
+    body = fitted_offset_page(page, envelope, lambda rows, env: {**env, "devices": rows})
+    return _tool_success(json.dumps(body, default=str)), "allowed", "list_devices"
 
 
 async def _tool_get_device(
@@ -1616,22 +1617,28 @@ async def _tool_search_entities(
         for row in results:
             row.update(_search_membership(row["entity_id"], access_key, hass, expose, budget))
 
-    body = {"count": len(results), "total": len(matches), "offset": f.offset, "truncated": has_more,
-            "has_more": has_more, "entities": results}
-    if has_more:
-        body["next_offset"] = end
-    if fuzzy_fallback:
-        # Signal that these are approximate (typo-tolerant) matches, not exact,
-        # so the agent knows the query did not match any entity literally.
-        body["fuzzy_fallback"] = True
-    if f.stale_threshold is not None:
-        body["oldest_last_changed"] = iso_utc(oldest_change) if oldest_change is not None else None
-        if oldest_change is not None and (now - oldest_change).total_seconds() < f.stale_threshold * 3600:
-            body["warnings"] = [
-                f"No entity searched has a last_changed before {iso_utc(oldest_change)}. Home Assistant resets "
-                "last_changed when it restarts, so entities unchanged since before then cannot be found this way. "
-                "Use get_history with mode summary to check a longer period."
-            ]
+    def build(count: int) -> dict[str, Any]:
+        # A page that would not fit one result ends early and continues where it stopped.
+        more = has_more or count < len(results)
+        page: dict[str, Any] = {"count": count, "total": len(matches), "offset": f.offset, "truncated": more,
+                                "has_more": more, "entities": results[:count]}
+        if more:
+            page["next_offset"] = f.offset + count
+        if fuzzy_fallback:
+            # Signal that these are approximate (typo-tolerant) matches, not exact,
+            # so the agent knows the query did not match any entity literally.
+            page["fuzzy_fallback"] = True
+        if f.stale_threshold is not None:
+            page["oldest_last_changed"] = iso_utc(oldest_change) if oldest_change is not None else None
+            if oldest_change is not None and (now - oldest_change).total_seconds() < f.stale_threshold * 3600:
+                page["warnings"] = [
+                    f"No entity searched has a last_changed before {iso_utc(oldest_change)}. Home Assistant resets "
+                    "last_changed when it restarts, so entities unchanged since before then cannot be found this way. "
+                    "Use get_history with mode summary to check a longer period."
+                ]
+        return page
+
+    body = longest_fitting(build, len(results))
     return _tool_success(json.dumps(body, default=str)), "allowed", "search_entities"
 
 

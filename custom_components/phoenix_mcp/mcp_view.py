@@ -14,6 +14,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal, cast
 
 import voluptuous as vol
@@ -932,6 +933,43 @@ async def _tool_get_history(
         return await _history_summary_select(args["select"], args, access_key, hass, data)
     if isinstance(args.get("entity_id"), list):
         return await _history_summary_many(args["entity_id"], args, access_key, hass)
+    return await _fit_recorder_page(lambda page_args: _history_page(page_args, access_key, hass), args, "history")
+
+
+async def _fit_recorder_page(
+    read: Callable[[dict], Awaitable[tuple[dict, str, str]]], args: dict, rows_key: str,
+) -> tuple[dict, str, str]:
+    """A Recorder page read again with a smaller limit until it fits TOOL_RESULT_MAX_BYTES.
+
+    Each page reader ends a page where its cursor continues exactly, even among
+    rows sharing a microsecond, so a smaller limit keeps the continuation exact
+    where cutting rows afterwards would not. The model is told the page shrank.
+    """
+    result = await read(args)
+    shortened = False
+    for _attempt in range(5):
+        content, outcome, _resource = result
+        text = "" if content.get("isError") else content["content"][0]["text"]
+        # A shortened page leaves room for the warning that says so.
+        budget = TOOL_RESULT_MAX_BYTES - (256 if shortened else 0)
+        if outcome != "allowed" or not text.startswith("{") or json_size(text) <= budget:
+            break
+        rows = len(json.loads(text).get(rows_key) or [])
+        if rows <= 1:
+            break
+        args = {**args, "limit": max(1, min(rows - 1, int(rows * budget * 0.9 / json_size(text))))}
+        result = await read(args)
+        shortened = True
+    if not shortened or result[1] != "allowed" or result[0].get("isError"):
+        return result
+    body = json.loads(result[0]["content"][0]["text"])
+    body["warnings"] = [*body.get("warnings", []),
+                        f"This page was shortened to {body.get('count')} rows to fit one result; continue with next_cursor."]
+    return _tool_success(json.dumps(body, default=str)), result[1], result[2]
+
+
+async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """One bounded page of one entity's state history, or its summary."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_history"
@@ -1523,6 +1561,11 @@ async def _tool_get_statistics(
         return await _statistics_summary_many(chosen, args, access_key, hass, selection=selection)
     if isinstance(args.get("entity_id"), list):
         return await _statistics_summary_many(args["entity_id"], args, access_key, hass)
+    return await _fit_recorder_page(lambda page_args: _statistics_page(page_args, access_key, hass), args, "statistics")
+
+
+async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """One aligned and bounded page of one entity's Recorder statistics."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_statistics"
@@ -1741,9 +1784,10 @@ async def _tool_get_calendar_events(
         if isinstance(paged, str):
             raise ValueError(paged)
         page, envelope = paged
-        body = {"calendar_id": args["entity_id"], **envelope, "events": [
-            {**event, "content_hash": content_hash(event)} for event in page]}
-        return _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass))), "allowed", args["entity_id"]
+        body = fitted_offset_page(page, envelope, lambda rows, env: _safe_calendar_data(
+            {"calendar_id": args["entity_id"], **env, "events": [{**event, "content_hash": content_hash(event)} for event in rows]},
+            access_key, hass))
+        return _tool_success(json.dumps(body)), "allowed", args["entity_id"]
     except AuthorityChangedError:
         raise
     except PermissionError:
@@ -2773,22 +2817,43 @@ async def _tool_get_logbook(
     scoped.sort(key=lambda entry: float(entry["when"]))
     total = len(scoped)
     scoped = scoped[-limit:]
-    body = {
-        "count": len(scoped),
-        "total": total,
-        "truncated": total > len(scoped),
-        "filters": {
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
-            "entity_ids": entity_ids,
-            "device_ids": device_ids,
-            "context_id": context_id,
-            "search": search,
-            "limit": limit,
-        },
-        "entries": scoped,
-    }
-    return _tool_success(json.dumps(body, default=str)), "allowed", "get_logbook"
+
+    def build(count: int) -> dict[str, Any]:
+        # The newest entries are kept; a slice that would not fit one result keeps fewer.
+        start = len(scoped) - count
+        crowded = False
+        if 0 < start < len(scoped) and scoped[start - 1]["when"] == scoped[start]["when"]:
+            # A slice never starts inside entries sharing one instant, so older_end_time,
+            # an exclusive end, reads that whole instant next; only an instant with more
+            # entries than one result holds is kept partly, and said so.
+            later = next((index for index in range(start, len(scoped))
+                          if scoped[index]["when"] != scoped[start]["when"]), len(scoped))
+            crowded = later == len(scoped)
+            start = start if crowded else later
+        kept = scoped[start:]
+        count = len(kept)
+        body: dict[str, Any] = {
+            "count": count,
+            "total": total,
+            "truncated": total > count,
+            "filters": {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "entity_ids": entity_ids,
+                "device_ids": device_ids,
+                "context_id": context_id,
+                "search": search,
+                "limit": limit,
+            },
+            "entries": kept,
+        }
+        if total > count and kept:
+            body["older_end_time"] = iso_utc(datetime.fromtimestamp(float(kept[0]["when"]), tz=timezone.utc))
+        if crowded:
+            body["warnings"] = ["More entries share one instant than one result holds; narrow target or search to read them all."]
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(scoped)), default=str)), "allowed", "get_logbook"
 
 
 _LOGGER_CONTROL_FINGERPRINT = "_phoenix_logger_control_fingerprint"
@@ -7169,7 +7234,7 @@ async def _tool_list_integrations(
     if isinstance(paged, str):
         return _tool_error(paged), "invalid_request", "list_integrations"
     page, envelope = paged
-    body: dict[str, Any] = {**envelope, "integrations": page}
+    extra: dict[str, Any] = {}
     # HA's discovered-but-not-added list is HA-wide, so only a key that sees what
     # HA sees gets it, once, on the first page.
     if (not envelope.get("offset") and full_pass_through(access_key, hass)
@@ -7180,7 +7245,8 @@ async def _tool_list_integrations(
             if (not domain_filter or row["domain"] == domain_filter)
             and (not query or query in f"{row['domain']} {' '.join(str(v) for v in row['title_placeholders'].values())}".lower())
         ]
-        body["discovered"], body["discovered_omitted"] = discovered, omitted
+        extra = {"discovered": discovered, "discovered_omitted": omitted}
+    body = fitted_offset_page(page, envelope, lambda rows, env: {**env, "integrations": rows, **extra})
     return _tool_success(json.dumps(body, default=str)), "allowed", "list_integrations"
 
 
