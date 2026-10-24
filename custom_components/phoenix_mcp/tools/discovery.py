@@ -1645,6 +1645,13 @@ async def _tool_search_entities(
     end = f.offset + f.limit
     has_more = len(matches) > end
     results = matches[f.offset:end]
+    # Counted over every match the key can read, like total, so "how many of each
+    # kind" needs no paging and reveals nothing total does not.
+    domains: dict[str, int] = {}
+    for row in matches:
+        domain = row["entity_id"].split(".", 1)[0]
+        domains[domain] = domains.get(domain, 0) + 1
+    by_domain = dict(sorted(domains.items(), key=lambda item: (-item[1], item[0])))
     for row in results:
         row.pop("_aliases", None)
         if "_scrubbed" in row:
@@ -1661,8 +1668,9 @@ async def _tool_search_entities(
     def build(count: int) -> dict[str, Any]:
         # A page that would not fit one result ends early and continues where it stopped.
         more = has_more or count < len(results)
-        page: dict[str, Any] = {"count": count, "total": len(matches), "offset": f.offset, "truncated": more,
-                                "has_more": more, "entities": results[:count]}
+        page: dict[str, Any] = {"count": count, "total": len(matches),
+                                **({"by_domain": by_domain} if len(by_domain) > 1 else {}),
+                                "offset": f.offset, "truncated": more, "has_more": more, "entities": results[:count]}
         if more:
             page["next_offset"] = f.offset + count
         if fuzzy_fallback:

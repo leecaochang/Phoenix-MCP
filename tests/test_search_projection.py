@@ -153,3 +153,15 @@ async def test_device_rows_name_their_area(hass, placed):
     assert rows[placed.loose.id]["area"] is None and rows[placed.loose.id]["area_id"] is None
     content, outcome, _ = await _call_tool("get_device", {"device_id": placed.hub.id}, key, hass, _data())
     assert outcome == "allowed" and json.loads(content["content"][0]["text"])["area"] == "Kitchen"
+
+
+async def test_by_domain_counts_every_match_not_just_the_page(hass, placed):
+    hass.states.async_set("light.orphan_lamp", "on")
+    content, outcome, _ = await _call_tool("search_entities", {"has_area": False, "limit": 1}, _key(), hass, _data())
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["count"] == 1 and body["by_domain"] == {"sensor": 2, "light": 1}
+    assert sum(body["by_domain"].values()) == body["total"]
+    # One domain needs no breakdown beside total.
+    content, _, _ = await _call_tool("search_entities", {"domain": "sensor", "has_area": False}, _key(), hass, _data())
+    assert "by_domain" not in json.loads(content["content"][0]["text"])
