@@ -934,6 +934,14 @@ class TestSearchByRadioAndIntegration:
         assert outcome == "allowed"
         assert {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]} == expected
 
+    async def test_a_child_device_is_read_without_core_compatibility_reports(self, hass, radio_env):
+        # connections is a deprecated shim on a child device; reading it reports
+        # usage and stops working in a later Home Assistant release.
+        with patch("homeassistant.helpers.device_registry.report_usage") as report:
+            content, outcome, _ = await _call("search_entities", {"radio": "bluetooth"}, _radio_key(), hass)
+        assert outcome == "allowed" and _result_json(content)["total"] == 1
+        report.assert_not_called()
+
     async def test_integration_is_the_provider_not_the_radio(self, hass, radio_env):
         content, _, _ = await _call("search_entities", {"integration": "mqtt"}, _radio_key(), hass)
         ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}

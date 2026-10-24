@@ -2985,3 +2985,24 @@ class TestAnnouncementGating:
             "get_radio_network", "get_radio_device",
         ):
             assert name in gate_map["unavailable"]
+
+
+def test_the_radio_preview_reads_a_child_device_without_core_reports(hass):
+    # manufacturer and model are compatibility shims on a child device.
+    from unittest.mock import patch as _patch
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.phoenix_mcp.tools.radio import _radio_device_diff_preview
+
+    entry = MockConfigEntry(domain="zha", entry_id="zha-preview")
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("zha", "00:aa")},
+                                          manufacturer="Acme", model="Plug", name="Plug")
+    child = registry.async_get_or_create_child(config_entry_id=entry.entry_id, identifiers={("zha", "00:aa-2")},
+                                               parent_device_id=parent.id)
+    with _patch("homeassistant.helpers.device_registry.report_usage") as report:
+        preview = _radio_device_diff_preview(child, "00:aa-2")
+        main = _radio_device_diff_preview(registry.async_get(parent.id), "00:aa")
+    report.assert_not_called()
+    assert (preview["manufacturer"], preview["model"]) == (None, None)
+    assert (main["manufacturer"], main["model"]) == ("Acme", "Plug")

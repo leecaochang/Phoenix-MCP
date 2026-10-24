@@ -423,3 +423,21 @@ async def test_post_apply_private_identity_change_has_explicit_status(
     body = _body(content)
     assert body["status"] == "applied_identity_mismatch"
     assert body["retry_safe"] is False
+
+
+async def test_private_identity_reads_a_child_device_without_core_reports(hass, reconfigure_env):
+    # A child device's connections is a compatibility shim that reports each read;
+    # the parent's real connections still anchor the identity, unchanged.
+    from unittest.mock import patch as _patch
+    entry, parent = reconfigure_env["entry"], reconfigure_env["device"]
+    child = dr.async_get(hass).async_get_or_create_child(
+        config_entry_id=entry.entry_id, identifiers={("test_integration", "child-private-id")},
+        parent_device_id=parent.id)
+    er.async_get(hass).async_get_or_create("sensor", "test_integration", "child-sensor", config_entry=entry,
+                                           device_id=child.id, suggested_object_id="child_sensor")
+    with _patch("homeassistant.helpers.device_registry.report_usage") as report:
+        identity = _config_entry_private_identity(entry, hass)
+    report.assert_not_called()
+    rows = {row["device_id"]: row for row in identity.devices}
+    assert rows[parent.id]["connections"] == [("mac", "00:11:22:33:44:55")]
+    assert rows[child.id]["connections"] == []

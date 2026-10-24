@@ -56,6 +56,7 @@ from .tool_common import _create_registry_mesa_approval, offset_page, unknown_ca
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
 from .device_semantics import (
+    device_entry_value,
     device_registry_snapshot,
     entity_follows_device_name,
     entity_name_source,
@@ -6471,9 +6472,11 @@ def _config_entry_private_identity(
             (str(domain), str(identifier))
             for domain, identifier in getattr(device, "identifiers", set())
         )
+        # A child device has no connections; reading the compatibility shim
+        # would report usage that stops working in a later Core release.
         connections = sorted(
             (str(kind), str(value))
-            for kind, value in getattr(device, "connections", set())
+            for kind, value in device_entry_value(device, "connections", ()) or ()
         )
         stable_anchor = stable_anchor or bool(identifiers or connections)
         owners: list[dict[str, str]] = []

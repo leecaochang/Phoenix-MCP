@@ -33,7 +33,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CAP_CONFIRM, CAP_DENY, PROXY_TIMEOUT_SECONDS, Z2M_BASE_TOPIC
 from ..data import PhoenixData
-from ..device_semantics import device_registry_snapshot
+from ..device_semantics import device_entry_value, device_registry_snapshot
 from ..mesa import (
     async_apply_mesa_to_call,
     entity_control_mode,
@@ -1478,8 +1478,10 @@ def _radio_device_diff_preview(device: Any, ieee: str) -> dict:
     return {
         "device": device.name_by_user or device.name or ieee,
         "ieee": ieee,
-        "manufacturer": device.manufacturer,
-        "model": device.model,
+        # Read from the public representation: on a child device these are
+        # compatibility shims that report every read.
+        "manufacturer": device_entry_value(device, "manufacturer"),
+        "model": device_entry_value(device, "model"),
     }
 
 

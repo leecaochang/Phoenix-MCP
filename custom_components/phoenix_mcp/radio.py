@@ -41,7 +41,7 @@ from .const import (
     Z2M_RETAINED_READ_TIMEOUT_SECONDS,
     ZIGBEE_TOPOLOGY_SCAN_TIMEOUT_SECONDS,
 )
-from .device_semantics import device_registry_snapshot
+from .device_semantics import device_entry_value, device_registry_snapshot
 from .ws_dispatch import (
     WsDispatchError,
     async_ws_command,
@@ -155,7 +155,9 @@ def device_radio_types(device: Any) -> set[str]:
                 found.add("zwave")
             elif ident[0] == "matter":
                 found.add("matter")
-    for connection in getattr(device, "connections", ()) or ():
+    # connections is a compatibility shim on a child device, which reports every
+    # read; the public representation simply has none for a child.
+    for connection in device_entry_value(device, "connections", ()) or ():
         if isinstance(connection, (list, tuple)) and len(connection) >= 2 and connection[0] == dr.CONNECTION_BLUETOOTH:
             found.add("bluetooth")
     return found
