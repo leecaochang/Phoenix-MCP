@@ -268,8 +268,11 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
                     out[f"{kind}_id"] = ids
     elif tool == "get_relationships":
         scope = out.pop("scope", None)
-        if not isinstance(scope, dict) or scope.get("kind") not in {"entity", "device", "integration", "area", "label"} or not isinstance(scope.get("id"), str):
-            return out, "scope must contain a supported kind and string id."
+        scope_id = scope.get("id") if isinstance(scope, dict) else None
+        if (not isinstance(scope, dict) or scope.get("kind") not in {"entity", "device", "integration", "area", "label"}
+                or not (isinstance(scope_id, str) or (isinstance(scope_id, list) and scope_id
+                                                      and all(isinstance(item, str) for item in scope_id)))):
+            return out, "scope must contain a supported kind and an id: a string, or a list of strings."
         out[f"{scope['kind']}_id" if scope["kind"] in {"entity", "device"} else scope["kind"]] = scope["id"]
     elif tool == "get_logbook":
         target = out.pop("target", None)

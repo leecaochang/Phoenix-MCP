@@ -2589,9 +2589,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_relationships",
         "description": (
             "Find what still USES a set of entities, before you change or remove anything. Pass "
-            "one required scope object: kind entity, device, integration, area, or label plus its id. Ask it "
-            "the broadest way you can: 'what references this integration' is one call, where the "
-            "same question per entity can be dozens. Results are grouped by CONSUMER, each naming "
+            "one required scope object: kind entity, device, integration, area, or label plus its id, or a "
+            "list of ids. Ask it the broadest way you can: 'what references this integration' is one call, "
+            "and every helper type or every script is one list, where the same question per entity can be "
+            "dozens. 'unreferenced' names the in-scope entities no searched consumer uses: candidates, not "
+            "proof, since not_searched says what was not checked. Results are grouped by CONSUMER, each naming "
             "the in-scope entities it touches and their roles, so the response is the list of "
             "things you would have to edit. Combines Home Assistant's loaded reference graph with "
             "Phoenix's direct config scans, preserving detailed roles while adding package, blueprint, "
@@ -2608,7 +2610,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "scope": {"type": "object", "description": "The one scope to inspect.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"type": "string", "description": "Identifier for the selected scope."}}, "required": ["kind", "id"]},
+                "scope": {"type": "object", "description": "The one scope to inspect.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "Identifier for the selected scope, or a list of them."}}, "required": ["kind", "id"]},
             },
             "required": ["scope"],
         },

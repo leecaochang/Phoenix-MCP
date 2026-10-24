@@ -117,7 +117,11 @@ async def test_many_reference_holders_do_not_rescan_the_registry(hass, monkeypat
         return original_values(self)
 
     monkeypatch.setattr(type(registry.entities), "values", counted_values)
-    with patch.object(discovery, "_relationship_graph_hits", return_value=(set(), [], False)):
+    # Every holder of every dead reference is listed here, more than one result holds;
+    # this test is about registry scans, so it lifts the result budget.
+    from custom_components.phoenix_mcp import tool_common
+    with patch.object(discovery, "_relationship_graph_hits", return_value=(set(), [], False)), \
+            patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", 1_000_000):
         body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, _access_key(), hass))
     assert len(body["consumers"]) == 100
     assert len(body["dangling_references"]) == 10

@@ -66,7 +66,7 @@ from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
-from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
+from ..tool_common import _resolve_area_id, _tool_error, _tool_success, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
@@ -224,6 +224,22 @@ _SERVICE_FIELDS = frozenset({"service", "perform_action", "action"})
 def _in_service_field(path: list) -> bool:
     """Whether a walked value sits where a SERVICE name goes rather than an id."""
     return bool(path) and path[-1] in _SERVICE_FIELDS
+
+
+# The script domain's own services, which name a verb rather than a script.
+_SCRIPT_SERVICES = frozenset({"script.turn_on", "script.turn_off", "script.toggle", "script.reload"})
+
+
+def _script_calls(config: Any) -> set[str]:
+    """Scripts a configuration runs by name (`action: script.greet`).
+
+    Running a script IS its entity id, so an automation calling one uses it even
+    though no `entity_id:` names it; missing this would report the script unused.
+    """
+    hits: list[tuple[list, str]] = []
+    _entity_id_strings(config, [], hits)
+    return {eid for path, eid in hits
+            if _in_service_field(path) and eid.startswith("script.") and eid not in _SCRIPT_SERVICES}
 
 
 def _dangling_candidates(
@@ -535,6 +551,11 @@ def _scan_relationships(
                             "name": entry["name"], "typed": True, "service": False, **evidence})
                 if eid in scope:
                     _record(entry, eid, role)
+        for eid in _script_calls(cfg):
+            _note(eid, {"kind": "automation", "id": entry["id"],
+                        "name": entry["name"], "typed": True, "service": True, **evidence})
+            if eid in scope:
+                _record(entry, eid, "action")
         if entry["entities"]:
             consumers.append(entry)
 
@@ -543,6 +564,7 @@ def _scan_relationships(
             continue
         found: set[str] = set()
         _collect_entity_id_values(cfg, found)
+        found |= _script_calls(cfg)
         entry = _consumer("script", script_id, cfg.get("alias"))
         for eid in found:
             _note(eid, {"kind": "script", "id": script_id, "name": entry["name"],
@@ -2139,10 +2161,10 @@ _SCOPE_NOT_FOUND = (
 
 @dataclasses.dataclass(frozen=True)
 class _Scope:
-    """One resolved selector and the accessible entity ids it names."""
+    """One resolved selector, its value or values, and the accessible entity ids they name."""
 
     selector: str
-    value: str
+    value: str | list[str]
     entity_ids: set[str]
 
 
@@ -2161,7 +2183,10 @@ def _relationship_scope(
     which entities an indirect reference names. `integration` is not an HA target
     selector, so it reads the registry's own platform field.
     """
-    given = [s for s in _RELATIONSHIP_SELECTORS if str_arg(args.get(s)).strip()]
+    def given_value(raw: Any) -> bool:
+        return bool(str_arg(raw).strip()) if not isinstance(raw, list) else bool(raw)
+
+    given = [s for s in _RELATIONSHIP_SELECTORS if given_value(args.get(s))]
     if len(given) != 1:
         return (
             _tool_error(
@@ -2172,21 +2197,31 @@ def _relationship_scope(
             "invalid_request", "get_relationships",
         )
     selector = given[0]
-    value = str_arg(args.get(selector)).strip()
+    raw = args.get(selector)
+    # Several values are one scope: every helper type, or every script, in one call.
+    values = [str_arg(item).strip() for item in raw] if isinstance(raw, list) else [str_arg(raw).strip()]
+    if not all(values) or len(values) > SEARCH_ENTITIES_MAX_LIMIT:
+        return _tool_error(
+            f"A scope id list takes 1 to {SEARCH_ENTITIES_MAX_LIMIT} non-empty strings."
+        ), "invalid_request", "get_relationships"
+    value: str | list[str] = values if isinstance(raw, list) else values[0]
 
     if selector == "entity_id":
-        candidates = [value]
+        candidates = list(values)
     elif selector == "integration":
+        platforms = set(values)
         candidates = [
             e.entity_id for e in er.async_get(hass).entities.values()
-            if e.platform == value and e.disabled_by is None
+            if e.platform in platforms and e.disabled_by is None
         ]
     elif selector == "area":
-        area = _resolve_area(hass, value)
-        candidates = build_expand_target(hass)("area_id", area.id) if area is not None else []
+        candidates = []
+        for name in values:
+            area = _resolve_area(hass, name)
+            candidates += build_expand_target(hass)("area_id", area.id) if area is not None else []
     else:
         kind = "device_id" if selector == "device_id" else "label_id"
-        candidates = build_expand_target(hass)(kind, value)
+        candidates = [eid for name in values for eid in build_expand_target(hass)(kind, name)]
 
     scope = {
         eid for eid in candidates
@@ -2196,7 +2231,7 @@ def _relationship_scope(
         # Byte-identical for "does not exist" and "not in your tree"; the
         # single-entity form uses the standard "Entity not found.".
         message = "Entity not found." if selector == "entity_id" else _SCOPE_NOT_FOUND
-        return _tool_error(message), "not_found", f"{selector}:{value}"
+        return _tool_error(message), "not_found", f"{selector}:{','.join(values)}"
     return _Scope(selector, value, scope)
 
 
@@ -2377,17 +2412,33 @@ async def _tool_get_relationships(
         if hass.states.get(eid) is None and registry.async_get(eid) is None
     ]
 
-    body: dict[str, Any] = {
-        "scope": {"selector": selector, "value": value,
-                  "entity_ids": sorted(scope), "count": len(scope)},
-        "consumers": consumers,
-        "consumer_count": len(consumers),
-        "dangling_references": dangling,
-        "searched": searched,
-    }
-    if not_searched:
-        body["not_searched"] = not_searched
-    if selector == "entity_id":
+    # What no searched consumer touches: removal candidates, which not_searched qualifies.
+    touched = {item["entity_id"] for consumer in consumers for item in consumer["entities"]}
+
+    def build(count: int) -> dict[str, Any]:
+        # Consumers are the work list, so they fill the result before dangling references.
+        listed, dead = consumers[:count], dangling[:max(0, count - len(consumers))]
+        body: dict[str, Any] = {
+            "scope": {"selector": selector, "value": value,
+                      "entity_ids": sorted(scope), "count": len(scope)},
+            "consumers": listed,
+            "consumer_count": len(consumers),
+            "unreferenced": sorted(scope - touched),
+            "dangling_references": dead,
+            "searched": searched,
+        }
+        if len(listed) < len(consumers):
+            body["consumers_not_listed"] = len(consumers) - len(listed)
+        if len(dead) < len(dangling):
+            body["dangling_not_listed"] = len(dangling) - len(dead)
+        if len(listed) < len(consumers) or len(dead) < len(dangling):
+            body["warnings"] = ["The result is full: narrow the scope to list the rest."]
+        if not_searched:
+            body["not_searched"] = not_searched
+        return body
+
+    body = longest_fitting(build, len(consumers) + len(dangling))
+    if selector == "entity_id" and isinstance(value, str):
         # Only meaningful for a single automation or script: what IT references.
         references, references_not_searched = await hass.async_add_executor_job(
             _forward_references_details, hass, value,
@@ -2400,7 +2451,8 @@ async def _tool_get_relationships(
         ]
         if references_not_searched:
             body["references_not_searched"] = references_not_searched
-    return _tool_success(json.dumps(body, default=str)), "allowed", f"{selector}:{value}"
+    label = ",".join(value) if isinstance(value, list) else value
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"{selector}:{label}"
 
 
 async def _tool_describe_entity(
