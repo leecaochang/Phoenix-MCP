@@ -324,6 +324,7 @@ class AccessKeyRecord:
     cap_physical_control: str = CAP_DENY
     cap_service_response: str = CAP_DENY
     cap_broadcast: str = CAP_DENY
+    cap_notify: str = CAP_DENY
     cap_log_read: str = CAP_DENY
     # Process-wide logger changes are deliberately separate from diagnostics.
     cap_log_control: str = CAP_DENY

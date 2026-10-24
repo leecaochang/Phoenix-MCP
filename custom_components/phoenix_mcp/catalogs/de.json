@@ -276,6 +276,10 @@
         "label": "Durchsage",
         "description": "Durchsagen über Assist-Satellitengeräte senden."
       },
+      "cap_notify": {
+        "label": "Benachrichtigungen",
+        "description": "Benachrichtigungen an Telefone und an die Benachrichtigungsliste von Home Assistant senden."
+      },
       "cap_service_response": {
         "label": "Dienst-Antwortdaten",
         "description": "Daten von Diensten zurückgeben, die eine Antwort liefern, wie z. B. conversation.process."
@@ -1287,6 +1291,7 @@
       "rename_esphome_device": "ESPHome-Gerät {device} in {new_name} umbenennen. Dabei wird das Gerät kompiliert und geflasht.",
       "rename_esphome_device.services": "ESPHome-Gerät {device} in {new_name} umbenennen und dabei {count} Aktionsdienst(e) umbenennen. Dabei wird das Gerät kompiliert und geflasht.",
       "restart_ha": "Home Assistant neu starten",
+      "send_notification": "Benachrichtigung an {target} senden",
       "set_dashboard_config": "Dashboard-Layout '{label}' festlegen",
       "set_device": "Metadaten der Geräteregistrierung ({fields}) für {device_id} aktualisieren",
       "set_entity": "Metadaten der Registrierung ({fields}) für {entity_id} aktualisieren",

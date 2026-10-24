@@ -154,6 +154,13 @@ const CAPS: CapDef[] = [
     confirmAvailable: true,
   },
   {
+    key: "cap_notify",
+    labelKey: "caps.cap_notify.label",
+    descriptionKey: "caps.cap_notify.description",
+    tier: "system",
+    confirmAvailable: true,
+  },
+  {
     key: "cap_restart",
     labelKey: "caps.cap_restart.label",
     descriptionKey: "caps.cap_restart.description",

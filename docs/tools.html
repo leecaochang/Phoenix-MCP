@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Tools reference &middot; Phoenix MCP docs</title>
-  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 150 Phoenix MCP tools, each scoped to the access key's permission tree and capabilities." />
+  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 152 Phoenix MCP tools, each scoped to the access key's permission tree and capabilities." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
-          <p class="lede">Search all 173 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 150 additional scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
+          <p class="lede">Search all 175 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 152 additional scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
           <p>Every tool accepts only the parameters listed for it. An unknown parameter, a missing required one, or a value of the wrong type or outside its documented range is refused with the parameter named, and a nested object's refusal also names what it takes. Some arguments name one request plainly even in another shape, and those run as that request, with the result's <code>arguments_adjusted</code> saying how they were read: Home Assistant's own service call shape (<code>service: "light.turn_on"</code> with <code>target</code> and <code>data</code>) and the previous catalog's flat shapes, a selector whose other keys decide its <code>kind</code>, a list of values sent as JSON text or as bracketed names such as <code>"[door, window]"</code> (entity IDs also as a comma list), a missing <code>get_state</code> projection (compact), several <code>get_history</code> entities without a mode (summary). A read-only tool also takes a synonym or one-letter slip that names exactly one of its parameters, a number or <code>true</code>/<code>false</code> sent as text, a listed value in another letter case (<code>"Day"</code> as <code>"day"</code>), a page size or wait above its maximum (as the maximum), and an optional argument that is only <code>null</code>, <code>""</code> or <code>[]</code> (as not given); a tool that writes, and <code>dry_run_service</code>, which predicts one, refuse these instead, naming the intended parameter. Sending both shapes for one part of a request is refused. A call that a missing capability blocks is refused before its parameters are checked. Native control tools also take the shapes Home Assistant's own native tools accept: one string where a list is expected, such as <code>"domain": "light"</code>, and a number sent as text, such as <code>"brightness": "40"</code>.</p>
           <p>Reads that return part of a longer list share one envelope: <code>count</code> is the rows in this result, <code>total</code> all matches when it is known, <code>has_more</code> whether more exist, and <code>next_offset</code> or <code>next_cursor</code> appears only when there is more. A read without paging lists rows while they fit one result of about 64 KB and names the rest in <code>not_listed</code>. Earlier names for the same fields (<code>truncated</code>, <code>matching_count</code>, <code>returned</code>, <code>matched_buckets</code>, <code>matched_blocks</code>) are still returned.</p>
           <p>Time arguments share one format: an ISO 8601 time or date, where one without an offset is Home Assistant local time as Home Assistant itself reads it; <code>now</code>; or a relative amount ago such as <code>30min</code>, <code>24h</code>, <code>7d</code>, <code>2w</code> or <code>1mo</code>, with <code>+7d</code> for 7 days ahead. A bare <code>m</code> is refused because it could mean minutes or months.</p>
@@ -34,7 +34,7 @@
         <div class="tool-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="tool-search-input" placeholder="Search all 173 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
+            <input type="text" id="tool-search-input" placeholder="Search all 175 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
           </label>
           <button class="filter-chip" data-cap="all" aria-pressed="true">All</button>
           <button class="filter-chip" data-cap="read" aria-pressed="false">Reads</button>
@@ -548,6 +548,16 @@
           <article class="tool" data-cap="system" data-search="restart_ha restart home assistant">
             <div class="tool-head"><span class="tool-name">restart_ha</span><span class="badge badge-cap">Restart or stop Home Assistant</span></div>
             <p class="tool-desc">Restart Home Assistant. Pass-through-exempt: even pass-through access keys must have this flag enabled.</p>
+          </article>
+          <article class="tool" data-cap="system" data-search="send_notification notify phone message alert persistent notification">
+            <div class="tool-head"><span class="tool-name">send_notification</span><span class="badge badge-cap">Notifications</span></div>
+            <p class="tool-desc">Send a notification to a person or a screen. <code>target</code> is <code>persistent_notification</code> (Home Assistant's own notification list), a <code>notify.*</code> entity the access key can WRITE, or a notify service such as a phone's <code>mobile_app_&lt;phone&gt;</code>; an unknown or inaccessible target is refused with the targets this key can use. A notify entity also passes MESA. Mobile app commands such as <code>request_location_update</code> or <code>command_*</code> act on the phone rather than inform anyone and are not sent. Pass-through-exempt, and Confirm holds each message for approval. The result says <code>sent</code>; <code>verified</code> is true only for <code>persistent_notification</code>, which is read back, because Home Assistant does not report delivery to a device.</p>
+            <dl><dt>params</dt><dd><code>target</code> (required), <code>message</code> (required, up to 4000 characters), <code>title</code> (optional)</dd></dl>
+          </article>
+          <article class="tool" data-cap="system" data-search="get_notifications persistent notification bell login attempt new device">
+            <div class="tool-head"><span class="tool-name">get_notifications</span><span class="badge badge-cap">System log read</span></div>
+            <p class="tool-desc">Home Assistant's persistent notifications, the bell in the sidebar, newest first: new devices discovered, login attempts, and messages automations left. Phoenix's own approval and rate-limit notices are never listed, since they can describe other access keys' activity, and addresses and entity IDs the access key cannot read are redacted.</p>
+            <dl><dt>returns</dt><dd><code>count</code>, <code>total</code>, <code>has_more</code>, and <code>notifications</code> with <code>notification_id</code>, <code>title</code>, <code>message</code> and <code>created_at</code></dd></dl>
           </article>
         </section>
 

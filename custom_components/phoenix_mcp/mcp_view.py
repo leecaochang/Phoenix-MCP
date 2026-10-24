@@ -50,6 +50,7 @@ from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOE
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
+from .tools.notify import _execute_send_notification, _tool_get_notifications, _tool_send_notification
 from .template_render import TemplateRenderError, async_render_template_for_access_key
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
@@ -10971,6 +10972,7 @@ def _build_diff_create_backup(args: dict, access_key: AccessKeyRecord, hass: Hom
 # When an admin approves a pending request, async_execute_approved_tool() invokes the
 # matching executor with the saved args.
 _register_executor("restart_ha", _execute_restart_ha)
+_register_executor("send_notification", _execute_send_notification)
 _register_executor("call_service", _execute_call_service)
 _register_executor("create_automation", _execute_create_automation)
 _register_executor("edit_automation", _execute_edit_automation)
@@ -11065,6 +11067,8 @@ _register_tool("create_automation", _tool_create_automation)
 _register_tool("edit_automation", _tool_edit_automation)
 _register_tool("delete_automation", _tool_delete_automation)
 _register_tool("restart_ha", _tool_restart_ha)
+_register_tool("send_notification", _tool_send_notification)
+_register_tool("get_notifications", _tool_get_notifications)
 _register_tool("get_approval_status", _tool_get_approval_status)
 _register_tool("wait_for_approval", _tool_wait_for_approval)
 _register_tool("get_capability_summary", _tool_get_capability_summary)

@@ -379,6 +379,10 @@
         "description": "Aankondigingen doen via Assist-satellietapparaten.",
         "label": "Omroepen"
       },
+      "cap_notify": {
+        "description": "Meldingen sturen naar telefoons en naar de meldingenlijst van Home Assistant.",
+        "label": "Meldingen"
+      },
       "cap_camera_read": {
         "description": "Stilstaande beelden ophalen van expliciet toegestane Home Assistant-camera's.",
         "label": "Camerabeelden lezen"
@@ -640,6 +644,7 @@
       "rename_esphome_device": "ESPHome-apparaat {device} hernoemen naar {new_name}. Dit compileert en flasht het apparaat.",
       "rename_esphome_device.services": "ESPHome-apparaat {device} hernoemen naar {new_name}, met hernoeming van {count} actieservice(s). Dit compileert en flasht het apparaat.",
       "restart_ha": "Home Assistant herstarten",
+      "send_notification": "Een melding sturen naar {target}",
       "set_dashboard_config": "Dashboardindeling '{label}' instellen",
       "set_device": "Apparaatregister-metagegevens bijwerken ({fields}) voor {device_id}",
       "set_entity": "Registermetagegevens bijwerken ({fields}) voor {entity_id}",

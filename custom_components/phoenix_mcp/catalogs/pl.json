@@ -383,6 +383,10 @@
         "description": "Wygłaszaj ogłoszenia przez urządzenia satelitarne Assist.",
         "label": "Ogłaszanie"
       },
+      "cap_notify": {
+        "description": "Wysyłaj powiadomienia na telefony i do listy powiadomień Home Assistant.",
+        "label": "Powiadomienia"
+      },
       "cap_camera_read": {
         "description": "Pobieraj obrazy nieruchome z jawnie dozwolonych kamer Home Assistant.",
         "label": "Odczyt obrazów kamery"
@@ -644,6 +648,7 @@
       "rename_esphome_device": "Zmień nazwę urządzenia ESPHome {device} na {new_name}. Spowoduje to kompilację i wgranie oprogramowania na urządzenie.",
       "rename_esphome_device.services": "Zmień nazwę urządzenia ESPHome {device} na {new_name}, zmieniając {count} usług akcji. Spowoduje to kompilację i wgranie oprogramowania na urządzenie.",
       "restart_ha": "Uruchom ponownie Home Assistant",
+      "send_notification": "Wyślij powiadomienie do {target}",
       "set_dashboard_config": "Ustaw układ panelu '{label}'",
       "set_device": "Zaktualizuj metadane rejestru urządzeń ({fields}) dla {device_id}",
       "set_entity": "Zaktualizuj metadane rejestru ({fields}) dla {entity_id}",

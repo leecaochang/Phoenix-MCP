@@ -41,6 +41,10 @@
         "label": "Difusión",
         "description": "Realiza anuncios a través de los dispositivos satélite de Assist."
       },
+      "cap_notify": {
+        "label": "Notificaciones",
+        "description": "Envía notificaciones a teléfonos y a la lista de notificaciones de Home Assistant."
+      },
       "cap_service_response": {
         "label": "Datos de respuesta de servicios",
         "description": "Devuelve datos de servicios que proporcionan una respuesta, como conversation.process."
@@ -809,6 +813,7 @@
       "rename_esphome_device": "Renombrar el dispositivo ESPHome {device} a {new_name}. Esto compila y graba el dispositivo.",
       "rename_esphome_device.services": "Renombrar el dispositivo ESPHome {device} a {new_name}, renombrando {count} servicio(s) de acción. Esto compila y graba el dispositivo.",
       "restart_ha": "Reiniciar Home Assistant",
+      "send_notification": "Enviar una notificación a {target}",
       "set_dashboard_config": "Establecer la disposición del panel de control '{label}'",
       "set_device": "Actualizar los metadatos del registro del dispositivo ({fields}) de {device_id}",
       "set_entity": "Actualizar los metadatos del registro ({fields}) de {entity_id}",

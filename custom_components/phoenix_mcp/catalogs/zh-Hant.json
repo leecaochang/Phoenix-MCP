@@ -728,6 +728,10 @@
         "description": "通過語音助理衛星播報訊息。",
         "label": "廣播"
       },
+      "cap_notify": {
+        "description": "向手機與 Home Assistant 通知清單傳送通知。",
+        "label": "通知"
+      },
       "cap_camera_read": {
         "description": "從明確授權的 Home Assistant 攝影機讀取靜態影像。",
         "label": "讀取攝影機影像"
@@ -1025,6 +1029,7 @@
       "rename_esphome_device": "將 ESPHome 裝置 {device} 重新命名為 {new_name}。此操作會編譯並刷寫該裝置。",
       "rename_esphome_device.services": "將 ESPHome 裝置 {device} 重新命名為 {new_name}，同時重新命名 {count} 個動作服務。此操作會編譯並刷寫該裝置。",
       "restart_ha": "重新啟動 Home Assistant",
+      "send_notification": "傳送通知至 {target}",
       "set_dashboard_config": "設定儀表板「{label}」的佈局",
       "set_device": "更新 {device_id} 的裝置註冊表後設資料（{fields}）",
       "set_entity": "更新 {entity_id} 的登錄檔後設資料（{fields}）",

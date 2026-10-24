@@ -742,6 +742,10 @@
         "description": "Diffonde annunci tramite i dispositivi satellite Assist.",
         "label": "Annuncio"
       },
+      "cap_notify": {
+        "description": "Invia notifiche ai telefoni e all'elenco delle notifiche di Home Assistant.",
+        "label": "Notifiche"
+      },
       "cap_camera_read": {
         "description": "Recupera immagini fisse dalle telecamere di Home Assistant esplicitamente autorizzate.",
         "label": "Lettura immagini telecamera"
@@ -1908,6 +1912,7 @@
       "rename_esphome_device": "Rinomina il dispositivo ESPHome {device} in {new_name}. Questo compila ed esegue il flashing del dispositivo.",
       "rename_esphome_device.services": "Rinomina il dispositivo ESPHome {device} in {new_name}, rinominando {count} servizi di azione. Questo compila ed esegue il flashing del dispositivo.",
       "restart_ha": "Riavvia Home Assistant",
+      "send_notification": "Invia una notifica a {target}",
       "set_dashboard_config": "Imposta il layout della plancia '{label}'",
       "set_device": "Aggiorna i metadati del registro dei dispositivi ({fields}) per {device_id}",
       "set_entity": "Aggiorna i metadati del registro ({fields}) per {entity_id}",

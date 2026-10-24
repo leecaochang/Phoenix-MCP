@@ -32,6 +32,7 @@ function makeAccessKey(overrides: Partial<AccessKeyRecord> = {}): AccessKeyRecor
     cap_physical_control: "deny",
     cap_service_response: "deny",
     cap_broadcast: "deny",
+    cap_notify: "deny",
     cap_search: "deny",
     cap_registry_read: "deny",
     cap_traces: "deny",

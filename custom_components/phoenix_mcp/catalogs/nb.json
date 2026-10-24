@@ -928,6 +928,10 @@
         "description": "Send kunngjøringer via Assist-satellittenheter.",
         "label": "Kunngjøring"
       },
+      "cap_notify": {
+        "description": "Send varsler til telefoner og til varsellisten i Home Assistant.",
+        "label": "Varsler"
+      },
       "cap_calendar_write": {
         "description": "Opprett, oppdater og slett hendelser i kalendere som kan skrives til.",
         "label": "Kalenderskriving"
@@ -1411,6 +1415,7 @@
       "rename_esphome_device": "Gi ESPHome-enheten {device} nytt navn til {new_name}. Dette kompilerer og flasher enheten.",
       "rename_esphome_device.services": "Gi ESPHome-enheten {device} nytt navn til {new_name}, og gi {count} handlingstjenester nytt navn. Dette kompilerer og flasher enheten.",
       "restart_ha": "Start Home Assistant på nytt",
+      "send_notification": "Send et varsel til {target}",
       "set_dashboard_config": "Angi dashbordoppsettet «{label}»",
       "set_device": "Oppdater metadata i enhetsregisteret ({fields}) for {device_id}",
       "set_entity": "Oppdater metadata i registeret ({fields}) for {entity_id}",

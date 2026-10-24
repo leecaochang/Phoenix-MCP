@@ -154,6 +154,10 @@
         "label": "Broadcast",
         "description": "Make announcements through Assist satellite devices."
       },
+      "cap_notify": {
+        "label": "Notifications",
+        "description": "Send notifications to phones and to Home Assistant's notification list."
+      },
       "cap_service_response": {
         "label": "Service response data",
         "description": "Return data from services that provide a response, such as conversation.process."
@@ -1733,6 +1737,7 @@
       "rename_esphome_device": "Rename ESPHome device {device} to {new_name}. This compiles and flashes the device.",
       "rename_esphome_device.services": "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s). This compiles and flashes the device.",
       "restart_ha": "Restart Home Assistant",
+      "send_notification": "Send a notification to {target}",
       "set_dashboard_config": "Set dashboard layout '{label}'",
       "set_device": "Update device registry metadata ({fields}) for {device_id}",
       "set_entity": "Update registry metadata ({fields}) for {entity_id}",

@@ -928,6 +928,10 @@
         "description": "Tee kuulutuksia Assist-satelliittilaitteiden kautta.",
         "label": "Kuulutus"
       },
+      "cap_notify": {
+        "description": "Lähetä ilmoituksia puhelimiin ja Home Assistantin ilmoitusluetteloon.",
+        "label": "Ilmoitukset"
+      },
       "cap_calendar_write": {
         "description": "Luo, päivitä ja poista tapahtumia kirjoitettavissa kalentereissa.",
         "label": "Kalenterin kirjoitus"
@@ -1411,6 +1415,7 @@
       "rename_esphome_device": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name}. Tämä kääntää kokoonpanon ja asentaa laitteen laiteohjelmiston.",
       "rename_esphome_device.services": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name} ja nimeä {count} toimintapalvelua uudelleen. Tämä kääntää kokoonpanon ja asentaa laitteen laiteohjelmiston.",
       "restart_ha": "Käynnistä Home Assistant uudelleen",
+      "send_notification": "Lähetä ilmoitus kohteeseen {target}",
       "set_dashboard_config": "Aseta kojelaudan asettelu '{label}'",
       "set_device": "Päivitä laiterekisterin metatiedot ({fields}) laitteelle {device_id}",
       "set_entity": "Päivitä rekisterin metatiedot ({fields}) entiteetille {entity_id}",

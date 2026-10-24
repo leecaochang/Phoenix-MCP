@@ -6,6 +6,7 @@
     "cap_automation_write",
     "cap_backup",
     "cap_broadcast",
+    "cap_notify",
     "cap_config_read",
     "cap_camera_read",
     "cap_diagnostics",

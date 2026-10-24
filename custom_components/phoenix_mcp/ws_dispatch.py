@@ -90,6 +90,9 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # them on cap_dashboard_resources. They are not registered in YAML mode.
         "lovelace/resources/create", "lovelace/resources/update", "lovelace/resources/delete",
         "logbook/get_events",
+        # Read only; tools/notify.py is the only caller, gated on cap_log_read, and
+        # it drops Phoenix's own operator notifications before anything is shown.
+        "persistent_notification/get",
         # Loaded-config reverse references. This complements Phoenix's direct
         # YAML walk with packages, blueprint-expanded configs, people, and
         # integration-managed consumers. The caller supplies only entity ids

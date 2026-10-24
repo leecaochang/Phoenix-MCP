@@ -154,6 +154,10 @@
         "label": "ブロードキャスト",
         "description": "Assist サテライトデバイスからアナウンスを流します。"
       },
+      "cap_notify": {
+        "label": "通知",
+        "description": "スマートフォンと Home Assistant の通知リストに通知を送信します。"
+      },
       "cap_service_response": {
         "label": "サービス応答データ",
         "description": "conversation.process など、応答を返すサービスのデータを返します。"
@@ -1238,6 +1242,7 @@
       "rename_esphome_device": "ESPHome デバイス {device} を {new_name} に変更。デバイスをコンパイルして書き込みます。",
       "rename_esphome_device.services": "ESPHome デバイス {device} を {new_name} に変更し、{count} 個のアクションサービス名も変更。デバイスをコンパイルして書き込みます。",
       "restart_ha": "Home Assistant を再起動",
+      "send_notification": "{target} に通知を送信",
       "set_dashboard_config": "ダッシュボード「{label}」のレイアウトを設定",
       "set_device": "{device_id} のデバイスレジストリメタデータ（{fields}）を更新",
       "set_entity": "{entity_id} のレジストリメタデータ（{fields}）を更新",

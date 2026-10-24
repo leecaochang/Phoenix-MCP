@@ -904,6 +904,7 @@ CAPABILITY_NAMES = (
     "cap_traces",
     "cap_diagnostics",
     "cap_broadcast",
+    "cap_notify",
     "cap_service_response",
     "cap_automation_write",
     "cap_script_write",
@@ -940,6 +941,9 @@ CAPABILITY_TIERS: dict[str, str] = {
     "cap_traces": "read",
     "cap_diagnostics": "read",
     "cap_broadcast": "everyday",
+    # Messages reach people's phones and screens: an agent could spam or
+    # impersonate, so it sits with the other actions on the household.
+    "cap_notify": "system",
     "cap_service_response": "everyday",
     "cap_automation_write": "config_write",
     "cap_script_write": "config_write",
@@ -978,6 +982,7 @@ CAPABILITY_TIERS: dict[str, str] = {
 # Capabilities for which Confirm is a meaningful third state.
 # UI hides the Confirm option for caps not in this set.
 CONFIRM_AVAILABLE_CAPS = frozenset({
+    "cap_notify",
     "cap_automation_write",
     "cap_script_write",
     "cap_blueprint_write",
@@ -1006,6 +1011,7 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
 # except that "confirm" is honored even for non-exempt caps under pass_through
 # (admin's intent to gate is preserved). See helpers.effective_cap.
 PASS_THROUGH_EXEMPT_CAPS = frozenset({
+    "cap_notify",
     "cap_camera_read",
     "cap_restart",
     "cap_physical_control",
@@ -1631,6 +1637,7 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "zigbee_topology.backend": "Scan {backend} neighbor tables for the scoped Zigbee map",
     # System.
     "restart_ha": "Restart Home Assistant",
+    "send_notification": "Send a notification to {target}",
     # {file} rather than a literal configuration.yaml: these tools write any
     # include target, so a summary naming the wrong file is a false line in
     # the History an admin reads. {path} is already the addressed KEY here.

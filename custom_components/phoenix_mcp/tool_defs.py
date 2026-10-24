@@ -1881,6 +1881,36 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "send_notification",
+        "description": (
+            "Send a notification to a person or a screen. target is persistent_notification (Home Assistant's own "
+            "notification list), a notify.* entity the access key can WRITE, or a notify service such as "
+            "mobile_app_<phone>; an unknown target is refused with the list of targets this key can use. Mobile app "
+            "commands such as request_location_update are not sent. The result says sent, and verified only for "
+            "persistent_notification, since Home Assistant does not report delivery to a device."
+        ),
+        "cap": "cap_notify",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "persistent_notification, a notify.* entity, or a notify service name."},
+                "message": {"type": "string", "maxLength": 4000, "description": "The text to send."},
+                "title": {"type": "string", "maxLength": 200, "description": "An optional title."},
+            },
+            "required": ["target", "message"],
+        },
+    },
+    {
+        "name": "get_notifications",
+        "description": (
+            "Read Home Assistant's persistent notifications (the bell in the sidebar: new devices found, repairs, "
+            "login attempts, messages automations left), newest first. Addresses and entity IDs this access key "
+            "cannot read are redacted."
+        ),
+        "cap": "cap_log_read",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "restart_ha",
         "description": "Restart Home Assistant.",
         "cap": "cap_restart",
@@ -4266,6 +4296,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "delete_blueprint": _annot(False, True, True),
     # System actions.
     "restart_ha": _annot(False, True, False),
+    "send_notification": _annot(False, False, False),
+    "get_notifications": _annot(True, False, True),
     _NATIVE_TOOL_NAMES["HassBroadcast"]: _annot(False, False, False),
     "permit_zigbee_join": _annot(False, False, False),
     "reconfigure_zigbee_device": _annot(False, True, True),

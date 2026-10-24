@@ -36,6 +36,7 @@ export interface CapabilityFlagsMap {
   cap_traces: CapMode;
   cap_diagnostics: CapMode;
   cap_broadcast: CapMode;
+  cap_notify: CapMode;
   cap_service_response: CapMode;
   cap_automation_write: CapMode;
   cap_script_write: CapMode;
@@ -559,6 +560,7 @@ export interface PatchAccessKeyBody {
   cap_physical_control?: CapMode;
   cap_service_response?: CapMode;
   cap_broadcast?: CapMode;
+  cap_notify?: CapMode;
   cap_search?: CapMode;
   cap_registry_read?: CapMode;
   cap_traces?: CapMode;

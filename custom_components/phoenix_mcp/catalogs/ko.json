@@ -190,6 +190,10 @@
         "label": "방송",
         "description": "Assist 위성 기기를 통해 안내 방송을 합니다."
       },
+      "cap_notify": {
+        "label": "알림",
+        "description": "휴대폰과 Home Assistant 알림 목록으로 알림을 보냅니다."
+      },
       "cap_service_response": {
         "label": "서비스 응답 데이터",
         "description": "conversation.process 와 같이 응답을 제공하는 서비스에서 데이터를 반환합니다."
@@ -708,6 +712,7 @@
       "rename_esphome_device": "ESPHome 기기 {device}을(를) {new_name}(으)로 이름 변경. 기기를 컴파일하고 플래시합니다.",
       "rename_esphome_device.services": "ESPHome 기기 {device}을(를) {new_name}(으)로 이름 변경하고 작업 서비스 {count}개도 이름 변경. 기기를 컴파일하고 플래시합니다.",
       "restart_ha": "Home Assistant 재시작",
+      "send_notification": "{target}에 알림 보내기",
       "set_dashboard_config": "대시보드 '{label}' 레이아웃 설정",
       "set_device": "{device_id}의 기기 레지스트리 메타데이터 업데이트 ({fields})",
       "set_entity": "{entity_id}의 레지스트리 메타데이터 업데이트 ({fields})",
