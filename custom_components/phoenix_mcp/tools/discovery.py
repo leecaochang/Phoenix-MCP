@@ -2080,6 +2080,9 @@ async def _tool_get_repairs(
         })
     body = {
         "count": len(projected),
+        "total": len(matches),
+        "has_more": len(matches) > limit,
+        # Earlier names for total and has_more, kept for existing callers.
         "matching_count": len(matches),
         "truncated": len(matches) > limit,
         "issues": projected,
@@ -3061,9 +3064,13 @@ async def _tool_recent_activity(
         "window_minutes": minutes,
         "count": min(len(changes), limit),
         "total": len(changes),
+        "has_more": len(changes) > limit,
         "truncated": len(changes) > limit,
         "changes": changes[:limit],
     }
+    if len(changes) > limit:
+        # This read has no offset: the newest changes lead, so a shorter window reads the rest.
+        body["warnings"] = [f"More entities changed than limit {limit}; raise limit or shorten minutes."]
     return _tool_success(json.dumps(body, default=str)), "allowed", "recent_activity"
 
 

@@ -1002,7 +1002,8 @@ class TestScopedEsphomeInventory:
         entry.data = {"device_name": "private"}
         content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "limit": 1}, _yaml_access_key(), hass)
         body = _json(content)
-        assert body["count"] == 2
+        # count is this page and total every scoped match, as on every paged read.
+        assert (body["count"], body["total"], body["has_more"]) == (1, 2, True)
         assert body["next_offset"] == 1
         assert body["matches"][0]["file"] == "a.yaml"
         content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "case_sensitive": True}, _yaml_access_key(), hass)
@@ -1052,7 +1053,7 @@ class TestScopedEsphomeInventory:
         (content, outcome, _), builder = await _inventory_call(hass, "list_esphome_jobs", {"limit": 1}, jobs)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["count"] == 2
+        assert (body["count"], body["total"], body["has_more"]) == (1, 2, True)
         assert body["jobs"][0] == {
             "file": "rf-blaster1.yaml", "job_id": "new", "status": "failed", "job_type": "compile",
             "created_at": "2026-09-02", "started_at": "2026-09-02T00:00:01",
@@ -1061,7 +1062,8 @@ class TestScopedEsphomeInventory:
         assert body["next_offset"] == 1
         assert builder.await_args.args[2] == "firmware/get_jobs"
         (content, _, _), _builder = await _inventory_call(hass, "list_esphome_jobs", {"status": "completed"}, jobs)
-        assert _json(content)["count"] == 1
+        last = _json(content)
+        assert last["count"] == 1 and last["has_more"] is False and "next_offset" not in last
 
     async def test_device_projection_importable_scope_and_network_confidentiality(self, hass, esphome_dir, esphome_entries):
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),

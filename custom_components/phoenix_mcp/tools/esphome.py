@@ -642,8 +642,12 @@ def _esphome_paged(rows: list[dict], args: dict, key: str) -> dict:
             break
         page.append(row)
     end = offset + len(page)
-    return {key: page, "count": len(rows), "offset": offset,
-            "next_offset": end if end < len(rows) else None}
+    # The shared envelope: count is this page, total every scoped row, and
+    # next_offset appears only when there is more.
+    body = {key: page, "count": len(page), "total": len(rows), "offset": offset, "has_more": end < len(rows)}
+    if end < len(rows):
+        body["next_offset"] = end
+    return body
 
 
 async def _tool_search_esphome_yaml(

@@ -2470,6 +2470,7 @@ async def _tool_log_query(
                 "time_basis": "latest_occurrence",
             },
             "count": 0,
+            "total": 0,
             "matched_buckets": 0,
             "has_more": False,
             "next_cursor": None,
@@ -2824,6 +2825,7 @@ async def _tool_get_logbook(
         body: dict[str, Any] = {
             "count": count,
             "total": total,
+            "has_more": total > count,
             "truncated": total > count,
             "filters": {
                 "start_time": start_time.isoformat(),
@@ -8543,7 +8545,9 @@ async def _tool_list_backups(
         available_agents = []
         warnings.append(f"Failed to list backup agents: {exc}")
     body = {
+        "count": min(len(summaries), limit),
         "total": len(summaries),
+        "has_more": len(summaries) > limit,
         "returned": min(len(summaries), limit),
         # Explicit, even though total vs returned already implies it: every other
         # paginating read states truncation as a boolean, and a reader that has to

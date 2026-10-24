@@ -242,3 +242,18 @@ class TestListScenes:
         assert await scenes("switch.fan") == await scenes("switch.nothing") == {}
         content, _, _ = await _call("list_scenes", {}, _access_key(), hass)
         assert all("members" not in row for row in _json(content)["scenes"])
+
+
+async def test_listings_fit_one_result_and_name_the_rest(hass, scene_env):
+    """Listings without paging grew without bound on a large home."""
+    from unittest.mock import patch as _patch
+    from custom_components.phoenix_mcp import tool_common
+
+    for index in range(40):
+        hass.states.async_set(f"scene.s{index:02d}", "scening", {"friendly_name": "x" * 60, "id": f"id{index}"})
+    with _patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", 2000):
+        content, outcome, _ = await _call("list_scenes", {}, _access_key(), hass)
+    body = _json(content)
+    assert outcome == "allowed" and 0 < body["count"] < 40
+    listed = [row["entity_id"] for row in body["scenes"]]
+    assert listed + body["not_listed"] == [f"scene.s{index:02d}" for index in range(40)]

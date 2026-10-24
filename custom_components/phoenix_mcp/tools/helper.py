@@ -69,6 +69,7 @@ from ..tool_common import (
     _pending_or_inline,
     _record_version,
     _restore_ctx,
+    fitted_list,
     redaction_sentinel_path,
     _tool_error,
     _tool_success,
@@ -922,7 +923,7 @@ async def _tool_list_helpers(
             })
         helpers.append(helper)
     helpers.sort(key=lambda h: h["entity_id"])
-    return _tool_success(json.dumps({"count": len(helpers), "helpers": helpers}, default=str)), "allowed", "list_helpers"
+    return _tool_success(json.dumps(fitted_list(helpers, "helpers"), default=str)), "allowed", "list_helpers"
 
 
 def _helper_icon_error(helper_type: str, icon: Any, *, editing: bool) -> str | None:

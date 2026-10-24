@@ -1016,6 +1016,7 @@ class LogEntryPage:
             "source": self.source,
             "filters": self.filters,
             "count": len(self.entries),
+            "total": self.matched_buckets,
             "matched_buckets": self.matched_buckets,
             "has_more": self.has_more,
             "next_cursor": self.next_cursor,

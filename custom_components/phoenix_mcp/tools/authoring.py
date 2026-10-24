@@ -48,7 +48,7 @@ from ..entity_registration import async_observe_registration
 from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg, _strict_phoenix_log_text
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
-    _tool_success, _truncate, longest_fitting,
+    _tool_success, _truncate, fitted_list, longest_fitting,
 )
 from ..policy_engine import Permission, filter_entities_for_access_key, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority
@@ -798,7 +798,7 @@ async def _tool_list_scripts(
             "state": e.get("state"),
         })
     items.sort(key=lambda s: s["entity_id"])
-    return _tool_success(json.dumps({"count": len(items), "scripts": items}, default=str)), "allowed", "list_scripts"
+    return _tool_success(json.dumps(fitted_list(items, "scripts"), default=str)), "allowed", "list_scripts"
 
 
 async def _tool_get_script(
@@ -1422,7 +1422,7 @@ async def _tool_list_scenes(
             row["members"] = members
         scenes.append(row)
     scenes.sort(key=lambda s: s["entity_id"])
-    return _tool_success(json.dumps({"count": len(scenes), "scenes": scenes}, default=str)), "allowed", "list_scenes"
+    return _tool_success(json.dumps(fitted_list(scenes, "scenes"), default=str)), "allowed", "list_scenes"
 
 
 async def _tool_get_scene(

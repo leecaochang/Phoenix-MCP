@@ -118,6 +118,21 @@ def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
     return build(low)
 
 
+def fitted_list(rows: list[dict], key: str) -> dict:
+    """A whole listing that fits one result, naming by entity_id the rows past it.
+
+    For listings without paging: they used to grow without bound on a large home.
+    """
+    def build(count: int) -> dict:
+        body: dict = {"count": count, key: rows[:count]}
+        if count < len(rows):
+            body["not_listed"] = [row.get("entity_id") for row in rows[count:]]
+            body["warnings"] = ["The result is full: the entities in not_listed were not listed."]
+        return body
+
+    return longest_fitting(build, len(rows))
+
+
 def fitted_offset_page(page: list, envelope: dict, build: Callable[[list, dict], dict]) -> dict:
     """An offset page shrunk to what fits TOOL_RESULT_MAX_BYTES, continuing at the first row left out.
 
