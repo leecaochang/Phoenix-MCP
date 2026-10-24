@@ -1521,7 +1521,35 @@
       "agentcliProbedVisionInconclusive": "图像检查：没有收到可用的回答，因此图像支持情况仍然未知。",
       "agentcliOpenCodeRoute": "API 路由",
       "agentcliOpenCodeZen": "Zen（旧版）",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "关于",
+      "accountChangeModel": "更改模型",
+      "accountCheckOptions": "检测可用选项",
+      "accountRefreshModels": "刷新模型列表",
+      "addAccount": "添加账户",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task 已不再是默认 AI 任务",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task 已取代 {name} 成为默认 AI 任务",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task 已成为默认 AI 任务",
+      "aiTaskDisabledDefaultToast": "已禁用 AI 任务，它也不再是默认 AI 任务",
+      "aiTaskDisabledToast": "已禁用 AI 任务",
+      "aiTaskEnabledToast": "已启用 AI 任务",
+      "catalogChecks": "模型目录检查",
+      "colAccount": "账户",
+      "colModel": "默认模型",
+      "colProvider": "提供商",
+      "discard": "放弃",
+      "haNotifications": "Home Assistant 通知",
+      "modelAutomatic": "自动",
+      "privacySection": "隐私",
+      "voiceAssistantAddedToast": "已将 Phoenix MCP 助手添加到 Home Assistant",
+      "voiceAssistantRemovedToast": "已从 Home Assistant 移除 Phoenix MCP 助手",
+      "voiceDisabledRemovedToast": "已禁用语音智能体，并已移除其 Home Assistant 助手",
+      "voiceDisabledToast": "已禁用语音智能体",
+      "voiceEnabledToast": "已启用语音智能体",
+      "voicePreferredClearedToast": "Phoenix MCP 已不再是首选助手",
+      "voicePreferredFailed": "无法更改首选助手。",
+      "voicePreferredSetToast": "Phoenix MCP 已成为首选助手",
+      "wipeWarningSelected": "这将删除以下数据，且此操作无法撤销。"
     },
     "agentchat": {
       "announceApproval": "操作 {name} 需要您的审批。",
@@ -1662,7 +1690,9 @@
       "attachNoVision": "此模型不接受图像。",
       "attachCompanion": "Home Companion 仅接受文本命令，因此无法附加图像。",
       "connection": "连接",
-      "changeConnection": "更改连接"
+      "changeConnection": "更改连接",
+      "dockedClosed": "Agent Chat 已关闭。",
+      "floatChat": "使 Agent Chat 浮动"
     },
     "wizard": {
       "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择 <strong>W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",
@@ -2303,7 +2333,8 @@
         "requestCompleted": "模型请求已完成"
       },
       "attachmentPrompt": "图片或文件提示内容",
-      "clearShort": "清除历史"
+      "clearShort": "清除历史",
+      "retention": "保留"
     },
     "attention": {
       "title": "需要关注",
@@ -2390,7 +2421,22 @@
       "profileEditor": "策略编辑器",
       "orphanedProfiles": "孤立的策略",
       "advisory": "建议性提示",
-      "diagnostics": "诊断"
+      "diagnostics": "诊断",
+      "addToMy": "添加到我的工作区",
+      "addedToMy": "已将{window}添加到我的工作区",
+      "aiProviders": "AI 提供商",
+      "findSetting": "查找设置",
+      "findSettingNone": "没有匹配的设置",
+      "findSettingPlaceholder": "搜索设置",
+      "findSettingResults": "匹配的设置",
+      "general": "常规",
+      "logsNotifications": "日志和通知",
+      "myEmpty": "我的工作区为空。请通过窗口菜单中的“添加到我的工作区”添加窗口，或通过 Agent Chat 自身的菜单添加 Agent Chat。",
+      "myEmptyPhone": "在此手机上，我的工作区中没有窗口。",
+      "myWorkspace": "我的工作区",
+      "removeFromMy": "从我的工作区移除",
+      "removedFromMy": "已将{window}从我的工作区移除",
+      "safety": "安全"
     },
     "notifications": {
       "title": "通知",
@@ -2426,7 +2472,13 @@
       "guideTitle": "拖动标题栏可移动指南，拖动边缘或角可调整其大小。",
       "selectBy": "只显示树中属于某个区域、标签或集成的部分。只改变显示内容，不改变密钥的权限。",
       "hintSave": "为所选范围保存提示。智能体会随此实体一起收到它。",
-      "hintRemove": "移除为所选范围保存的提示。"
+      "hintRemove": "移除为所选范围保存的提示。",
+      "settingsAiTaskDisable": "关闭 AI 任务后，它也将不再是 Home Assistant 的默认 AI 任务。",
+      "settingsAiTaskReplaceDefault": "Home Assistant 只有一个默认 AI 任务，因此此设置会替换当前的默认 AI 任务。",
+      "settingsVoiceClearPreferred": "关闭此项后，该助手仍会保留。Home Assistant 将改为首选另一个助手。",
+      "settingsVoiceDisable": "关闭语音智能体也会移除 Phoenix MCP 在 Home Assistant 中创建的助手。",
+      "settingsVoiceRemoveAssistant": "关闭此项会移除 Phoenix MCP 在 Home Assistant 中创建的助手。语音智能体仍保持启用。",
+      "wsMy": "您自己的工作区：包含您从其他工作区添加的窗口，以及停靠到此处的 Agent Chat。"
     },
     "guide": {
       "title": "指南",
@@ -2441,7 +2493,9 @@
       "clearFilters": "清除筛选",
       "latest": "最新",
       "turns": "轮次",
-      "toolCalls": "工具调用"
+      "toolCalls": "工具调用",
+      "pauseUpdates": "暂停更新",
+      "recordingSettings": "记录设置"
     },
     "table": {
       "sortAscending": "升序排序",

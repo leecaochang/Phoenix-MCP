@@ -922,7 +922,9 @@
       "attachNoVision": "Dit model accepteert geen afbeeldingen.",
       "attachCompanion": "Home Companion accepteert alleen tekstopdrachten, dus afbeeldingen kunnen niet worden bijgevoegd.",
       "connection": "Verbinding",
-      "changeConnection": "Verbinding wijzigen"
+      "changeConnection": "Verbinding wijzigen",
+      "dockedClosed": "Agent Chat is gesloten.",
+      "floatChat": "Agent Chat loskoppelen"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",
@@ -1868,7 +1870,35 @@
       "agentcliProbedVisionInconclusive": "Afbeeldingscontrole: er kwam geen bruikbaar antwoord terug, dus ondersteuning voor afbeeldingen is nog onbekend.",
       "agentcliOpenCodeRoute": "API-pad",
       "agentcliOpenCodeZen": "Zen (bestaand)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Over",
+      "accountChangeModel": "Model wijzigen",
+      "accountCheckOptions": "Opties controleren",
+      "accountRefreshModels": "Modellen vernieuwen",
+      "addAccount": "Account toevoegen",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task is niet langer de standaard",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task is nu de standaard in plaats van {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task is nu de standaard",
+      "aiTaskDisabledDefaultToast": "AI-taak uitgeschakeld en niet langer de standaard",
+      "aiTaskDisabledToast": "AI-taak uitgeschakeld",
+      "aiTaskEnabledToast": "AI-taak ingeschakeld",
+      "catalogChecks": "Controles van de modelcatalogus",
+      "colAccount": "Account",
+      "colModel": "Standaardmodel",
+      "colProvider": "Provider",
+      "discard": "Wijzigingen verwijderen",
+      "haNotifications": "Home Assistant-meldingen",
+      "modelAutomatic": "automatisch",
+      "privacySection": "Privacy",
+      "voiceAssistantAddedToast": "Phoenix MCP-assistent toegevoegd aan Home Assistant",
+      "voiceAssistantRemovedToast": "Phoenix MCP-assistent verwijderd uit Home Assistant",
+      "voiceDisabledRemovedToast": "Spraakagent uitgeschakeld en bijbehorende Home Assistant-assistent verwijderd",
+      "voiceDisabledToast": "Spraakagent uitgeschakeld",
+      "voiceEnabledToast": "Spraakagent ingeschakeld",
+      "voicePreferredClearedToast": "Phoenix MCP is niet langer de voorkeursassistent",
+      "voicePreferredFailed": "De voorkeursassistent kon niet worden gewijzigd.",
+      "voicePreferredSetToast": "Phoenix MCP is nu de voorkeursassistent",
+      "wipeWarningSelected": "Dit verwijdert de onderstaande gegevens en kan niet ongedaan worden gemaakt."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",
@@ -2381,7 +2411,8 @@
         "requestCompleted": "Modelverzoek voltooid"
       },
       "attachmentPrompt": "Bericht met afbeelding of bestand",
-      "clearShort": "Geschiedenis wissen"
+      "clearShort": "Geschiedenis wissen",
+      "retention": "Bewaarlimieten"
     },
     "attention": {
       "title": "Aandacht nodig",
@@ -2468,7 +2499,22 @@
       "profileEditor": "Profieleditor",
       "orphanedProfiles": "Verweesde profielen",
       "advisory": "Adviserende meldingen",
-      "diagnostics": "Diagnostiek"
+      "diagnostics": "Diagnostiek",
+      "addToMy": "Toevoegen aan Mijn werkruimte",
+      "addedToMy": "{window} toegevoegd aan Mijn werkruimte",
+      "aiProviders": "AI-aanbieders",
+      "findSetting": "Instelling zoeken",
+      "findSettingNone": "Geen overeenkomende instellingen",
+      "findSettingPlaceholder": "Instellingen zoeken",
+      "findSettingResults": "Overeenkomende instellingen",
+      "general": "Algemeen",
+      "logsNotifications": "Logboeken en meldingen",
+      "myEmpty": "Mijn werkruimte is leeg. Voeg een venster toe met Toevoegen aan Mijn werkruimte in het venstermenu, of Agent Chat via zijn eigen menu.",
+      "myEmptyPhone": "Mijn werkruimte heeft geen vensters op deze telefoon.",
+      "myWorkspace": "Mijn werkruimte",
+      "removeFromMy": "Verwijderen uit Mijn werkruimte",
+      "removedFromMy": "{window} verwijderd uit Mijn werkruimte",
+      "safety": "Veiligheid"
     },
     "notifications": {
       "title": "Meldingen",
@@ -2504,7 +2550,13 @@
       "guideTitle": "Sleep de titelbalk om de gids te verplaatsen, of sleep een rand of hoek om het formaat te wijzigen.",
       "selectBy": "Toon alleen het deel van de boom in één ruimte, label of integratie. Dit verandert wat u ziet, niet wat de sleutel mag.",
       "hintSave": "Sla de hint op voor het gekozen bereik. Agents krijgen hem bij deze entiteit.",
-      "hintRemove": "Verwijder de hint die voor het gekozen bereik is opgeslagen."
+      "hintRemove": "Verwijder de hint die voor het gekozen bereik is opgeslagen.",
+      "settingsAiTaskDisable": "Als je de AI-taak uitschakelt, is deze ook niet langer de standaard-AI-taak van Home Assistant.",
+      "settingsAiTaskReplaceDefault": "Home Assistant heeft één standaard-AI-taak, dus deze vervangt de huidige.",
+      "settingsVoiceClearPreferred": "Als je dit uitzet, blijft de assistent behouden. Home Assistant geeft dan de voorkeur aan een andere assistent.",
+      "settingsVoiceDisable": "Als je de spraakagent uitschakelt, wordt ook de assistent verwijderd die Phoenix MCP in Home Assistant heeft aangemaakt.",
+      "settingsVoiceRemoveAssistant": "Als je dit uitzet, wordt de assistent verwijderd die Phoenix MCP in Home Assistant heeft aangemaakt. De spraakagent blijft ingeschakeld.",
+      "wsMy": "Je eigen werkruimte: vensters die je uit de andere werkruimten hebt toegevoegd, en Agent Chat als je die hier hebt vastgekoppeld."
     },
     "guide": {
       "title": "Gids",
@@ -2519,7 +2571,9 @@
       "clearFilters": "Filters wissen",
       "latest": "Laatste",
       "turns": "Beurten",
-      "toolCalls": "Hulpmiddelaanroepen"
+      "toolCalls": "Hulpmiddelaanroepen",
+      "pauseUpdates": "Bijwerken pauzeren",
+      "recordingSettings": "Opname-instellingen"
     },
     "table": {
       "sortAscending": "Oplopend sorteren",

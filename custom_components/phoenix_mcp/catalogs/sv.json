@@ -482,7 +482,9 @@
       "attachNoVision": "Den här modellen accepterar inte bilder.",
       "attachCompanion": "Home Companion tar bara emot textkommandon, så bilder kan inte bifogas.",
       "connection": "Anslutning",
-      "changeConnection": "Ändra anslutning"
+      "changeConnection": "Ändra anslutning",
+      "dockedClosed": "Agent Chat är stängd.",
+      "floatChat": "Gör Agent Chat flytande"
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",
@@ -1351,7 +1353,8 @@
       "turns": "Turer: {count}",
       "unknown": "Okänd",
       "week": "Senaste veckan",
-      "clearShort": "Rensa historik"
+      "clearShort": "Rensa historik",
+      "retention": "Bevarande"
     },
     "diff": {
       "blueprint.create": "Skapa {domain}-blueprint '{rel}'",
@@ -2172,7 +2175,35 @@
       "agentcliProbedVisionInconclusive": "Bildkontroll: inget användbart svar kom tillbaka, så bildstödet är fortfarande okänt.",
       "agentcliOpenCodeRoute": "API-sökväg",
       "agentcliOpenCodeZen": "Zen (äldre)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Om",
+      "accountChangeModel": "Byt modell",
+      "accountCheckOptions": "Kontrollera alternativ",
+      "accountRefreshModels": "Uppdatera modeller",
+      "addAccount": "Lägg till konto",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task är inte längre standard",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task är nu standard i stället för {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task är nu standard",
+      "aiTaskDisabledDefaultToast": "AI-uppgift inaktiverad, och den är inte längre standard",
+      "aiTaskDisabledToast": "AI-uppgift inaktiverad",
+      "aiTaskEnabledToast": "AI-uppgift aktiverad",
+      "catalogChecks": "Modellkatalogkontroller",
+      "colAccount": "Konto",
+      "colModel": "Standardmodell",
+      "colProvider": "Leverantör",
+      "discard": "Förkasta",
+      "haNotifications": "Home Assistant-aviseringar",
+      "modelAutomatic": "automatiskt",
+      "privacySection": "Integritet",
+      "voiceAssistantAddedToast": "Phoenix MCP-assistent tillagd i Home Assistant",
+      "voiceAssistantRemovedToast": "Phoenix MCP-assistent borttagen från Home Assistant",
+      "voiceDisabledRemovedToast": "Röstagent inaktiverad och tillhörande Home Assistant-assistent borttagen",
+      "voiceDisabledToast": "Röstagent inaktiverad",
+      "voiceEnabledToast": "Röstagent aktiverad",
+      "voicePreferredClearedToast": "Phoenix MCP är inte längre den föredragna assistenten",
+      "voicePreferredFailed": "Det gick inte att ändra den föredragna assistenten.",
+      "voicePreferredSetToast": "Phoenix MCP är nu den föredragna assistenten",
+      "wipeWarningSelected": "Detta raderar nedanstående data och kan inte ångras."
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2395,7 +2426,22 @@
       "profileEditor": "Profilredigerare",
       "orphanedProfiles": "Övergivna profiler",
       "advisory": "Rådgivande notiser",
-      "diagnostics": "Diagnostik"
+      "diagnostics": "Diagnostik",
+      "addToMy": "Lägg till i Min arbetsyta",
+      "addedToMy": "{window} har lagts till i Min arbetsyta",
+      "aiProviders": "AI-leverantörer",
+      "findSetting": "Hitta inställning",
+      "findSettingNone": "Inga matchande inställningar",
+      "findSettingPlaceholder": "Sök inställningar",
+      "findSettingResults": "Matchande inställningar",
+      "general": "Allmänt",
+      "logsNotifications": "Loggar och aviseringar",
+      "myEmpty": "Min arbetsyta är tom. Lägg till ett fönster med Lägg till i Min arbetsyta i dess fönstermeny, eller Agent Chat från dess egen meny.",
+      "myEmptyPhone": "Min arbetsyta har inga fönster på den här telefonen.",
+      "myWorkspace": "Min arbetsyta",
+      "removeFromMy": "Ta bort från Min arbetsyta",
+      "removedFromMy": "{window} har tagits bort från Min arbetsyta",
+      "safety": "Säkerhet"
     },
     "notifications": {
       "title": "Aviseringar",
@@ -2431,7 +2477,13 @@
       "guideTitle": "Dra i namnlisten för att flytta guiden, eller dra i en kant eller ett hörn för att ändra storleken.",
       "selectBy": "Visa bara den del av trädet som hör till ett område, en etikett eller en integration. Det ändrar vad du ser, inte vad nyckeln får göra.",
       "hintSave": "Spara tipset för det valda omfånget. Agenter får det tillsammans med den här entiteten.",
-      "hintRemove": "Ta bort tipset som sparats för det valda omfånget."
+      "hintRemove": "Ta bort tipset som sparats för det valda omfånget.",
+      "settingsAiTaskDisable": "När du stänger av AI-uppgiften tas den också bort som Home Assistants standard-AI-uppgift.",
+      "settingsAiTaskReplaceDefault": "Home Assistant har en standard-AI-uppgift, så den här ersätter den nuvarande.",
+      "settingsVoiceClearPreferred": "När du stänger av detta behålls assistenten. Home Assistant föredrar i stället en annan assistent.",
+      "settingsVoiceDisable": "När du stänger av röstagenten tas även assistenten som Phoenix MCP skapade i Home Assistant bort.",
+      "settingsVoiceRemoveAssistant": "När du stänger av detta tas assistenten som Phoenix MCP skapade i Home Assistant bort. Röstagenten förblir aktiverad.",
+      "wsMy": "Din egen arbetsyta: fönster som du har lagt till från de andra arbetsytorna, och Agent Chat om du har dockat den här."
     },
     "guide": {
       "title": "Guide",
@@ -2446,7 +2498,9 @@
       "clearFilters": "Rensa filter",
       "latest": "Senaste",
       "turns": "Turer",
-      "toolCalls": "Verktygsanrop"
+      "toolCalls": "Verktygsanrop",
+      "pauseUpdates": "Pausa uppdateringar",
+      "recordingSettings": "Inspelningsinställningar"
     },
     "table": {
       "sortAscending": "Sortera stigande",

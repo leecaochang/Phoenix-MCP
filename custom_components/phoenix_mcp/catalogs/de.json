@@ -233,7 +233,9 @@
       "attachNoVision": "Dieses Modell akzeptiert keine Bilder.",
       "attachCompanion": "Home Companion nimmt nur Textbefehle an, daher können keine Bilder angehängt werden.",
       "connection": "Verbindung",
-      "changeConnection": "Verbindung ändern"
+      "changeConnection": "Verbindung ändern",
+      "dockedClosed": "Agent Chat ist geschlossen.",
+      "floatChat": "Agent Chat lösen"
     },
     "caps": {
       "cap_config_read": {
@@ -1219,7 +1221,35 @@
       "agentcliProbedVisionInconclusive": "Bildprüfung: Es kam keine verwertbare Antwort, daher ist die Bildunterstützung weiterhin unbekannt.",
       "agentcliOpenCodeRoute": "API-Zugangsweg",
       "agentcliOpenCodeZen": "Zen (bisherig)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Über",
+      "accountChangeModel": "Modell ändern",
+      "accountCheckOptions": "Optionen prüfen",
+      "accountRefreshModels": "Modelle aktualisieren",
+      "addAccount": "Konto hinzufügen",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task ist nicht mehr die Standard-KI-Aufgabe",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task ist jetzt die Standard-KI-Aufgabe und ersetzt {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task ist jetzt die Standard-KI-Aufgabe",
+      "aiTaskDisabledDefaultToast": "KI-Aufgabe deaktiviert und nicht mehr als Standard festgelegt",
+      "aiTaskDisabledToast": "KI-Aufgabe deaktiviert",
+      "aiTaskEnabledToast": "KI-Aufgabe aktiviert",
+      "catalogChecks": "Prüfungen des Modellkatalogs",
+      "colAccount": "Konto",
+      "colModel": "Standardmodell",
+      "colProvider": "Anbieter",
+      "discard": "Verwerfen",
+      "haNotifications": "Home Assistant-Benachrichtigungen",
+      "modelAutomatic": "automatisch",
+      "privacySection": "Datenschutz",
+      "voiceAssistantAddedToast": "Phoenix MCP-Assistent zu Home Assistant hinzugefügt",
+      "voiceAssistantRemovedToast": "Phoenix MCP-Assistent aus Home Assistant entfernt",
+      "voiceDisabledRemovedToast": "Sprachagent deaktiviert und sein Assistent in Home Assistant entfernt",
+      "voiceDisabledToast": "Sprachagent deaktiviert",
+      "voiceEnabledToast": "Sprachagent aktiviert",
+      "voicePreferredClearedToast": "Phoenix MCP ist nicht mehr der bevorzugte Assistent",
+      "voicePreferredFailed": "Der bevorzugte Assistent konnte nicht geändert werden.",
+      "voicePreferredSetToast": "Phoenix MCP ist jetzt der bevorzugte Assistent",
+      "wipeWarningSelected": "Dies löscht die unten aufgeführten Daten und kann nicht rückgängig gemacht werden."
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -2303,7 +2333,8 @@
         "requestCompleted": "Modellanfrage abgeschlossen"
       },
       "attachmentPrompt": "Anfrage mit Bild oder Datei",
-      "clearShort": "Verlauf löschen"
+      "clearShort": "Verlauf löschen",
+      "retention": "Aufbewahrung"
     },
     "attention": {
       "title": "Handlungsbedarf",
@@ -2390,7 +2421,22 @@
       "profileEditor": "Profileditor",
       "orphanedProfiles": "Verwaiste Profile",
       "advisory": "Beratende Hinweise",
-      "diagnostics": "Diagnose"
+      "diagnostics": "Diagnose",
+      "addToMy": "Zu Meinem Arbeitsbereich hinzufügen",
+      "addedToMy": "{window} zu Meinem Arbeitsbereich hinzugefügt",
+      "aiProviders": "KI-Anbieter",
+      "findSetting": "Einstellung suchen",
+      "findSettingNone": "Keine passenden Einstellungen",
+      "findSettingPlaceholder": "Einstellungen durchsuchen",
+      "findSettingResults": "Passende Einstellungen",
+      "general": "Allgemein",
+      "logsNotifications": "Protokolle und Benachrichtigungen",
+      "myEmpty": "Mein Arbeitsbereich ist leer. Fügen Sie ein Fenster über „Zu Meinem Arbeitsbereich hinzufügen“ in seinem Fenstermenü hinzu oder Agent Chat über sein eigenes Menü.",
+      "myEmptyPhone": "Mein Arbeitsbereich enthält auf diesem Telefon keine Fenster.",
+      "myWorkspace": "Mein Arbeitsbereich",
+      "removeFromMy": "Aus Meinem Arbeitsbereich entfernen",
+      "removedFromMy": "{window} aus Meinem Arbeitsbereich entfernt",
+      "safety": "Sicherheit"
     },
     "notifications": {
       "title": "Benachrichtigungen",
@@ -2426,7 +2472,13 @@
       "guideTitle": "Die Titelleiste ziehen, um den Leitfaden zu verschieben, oder an einer Kante oder Ecke ziehen, um die Größe zu ändern.",
       "selectBy": "Nur den Teil des Baums anzeigen, der zu einem Bereich, einem Label oder einer Integration gehört. Das ändert die Ansicht, nicht die Rechte des Schlüssels.",
       "hintSave": "Den Hinweis für den gewählten Geltungsbereich speichern. Agenten erhalten ihn mit dieser Entität.",
-      "hintRemove": "Den für den gewählten Geltungsbereich gespeicherten Hinweis entfernen."
+      "hintRemove": "Den für den gewählten Geltungsbereich gespeicherten Hinweis entfernen.",
+      "settingsAiTaskDisable": "Wenn Sie die KI-Aufgabe ausschalten, ist sie auch nicht mehr die Standard-KI-Aufgabe von Home Assistant.",
+      "settingsAiTaskReplaceDefault": "Home Assistant hat nur eine Standard-KI-Aufgabe, daher wird die aktuelle ersetzt.",
+      "settingsVoiceClearPreferred": "Wenn Sie dies ausschalten, bleibt der Assistent erhalten. Home Assistant bevorzugt dann einen anderen Assistenten.",
+      "settingsVoiceDisable": "Wenn Sie den Sprachagenten ausschalten, wird auch der Assistent entfernt, den Phoenix MCP in Home Assistant erstellt hat.",
+      "settingsVoiceRemoveAssistant": "Wenn Sie dies ausschalten, wird der Assistent entfernt, den Phoenix MCP in Home Assistant erstellt hat. Der Sprachagent bleibt aktiviert.",
+      "wsMy": "Ihr eigener Arbeitsbereich: Fenster, die Sie aus den anderen Arbeitsbereichen hinzugefügt haben, und Agent Chat, wenn Sie es hier angedockt haben."
     },
     "guide": {
       "title": "Leitfaden",
@@ -2441,7 +2493,9 @@
       "clearFilters": "Filter zurücksetzen",
       "latest": "Zuletzt",
       "turns": "Gesprächsrunden",
-      "toolCalls": "Werkzeugaufrufe"
+      "toolCalls": "Werkzeugaufrufe",
+      "pauseUpdates": "Aktualisierungen pausieren",
+      "recordingSettings": "Aufzeichnungseinstellungen"
     },
     "table": {
       "sortAscending": "Aufsteigend sortieren",

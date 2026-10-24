@@ -1172,7 +1172,9 @@
       "attachNoVision": "このモデルは画像を受け付けません。",
       "attachCompanion": "Home Companion はテキストのコマンドのみを受け付けるため、画像を添付できません。",
       "connection": "接続",
-      "changeConnection": "接続を変更"
+      "changeConnection": "接続を変更",
+      "dockedClosed": "Agent Chat は閉じています。",
+      "floatChat": "Agent Chat をフローティング表示"
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",
@@ -1543,7 +1545,35 @@
       "agentcliProbedVisionInconclusive": "画像チェック：有効な回答が得られなかったため、画像への対応状況は不明のままです。",
       "agentcliOpenCodeRoute": "API 接続先",
       "agentcliOpenCodeZen": "Zen（従来）",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "概要",
+      "accountChangeModel": "モデルを変更",
+      "accountCheckOptions": "オプションを確認",
+      "accountRefreshModels": "モデル一覧を更新",
+      "addAccount": "アカウントを追加",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task は既定ではなくなりました",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task が {name} に代わって既定になりました",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task が既定になりました",
+      "aiTaskDisabledDefaultToast": "AI Task を無効にし、既定の設定も解除しました",
+      "aiTaskDisabledToast": "AI Task を無効にしました",
+      "aiTaskEnabledToast": "AI Task を有効にしました",
+      "catalogChecks": "モデルカタログの確認",
+      "colAccount": "アカウント",
+      "colModel": "既定のモデル",
+      "colProvider": "プロバイダー",
+      "discard": "破棄",
+      "haNotifications": "Home Assistant の通知",
+      "modelAutomatic": "自動",
+      "privacySection": "プライバシー",
+      "voiceAssistantAddedToast": "Phoenix MCP アシスタントを Home Assistant に追加しました",
+      "voiceAssistantRemovedToast": "Phoenix MCP アシスタントを Home Assistant から削除しました",
+      "voiceDisabledRemovedToast": "音声エージェントを無効にし、その Home Assistant アシスタントを削除しました",
+      "voiceDisabledToast": "音声エージェントを無効にしました",
+      "voiceEnabledToast": "音声エージェントを有効にしました",
+      "voicePreferredClearedToast": "Phoenix MCP は優先アシスタントではなくなりました",
+      "voicePreferredFailed": "優先アシスタントを変更できませんでした。",
+      "voicePreferredSetToast": "Phoenix MCP が優先アシスタントになりました",
+      "wipeWarningSelected": "以下のデータを削除します。この操作は元に戻せません。"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2303,7 +2333,8 @@
         "requestCompleted": "モデルへのリクエスト完了"
       },
       "attachmentPrompt": "画像またはファイルのメッセージ",
-      "clearShort": "履歴を消去"
+      "clearShort": "履歴を消去",
+      "retention": "保持"
     },
     "attention": {
       "title": "確認が必要",
@@ -2390,7 +2421,22 @@
       "profileEditor": "プロファイルエディター",
       "orphanedProfiles": "孤立したプロファイル",
       "advisory": "助言",
-      "diagnostics": "診断"
+      "diagnostics": "診断",
+      "addToMy": "マイワークスペースに追加",
+      "addedToMy": "{window} をマイワークスペースに追加しました",
+      "aiProviders": "AI プロバイダー",
+      "findSetting": "設定を検索",
+      "findSettingNone": "一致する設定はありません",
+      "findSettingPlaceholder": "設定を検索",
+      "findSettingResults": "一致する設定",
+      "general": "一般",
+      "logsNotifications": "ログと通知",
+      "myEmpty": "マイワークスペースは空です。ウィンドウメニューの「マイワークスペースに追加」でウィンドウを追加するか、Agent Chat のメニューから Agent Chat を追加してください。",
+      "myEmptyPhone": "このスマートフォンでは、マイワークスペースにウィンドウがありません。",
+      "myWorkspace": "マイワークスペース",
+      "removeFromMy": "マイワークスペースから削除",
+      "removedFromMy": "{window} をマイワークスペースから削除しました",
+      "safety": "安全性"
     },
     "notifications": {
       "title": "通知",
@@ -2426,7 +2472,13 @@
       "guideTitle": "タイトルバーをドラッグしてガイドを移動するか、端や角をドラッグしてサイズを変更します。",
       "selectBy": "ツリーのうち、ひとつのエリア、ラベル、またはインテグレーションに属する部分だけを表示します。変わるのは表示だけで、キーの権限は変わりません。",
       "hintSave": "選択した範囲のヒントを保存します。エージェントはこのエンティティと一緒にヒントを受け取ります。",
-      "hintRemove": "選択した範囲に保存されたヒントを削除します。"
+      "hintRemove": "選択した範囲に保存されたヒントを削除します。",
+      "settingsAiTaskDisable": "AI Task をオフにすると、Home Assistant の既定の AI Task としての設定も解除されます。",
+      "settingsAiTaskReplaceDefault": "Home Assistant の既定の AI Task は一つだけのため、現在の既定が置き換えられます。",
+      "settingsVoiceClearPreferred": "オフにしてもアシスタントは残ります。Home Assistant では代わりに別のアシスタントが優先されます。",
+      "settingsVoiceDisable": "音声エージェントをオフにすると、Phoenix MCP が Home Assistant に作成したアシスタントも削除されます。",
+      "settingsVoiceRemoveAssistant": "オフにすると、Phoenix MCP が Home Assistant に作成したアシスタントが削除されます。音声エージェントは有効のままです。",
+      "wsMy": "自分専用のワークスペース: ほかのワークスペースから追加したウィンドウと、ここにドッキングした Agent Chat です。"
     },
     "guide": {
       "title": "ガイド",
@@ -2441,7 +2493,9 @@
       "clearFilters": "フィルターをクリア",
       "latest": "最新",
       "turns": "ターン",
-      "toolCalls": "ツール呼び出し"
+      "toolCalls": "ツール呼び出し",
+      "pauseUpdates": "更新を一時停止",
+      "recordingSettings": "記録の設定"
     },
     "table": {
       "sortAscending": "昇順で並べ替え",

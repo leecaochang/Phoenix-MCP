@@ -375,7 +375,9 @@
       "attachNoVision": "Эта модель не принимает изображения.",
       "attachCompanion": "Home Companion принимает только текстовые команды, поэтому изображения прикрепить нельзя.",
       "connection": "Подключение",
-      "changeConnection": "Изменить подключение"
+      "changeConnection": "Изменить подключение",
+      "dockedClosed": "Agent Chat закрыт.",
+      "floatChat": "Открепить Agent Chat"
     },
     "approvalSummary": {
       "action.optionalReason": "Причина (необязательно)",
@@ -1844,7 +1846,35 @@
       "agentcliProbedVisionInconclusive": "Проверка изображения: пригодный ответ не получен, поэтому поддержка изображений по-прежнему неизвестна.",
       "agentcliOpenCodeRoute": "Маршрут API",
       "agentcliOpenCodeZen": "Zen (прежний)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "О программе",
+      "accountChangeModel": "Изменить модель",
+      "accountCheckOptions": "Проверить параметры",
+      "accountRefreshModels": "Обновить список моделей",
+      "addAccount": "Добавить учётную запись",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task больше не используется по умолчанию",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task теперь используется по умолчанию вместо {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task теперь используется по умолчанию",
+      "aiTaskDisabledDefaultToast": "AI-задача отключена и больше не используется по умолчанию",
+      "aiTaskDisabledToast": "AI-задача отключена",
+      "aiTaskEnabledToast": "AI-задача включена",
+      "catalogChecks": "Проверка каталога моделей",
+      "colAccount": "Учётная запись",
+      "colModel": "Модель по умолчанию",
+      "colProvider": "Провайдер",
+      "discard": "Отменить",
+      "haNotifications": "Уведомления Home Assistant",
+      "modelAutomatic": "автоматически",
+      "privacySection": "Конфиденциальность",
+      "voiceAssistantAddedToast": "Ассистент Phoenix MCP добавлен в Home Assistant",
+      "voiceAssistantRemovedToast": "Ассистент Phoenix MCP удалён из Home Assistant",
+      "voiceDisabledRemovedToast": "Голосовой агент отключён, его ассистент в Home Assistant удалён",
+      "voiceDisabledToast": "Голосовой агент отключён",
+      "voiceEnabledToast": "Голосовой агент включён",
+      "voicePreferredClearedToast": "Phoenix MCP больше не является предпочтительным ассистентом",
+      "voicePreferredFailed": "Не удалось изменить предпочтительного ассистента.",
+      "voicePreferredSetToast": "Phoenix MCP теперь предпочтительный ассистент",
+      "wipeWarningSelected": "Будут удалены данные, перечисленные ниже. Это действие нельзя отменить."
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2403,7 +2433,8 @@
         "requestCompleted": "Запрос к модели завершён"
       },
       "attachmentPrompt": "Сообщение с изображением или файлом",
-      "clearShort": "Очистить историю"
+      "clearShort": "Очистить историю",
+      "retention": "Хранение"
     },
     "attention": {
       "title": "Требует внимания",
@@ -2490,7 +2521,22 @@
       "profileEditor": "Редактор профиля",
       "orphanedProfiles": "Потерянные профили",
       "advisory": "Рекомендательные уведомления",
-      "diagnostics": "Диагностика"
+      "diagnostics": "Диагностика",
+      "addToMy": "Добавить в Мою рабочую область",
+      "addedToMy": "Окно «{window}» добавлено в Мою рабочую область",
+      "aiProviders": "Провайдеры ИИ",
+      "findSetting": "Найти настройку",
+      "findSettingNone": "Нет подходящих настроек",
+      "findSettingPlaceholder": "Поиск настроек",
+      "findSettingResults": "Подходящие настройки",
+      "general": "Общие",
+      "logsNotifications": "Журналы и уведомления",
+      "myEmpty": "Моя рабочая область пуста. Добавьте окно с помощью пункта «Добавить в Мою рабочую область» в меню окна или добавьте Agent Chat из его собственного меню.",
+      "myEmptyPhone": "На этом телефоне в Моей рабочей области нет окон.",
+      "myWorkspace": "Моя рабочая область",
+      "removeFromMy": "Удалить из Моей рабочей области",
+      "removedFromMy": "Окно «{window}» удалено из Моей рабочей области",
+      "safety": "Безопасность"
     },
     "notifications": {
       "title": "Уведомления",
@@ -2526,7 +2572,13 @@
       "guideTitle": "Перетащите заголовок, чтобы переместить руководство, или потяните за край либо угол, чтобы изменить его размер.",
       "selectBy": "Показать только часть дерева, относящуюся к одному пространству, ярлыку или интеграции. Меняется только вид, а не права ключа.",
       "hintSave": "Сохранить подсказку для выбранной области действия. Агенты получают её вместе с этим объектом.",
-      "hintRemove": "Удалить подсказку, сохранённую для выбранной области действия."
+      "hintRemove": "Удалить подсказку, сохранённую для выбранной области действия.",
+      "settingsAiTaskDisable": "При выключении AI-задачи она также перестаёт быть AI-задачей по умолчанию в Home Assistant.",
+      "settingsAiTaskReplaceDefault": "В Home Assistant может быть только одна AI-задача по умолчанию, поэтому эта настройка заменит текущую.",
+      "settingsVoiceClearPreferred": "При выключении этого параметра ассистент сохраняется. Вместо него предпочтительным в Home Assistant станет другой ассистент.",
+      "settingsVoiceDisable": "При выключении голосового агента также удаляется ассистент, созданный Phoenix MCP в Home Assistant.",
+      "settingsVoiceRemoveAssistant": "При выключении этого параметра удаляется ассистент, созданный Phoenix MCP в Home Assistant. Голосовой агент остаётся включённым.",
+      "wsMy": "Ваша собственная рабочая область: окна, добавленные вами из других рабочих областей, и Agent Chat, если вы закрепили его здесь."
     },
     "guide": {
       "title": "Руководство",
@@ -2541,7 +2593,9 @@
       "clearFilters": "Сбросить фильтры",
       "latest": "Последнее",
       "turns": "Ходы",
-      "toolCalls": "Вызовы инструментов"
+      "toolCalls": "Вызовы инструментов",
+      "pauseUpdates": "Приостановить обновления",
+      "recordingSettings": "Настройки записи"
     },
     "table": {
       "sortAscending": "Сортировать по возрастанию",

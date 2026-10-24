@@ -482,7 +482,9 @@
       "attachNoVision": "Tämä malli ei hyväksy kuvia.",
       "attachCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää.",
       "connection": "Yhteys",
-      "changeConnection": "Vaihda yhteys"
+      "changeConnection": "Vaihda yhteys",
+      "dockedClosed": "Agent Chat on suljettu.",
+      "floatChat": "Irrota Agent Chat"
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",
@@ -1351,7 +1353,8 @@
       "turns": "Vuoroja: {count}",
       "unknown": "Tuntematon",
       "week": "Viimeinen viikko",
-      "clearShort": "Tyhjennä historia"
+      "clearShort": "Tyhjennä historia",
+      "retention": "Säilytys"
     },
     "diff": {
       "blueprint.create": "Luo {domain}-mallipohja '{rel}'",
@@ -2172,7 +2175,35 @@
       "agentcliProbedVisionInconclusive": "Kuvatarkistus: käyttökelpoista vastausta ei tullut, joten kuvatuki on yhä tuntematon.",
       "agentcliOpenCodeRoute": "API-reitti",
       "agentcliOpenCodeZen": "Zen (vanha)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Tietoja",
+      "accountChangeModel": "Vaihda malli",
+      "accountCheckOptions": "Tarkista valinnat",
+      "accountRefreshModels": "Päivitä mallit",
+      "addAccount": "Lisää tili",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task ei ole enää oletus",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task on nyt oletus entiteetin {name} sijaan",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task on nyt oletus",
+      "aiTaskDisabledDefaultToast": "Tekoälytehtävä poistettu käytöstä, eikä se ole enää oletus",
+      "aiTaskDisabledToast": "Tekoälytehtävä poistettu käytöstä",
+      "aiTaskEnabledToast": "Tekoälytehtävä otettu käyttöön",
+      "catalogChecks": "Malliluettelon tarkistukset",
+      "colAccount": "Tili",
+      "colModel": "Oletusmalli",
+      "colProvider": "Palveluntarjoaja",
+      "discard": "Kumoa",
+      "haNotifications": "Home Assistant -ilmoitukset",
+      "modelAutomatic": "automaattinen",
+      "privacySection": "Tietosuoja",
+      "voiceAssistantAddedToast": "Phoenix MCP -avustaja lisätty Home Assistantiin",
+      "voiceAssistantRemovedToast": "Phoenix MCP -avustaja poistettu Home Assistantista",
+      "voiceDisabledRemovedToast": "Ääniagentti poistettu käytöstä ja sen Home Assistant -avustaja poistettu",
+      "voiceDisabledToast": "Ääniagentti poistettu käytöstä",
+      "voiceEnabledToast": "Ääniagentti otettu käyttöön",
+      "voicePreferredClearedToast": "Phoenix MCP ei ole enää ensisijainen avustaja",
+      "voicePreferredFailed": "Ensisijaisen avustajan vaihtaminen ei onnistunut.",
+      "voicePreferredSetToast": "Phoenix MCP on nyt ensisijainen avustaja",
+      "wipeWarningSelected": "Tämä poistaa alla olevat tiedot, eikä sitä voi peruuttaa."
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2395,7 +2426,22 @@
       "profileEditor": "Profiilieditori",
       "orphanedProfiles": "Orvot profiilit",
       "advisory": "Neuvovat ilmoitukset",
-      "diagnostics": "Diagnostiikka"
+      "diagnostics": "Diagnostiikka",
+      "addToMy": "Lisää Omaan työtilaan",
+      "addedToMy": "{window} lisätty Omaan työtilaan",
+      "aiProviders": "Tekoälypalveluntarjoajat",
+      "findSetting": "Etsi asetus",
+      "findSettingNone": "Ei vastaavia asetuksia",
+      "findSettingPlaceholder": "Hae asetuksia",
+      "findSettingResults": "Vastaavat asetukset",
+      "general": "Yleiset",
+      "logsNotifications": "Lokit ja ilmoitukset",
+      "myEmpty": "Oma työtila on tyhjä. Lisää ikkuna valitsemalla ikkunan valikosta Lisää Omaan työtilaan tai lisää Agent Chat sen omasta valikosta.",
+      "myEmptyPhone": "Omassa työtilassa ei ole ikkunoita tässä puhelimessa.",
+      "myWorkspace": "Oma työtila",
+      "removeFromMy": "Poista Omasta työtilasta",
+      "removedFromMy": "{window} poistettu Omasta työtilasta",
+      "safety": "Turvallisuus"
     },
     "notifications": {
       "title": "Ilmoitukset",
@@ -2431,7 +2477,13 @@
       "guideTitle": "Siirrä opasta vetämällä otsikkoriviä tai muuta sen kokoa vetämällä reunaa tai kulmaa.",
       "selectBy": "Näytä vain se osa puusta, joka kuuluu yhteen huoneeseen, tunnisteeseen tai integraatioon. Se muuttaa näkymää, ei avaimen oikeuksia.",
       "hintSave": "Tallenna vihje valitulle laajuudelle. Agentit saavat sen tämän entiteetin mukana.",
-      "hintRemove": "Poista valitulle laajuudelle tallennettu vihje."
+      "hintRemove": "Poista valitulle laajuudelle tallennettu vihje.",
+      "settingsAiTaskDisable": "Kun poistat tekoälytehtävän käytöstä, se lakkaa myös olemasta Home Assistantin oletustekoälytehtävä.",
+      "settingsAiTaskReplaceDefault": "Home Assistantissa on yksi oletustekoälytehtävä, joten tämä korvaa nykyisen.",
+      "settingsVoiceClearPreferred": "Kun kytket tämän pois päältä, avustaja säilyy. Home Assistant käyttää sen sijaan ensisijaisena toista avustajaa.",
+      "settingsVoiceDisable": "Kun poistat ääniagentin käytöstä, myös avustaja, jonka Phoenix MCP loi Home Assistantiin, poistetaan.",
+      "settingsVoiceRemoveAssistant": "Kun kytket tämän pois päältä, avustaja, jonka Phoenix MCP loi Home Assistantiin, poistetaan. Ääniagentti pysyy käytössä.",
+      "wsMy": "Oma työtilasi: ikkunat, jotka olet lisännyt muista työtiloista, sekä Agent Chat, jos olet kiinnittänyt sen tänne."
     },
     "guide": {
       "title": "Opas",
@@ -2446,7 +2498,9 @@
       "clearFilters": "Tyhjennä suodattimet",
       "latest": "Viimeisin",
       "turns": "Vuorot",
-      "toolCalls": "Työkalukutsut"
+      "toolCalls": "Työkalukutsut",
+      "pauseUpdates": "Keskeytä päivitykset",
+      "recordingSettings": "Tallennusasetukset"
     },
     "table": {
       "sortAscending": "Lajittele nousevasti",

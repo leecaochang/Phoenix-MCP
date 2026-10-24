@@ -482,7 +482,9 @@
       "attachNoVision": "Denne model accepterer ikke billeder.",
       "attachCompanion": "Home Companion tager kun imod tekstkommandoer, så der kan ikke vedhæftes billeder.",
       "connection": "Forbindelse",
-      "changeConnection": "Skift forbindelse"
+      "changeConnection": "Skift forbindelse",
+      "dockedClosed": "Agent Chat er lukket.",
+      "floatChat": "Gør Agent Chat flydende"
     },
     "approvalSummary": {
       "action.optionalReason": "Valgfri begrundelse",
@@ -1351,7 +1353,8 @@
       "turns": "Runder: {count}",
       "unknown": "Ukendt",
       "week": "Seneste uge",
-      "clearShort": "Ryd historik"
+      "clearShort": "Ryd historik",
+      "retention": "Opbevaring"
     },
     "diff": {
       "blueprint.create": "Opret {domain}-blueprint '{rel}'",
@@ -2172,7 +2175,35 @@
       "agentcliProbedVisionInconclusive": "Billedtjek: der kom intet brugbart svar, så billedunderstøttelsen er stadig ukendt.",
       "agentcliOpenCodeRoute": "API-rute",
       "agentcliOpenCodeZen": "Zen (ældre)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Om",
+      "accountChangeModel": "Skift model",
+      "accountCheckOptions": "Tjek indstillinger",
+      "accountRefreshModels": "Opdatér modeller",
+      "addAccount": "Tilføj konto",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task er ikke længere standard",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task er nu standard i stedet for {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task er nu standard",
+      "aiTaskDisabledDefaultToast": "AI-opgave deaktiveret, og den er ikke længere standard",
+      "aiTaskDisabledToast": "AI-opgave deaktiveret",
+      "aiTaskEnabledToast": "AI-opgave aktiveret",
+      "catalogChecks": "Kontrol af modelkatalog",
+      "colAccount": "Konto",
+      "colModel": "Standardmodel",
+      "colProvider": "Udbyder",
+      "discard": "Kassér",
+      "haNotifications": "Home Assistant-notifikationer",
+      "modelAutomatic": "automatisk",
+      "privacySection": "Privatliv",
+      "voiceAssistantAddedToast": "Phoenix MCP-assistent tilføjet til Home Assistant",
+      "voiceAssistantRemovedToast": "Phoenix MCP-assistent fjernet fra Home Assistant",
+      "voiceDisabledRemovedToast": "Stemmeagent deaktiveret og tilhørende Home Assistant-assistent fjernet",
+      "voiceDisabledToast": "Stemmeagent deaktiveret",
+      "voiceEnabledToast": "Stemmeagent aktiveret",
+      "voicePreferredClearedToast": "Phoenix MCP er ikke længere den foretrukne assistent",
+      "voicePreferredFailed": "Kunne ikke ændre den foretrukne assistent.",
+      "voicePreferredSetToast": "Phoenix MCP er nu den foretrukne assistent",
+      "wipeWarningSelected": "Dette sletter dataene nedenfor og kan ikke fortrydes."
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2395,7 +2426,22 @@
       "profileEditor": "Profileditor",
       "orphanedProfiles": "Forældreløse profiler",
       "advisory": "Rådgivende meddelelser",
-      "diagnostics": "Diagnostik"
+      "diagnostics": "Diagnostik",
+      "addToMy": "Tilføj til Mit arbejdsområde",
+      "addedToMy": "{window} tilføjet til Mit arbejdsområde",
+      "aiProviders": "AI-udbydere",
+      "findSetting": "Find indstilling",
+      "findSettingNone": "Ingen matchende indstillinger",
+      "findSettingPlaceholder": "Søg i indstillinger",
+      "findSettingResults": "Matchende indstillinger",
+      "general": "Generelt",
+      "logsNotifications": "Logge og notifikationer",
+      "myEmpty": "Mit arbejdsområde er tomt. Tilføj et vindue med Tilføj til Mit arbejdsområde i dets vinduesmenu, eller Agent Chat fra dens egen menu.",
+      "myEmptyPhone": "Mit arbejdsområde har ingen vinduer på denne telefon.",
+      "myWorkspace": "Mit arbejdsområde",
+      "removeFromMy": "Fjern fra Mit arbejdsområde",
+      "removedFromMy": "{window} fjernet fra Mit arbejdsområde",
+      "safety": "Sikkerhed"
     },
     "notifications": {
       "title": "Notifikationer",
@@ -2431,7 +2477,13 @@
       "guideTitle": "Træk i titellinjen for at flytte guiden, eller træk i en kant eller et hjørne for at ændre størrelsen.",
       "selectBy": "Vis kun den del af træet, der hører til ét område, én label eller én integration. Det ændrer det, du ser, ikke hvad nøglen må.",
       "hintSave": "Gem vinket for det valgte omfang. Agenter modtager det sammen med denne entitet.",
-      "hintRemove": "Fjern vinket, der er gemt for det valgte omfang."
+      "hintRemove": "Fjern vinket, der er gemt for det valgte omfang.",
+      "settingsAiTaskDisable": "Når du slår AI-opgaven fra, fjernes den også som Home Assistants standard-AI-opgave.",
+      "settingsAiTaskReplaceDefault": "Home Assistant har én standard-AI-opgave, så denne erstatter den nuværende.",
+      "settingsVoiceClearPreferred": "Når du slår dette fra, bevares assistenten. Home Assistant foretrækker i stedet en anden assistent.",
+      "settingsVoiceDisable": "Når du slår stemmeagenten fra, fjernes også den assistent, som Phoenix MCP har oprettet i Home Assistant.",
+      "settingsVoiceRemoveAssistant": "Når du slår dette fra, fjernes den assistent, som Phoenix MCP har oprettet i Home Assistant. Stemmeagenten forbliver aktiveret.",
+      "wsMy": "Dit eget arbejdsområde: vinduer, du har tilføjet fra de andre arbejdsområder, og Agent Chat, hvis du har fastgjort den her."
     },
     "guide": {
       "title": "Guide",
@@ -2446,7 +2498,9 @@
       "clearFilters": "Ryd filtre",
       "latest": "Seneste",
       "turns": "Runder",
-      "toolCalls": "Værktøjskald"
+      "toolCalls": "Værktøjskald",
+      "pauseUpdates": "Sæt opdateringer på pause",
+      "recordingSettings": "Registreringsindstillinger"
     },
     "table": {
       "sortAscending": "Sortér stigende",

@@ -300,7 +300,9 @@
       "attachNoVision": "此模型不接受影像。",
       "attachCompanion": "Home Companion 僅接受文字指令，因此無法附加影像。",
       "connection": "連線",
-      "changeConnection": "變更連線"
+      "changeConnection": "變更連線",
+      "dockedClosed": "Agent Chat 已關閉。",
+      "floatChat": "使 Agent Chat 浮動"
     },
     "approvalSummary": {
       "action.optionalReason": "可選原因",
@@ -1753,7 +1755,35 @@
       "agentcliProbedVisionInconclusive": "影像檢查：沒有收到可用的回答，因此影像支援情況仍然未知。",
       "agentcliOpenCodeRoute": "API 路由",
       "agentcliOpenCodeZen": "Zen（舊版）",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "關於",
+      "accountChangeModel": "更改模型",
+      "accountCheckOptions": "檢測可用選項",
+      "accountRefreshModels": "重新整理模型清單",
+      "addAccount": "新增帳戶",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task 已不再是預設 AI 任務",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task 已取代 {name} 成為預設 AI 任務",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task 已成為預設 AI 任務",
+      "aiTaskDisabledDefaultToast": "已停用 AI 任務，它也不再是預設 AI 任務",
+      "aiTaskDisabledToast": "已停用 AI 任務",
+      "aiTaskEnabledToast": "已啟用 AI 任務",
+      "catalogChecks": "模型目錄檢查",
+      "colAccount": "帳戶",
+      "colModel": "預設模型",
+      "colProvider": "供應商",
+      "discard": "放棄",
+      "haNotifications": "Home Assistant 通知",
+      "modelAutomatic": "自動",
+      "privacySection": "隱私",
+      "voiceAssistantAddedToast": "已將 Phoenix MCP 助理新增到 Home Assistant",
+      "voiceAssistantRemovedToast": "已從 Home Assistant 移除 Phoenix MCP 助理",
+      "voiceDisabledRemovedToast": "已停用語音智慧體，並已移除其 Home Assistant 助理",
+      "voiceDisabledToast": "已停用語音智慧體",
+      "voiceEnabledToast": "已啟用語音智慧體",
+      "voicePreferredClearedToast": "Phoenix MCP 已不再是首選助理",
+      "voicePreferredFailed": "無法更改首選助理。",
+      "voicePreferredSetToast": "Phoenix MCP 已成為首選助理",
+      "wipeWarningSelected": "這將刪除以下資料，且此操作無法撤銷。"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2308,7 +2338,8 @@
         "requestCompleted": "模型請求已完成"
       },
       "attachmentPrompt": "圖片或檔案提示內容",
-      "clearShort": "清除記錄"
+      "clearShort": "清除記錄",
+      "retention": "保留"
     },
     "attention": {
       "title": "需要關注",
@@ -2395,7 +2426,22 @@
       "profileEditor": "策略編輯器",
       "orphanedProfiles": "孤立的策略",
       "advisory": "建議性提示",
-      "diagnostics": "診斷"
+      "diagnostics": "診斷",
+      "addToMy": "新增到我的工作區",
+      "addedToMy": "已將{window}新增到我的工作區",
+      "aiProviders": "AI 供應商",
+      "findSetting": "尋找設定",
+      "findSettingNone": "沒有匹配的設定",
+      "findSettingPlaceholder": "搜尋設定",
+      "findSettingResults": "匹配的設定",
+      "general": "一般",
+      "logsNotifications": "日誌和通知",
+      "myEmpty": "我的工作區是空的。請透過視窗選單中的「新增到我的工作區」新增視窗，或透過 Agent Chat 本身的選單新增 Agent Chat。",
+      "myEmptyPhone": "在此手機上，我的工作區中沒有視窗。",
+      "myWorkspace": "我的工作區",
+      "removeFromMy": "從我的工作區移除",
+      "removedFromMy": "已將{window}從我的工作區移除",
+      "safety": "安全"
     },
     "notifications": {
       "title": "通知",
@@ -2431,7 +2477,13 @@
       "guideTitle": "拖曳標題列可移動指南，拖曳邊緣或角落可調整其大小。",
       "selectBy": "只顯示樹中屬於某個分區、分類或整合的部分。只改變顯示內容，不改變金鑰的權限。",
       "hintSave": "為所選範圍儲存提示。智慧體會隨此實體一起收到它。",
-      "hintRemove": "移除為所選範圍儲存的提示。"
+      "hintRemove": "移除為所選範圍儲存的提示。",
+      "settingsAiTaskDisable": "關閉 AI 任務後，它也將不再是 Home Assistant 的預設 AI 任務。",
+      "settingsAiTaskReplaceDefault": "Home Assistant 只有一個預設 AI 任務，因此此設定會取代目前的預設 AI 任務。",
+      "settingsVoiceClearPreferred": "關閉此項後，該助理仍會保留。Home Assistant 將改為首選另一個助理。",
+      "settingsVoiceDisable": "關閉語音智慧體也會移除 Phoenix MCP 在 Home Assistant 中建立的助理。",
+      "settingsVoiceRemoveAssistant": "關閉此項會移除 Phoenix MCP 在 Home Assistant 中建立的助理。語音智慧體仍保持啟用。",
+      "wsMy": "您自己的工作區：包含您從其他工作區新增的視窗，以及停駐到此處的 Agent Chat。"
     },
     "guide": {
       "title": "指南",
@@ -2446,7 +2498,9 @@
       "clearFilters": "清除篩選",
       "latest": "最新",
       "turns": "回合",
-      "toolCalls": "工具呼叫"
+      "toolCalls": "工具呼叫",
+      "pauseUpdates": "暫停更新",
+      "recordingSettings": "記錄設定"
     },
     "table": {
       "sortAscending": "遞增排序",

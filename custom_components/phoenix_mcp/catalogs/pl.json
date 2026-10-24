@@ -928,7 +928,9 @@
       "attachNoVision": "Ten model nie przyjmuje obrazów.",
       "attachCompanion": "Home Companion przyjmuje tylko polecenia tekstowe, więc nie można załączać obrazów.",
       "connection": "Połączenie",
-      "changeConnection": "Zmień połączenie"
+      "changeConnection": "Zmień połączenie",
+      "dockedClosed": "Agent Chat jest zamknięty.",
+      "floatChat": "Odłącz Agent Chat"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",
@@ -1890,7 +1892,35 @@
       "agentcliProbedVisionInconclusive": "Test obrazu: nie wróciła użyteczna odpowiedź, więc obsługa obrazów nadal jest nieznana.",
       "agentcliOpenCodeRoute": "Trasa API",
       "agentcliOpenCodeZen": "Zen (starszy)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Informacje",
+      "accountChangeModel": "Zmień model",
+      "accountCheckOptions": "Sprawdź opcje",
+      "accountRefreshModels": "Odśwież modele",
+      "addAccount": "Dodaj konto",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task nie jest już domyślnym Zadaniem AI",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task jest teraz domyślnym Zadaniem AI zamiast {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task jest teraz domyślnym Zadaniem AI",
+      "aiTaskDisabledDefaultToast": "Wyłączono Zadanie AI, które nie jest już domyślne",
+      "aiTaskDisabledToast": "Wyłączono Zadanie AI",
+      "aiTaskEnabledToast": "Włączono Zadanie AI",
+      "catalogChecks": "Sprawdzanie katalogu modeli",
+      "colAccount": "Konto",
+      "colModel": "Model domyślny",
+      "colProvider": "Dostawca",
+      "discard": "Odrzuć",
+      "haNotifications": "Powiadomienia Home Assistant",
+      "modelAutomatic": "automatyczny",
+      "privacySection": "Prywatność",
+      "voiceAssistantAddedToast": "Dodano asystenta Phoenix MCP do Home Assistant",
+      "voiceAssistantRemovedToast": "Usunięto asystenta Phoenix MCP z Home Assistant",
+      "voiceDisabledRemovedToast": "Wyłączono agenta głosowego i usunięto jego asystenta Home Assistant",
+      "voiceDisabledToast": "Wyłączono agenta głosowego",
+      "voiceEnabledToast": "Włączono agenta głosowego",
+      "voicePreferredClearedToast": "Phoenix MCP nie jest już preferowanym asystentem",
+      "voicePreferredFailed": "Nie można było zmienić preferowanego asystenta.",
+      "voicePreferredSetToast": "Phoenix MCP jest teraz preferowanym asystentem",
+      "wipeWarningSelected": "Spowoduje to usunięcie poniższych danych i nie można tego cofnąć."
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",
@@ -2407,7 +2437,8 @@
         "requestCompleted": "Żądanie do modelu zakończone"
       },
       "attachmentPrompt": "Wiadomość z obrazem lub plikiem",
-      "clearShort": "Wyczyść historię"
+      "clearShort": "Wyczyść historię",
+      "retention": "Przechowywanie"
     },
     "attention": {
       "title": "Wymaga uwagi",
@@ -2494,7 +2525,22 @@
       "profileEditor": "Edytor profilu",
       "orphanedProfiles": "Osierocone profile",
       "advisory": "Powiadomienia doradcze",
-      "diagnostics": "Diagnostyka"
+      "diagnostics": "Diagnostyka",
+      "addToMy": "Dodaj do Mojego obszaru roboczego",
+      "addedToMy": "Dodano do Mojego obszaru roboczego: {window}",
+      "aiProviders": "Dostawcy AI",
+      "findSetting": "Znajdź ustawienie",
+      "findSettingNone": "Brak pasujących ustawień",
+      "findSettingPlaceholder": "Szukaj ustawień",
+      "findSettingResults": "Pasujące ustawienia",
+      "general": "Ogólne",
+      "logsNotifications": "Dzienniki i powiadomienia",
+      "myEmpty": "Mój obszar roboczy jest pusty. Dodaj okno poleceniem „Dodaj do Mojego obszaru roboczego” w menu okna albo Agent Chat z jego własnego menu.",
+      "myEmptyPhone": "Mój obszar roboczy nie ma okien na tym telefonie.",
+      "myWorkspace": "Mój obszar roboczy",
+      "removeFromMy": "Usuń z Mojego obszaru roboczego",
+      "removedFromMy": "Usunięto z Mojego obszaru roboczego: {window}",
+      "safety": "Bezpieczeństwo"
     },
     "notifications": {
       "title": "Powiadomienia",
@@ -2530,7 +2576,13 @@
       "guideTitle": "Przeciągnij pasek tytułu, aby przenieść przewodnik, albo przeciągnij krawędź lub róg, aby zmienić jego rozmiar.",
       "selectBy": "Pokaż tylko tę część drzewa, która należy do jednego obszaru, etykiety lub integracji. Zmienia to widok, a nie uprawnienia klucza.",
       "hintSave": "Zapisz podpowiedź dla wybranego zakresu. Agenci otrzymują ją razem z tą encją.",
-      "hintRemove": "Usuń podpowiedź zapisaną dla wybranego zakresu."
+      "hintRemove": "Usuń podpowiedź zapisaną dla wybranego zakresu.",
+      "settingsAiTaskDisable": "Wyłączenie Zadania AI sprawia też, że przestaje ono być domyślnym Zadaniem AI w Home Assistant.",
+      "settingsAiTaskReplaceDefault": "Home Assistant ma tylko jedno domyślne Zadanie AI, więc to zastąpi obecne.",
+      "settingsVoiceClearPreferred": "Wyłączenie tej opcji zachowuje asystenta. Home Assistant preferuje wtedy innego asystenta.",
+      "settingsVoiceDisable": "Wyłączenie agenta głosowego usuwa też asystenta, którego Phoenix MCP utworzył w Home Assistant.",
+      "settingsVoiceRemoveAssistant": "Wyłączenie tej opcji usuwa asystenta, którego Phoenix MCP utworzył w Home Assistant. Agent głosowy pozostaje włączony.",
+      "wsMy": "Twój własny obszar roboczy: okna dodane z innych obszarów roboczych oraz Agent Chat, jeśli został tu zadokowany."
     },
     "guide": {
       "title": "Przewodnik",
@@ -2545,7 +2597,9 @@
       "clearFilters": "Wyczyść filtry",
       "latest": "Ostatnio",
       "turns": "Tury",
-      "toolCalls": "Wywołania narzędzi"
+      "toolCalls": "Wywołania narzędzi",
+      "pauseUpdates": "Wstrzymaj aktualizacje",
+      "recordingSettings": "Ustawienia rejestrowania"
     },
     "table": {
       "sortAscending": "Sortuj rosnąco",

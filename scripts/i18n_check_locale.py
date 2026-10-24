@@ -91,6 +91,7 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     "proper nouns": (
         "panel.shell.tabMesa",
         "panel.audit.rowMesa",
+        "panel.workspace.homeAssistant",
         "notification.approval.title",
         "config.step.user.title",
     ),
@@ -240,6 +241,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.changes.typeLabel",  # "Label"
         "panel.mesa.colName",  # "Name"
         "panel.mesa.colSignal",  # "Signal"
         "panel.mesa.colTags",  # "Tags"
@@ -304,6 +306,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.caps.cap_notify.label",  # "Notifications"
         "panel.mesa.colSignal",  # "Signal"
         "panel.mesa.colSource",  # "Source"
         "panel.guide.title",  # "Guide", the same word in this language
@@ -332,6 +335,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.workspace.general",  # "General"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -361,6 +365,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.settings.colAccount",  # "Account"
+        "panel.settings.colProvider",  # "Provider"
+        "panel.settings.privacySection",  # "Privacy"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -444,6 +451,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.settings.colAccount",  # "Account"
+        "panel.settings.colProvider",  # "Provider"
+        "panel.settings.privacySection",  # "Privacy"
+        "panel.changes.typeLabel",  # "Label"
         "panel.mesa.colTags",  # "Tags"
         "panel.help.title",  # "Help", the usual Dutch interface term
         "panel.logs.filters",  # "Filters", also Dutch

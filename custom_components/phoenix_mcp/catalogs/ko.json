@@ -642,7 +642,9 @@
       "attachNoVision": "이 모델은 이미지를 받지 않습니다.",
       "attachCompanion": "Home Companion은 텍스트 명령만 받으므로 이미지를 첨부할 수 없습니다.",
       "connection": "연결",
-      "changeConnection": "연결 변경"
+      "changeConnection": "연결 변경",
+      "dockedClosed": "Agent Chat이 닫혀 있습니다.",
+      "floatChat": "Agent Chat 띄우기"
     },
     "diff": {
       "blueprint.create": "{domain} 블루프린트 '{rel}' 생성",
@@ -1416,7 +1418,35 @@
       "agentcliProbedVisionInconclusive": "이미지 확인: 사용할 수 있는 응답이 없어 이미지 지원 여부는 여전히 알 수 없습니다.",
       "agentcliOpenCodeRoute": "API 경로",
       "agentcliOpenCodeZen": "Zen (기존)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "정보",
+      "accountChangeModel": "모델 변경",
+      "accountCheckOptions": "옵션 확인",
+      "accountRefreshModels": "모델 목록 새로 고침",
+      "addAccount": "계정 추가",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task는 더 이상 기본 AI 작업이 아닙니다",
+      "aiTaskDefaultReplacedToast": "{name} 대신 Phoenix MCP AI Task가 기본 AI 작업으로 설정되었습니다",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task가 기본 AI 작업으로 설정되었습니다",
+      "aiTaskDisabledDefaultToast": "AI 작업이 비활성화되었으며 더 이상 기본 AI 작업이 아닙니다",
+      "aiTaskDisabledToast": "AI 작업이 비활성화되었습니다",
+      "aiTaskEnabledToast": "AI 작업이 활성화되었습니다",
+      "catalogChecks": "모델 카탈로그 확인",
+      "colAccount": "계정",
+      "colModel": "기본 모델",
+      "colProvider": "공급자",
+      "discard": "버리기",
+      "haNotifications": "Home Assistant 알림",
+      "modelAutomatic": "자동",
+      "privacySection": "개인정보 보호",
+      "voiceAssistantAddedToast": "Phoenix MCP 어시스턴트가 Home Assistant에 추가되었습니다",
+      "voiceAssistantRemovedToast": "Phoenix MCP 어시스턴트가 Home Assistant에서 제거되었습니다",
+      "voiceDisabledRemovedToast": "음성 에이전트가 비활성화되었으며 해당 Home Assistant 어시스턴트가 제거되었습니다",
+      "voiceDisabledToast": "음성 에이전트가 비활성화되었습니다",
+      "voiceEnabledToast": "음성 에이전트가 활성화되었습니다",
+      "voicePreferredClearedToast": "Phoenix MCP는 더 이상 기본 어시스턴트가 아닙니다",
+      "voicePreferredFailed": "기본 어시스턴트를 변경할 수 없습니다.",
+      "voicePreferredSetToast": "Phoenix MCP가 기본 어시스턴트로 설정되었습니다",
+      "wipeWarningSelected": "아래 데이터가 삭제되며 이 작업은 되돌릴 수 없습니다."
     },
     "approvalSummary": {
       "action.optionalReason": "선택 사유",
@@ -2308,7 +2338,8 @@
         "requestCompleted": "모델 요청 완료"
       },
       "attachmentPrompt": "이미지 또는 파일 메시지",
-      "clearShort": "기록 지우기"
+      "clearShort": "기록 지우기",
+      "retention": "보관"
     },
     "attention": {
       "title": "확인 필요",
@@ -2395,7 +2426,22 @@
       "profileEditor": "프로필 편집기",
       "orphanedProfiles": "고아 프로필",
       "advisory": "권고",
-      "diagnostics": "진단"
+      "diagnostics": "진단",
+      "addToMy": "내 작업 공간에 추가",
+      "addedToMy": "{window}이(가) 내 작업 공간에 추가되었습니다",
+      "aiProviders": "AI 공급자",
+      "findSetting": "설정 찾기",
+      "findSettingNone": "일치하는 설정이 없습니다",
+      "findSettingPlaceholder": "설정 검색",
+      "findSettingResults": "일치하는 설정",
+      "general": "일반",
+      "logsNotifications": "로그 및 알림",
+      "myEmpty": "내 작업 공간이 비어 있습니다. 창 메뉴의 \"내 작업 공간에 추가\"로 창을 추가하거나, Agent Chat의 자체 메뉴에서 Agent Chat을 추가하세요.",
+      "myEmptyPhone": "이 휴대폰에서는 내 작업 공간에 창이 없습니다.",
+      "myWorkspace": "내 작업 공간",
+      "removeFromMy": "내 작업 공간에서 제거",
+      "removedFromMy": "{window}이(가) 내 작업 공간에서 제거되었습니다",
+      "safety": "안전"
     },
     "notifications": {
       "title": "알림",
@@ -2431,7 +2477,13 @@
       "guideTitle": "제목 표시줄을 끌어 가이드를 이동하거나, 가장자리나 모서리를 끌어 크기를 조정합니다.",
       "selectBy": "트리에서 하나의 영역, 레이블 또는 통합 구성 요소에 속한 부분만 표시합니다. 보이는 내용만 바뀌고 키의 권한은 바뀌지 않습니다.",
       "hintSave": "선택한 범위에 힌트를 저장합니다. 에이전트는 이 엔티티와 함께 힌트를 받습니다.",
-      "hintRemove": "선택한 범위에 저장된 힌트를 제거합니다."
+      "hintRemove": "선택한 범위에 저장된 힌트를 제거합니다.",
+      "settingsAiTaskDisable": "AI 작업을 끄면 Home Assistant의 기본 AI 작업 설정도 해제됩니다.",
+      "settingsAiTaskReplaceDefault": "Home Assistant에는 기본 AI 작업이 하나만 있으므로 현재 기본 AI 작업이 대체됩니다.",
+      "settingsVoiceClearPreferred": "이 옵션을 꺼도 어시스턴트는 유지됩니다. 대신 Home Assistant는 다른 어시스턴트를 기본 어시스턴트로 사용합니다.",
+      "settingsVoiceDisable": "음성 에이전트를 끄면 Phoenix MCP가 Home Assistant에 만든 어시스턴트도 제거됩니다.",
+      "settingsVoiceRemoveAssistant": "이 옵션을 끄면 Phoenix MCP가 Home Assistant에 만든 어시스턴트가 제거됩니다. 음성 에이전트는 계속 활성화되어 있습니다.",
+      "wsMy": "나만의 작업 공간: 다른 작업 공간에서 추가한 창과 여기에 도킹한 Agent Chat입니다."
     },
     "guide": {
       "title": "가이드",
@@ -2446,7 +2498,9 @@
       "clearFilters": "필터 지우기",
       "latest": "최근",
       "turns": "턴",
-      "toolCalls": "도구 호출"
+      "toolCalls": "도구 호출",
+      "pauseUpdates": "업데이트 일시 중지",
+      "recordingSettings": "기록 설정"
     },
     "table": {
       "sortAscending": "오름차순 정렬",

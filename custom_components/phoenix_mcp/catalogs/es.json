@@ -743,7 +743,9 @@
       "attachNoVision": "Este modelo no acepta imágenes.",
       "attachCompanion": "Home Companion solo acepta comandos de texto, por lo que no se pueden adjuntar imágenes.",
       "connection": "Conexión",
-      "changeConnection": "Cambiar conexión"
+      "changeConnection": "Cambiar conexión",
+      "dockedClosed": "Agent Chat está cerrado.",
+      "floatChat": "Desacoplar Agent Chat"
     },
     "diff": {
       "blueprint.create": "Crear el plano {domain} '{rel}'",
@@ -1699,7 +1701,35 @@
       "agentcliProbedVisionInconclusive": "Comprobación de imagen: no llegó una respuesta utilizable, por lo que la compatibilidad con imágenes sigue siendo desconocida.",
       "agentcliOpenCodeRoute": "Ruta de API",
       "agentcliOpenCodeZen": "Zen (anterior)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "Acerca de",
+      "accountChangeModel": "Cambiar modelo",
+      "accountCheckOptions": "Comprobar opciones",
+      "accountRefreshModels": "Actualizar modelos",
+      "addAccount": "Añadir cuenta",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task ya no es la tarea de IA predeterminada",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task es ahora la tarea de IA predeterminada en lugar de {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task es ahora la tarea de IA predeterminada",
+      "aiTaskDisabledDefaultToast": "Tarea de IA deshabilitada y ya no es la predeterminada",
+      "aiTaskDisabledToast": "Tarea de IA deshabilitada",
+      "aiTaskEnabledToast": "Tarea de IA habilitada",
+      "catalogChecks": "Comprobaciones del catálogo de modelos",
+      "colAccount": "Cuenta",
+      "colModel": "Modelo predeterminado",
+      "colProvider": "Proveedor",
+      "discard": "Descartar",
+      "haNotifications": "Notificaciones de Home Assistant",
+      "modelAutomatic": "automático",
+      "privacySection": "Privacidad",
+      "voiceAssistantAddedToast": "Asistente de Phoenix MCP añadido a Home Assistant",
+      "voiceAssistantRemovedToast": "Asistente de Phoenix MCP eliminado de Home Assistant",
+      "voiceDisabledRemovedToast": "Agente de voz deshabilitado y su asistente de Home Assistant eliminado",
+      "voiceDisabledToast": "Agente de voz deshabilitado",
+      "voiceEnabledToast": "Agente de voz habilitado",
+      "voicePreferredClearedToast": "Phoenix MCP ya no es el asistente preferido",
+      "voicePreferredFailed": "No se pudo cambiar el asistente preferido.",
+      "voicePreferredSetToast": "Phoenix MCP es ahora el asistente preferido",
+      "wipeWarningSelected": "Esto elimina los datos indicados a continuación y no se puede deshacer."
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",
@@ -2303,7 +2333,8 @@
         "requestCompleted": "Solicitud al modelo completada"
       },
       "attachmentPrompt": "Mensaje con imagen o archivo",
-      "clearShort": "Borrar historial"
+      "clearShort": "Borrar historial",
+      "retention": "Conservación"
     },
     "attention": {
       "title": "Requiere atención",
@@ -2390,7 +2421,22 @@
       "profileEditor": "Editor de perfiles",
       "orphanedProfiles": "Perfiles huérfanos",
       "advisory": "Avisos consultivos",
-      "diagnostics": "Diagnóstico"
+      "diagnostics": "Diagnóstico",
+      "addToMy": "Añadir a Mi espacio de trabajo",
+      "addedToMy": "Se añadió {window} a Mi espacio de trabajo",
+      "aiProviders": "Proveedores de IA",
+      "findSetting": "Buscar ajuste",
+      "findSettingNone": "No hay ajustes que coincidan",
+      "findSettingPlaceholder": "Buscar ajustes",
+      "findSettingResults": "Ajustes coincidentes",
+      "general": "General",
+      "logsNotifications": "Registros y notificaciones",
+      "myEmpty": "Mi espacio de trabajo está vacío. Añada una ventana con «Añadir a Mi espacio de trabajo» en el menú de la ventana, o Agent Chat desde su propio menú.",
+      "myEmptyPhone": "Mi espacio de trabajo no tiene ventanas en este teléfono.",
+      "myWorkspace": "Mi espacio de trabajo",
+      "removeFromMy": "Quitar de Mi espacio de trabajo",
+      "removedFromMy": "Se quitó {window} de Mi espacio de trabajo",
+      "safety": "Seguridad"
     },
     "notifications": {
       "title": "Notificaciones",
@@ -2426,7 +2472,13 @@
       "guideTitle": "Arrastre la barra de título para mover la guía, o arrastre un borde o una esquina para cambiar su tamaño.",
       "selectBy": "Muestre solo la parte del árbol de un área, una etiqueta o una integración. Cambia lo que ve, no lo que la clave puede hacer.",
       "hintSave": "Guarde la sugerencia para el ámbito elegido. Los agentes la reciben con esta entidad.",
-      "hintRemove": "Elimine la sugerencia guardada para el ámbito elegido."
+      "hintRemove": "Elimine la sugerencia guardada para el ámbito elegido.",
+      "settingsAiTaskDisable": "Al desactivar la tarea de IA, también deja de ser la tarea de IA predeterminada de Home Assistant.",
+      "settingsAiTaskReplaceDefault": "Home Assistant tiene una sola tarea de IA predeterminada, así que esta reemplaza a la actual.",
+      "settingsVoiceClearPreferred": "Al desactivar esta opción se conserva el asistente. Home Assistant prefiere otro asistente en su lugar.",
+      "settingsVoiceDisable": "Al desactivar el agente de voz, también se elimina el asistente que Phoenix MCP creó en Home Assistant.",
+      "settingsVoiceRemoveAssistant": "Al desactivar esta opción, se elimina el asistente que Phoenix MCP creó en Home Assistant. El agente de voz sigue habilitado.",
+      "wsMy": "Su propio espacio de trabajo: las ventanas que ha añadido desde los otros espacios de trabajo y Agent Chat si lo ha acoplado aquí."
     },
     "guide": {
       "title": "Guía",
@@ -2441,7 +2493,9 @@
       "clearFilters": "Borrar filtros",
       "latest": "Última",
       "turns": "Turnos",
-      "toolCalls": "Llamadas a herramientas"
+      "toolCalls": "Llamadas a herramientas",
+      "pauseUpdates": "Pausar actualizaciones",
+      "recordingSettings": "Configuración de registro"
     },
     "table": {
       "sortAscending": "Orden ascendente",

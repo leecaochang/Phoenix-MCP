@@ -1327,7 +1327,35 @@
       "agentcliProbedVisionInconclusive": "Vérification d'image : aucune réponse exploitable n'est revenue, la prise en charge des images reste donc inconnue.",
       "agentcliOpenCodeRoute": "Route API",
       "agentcliOpenCodeZen": "Zen (ancien)",
-      "agentcliOpenCodeConsole": "Console"
+      "agentcliOpenCodeConsole": "Console",
+      "about": "À propos",
+      "accountChangeModel": "Changer de modèle",
+      "accountCheckOptions": "Vérifier les options",
+      "accountRefreshModels": "Actualiser les modèles",
+      "addAccount": "Ajouter un compte",
+      "aiTaskDefaultClearedToast": "Phoenix MCP AI Task n'est plus la Tâche d'IA par défaut",
+      "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task est désormais la Tâche d'IA par défaut, à la place de {name}",
+      "aiTaskDefaultSetToast": "Phoenix MCP AI Task est désormais la Tâche d'IA par défaut",
+      "aiTaskDisabledDefaultToast": "Tâche d'IA désactivée et retirée comme Tâche d'IA par défaut",
+      "aiTaskDisabledToast": "Tâche d'IA désactivée",
+      "aiTaskEnabledToast": "Tâche d'IA activée",
+      "catalogChecks": "Vérifications du catalogue de modèles",
+      "colAccount": "Compte",
+      "colModel": "Modèle par défaut",
+      "colProvider": "Fournisseur",
+      "discard": "Ignorer",
+      "haNotifications": "Notifications Home Assistant",
+      "modelAutomatic": "automatique",
+      "privacySection": "Confidentialité",
+      "voiceAssistantAddedToast": "Assistant Phoenix MCP ajouté à Home Assistant",
+      "voiceAssistantRemovedToast": "Assistant Phoenix MCP supprimé de Home Assistant",
+      "voiceDisabledRemovedToast": "Agent vocal désactivé et son assistant Home Assistant supprimé",
+      "voiceDisabledToast": "Agent vocal désactivé",
+      "voiceEnabledToast": "Agent vocal activé",
+      "voicePreferredClearedToast": "Phoenix MCP n'est plus l'assistant préféré",
+      "voicePreferredFailed": "Impossible de modifier l'assistant préféré.",
+      "voicePreferredSetToast": "Phoenix MCP est désormais l'assistant préféré",
+      "wipeWarningSelected": "Cette action supprime les données ci-dessous et est irréversible."
     },
     "agentchat": {
       "announceApproval": "L'action {name} nécessite votre approbation.",
@@ -1468,7 +1496,9 @@
       "attachNoVision": "Ce modèle n'accepte pas les images.",
       "attachCompanion": "Home Companion n'accepte que des commandes textuelles ; les images ne peuvent donc pas être jointes.",
       "connection": "Connexion",
-      "changeConnection": "Changer de connexion"
+      "changeConnection": "Changer de connexion",
+      "dockedClosed": "Agent Chat est fermé.",
+      "floatChat": "Rendre Agent Chat flottant"
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",
@@ -2303,7 +2333,8 @@
         "requestCompleted": "Demande au modèle terminée"
       },
       "attachmentPrompt": "Message avec image ou fichier",
-      "clearShort": "Effacer l’historique"
+      "clearShort": "Effacer l’historique",
+      "retention": "Conservation"
     },
     "attention": {
       "title": "À vérifier",
@@ -2390,7 +2421,22 @@
       "profileEditor": "Éditeur de profil",
       "orphanedProfiles": "Profils orphelins",
       "advisory": "Avis consultatifs",
-      "diagnostics": "Diagnostic"
+      "diagnostics": "Diagnostic",
+      "addToMy": "Ajouter à Mon espace de travail",
+      "addedToMy": "Fenêtre {window} ajoutée à Mon espace de travail",
+      "aiProviders": "Fournisseurs d’IA",
+      "findSetting": "Rechercher un paramètre",
+      "findSettingNone": "Aucun paramètre correspondant",
+      "findSettingPlaceholder": "Rechercher des paramètres",
+      "findSettingResults": "Paramètres correspondants",
+      "general": "Général",
+      "logsNotifications": "Journaux et notifications",
+      "myEmpty": "Mon espace de travail est vide. Ajoutez une fenêtre avec « Ajouter à Mon espace de travail » dans le menu de la fenêtre, ou Agent Chat depuis son propre menu.",
+      "myEmptyPhone": "Mon espace de travail ne contient aucune fenêtre sur ce téléphone.",
+      "myWorkspace": "Mon espace de travail",
+      "removeFromMy": "Retirer de Mon espace de travail",
+      "removedFromMy": "Fenêtre {window} retirée de Mon espace de travail",
+      "safety": "Sécurité"
     },
     "notifications": {
       "title": "Notifications",
@@ -2426,7 +2472,13 @@
       "guideTitle": "Faites glisser la barre de titre pour déplacer le guide, ou faites glisser un bord ou un coin pour le redimensionner.",
       "selectBy": "Affichez seulement la partie de l’arbre qui appartient à une pièce, une étiquette ou une intégration. Cela change ce que vous voyez, pas ce que la clé peut faire.",
       "hintSave": "Enregistrez l’indication pour la portée choisie. Les agents la reçoivent avec cette entité.",
-      "hintRemove": "Supprimez l’indication enregistrée pour la portée choisie."
+      "hintRemove": "Supprimez l’indication enregistrée pour la portée choisie.",
+      "settingsAiTaskDisable": "Désactiver la Tâche d'IA la retire aussi comme Tâche d'IA par défaut de Home Assistant.",
+      "settingsAiTaskReplaceDefault": "Home Assistant n'a qu'une seule Tâche d'IA par défaut, celle-ci remplace donc l'actuelle.",
+      "settingsVoiceClearPreferred": "Désactiver cette option conserve l'assistant. Home Assistant préfère alors un autre assistant.",
+      "settingsVoiceDisable": "Désactiver l'agent vocal supprime aussi l'assistant que Phoenix MCP a créé dans Home Assistant.",
+      "settingsVoiceRemoveAssistant": "Désactiver cette option supprime l'assistant que Phoenix MCP a créé dans Home Assistant. L'agent vocal reste activé.",
+      "wsMy": "Votre propre espace de travail : les fenêtres que vous avez ajoutées depuis les autres espaces de travail, et Agent Chat si vous l’y avez ancré."
     },
     "guide": {
       "title": "Guide",
@@ -2441,7 +2493,9 @@
       "clearFilters": "Effacer les filtres",
       "latest": "Dernier",
       "turns": "Tours",
-      "toolCalls": "Appels d'outils"
+      "toolCalls": "Appels d'outils",
+      "pauseUpdates": "Suspendre les mises à jour",
+      "recordingSettings": "Paramètres d'enregistrement"
     },
     "table": {
       "sortAscending": "Tri croissant",
