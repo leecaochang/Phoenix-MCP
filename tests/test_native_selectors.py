@@ -409,7 +409,7 @@ async def test_light_set_empty_domain_preserves_explicit_name_selection(domain):
     action.assert_awaited_once()
 
 
-@pytest.mark.parametrize("domain", [[], "light", ["fan"]])
+@pytest.mark.parametrize("domain", [[], "", ["fan"], "fan"])
 async def test_light_set_empty_or_wrong_domain_cannot_expand_implicit_selection(domain):
     with patch(f"{NATIVE}.resolve_intent_entities") as resolver:
         response, outcome, _ = await _call_tool(
@@ -485,3 +485,55 @@ async def test_a_selector_rule_lowered_to_prose_is_still_refused_at_dispatch(too
     assert "No usable targeting parameter" in _text(response)
     resolver.assert_not_called()
     action.assert_not_awaited()
+
+
+@pytest.mark.parametrize(("tool", "args", "selector", "expected"), [
+    ("intent__HassTurnOn", {"domain": "light"}, "domains", ["light"]),
+    ("intent__HassTurnOff", {"device_class": "outlet"}, "device_classes", ["outlet"]),
+    ("light__HassLightSet", {"domain": "light", "brightness": "40"}, "domains", ["light"]),
+])
+async def test_one_string_is_a_one_item_list_as_in_home_assistant(tool, args, selector, expected):
+    """HA's intent slots use cv.ensure_list: a string never means "not provided"."""
+    resolver = MagicMock(return_value=[])
+    with patch(f"{NATIVE}.resolve_intent_entities", resolver):
+        await _call_tool(tool, args, _access_key(), MagicMock(), MagicMock())
+    assert resolver.call_args.kwargs[selector] == expected
+
+
+@pytest.mark.parametrize(("tool", "field", "text", "value"), [
+    ("light__HassLightSet", "brightness", "40", 40),
+    ("fan__HassFanSetSpeed", "percentage", " 75 ", 75),
+    ("intent__HassSetPosition", "position", "30", 30),
+    ("media_player__HassSetVolume", "volume_level", "20", 20),
+    ("climate__HassClimateSetTemperature", "temperature", "21.5", 21.5),
+])
+def test_numeric_text_is_coerced_as_home_assistant_does(tool, field, text, value):
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+    arguments, error = scalar_arguments(tool, {"name": "Fixture", field: text})
+    assert error is None and arguments[field] == value
+
+
+@pytest.mark.parametrize(("tool", "field", "text"), [
+    ("light__HassLightSet", "brightness", "40.5"),
+    ("light__HassLightSet", "brightness", "bright"),
+    ("light__HassLightSet", "brightness", "140"),
+    ("climate__HassClimateSetTemperature", "temperature", "warm"),
+])
+def test_text_that_is_not_the_number_stays_refused(tool, field, text):
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+    _, error = scalar_arguments(tool, {"name": "Fixture", field: text})
+    assert error is not None and field in error
+
+
+def test_only_native_tools_take_numeric_text():
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+    assert scalar_arguments("get_history", {"limit": "10"})[1] == "limit must be an integer."
+
+
+async def test_an_empty_string_selector_beside_a_name_stays_a_placeholder():
+    resolver = MagicMock(return_value=[])
+    with patch(f"{NATIVE}.resolve_intent_entities", resolver):
+        _, outcome, _ = await _call_tool(
+            "intent__HassTurnOn", {"name": "Fixture", "domain": ""}, _access_key(), MagicMock(), MagicMock())
+    assert resolver.call_args.kwargs["name"] == "Fixture"
+    assert resolver.call_args.kwargs["domains"] == ""

@@ -16,6 +16,9 @@ _SCHEMAS = {definition["name"]: definition["inputSchema"]
 _PUBLIC_SCHEMAS = {**_SCHEMAS, **{definition["name"]: definition["inputSchema"]
                                   for definition in _NATIVE_TOOL_DEFS}}
 _CONTAINER_TYPES = ("object", "array")
+_NATIVE_TOOLS = frozenset(definition["name"] for definition in _NATIVE_TOOL_DEFS)
+_INTEGER_TEXT = re.compile(r"-?\d+")
+_NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
 
 
 def decode_container_strings(tool: str, arguments: dict) -> dict:
@@ -142,6 +145,26 @@ def _whole_integers(value: Any, schema: Any) -> Any:
     return value
 
 
+def _native_shape(value: Any, schema: dict) -> Any:
+    """Take the shapes Home Assistant's own native tools accept.
+
+    HA's intent slots wrap one string in a list (cv.ensure_list) and coerce
+    numeric text (vol.Coerce(int) or vol.Coerce(float)), so a native tool takes
+    "light" for ["light"] and "50" for 50. A string is never read as absent.
+    """
+    if not isinstance(value, str):
+        return value
+    kinds, text = _kinds(schema), value.strip()
+    items = schema.get("items")
+    if "array" in kinds and text and isinstance(items, dict) and _kinds(items) == ["string"]:
+        return [value]
+    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
+        return int(text)
+    if "number" in kinds and _NUMBER_TEXT.fullmatch(text):
+        return float(text)
+    return value
+
+
 def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str | None:
     """Name the schema field and its rule, never the value."""
     if value is None:
@@ -177,8 +200,9 @@ def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
     messages explain the choice and for whom null can be a refused value (a
     compare-and-swap expected_hash) as well as absence. Whole-valued
     floats become ints wherever the schema expects an integer, nested ones
-    included. Union-typed fields are left to their handler. Call after the
-    owning capability's denial check.
+    included, and native tools take HA's own list and number shapes
+    (_native_shape). Union-typed fields are left to their handler. Call after
+    the owning capability's denial check.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -198,6 +222,8 @@ def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
             # What null means stays the handler's call: for some fields it is
             # absence, for a safety token such as expected_hash it must refuse.
             continue
+        if tool in _NATIVE_TOOLS:
+            value = _native_shape(value, field)
         converted = _whole_integers(value, field)
         if kinds and set(kinds) <= _SCALAR_TYPES and (error := _scalar_error(name, converted, field, kinds)):
             return arguments, error
