@@ -926,6 +926,13 @@ async def _tool_get_history(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one bounded page of state history, or summarize several entities."""
+    # Some models fill every optional parameter: an empty select or entity_id
+    # beside the other names nothing, so it is not a second, conflicting request.
+    if "select" in args and "entity_id" in args:
+        for placeholder in ("select", "entity_id"):
+            if args[placeholder] in (None, "", [], {}):
+                args = {key: value for key, value in args.items() if key != placeholder}
+                break
     if "select" in args:
         return await _history_summary_select(args["select"], args, access_key, hass, data)
     if isinstance(args.get("entity_id"), list):

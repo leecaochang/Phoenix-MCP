@@ -708,6 +708,22 @@ async def test_a_malformed_select_is_refused(hass: HomeAssistant, args, message)
     assert outcome == "invalid_request" and message in content["content"][0]["text"]
 
 
+@pytest.mark.parametrize("placeholder", [None, "", [], {}])
+async def test_an_empty_placeholder_beside_entity_id_or_select_is_ignored(
+        recorder_mock, hass: HomeAssistant, placeholder) -> None:
+    # Models that fill every optional parameter send one of these beside the real argument.
+    _anchor(hass)
+    _set(hass, "light.desk", "on", 20)
+    _register(hass, "light.desk")
+    await async_wait_recording_done(hass)
+    single = await _call(hass, "light.desk", 0, 400, select=placeholder)
+    assert single[1] == "allowed", single
+    assert json.loads(single[0]["content"][0]["text"])["entity_id"] == "light.desk"
+    selected = await _select(hass, {"domain": "light"}, entity_id=placeholder)
+    assert selected[1] == "allowed", selected
+    assert json.loads(selected[0]["content"][0]["text"])["matched"] == 1
+
+
 async def test_select_needs_search_access(hass: HomeAssistant) -> None:
     content, outcome, _ = await _call_tool(
         "get_history", {"select": {"domain": "light"}, "mode": "summary"}, _search_key(cap_search="deny"),
