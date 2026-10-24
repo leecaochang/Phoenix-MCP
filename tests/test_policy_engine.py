@@ -1514,8 +1514,41 @@ class TestParseRelativeTime:
     def test_months(self):
         with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
             mock_now.return_value = datetime(2026, 4, 10, 0, 0, 0)
-            result = parse_relative_time("1m")
+            result = parse_relative_time("1mo")
         assert result == datetime(2026, 3, 11, 0, 0, 0)
+
+    @pytest.mark.parametrize(("value", "expected"), [
+        ("30min", datetime(2026, 4, 10, 11, 30)),
+        ("45 minutes", datetime(2026, 4, 10, 11, 15)),
+        ("24H", datetime(2026, 4, 9, 12, 0)),
+        ("24 hours", datetime(2026, 4, 9, 12, 0)),
+        ("-24h", datetime(2026, 4, 9, 12, 0)),
+        ("2 days ago", datetime(2026, 4, 8, 12, 0)),
+        ("1 Week", datetime(2026, 4, 3, 12, 0)),
+        ("2 months", datetime(2026, 2, 9, 12, 0)),
+        ("+7d", datetime(2026, 4, 17, 12, 0)),
+        ("+90min", datetime(2026, 4, 10, 13, 30)),
+    ])
+    def test_spelled_signed_and_minute_units(self, value, expected):
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
+            mock_now.return_value = datetime(2026, 4, 10, 12, 0, 0)
+            assert parse_relative_time(value) == expected
+
+    @pytest.mark.parametrize("value", ["5m", "30M", "1 m"])
+    def test_bare_m_is_refused_as_ambiguous(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(RelativeTimeError, match="min for minutes or .*mo for months"):
+            parse_relative_time(value)
+
+    @pytest.mark.parametrize("value", ["367d", "53w", "13mo", "+400d", "530000min"])
+    def test_range_cap_is_a_refusal_with_its_reason(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(RelativeTimeError, match="maximum allowed range of 366 days"):
+            parse_relative_time(value)
+
+    @pytest.mark.parametrize("value", ["366d", "52w", "12mo"])
+    def test_range_cap_allows_a_year(self, value):
+        assert isinstance(parse_relative_time(value), datetime)
 
     @pytest.mark.parametrize("value", ["now", " NOW "])
     def test_now_is_the_current_time(self, value):
@@ -1535,9 +1568,12 @@ class TestParseRelativeTime:
         with pytest.raises(ValueError):
             parse_relative_time("invalid")
 
-    def test_invalid_unit_raises(self):
-        with pytest.raises(ValueError):
-            parse_relative_time("5x")
+    @pytest.mark.parametrize("value", ["5x", "+7d ago", "7 fortnights", "yesterday"])
+    def test_invalid_unit_raises(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(ValueError) as caught:
+            parse_relative_time(value)
+        assert not isinstance(caught.value, RelativeTimeError)
 
     def test_no_number_raises(self):
         with pytest.raises(ValueError):

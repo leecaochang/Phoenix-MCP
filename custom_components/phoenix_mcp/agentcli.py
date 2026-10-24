@@ -3860,8 +3860,9 @@ def _agentcli_add_resource_match_guidance(
 
 
 # Every absolute time argument a read takes, so the wall-time rule the prompt
-# states holds for each tool it names. Calendar reads already take a naive time
-# as Home Assistant local time, and keep accepting the offsets events carry.
+# states holds for each tool it names. Every tool reads a time without an offset
+# as Home Assistant local time; calendar reads also keep accepting the offsets
+# events carry, so they are not policed here.
 _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
     "get_history": frozenset({"start_time", "end_time"}),
     "get_statistics": frozenset({"start_time", "end_time"}),
@@ -3872,37 +3873,29 @@ _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
 }
 
 
-def _agentcli_prepare_time_args(
+def _agentcli_time_arg_error(
     tool_name: str, args: dict[str, Any], local_tz: tzinfo,
-) -> tuple[dict[str, Any], str | None]:
-    """Apply HA's zone to naive Agent Chat ranges and reject manual shifting.
+) -> str | None:
+    """Refuse a query time the model shifted into another zone itself.
 
-    A value already carrying HA's own offset for that instant, such as a _local
-    result value sent back, is exact and passes unchanged; any other offset is
-    refused as a shift the model made itself.
+    A wall time without an offset passes unchanged, since the tool reads it as
+    HA local time. A value already carrying HA's own offset for that instant,
+    such as a _local result value sent back, is exact and passes too; any other
+    offset is refused as a shift the model made itself.
     """
-    fields = _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name)
-    if fields is None:
-        return args, None
-    prepared = dict(args)
-    for field in fields:
-        value = prepared.get(field)
-        if not isinstance(value, str):
+    for field in _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name, ()):
+        value = args.get(field)
+        parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+        if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
             continue
-        parsed = dt_util.parse_datetime(value)
-        if parsed is None:
-            continue
-        if parsed.tzinfo is not None and parsed.utcoffset() is not None:
-            if parsed.astimezone(local_tz).utcoffset() == parsed.utcoffset():
-                continue
-            return args, (
+        if parsed.astimezone(local_tz).utcoffset() != parsed.utcoffset():
+            return (
                 f"Agent Chat {field} must be a Home Assistant local wall time without "
                 "a timezone suffix, a relative time, or a _local value copied unchanged "
                 "from a result. Pass the operator's intended clock time directly; "
                 "Phoenix applies the configured time zone."
             )
-        prepared[field] = parsed.replace(tzinfo=local_tz).isoformat()
-    return prepared, None
+    return None
 
 
 def dispatch_tool_result(response: dict | None) -> dict:
@@ -4750,12 +4743,9 @@ async def _run_tool_batch(
                             "result_text": "Cancelled by the operator; not run.",
                             "is_error": True})
             continue
-        if isinstance(args, dict):
-            args, time_error = _agentcli_prepare_time_args(
-                name, args, dt_util.now().tzinfo or dt_util.UTC,
-            )
-        else:
-            time_error = None
+        time_error = _agentcli_time_arg_error(
+            name, args, dt_util.now().tzinfo or dt_util.UTC,
+        ) if isinstance(args, dict) else None
         if time_error is not None:
             await emit("tool_result", {
                 "id": tc.get("id"), "name": name,

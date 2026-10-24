@@ -92,7 +92,7 @@ grain of the model gives the smoothest results and avoids dead ends.
   unavailable, unreadable, unmodeled, or capability-skipped source.
 - `get_history` (`state_changes` by default), `get_statistics`,
   `recent_activity`, `compare_states`: what changed and when. Use relative time
-  strings like `24h`, `7d`, `2w`, `1m`. History and statistics are bounded
+  strings like `30min`, `24h`, `7d`, `2w`, `1mo`. History and statistics are bounded
   pages: continue only when `has_more` is true, using `next_cursor` as the next
   call's `cursor`. There is no total to infer. A page's `covered_range` is only
   what it read; `unread_range` is the rest, so it never shows where data begins.

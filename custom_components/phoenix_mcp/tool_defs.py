@@ -188,7 +188,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 ], "description": "Entity ID, or in summary mode a list of entity IDs."},
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d, 2w, 1m). Defaults to 24h before end_time.",
+                    "description": "ISO timestamp or relative string (30min, 24h, 7d, 2w, 1mo). Defaults to 24h before end_time.",
                 },
                 "end_time": {
                     "type": "string",
@@ -444,7 +444,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                               "description": "A calendar.* entity ID, or a list of them; omit for every calendar."},
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d). Defaults to now.",
+                    "description": "ISO timestamp or relative string (24h ago, +7d ahead). Defaults to now.",
                 },
                 "end_time": {
                     "type": "string",
@@ -2691,7 +2691,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "entity_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 100, "description": "One or more entity IDs."},
-                "t1": {"type": "string", "description": "Earlier time (ISO or relative: 24h, 7d, 2w, 1m)."},
+                "t1": {"type": "string", "description": "Earlier time (ISO or relative: 30min, 24h, 7d, 2w, 1mo)."},
                 "t2": {"type": "string", "description": "Later time (ISO or relative). Defaults to now."},
             },
             "required": ["entity_ids", "t1"],

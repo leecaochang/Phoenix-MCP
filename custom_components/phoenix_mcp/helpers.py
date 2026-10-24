@@ -23,7 +23,7 @@ from aiohttp import web
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import get_default_time_zone, parse_datetime, utcnow
 
 from .const import (
     LOG_DETAIL_STALE_MESSAGE,
@@ -47,6 +47,7 @@ from .const import (
 )
 from .policy_engine import (
     Permission,
+    RelativeTimeError,
     assist_expose_check,
     get_effective_hint,
     is_sensitive_key,
@@ -252,19 +253,35 @@ def content_hash(content: str | bytes | dict | list) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+TIME_INPUT_FORMS = (
+    "Use an ISO 8601 time (2026-10-24T08:00:00; without an offset it is Home Assistant "
+    "local time), a date, now, or a relative amount ago such as 30min, 24h, 7d, 2w or 1mo "
+    "(+7d is 7 days ahead)."
+)
+
+
 def parse_time_param(value: str) -> datetime:
-    """Parse a relative time string or ISO timestamp. Raises ValueError for unknown formats."""
+    """Parse a relative time, ISO timestamp or date into an aware datetime.
+
+    A time or date without an offset is Home Assistant local time, as Home
+    Assistant's own dt_util.as_utc reads it, so every tool gives it one meaning.
+    Raises ValueError with a client-safe message naming the accepted forms.
+    """
     # HA's parse_datetime regex-matches its argument, so a non-string reaches it
     # as a TypeError rather than the ValueError every caller here handles.
     if not isinstance(value, str):
-        raise ValueError(f"Unrecognized time format: {value!r}")
+        raise ValueError(f"Unrecognized time format. {TIME_INPUT_FORMS}")
     try:
         return parse_relative_time(value)
+    except RelativeTimeError:
+        raise
     except ValueError:
         pass
-    dt = parse_datetime(value)
+    dt = parse_datetime(value.strip())
     if dt is None:
-        raise ValueError(f"Unrecognized time format: {value!r}")
+        raise ValueError(f"Unrecognized time format: {value!r}. {TIME_INPUT_FORMS}")
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        dt = dt.replace(tzinfo=get_default_time_zone())
     return dt
 
 

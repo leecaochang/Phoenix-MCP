@@ -167,13 +167,14 @@ def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssi
 
 
 def _calendar_time(value: Any) -> datetime:
+    """An ISO date or timestamp in HA's zone; one without an offset is local time."""
     if not isinstance(value, str) or not value:
-        raise ValueError("Times must be ISO dates or timestamps with a timezone.")
+        raise ValueError("Times must be ISO dates or timestamps.")
     if len(value) == 10 and (day := dt_util.parse_date(value)) is not None:
         return dt_util.start_of_local_day(datetime.combine(day, datetime.min.time()))
     parsed = dt_util.parse_datetime(value)
-    if parsed is None or parsed.tzinfo is None:
-        raise ValueError("Times must be ISO dates or timestamps with a timezone.")
+    if parsed is None:
+        raise ValueError("Times must be ISO dates or timestamps.")
     return dt_util.as_local(parsed)
 
 
@@ -183,7 +184,10 @@ def _calendar_window(args: dict, *, defaults: bool = False) -> tuple[datetime, d
     if start is None or end is None:
         raise ValueError("start_time and end_time are required to locate the event.")
     if not timedelta(0) < end - start <= timedelta(days=CALENDAR_MAX_WINDOW_DAYS):
-        raise ValueError(f"Event windows must be positive and at most {CALENDAR_MAX_WINDOW_DAYS} days.")
+        raise ValueError(
+            f"Event windows must be positive and at most {CALENDAR_MAX_WINDOW_DAYS} days. A relative "
+            "time such as 7d means 7 days ago; +7d means 7 days ahead."
+        )
     return start, end
 
 

@@ -298,23 +298,34 @@ async def test_search_runs_after_scrubbing_and_cannot_probe_raw_credentials():
 
 
 @pytest.mark.asyncio
-async def test_naive_and_timezone_aware_iso_bounds_share_utc_semantics():
+async def test_a_bound_without_an_offset_is_home_assistant_local_time():
+    from zoneinfo import ZoneInfo
+    from homeassistant.util import dt as dt_util
+
     access_key, _ = _make_access_key(cap_log_read="allow")
-    entry = make_log_entry(created=1_700_000_000)
+    entry = make_log_entry(created=1_700_000_000)  # 2023-11-14T22:13:20Z
     hass, data = _hass_with_entries(access_key, [entry])
-    body, _result, outcome = await _call(
-        "get_logs",
-        {
-            "since": "2023-11-14T22:00:00",
-            "until": "2023-11-14T23:00:00Z",
-        },
-        access_key=access_key,
-        hass=hass,
-        data=data,
-    )
+    original = dt_util.get_default_time_zone()
+    dt_util.set_default_time_zone(ZoneInfo("Asia/Bangkok"))
+    try:
+        body, _result, outcome = await _call(
+            "get_logs",
+            {"since": "2023-11-15T05:00:00", "until": "2023-11-14T23:00:00Z"},
+            access_key=access_key, hass=hass, data=data,
+        )
+        later_clock, _result, _outcome = await _call(
+            "get_logs",
+            {"since": "2023-11-14T22:20:00", "until": "2023-11-14T23:00:00Z"},
+            access_key=access_key, hass=hass, data=data,
+        )
+    finally:
+        dt_util.set_default_time_zone(original)
     assert outcome == "allowed"
     assert body["count"] == 1
     assert body["filters"]["since"] == "2023-11-14T22:00:00+00:00"
+    # 22:20 read as UTC would start after the 22:13Z entry; as Bangkok time it is 15:20Z.
+    assert later_clock["count"] == 1
+    assert later_clock["filters"]["since"] == "2023-11-14T15:20:00+00:00"
 
 
 @pytest.mark.asyncio

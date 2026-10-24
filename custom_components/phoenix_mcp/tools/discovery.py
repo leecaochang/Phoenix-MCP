@@ -2767,23 +2767,19 @@ async def _tool_compare_state(
     if not args.get("t1"):
         return _tool_error("Missing required argument: t1"), "invalid_request", "compare_states"
     try:
-        t1 = _parse_time_param(args["t1"])
-        if t1.tzinfo is None or t1.utcoffset() is None:
-            raise ValueError
-        t1 = as_utc(t1)
-    except ValueError:
-        return _tool_error("Invalid t1 format."), "invalid_request", "compare_states"
+        t1 = as_utc(_parse_time_param(args["t1"]))
+    except ValueError as err:
+        return _tool_error(f"Invalid t1 format. {err}"), "invalid_request", "compare_states"
     t2 = utcnow()
     if args.get("t2"):
         try:
-            t2 = _parse_time_param(args["t2"])
-            if t2.tzinfo is None or t2.utcoffset() is None:
-                raise ValueError
-            t2 = as_utc(t2)
-        except ValueError:
-            return _tool_error("Invalid t2 format."), "invalid_request", "compare_states"
+            t2 = as_utc(_parse_time_param(args["t2"]))
+        except ValueError as err:
+            return _tool_error(f"Invalid t2 format. {err}"), "invalid_request", "compare_states"
     if t1 >= t2:
-        return _tool_error("t1 must be earlier than t2."), "invalid_request", "compare_states"
+        return _tool_error(
+            "t1 must be earlier than t2. A relative time such as 7d means 7 days ago."
+        ), "invalid_request", "compare_states"
 
     comparisons: list[dict] = []
     if accessible:

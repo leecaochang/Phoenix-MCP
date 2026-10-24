@@ -1985,25 +1985,20 @@ def test_agentcli_leaves_non_temporal_tool_results_unchanged():
     ("get_logs", "since", "until"),
     ("get_phoenix_diagnostics", "since", "until"),
 ])
-def test_agentcli_applies_home_zone_to_naive_query_bounds_and_rejects_shifted_ones(tool, first, second):
-    # The prompt tells the model to send wall times to each of these; any of them
-    # left out would read "6 this morning" as a UTC time or refuse it.
+def test_agentcli_passes_wall_times_and_rejects_shifted_ones(tool, first, second):
+    # Every listed tool reads a wall time as HA local time itself, so Agent Chat
+    # passes it unchanged and refuses only an offset the model invented.
     local_tz = timezone(timedelta(hours=7))
 
-    prepared, error = agentcli._agentcli_prepare_time_args(
+    assert agentcli._agentcli_time_arg_error(
         tool, {first: "2026-08-14T05:00:00", second: "2h"}, local_tz,
-    )
-    assert error is None
-    assert prepared == {first: "2026-08-14T05:00:00+07:00", second: "2h"}
-
-    original = {first: "2026-08-13T22:00:00Z"}
-    prepared, error = agentcli._agentcli_prepare_time_args(tool, original, local_tz)
-    assert prepared == original
+    ) is None
+    error = agentcli._agentcli_time_arg_error(tool, {first: "2026-08-13T22:00:00Z"}, local_tz)
     assert "without a timezone suffix" in str(error)
 
     # A _local value sent back is already in the home zone: the exact instant.
     echoed = {first: "2026-08-14T05:14:17.250000+07:00", second: "2026-08-14T06:00:00+07:00"}
-    assert agentcli._agentcli_prepare_time_args(tool, echoed, local_tz) == (echoed, None)
+    assert agentcli._agentcli_time_arg_error(tool, echoed, local_tz) is None
 
 
 def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving():
@@ -2012,7 +2007,7 @@ def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving
     local_tz = ZoneInfo("America/Los_Angeles")
     for value, accepted in (("2026-07-01T05:00:00-07:00", True), ("2026-01-01T05:00:00-08:00", True),
                             ("2026-07-01T05:00:00-08:00", False), ("2026-01-01T05:00:00-07:00", False)):
-        _, error = agentcli._agentcli_prepare_time_args("get_logbook", {"start_time": value}, local_tz)
+        error = agentcli._agentcli_time_arg_error("get_logbook", {"start_time": value}, local_tz)
         assert (error is None) is accepted, value
 
 
@@ -2022,9 +2017,9 @@ def test_agentcli_states_the_logbook_resume_time_locally_so_it_can_be_sent_back(
     augmented = json.loads(agentcli._agentcli_add_local_time_fields("get_logbook", text, local_tz))
     assert augmented["older_end_time"] == "2026-08-14T05:14:17.250000+07:00"
     assert "older_end_time_local" not in augmented
-    assert agentcli._agentcli_prepare_time_args(
+    assert agentcli._agentcli_time_arg_error(
         "get_logbook", {"end_time": augmented["older_end_time"]}, local_tz,
-    ) == ({"end_time": "2026-08-14T05:14:17.250000+07:00"}, None)
+    ) is None
 
 
 def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule():
@@ -2142,9 +2137,10 @@ async def test_run_agent_turn_adds_logbook_local_companions_before_model_sees_it
     for result_text in (model_result, panel_result):
         assert '"when":1786659257.0' in result_text
         assert '"when_local":"2026-08-14T05:14:17+07:00"' in result_text
+    # The wall time reaches the tool unchanged; the tool reads it as HA local time.
     dispatch_params = fake_dispatch.await_args.args[2]
-    assert dispatch_params["arguments"]["start_time"] == "2026-08-14T05:00:00+07:00"
-    assert dispatch_params["arguments"]["end_time"] == "2026-08-14T06:00:00+07:00"
+    assert dispatch_params["arguments"]["start_time"] == "2026-08-14T05:00:00"
+    assert dispatch_params["arguments"]["end_time"] == "2026-08-14T06:00:00"
 
 
 @pytest.mark.asyncio

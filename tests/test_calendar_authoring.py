@@ -122,13 +122,25 @@ async def test_replace_clears_optional_fields_and_delete_keeps_uid(calendar_env)
     assert calendar_env[3].events == []
 
 
-@pytest.mark.parametrize('event', [None, [], {'summary': True, 'start': '2026-10-02', 'end': '2026-10-03'}, {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-02'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-03', 'rrule': 'FREQ=HOURLY'}])
+@pytest.mark.parametrize('event', [None, [], {'summary': True, 'start': '2026-10-02', 'end': '2026-10-03'}, {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00+00:00'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-02'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-03', 'rrule': 'FREQ=HOURLY'}])
 async def test_invalid_event_refuses_before_approval(calendar_env, event):
     calendar_env[2].cap_calendar_write = 'confirm'
     result = await call(calendar_env, 'create_calendar_event', {**CREATE, 'event': event})
     assert result[1] == 'invalid_request'
     assert not calendar_env[1].store.get_pending_approvals()
     assert not calendar_env[3].calls
+
+
+
+async def test_a_time_without_an_offset_is_home_assistant_local_time(calendar_env):
+    """As HA's own calendar websocket schema reads it (as_local_timezone)."""
+    from homeassistant.util import dt as dt_util
+    event = {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00'}
+    result = await call(calendar_env, 'create_calendar_event', {**CREATE, 'event': event})
+    assert result[1] == 'allowed', result
+    created = calendar_env[3].events[0]
+    assert created.start == dt_util.as_local(dt_util.parse_datetime('2026-10-02T12:00:00'))
+    assert created.start.utcoffset() == dt_util.get_default_time_zone().utcoffset(created.start.replace(tzinfo=None))
 
 
 async def test_capability_deny_survives_passthrough(calendar_env):

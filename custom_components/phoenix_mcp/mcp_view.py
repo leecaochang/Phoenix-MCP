@@ -2406,16 +2406,14 @@ async def _tool_log_query(
     raw_since = str_arg(args.get("since")).strip()
     raw_until = str_arg(args.get("until")).strip()
     try:
+        field = "since"
         if raw_since:
             since = _parse_time_param(raw_since)
-            if since.tzinfo is None:
-                since = since.replace(tzinfo=timezone.utc)
+        field = "until"
         if raw_until:
             until = _parse_time_param(raw_until)
-            if until.tzinfo is None:
-                until = until.replace(tzinfo=timezone.utc)
-    except ValueError:
-        return _tool_error("Invalid since or until time format."), "invalid_request", tool_name
+    except ValueError as err:
+        return _tool_error(f"Invalid {field} time format. {err}"), "invalid_request", tool_name
     if since is not None and until is not None and since >= until:
         return _tool_error("since must be earlier than until."), "invalid_request", tool_name
 
@@ -2620,15 +2618,10 @@ def _logbook_string_list(args: dict, key: str) -> tuple[list[str], str | None]:
 
 
 def _logbook_time(value: Any, default: datetime) -> datetime:
-    """Parse one logbook bound and normalize timezone-less ISO input to UTC."""
+    """Parse one logbook bound to UTC; a time without an offset is HA local time."""
     if value in (None, ""):
         return default
-    if not isinstance(value, str):
-        raise ValueError
-    parsed = _parse_time_param(value)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return _parse_time_param(value).astimezone(timezone.utc)
 
 
 def _logbook_entry_visible(
@@ -2719,15 +2712,17 @@ async def _tool_get_logbook(
 
     now = utcnow()
     try:
+        field = "start_time"
         start_time = _logbook_time(args.get("start_time"), now - timedelta(hours=24))
+        field = "end_time"
         end_time = _logbook_time(args.get("end_time"), now)
-    except ValueError:
-        return _tool_error(
-            "Invalid start_time or end_time format."
-        ), "invalid_request", "get_logbook"
+    except ValueError as err:
+        return _tool_error(f"Invalid {field} format. {err}"), "invalid_request", "get_logbook"
     if start_time >= end_time:
         return _tool_error(
-            "start_time must be earlier than end_time."
+            "start_time must be earlier than end_time. A relative time such as 7d means 7 days "
+            "ago, and start_time defaults to 24h before now, so keep the original start_time "
+            "when you continue from older_end_time."
         ), "invalid_request", "get_logbook"
     narrowed = bool(entity_ids or device_ids or context_id)
     max_days = MAX_LOGBOOK_NARROWED_DAYS if narrowed else MAX_LOGBOOK_HOME_DAYS

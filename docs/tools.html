@@ -27,6 +27,7 @@
           <h1>Tools reference</h1>
           <p class="lede">Search all 171 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 148 additional scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
           <p>Every tool accepts only the parameters listed for it. An unknown parameter, a missing required one, or a value of the wrong type or outside its documented range is refused with the parameter named, never ignored or quietly adjusted. A call that a missing capability blocks is refused before its parameters are checked.</p>
+          <p>Time arguments share one format: an ISO 8601 time or date, where one without an offset is Home Assistant local time as Home Assistant itself reads it; <code>now</code>; or a relative amount ago such as <code>30min</code>, <code>24h</code>, <code>7d</code>, <code>2w</code> or <code>1mo</code>, with <code>+7d</code> for 7 days ahead. A bare <code>m</code> is refused because it could mean minutes or months.</p>
         </header>
 
         <div class="tool-toolbar" role="search">

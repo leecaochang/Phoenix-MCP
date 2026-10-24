@@ -59,7 +59,15 @@ def device_registry_entries(registry: Any) -> Any:
     return device_registry_snapshot_from_registry(registry).entries
 
 
-_RELATIVE_TIME_RE = re.compile(r"^(\d+)(h|d|w|m)$")
+_RELATIVE_TIME_RE = re.compile(r"^([+-]?)\s*(\d+)\s*([a-z]+)(\s+ago)?$")
+_RELATIVE_UNITS = {
+    **dict.fromkeys(("min", "mins", "minute", "minutes"), "minutes"),
+    **dict.fromkeys(("h", "hr", "hrs", "hour", "hours"), "hours"),
+    **dict.fromkeys(("d", "day", "days"), "days"),
+    **dict.fromkeys(("w", "wk", "wks", "week", "weeks"), "weeks"),
+    **dict.fromkeys(("mo", "mon", "month", "months"), "months"),
+}
+_RELATIVE_MAX_DAYS = 366
 _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 
@@ -1088,40 +1096,42 @@ def template_blocklist_vars() -> dict:
     }
 
 
+class RelativeTimeError(ValueError):
+    """A recognized relative time Phoenix refuses; the message is safe to return."""
+
+
 def parse_relative_time(value: str) -> datetime:
     """Parse a relative time string to a UTC datetime.
 
-    Supported formats: '24h' (hours), '7d' (days), '2w' (weeks), '1m' (30-day months),
-    and 'now', which models send for the current time as readily as an amount ago.
-    Raises ValueError for unrecognized formats.
+    An amount and unit, case-insensitive, with or without a space: minutes
+    (30min), hours (24h, 24 hours), days (7d), weeks (2w) or 30-day months
+    (1mo). It means that long ago; a leading minus or a trailing "ago" says the
+    same, and a leading plus means that far ahead. 'now' is the current time.
+    A bare 'm' is refused as ambiguous, since models send it for minutes and
+    months alike. Raises RelativeTimeError for a refused relative time and
+    ValueError for anything that is not one.
     """
     if not isinstance(value, str):
         raise ValueError(f"Unrecognized relative time format: {value!r}")
-    if value.strip().lower() == "now":
+    text = value.strip().lower()
+    if text == "now":
         return utcnow()
-    match = _RELATIVE_TIME_RE.match(value.strip())
+    match = _RELATIVE_TIME_RE.match(text)
     if not match:
         raise ValueError(f"Unrecognized relative time format: {value!r}")
-    n = int(match.group(1))
-    unit = match.group(2)
-    _MAX_DAYS = 366
-    if unit == "h":
-        if n > _MAX_DAYS * 24:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of {_MAX_DAYS} days.")
-        delta = timedelta(hours=n)
-    elif unit == "d":
-        if n > _MAX_DAYS:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of {_MAX_DAYS} days.")
-        delta = timedelta(days=n)
-    elif unit == "w":
-        if n > 52:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of 52 weeks.")
-        delta = timedelta(weeks=n)
-    else:
-        if n > 12:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of 12 months.")
-        delta = timedelta(days=30 * n)
-    return utcnow() - delta
+    sign, amount, unit_text, ago = match.groups()
+    n = int(amount)
+    if unit_text == "m":
+        raise RelativeTimeError(f"{value.strip()!r} is ambiguous: use {n}min for minutes or {n}mo for months.")
+    unit = _RELATIVE_UNITS.get(unit_text)
+    if unit is None or (sign == "+" and ago):
+        raise ValueError(f"Unrecognized relative time format: {value!r}")
+    delta = timedelta(days=30 * n) if unit == "months" else timedelta(**{unit: n})
+    if delta > timedelta(days=_RELATIVE_MAX_DAYS):
+        raise RelativeTimeError(
+            f"Relative time {value.strip()!r} exceeds the maximum allowed range of {_RELATIVE_MAX_DAYS} days."
+        )
+    return utcnow() + delta if sign == "+" else utcnow() - delta
 
 
 def _selector_list(value: object) -> list[str] | None:

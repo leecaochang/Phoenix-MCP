@@ -61,16 +61,18 @@ def parse_recorder_window(
         try:
             end = _as_utc(parse_time_param(args["end_time"]))
         except (TypeError, ValueError) as err:
-            raise ValueError("Invalid end_time format.") from err
+            raise ValueError(f"Invalid end_time format. {err}") from err
 
     start = end - default_range
     if args.get("start_time"):
         try:
             start = _as_utc(parse_time_param(args["start_time"]))
         except (TypeError, ValueError) as err:
-            raise ValueError("Invalid start_time format.") from err
+            raise ValueError(f"Invalid start_time format. {err}") from err
     if start >= end:
-        raise ValueError("start_time must be earlier than end_time.")
+        raise ValueError(
+            "start_time must be earlier than end_time. A relative time such as 7d means 7 days ago."
+        )
 
     page_start = start
     if args.get("cursor"):
