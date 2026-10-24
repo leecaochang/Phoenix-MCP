@@ -221,3 +221,24 @@ class TestListScenes:
     async def test_deny_without_cap(self, hass, scene_env):
         _, outcome, _ = await _call("list_scenes", {}, _access_key(cap_registry_read="deny"), hass)
         assert outcome == "denied"
+
+    async def test_entity_id_finds_the_scenes_that_include_it(self, hass, scene_env):
+        for light in ("light.studio", "light.porch", "switch.fan"):
+            hass.states.async_set(light, "on")
+        hass.states.async_set("scene.focus", "scening", {"friendly_name": "Focus", "id": "focus",
+                                                         "entity_id": ["light.studio", "switch.fan"]})
+        hass.states.async_set("scene.night", "scening", {"friendly_name": "Night", "id": "night",
+                                                         "entity_id": ["light.porch"]})
+
+        async def scenes(entity_id):
+            content, outcome, _ = await _call("list_scenes", {"entity_id": entity_id}, _access_key(), hass)
+            assert outcome == "allowed"
+            return {row["entity_id"]: row.get("members") for row in _json(content)["scenes"]}
+
+        # Members the key cannot read (switch.fan) are neither listed nor matched,
+        # so a hidden entity answers exactly like one no scene uses.
+        assert await scenes("light.studio") == {"scene.focus": ["light.studio"]}
+        assert await scenes(["light.studio", "light.porch"]) == {"scene.focus": ["light.studio"], "scene.night": ["light.porch"]}
+        assert await scenes("switch.fan") == await scenes("switch.nothing") == {}
+        content, _, _ = await _call("list_scenes", {}, _access_key(), hass)
+        assert all("members" not in row for row in _json(content)["scenes"])

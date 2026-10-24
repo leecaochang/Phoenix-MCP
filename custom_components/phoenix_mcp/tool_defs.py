@@ -2781,9 +2781,16 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_scenes",
-        "description": "List Home Assistant scenes this access key can access (entity_id, name, and scene id for editing).",
+        "description": (
+            "List Home Assistant scenes this access key can access (entity_id, name, and scene id for editing). "
+            "With entity_id, only the scenes that include any of those entities, each with its members, "
+            "so finding the scenes that use an entity needs no get_scene per scene."
+        ),
         "cap": "cap_registry_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                          "description": "An entity ID, or a list of them, that a listed scene must include."},
+        }},
     },
     {
         "name": "get_scene",

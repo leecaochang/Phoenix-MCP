@@ -45,12 +45,12 @@ from ..authoring_validation import authoring_input_error, validation_message
 from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
-from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
+from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg, _strict_phoenix_log_text
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
     _tool_success, _truncate, longest_fitting,
 )
-from ..policy_engine import Permission, filter_entities_for_access_key, resolve
+from ..policy_engine import Permission, filter_entities_for_access_key, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -1394,19 +1394,33 @@ def _valid_scene_config(config: Any) -> bool:
 async def _tool_list_scenes(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: list accessible scene.* entities with their editable scene id."""
+    """MCP tool: list accessible scene.* entities with their editable scene id.
+
+    entity_id keeps the scenes that include any of those entities, so "which
+    scenes use the studio lights" needs no get_scene per scene. Only members
+    this access key can read are matched or listed, so a hidden member answers
+    exactly like an entity no scene uses.
+    """
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_scenes"
+    wanted = {item.strip() for item in str_list_arg(args.get("entity_id")) if item.strip()}
     scenes: list[dict] = []
     for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("scene."):
             continue
         attrs = e.get("attributes", {})
-        scenes.append({
+        row = {
             "entity_id": e["entity_id"],
             "name": attrs.get("friendly_name"),
             "scene_id": attrs.get("id"),
-        })
+        }
+        if wanted:
+            members = [member for member in attrs.get("entity_id") or () if isinstance(member, str)
+                       and resolve_read(member, access_key, hass) in (Permission.READ, Permission.WRITE)]
+            if not wanted & set(members):
+                continue
+            row["members"] = members
+        scenes.append(row)
     scenes.sort(key=lambda s: s["entity_id"])
     return _tool_success(json.dumps({"count": len(scenes), "scenes": scenes}, default=str)), "allowed", "list_scenes"
 
