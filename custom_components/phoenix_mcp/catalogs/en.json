@@ -2189,6 +2189,8 @@
       "rename_esphome_device.title": "Rename ESPHome device {device} to {new_name}",
       "restart_ha.body": "Home Assistant will be briefly unavailable while it restarts.",
       "restart_ha.title": "Restart Home Assistant",
+      "send_notification.body": "This will send the message shown in Details to {target}.",
+      "send_notification.title": "Send a notification to {target}",
       "set_dashboard_config.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
       "set_dashboard_config.title": "Set dashboard layout '{label}'",
       "set_device.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",

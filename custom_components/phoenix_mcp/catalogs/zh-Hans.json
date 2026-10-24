@@ -1978,6 +1978,8 @@
       "rename_esphome_device.title": "将 ESPHome 设备 {device} 重命名为 {new_name}",
       "restart_ha.body": "Home Assistant 重启期间将暂时不可用。",
       "restart_ha.title": "重启 Home Assistant",
+      "send_notification.body": "这会将详情中显示的消息发送给 {target}。",
+      "send_notification.title": "向 {target} 发送通知",
       "set_dashboard_config.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
       "set_dashboard_config.title": "设置仪表盘“{label}”的布局",
       "set_device.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",

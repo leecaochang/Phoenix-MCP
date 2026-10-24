@@ -1768,6 +1768,7 @@ _APPROVAL_SUMMARY_BODIES = {
     "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown in Details. Reject keeps the current configuration. The original command will not be repeated.",
     "configuration_recovery.acknowledge": "A previous change could not be verified and cannot be safely restored here. Check this resource in Home Assistant, then Approve to accept its current state and unblock changes. Reject leaves changes blocked. The original command will not be repeated.",
     "restart_ha": "Home Assistant will be briefly unavailable while it restarts.",
+    "send_notification": "This will send the message shown in Details to {target}.",
     "zigbee_reconfigure": "This will interview the Zigbee device again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_reconfigure.device": "This will interview {label} again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_remove": "This will remove the Zigbee device from the network. The change cannot be undone from this approval.",

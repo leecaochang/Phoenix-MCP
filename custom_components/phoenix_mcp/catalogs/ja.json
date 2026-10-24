@@ -1978,6 +1978,8 @@
       "rename_esphome_device.title": "ESPHome デバイス {device} を {new_name} に変更",
       "restart_ha.body": "再起動中はHome Assistantを一時的に利用できなくなります。",
       "restart_ha.title": "Home Assistant を再起動",
+      "send_notification.body": "詳細に表示されたメッセージを {target} に送信します。",
+      "send_notification.title": "{target} に通知を送信",
       "set_dashboard_config.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
       "set_dashboard_config.title": "ダッシュボード「{label}」のレイアウトを設定",
       "set_device.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",

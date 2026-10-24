@@ -694,6 +694,8 @@
       "rename_esphome_device.title": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name}",
       "restart_ha.body": "Home Assistant on hetken ajan poissa käytöstä uudelleenkäynnistyksen aikana.",
       "restart_ha.title": "Käynnistä Home Assistant uudelleen",
+      "send_notification.body": "Tämä lähettää Tiedot-kohdassa näkyvän viestin kohteeseen {target}.",
+      "send_notification.title": "Lähetä ilmoitus kohteeseen {target}",
       "set_dashboard_config.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
       "set_dashboard_config.title": "Aseta kojelaudan asettelu '{label}'",
       "set_device.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",

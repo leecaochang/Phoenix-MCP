@@ -1684,6 +1684,8 @@
       "rename_esphome_device.title": "ESPHome-Gerät {device} in {new_name} umbenennen",
       "restart_ha.body": "Home Assistant ist während des Neustarts kurzzeitig nicht verfügbar.",
       "restart_ha.title": "Home Assistant neu starten",
+      "send_notification.body": "Dadurch wird die unter Details gezeigte Nachricht an {target} gesendet.",
+      "send_notification.title": "Benachrichtigung an {target} senden",
       "set_dashboard_config.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
       "set_dashboard_config.title": "Dashboard-Layout '{label}' festlegen",
       "set_device.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",

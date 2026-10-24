@@ -694,6 +694,8 @@
       "rename_esphome_device.title": "Gi ESPHome-enheten {device} nytt navn til {new_name}",
       "restart_ha.body": "Home Assistant vil være utilgjengelig i kort tid mens den starter på nytt.",
       "restart_ha.title": "Start Home Assistant på nytt",
+      "send_notification.body": "Dette sender meldingen som vises i Detaljer, til {target}.",
+      "send_notification.title": "Send et varsel til {target}",
       "set_dashboard_config.body": "Dette tar i bruk den foreslåtte konfigurasjonsendringen. Åpne Detaljer for å gjennomgå den nøyaktige foreslåtte endringen.",
       "set_dashboard_config.title": "Angi dashbordoppsettet «{label}»",
       "set_device.body": "Dette tar i bruk den foreslåtte konfigurasjonsendringen. Åpne Detaljer for å gjennomgå den nøyaktige foreslåtte endringen.",
