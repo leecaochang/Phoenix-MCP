@@ -139,3 +139,17 @@ async def test_has_area_must_be_a_boolean(hass, tool):
     content, outcome, _ = await _call_tool(tool, {"has_area": "no"}, key, hass, _data())
     assert outcome == "invalid_request"
     assert "has_area" in content["content"][0]["text"]
+
+
+async def test_device_rows_name_their_area(hass, placed):
+    # "Which devices are in the kitchen" is asked by name; the row's area_id alone is an opaque ID.
+    key = _key()
+    key.cap_registry_read = "allow"
+    content, outcome, _ = await _call_tool("list_devices", {}, key, hass, _data())
+    assert outcome == "allowed", content
+    rows = {row["device_id"]: row for row in json.loads(content["content"][0]["text"])["devices"]}
+    assert rows[placed.hub.id]["area"] == "Kitchen" and rows[placed.hub.id]["area_id"]
+    assert rows[placed.part.id]["area"] == "Kitchen"  # a child device takes its main device's area
+    assert rows[placed.loose.id]["area"] is None and rows[placed.loose.id]["area_id"] is None
+    content, outcome, _ = await _call_tool("get_device", {"device_id": placed.hub.id}, key, hass, _data())
+    assert outcome == "allowed" and json.loads(content["content"][0]["text"])["area"] == "Kitchen"

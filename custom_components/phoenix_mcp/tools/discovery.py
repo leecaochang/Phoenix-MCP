@@ -1150,6 +1150,10 @@ def _device_list_projection(
     ) not in (Permission.READ, Permission.WRITE):
         via_device_id = None
         parent_device_id = None
+    # The row already names its area by ID; the name is that same area's label,
+    # which "which devices are in the kitchen" is asked in.
+    area_id = snapshot.effective_area_id(device.id)
+    area = ar.async_get(hass).async_get_area(area_id) if area_id else None
     return {
         "device_id": device.id,
         "name": device.name_by_user or device.name,
@@ -1157,7 +1161,8 @@ def _device_list_projection(
         "name_by_user": device.name_by_user,
         "manufacturer": device_entry_value(device, "manufacturer"),
         "model": device_entry_value(device, "model"),
-        "area_id": snapshot.effective_area_id(device.id),
+        "area_id": area_id,
+        "area": area.name if area is not None else None,
         "disabled_by": _registry_value(device.disabled_by),
         "labels": sorted(device.labels),
         "accessible_entity_count": len(

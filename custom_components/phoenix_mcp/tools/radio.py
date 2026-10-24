@@ -27,6 +27,7 @@ import logging
 import re
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
@@ -2140,6 +2141,8 @@ async def _tool_get_radio_device(
     area_id = device_registry_snapshot(hass).effective_area_id(device.id)
     if area_id:
         projected["area_id"] = area_id
+        if (area := ar.async_get(hass).async_get_area(area_id)) is not None:
+            projected["area"] = area.name
     return _tool_success(json.dumps(projected, default=str)), "allowed", device.id
 
 
