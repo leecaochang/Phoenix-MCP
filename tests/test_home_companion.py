@@ -1236,3 +1236,40 @@ async def test_agent_chat_shows_the_companion_turns_token_usage(hass, companion,
         assert 'tokens' not in json.dumps([value for name, value in events if name == 'assistant_delta'])
     else:
         assert usage == []
+
+
+@pytest.mark.parametrize('voice_configured', [True, False])
+async def test_agent_chat_runs_companion_on_the_chats_own_account_and_model(hass, companion, monkeypatch, voice_configured):
+    data, access_key, store, voice_account = companion
+    chat_account = await store.add('claude', {'api_key': 'synthetic-key', 'model': 'chat-default'})
+    if not voice_configured:
+        await data.store.async_patch_settings(voice_agent_provider_id=None, voice_agent_model=None)
+    scripted(monkeypatch, [
+        [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
+        json.dumps({'status': 'completed', 'message': '23 degrees.'}),
+    ])
+    provider, used = agentcli.build_provider(None), []
+    monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+    events = []
+    async def emit(name, value):
+        events.append((name, value))
+    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+        messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
+        emit=emit, cancel=asyncio.Event(), account=(chat_account, 'chat-picked-model'))
+    assert used == [('claude', 'chat-picked-model')]
+    assert [value for name, value in events if name == 'assistant_delta'][0]['text'] == 'Home Assistant reports: sensor.temperature: 23.'
+    # Voice and external clients still run on the Voice settings.
+    if voice_configured:
+        used.clear()
+        scripted(monkeypatch, [json.dumps({'status': 'clarification_needed', 'message': 'Which sensor?'})])
+        monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+        await rpc(hass, companion)
+        assert used == [('chatgpt', 'test-model')]
+
+
+async def test_an_external_request_cannot_choose_the_provider_account(hass, companion, monkeypatch):
+    _, _, store, _ = companion
+    other = await store.add('claude', {'api_key': 'synthetic-key', 'model': 'other'})
+    catalogs = scripted(monkeypatch, [])
+    report = payload(await rpc(hass, companion, args={'request': 'Read the temperature.', 'account': other}))
+    assert report['status'] == 'invalid_request' and catalogs == []

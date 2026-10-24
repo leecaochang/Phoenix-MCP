@@ -51,6 +51,12 @@ _presentation: ContextVar[tuple[str, str] | None] = ContextVar("phoenix_companio
 _turn: ContextVar[CompanionTurn | None] = ContextVar("phoenix_companion_turn", default=None)
 
 
+# The provider account and model Agent Chat's user chose. Only an internal caller
+# sets it, never home_request's arguments, so an external client cannot pick which
+# account is spent; without it the Voice settings decide.
+_account: ContextVar[tuple[str, str | None] | None] = ContextVar("phoenix_companion_account", default=None)
+
+
 def is_companion(access_key: Any) -> bool:
     return getattr(access_key, "persona", None) == PERSONA_HOME_COMPANION
 
@@ -369,8 +375,7 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
         authority = RoutingAuthority.capture(data, access_key)
         settings = data.store.get_settings()
         turn.style, turn.detail = _presentation.get() or (settings.voice_agent_conversation_style, settings.voice_agent_detail_level)
-        account = settings.voice_agent_provider_id
-        model = settings.voice_agent_model or None
+        account, model = _account.get() or (settings.voice_agent_provider_id, settings.voice_agent_model or None)
         store = await _get_secret_store(hass)
         cfg = store.resolve(account, model) if account else None
         if cfg is None or not cfg.model:
@@ -511,11 +516,12 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
 
 async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, language: object,
                          base_url: str, *, style: str | None = None, detail: str | None = None,
-                         usage: Any = None) -> dict:
+                         usage: Any = None, account: tuple[str, str | None] | None = None) -> dict:
     """Delegate original ingress text once through normal MCP and recovery gates.
 
     usage, a HeadlessUsage, collects the inner turn's provider-reported tokens for
-    a caller that shows them; it never enters the report.
+    a caller that shows them; it never enters the report. account is the provider
+    account and model the caller's user chose; None uses the Voice settings.
     """
     from .agent_recovery import dispatch_agent_tool
     from .agentcli import headless_usage
@@ -526,6 +532,7 @@ async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, la
     settings = data.store.get_settings()
     presentation = _presentation.set((style or settings.voice_agent_conversation_style, detail or settings.voice_agent_detail_level))
     sink = headless_usage.set(usage)
+    chosen = _account.set(account)
     try:
         response, _, _, _ = await dispatch_agent_tool(
             _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="home_request",
@@ -534,6 +541,7 @@ async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, la
             request_id=generate_request_id(),
         )
     finally:
+        _account.reset(chosen)
         headless_usage.reset(sink)
         _presentation.reset(presentation)
     check_request_authority()

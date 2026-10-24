@@ -4913,8 +4913,12 @@ async def async_run_agent_turn(
     detail_level: str = DETAIL_LEVEL_CONCISE,
     home_focused: bool = False,
     routing_language: object = None,
+    account: tuple[str, str | None] | None = None,
 ) -> list[dict]:
     """Run one user turn to completion, streaming SSE events. Returns updated messages.
+
+    account is the chat's provider account and model, which a Home Companion
+    request runs on in place of the Voice settings.
 
     The loop body is three phases: drain one model call (_consume_model_stream),
     decide whether to keep the assistant message against the turn output budget,
@@ -4947,7 +4951,8 @@ async def async_run_agent_turn(
             return messages
         usage = HeadlessUsage()
         task = asyncio.create_task(async_delegate(hass, data, access_key, request, routing_language, base_url,
-                                                   style=conversation_style, detail=detail_level, usage=usage))
+                                                   style=conversation_style, detail=detail_level, usage=usage,
+                                                   account=account))
         stopped = asyncio.create_task(cancel.wait())
         try:
             done, _ = await asyncio.wait({task, stopped}, return_when=asyncio.FIRST_COMPLETED)
@@ -6090,6 +6095,7 @@ class PhoenixAgentCliChatView(PhoenixView):
                 detail_level=settings.agentcli_detail_level,
                 home_focused=settings.agentcli_home_focused,
                 routing_language=body.get("language") if body.get("continue") is not True else None,
+                account=(instance_id, body.get("model") or None),
             )
         except Exception:  # noqa: BLE001 - never leak internals to the client
             _LOGGER.exception("agentCLI turn failed")
