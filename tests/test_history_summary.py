@@ -960,3 +960,25 @@ async def test_select_needs_search_access(hass: HomeAssistant) -> None:
         "get_history", {"select": {"domain": "light"}, "mode": "summary"}, _search_key(cap_search="deny"),
         hass, MagicMock(), "r", None)
     assert outcome == "denied" and "pass entity_id instead" in content["content"][0]["text"]
+
+
+async def test_not_in_state_keeps_only_the_entities_never_in_it(recorder_mock, hass: HomeAssistant) -> None:
+    """Which sensors did not trigger: an unavailable blip does not count, starting the range on does."""
+    _anchor(hass)
+    _set(hass, "light.quiet", "off", -3600)
+    _set(hass, "light.quiet", "unavailable", 600)
+    _set(hass, "light.quiet", "off", 700)
+    _set(hass, "light.tripped", "off", -3600)
+    _set(hass, "light.tripped", "on", 1200)
+    _set(hass, "light.tripped", "off", 1300)
+    _set(hass, "light.stuck", "on", -3600)
+    await async_wait_recording_done(hass)
+    ids = ["light.quiet", "light.tripped", "light.stuck"]
+    body = await _many(hass, 0, 3600, entity_id=ids, not_in_state="on")
+    assert [row["entity_id"] for row in body["entities"]] == ["light.quiet"]
+    assert body["not_in_state"] == ["on"] and body["scanned"] == 3 and "in_state" not in body
+    args = {"mode": "summary", "entity_id": ids, "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    for extra, message in (({"in_state": "on", "not_in_state": "off"}, "not both"),
+                           ({"not_in_state": [""]}, "not_in_state must be a state")):
+        refused = await _call_tool("get_history", {**args, **extra}, _key(), hass, MagicMock(), "r", None)
+        assert refused[1] == "invalid_request" and message in refused[0]["content"][0]["text"]

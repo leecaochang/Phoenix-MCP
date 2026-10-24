@@ -971,13 +971,14 @@ class TestSearchByRadioAndIntegration:
         assert outcome == "invalid_request" and content["content"][0]["text"] == message
 
 
-def _add_battery(hass, device_name: str, domain: str = "sensor") -> str:
+def _add_battery(hass, device_name: str, domain: str = "sensor", diagnostic: bool = True) -> str:
     """A battery entity on one radio_env device, as integrations register them."""
     dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
     device = next(d for d in dev_reg.devices if d.name == device_name)
     entry = ent_reg.async_get_or_create(domain, "test", f"{device_name}_battery", device_id=device.id,
                                         suggested_object_id=f"{device_name}_battery",
-                                        original_device_class="battery", entity_category=er.EntityCategory.DIAGNOSTIC)
+                                        original_device_class="battery",
+                                        entity_category=er.EntityCategory.DIAGNOSTIC if diagnostic else None)
     hass.states.async_set(entry.entity_id, "80" if domain == "sensor" else "off", {"device_class": "battery"})
     return entry.entity_id
 
@@ -989,6 +990,8 @@ class TestSearchByPower:
         _add_battery(hass, "zha_leak")
         _add_battery(hass, "z2m_door", "binary_sensor")
         hidden = _add_battery(hass, "mqtt_strimmer")
+        # A battery that is the device's main reading, as on a car or a home storage system.
+        _add_battery(hass, "wifi_plug", diagnostic=False)
         return hass, hidden
 
     def _key(self, hidden: str) -> AccessKeyRecord:
@@ -1002,7 +1005,8 @@ class TestSearchByPower:
                                           self._key(hidden), hass)
         ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
         # A child device counts with its main device; a device whose only battery
-        # entity the key cannot read is left out, so the hidden entity stays unrevealed.
+        # entity the key cannot read is left out, so the hidden entity stays unrevealed;
+        # a battery that is the device's main reading does not make it battery powered.
         assert outcome == "allowed" and ids == {"zha_leak", "z2m_door", "z2m_door_l2", "z2m_door_battery"}
 
     async def test_battery_combines_with_radio_and_drops_diagnostics_in_a_summary_select(self, power_env):

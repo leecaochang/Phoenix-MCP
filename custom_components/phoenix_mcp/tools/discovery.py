@@ -1380,11 +1380,13 @@ def _entity_radio_types(entry: Any, cache: dict[str, set[str]], hass: HomeAssist
 
 def _device_reports_battery(entry: Any, cache: dict[str, bool], access_key: AccessKeyRecord,
                             hass: HomeAssistant, expose: Any) -> bool:
-    """Whether an entity's device, or its main parent, has a battery entity the access key can read.
+    """Whether an entity's device, or its main parent, runs on a battery the access key can read about.
 
     A battery level or low-battery entity is the only power evidence Home Assistant
-    records, and it also marks phones, cars and home battery storage. One the
-    access key cannot read never counts, so the filter cannot reveal it exists.
+    records. Only a diagnostic one counts: integrations mark a battery that keeps
+    the device running as diagnostic, while a car's or a home storage system's
+    battery is the product's main reading. One the access key cannot read never
+    counts, so the filter cannot reveal it exists.
     """
     device_id = getattr(entry, "device_id", None)
     if not device_id:
@@ -1397,7 +1399,7 @@ def _device_reports_battery(entry: Any, cache: dict[str, bool], access_key: Acce
                 state = hass.states.get(sibling.entity_id)
                 device_class = (sibling.device_class or sibling.original_device_class
                                 or (state.attributes.get("device_class") if state is not None else None))
-                if (device_class == "battery"
+                if (device_class == "battery" and sibling.entity_category == er.EntityCategory.DIAGNOSTIC
                         and resolve_registry_access(sibling.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
                         and (expose is None or expose(sibling.entity_id))):
                     found = True

@@ -21,7 +21,7 @@ _NATIVE_TOOLS = frozenset(definition["name"] for definition in _NATIVE_TOOL_DEFS
 _INTEGER_TEXT = re.compile(r"-?\d+")
 _NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
 _IDENTIFIER = re.compile(r"[\w.-]+")
-_STATE_VALUES = frozenset({"in_state"})
+_STATE_VALUES = frozenset({"in_state", "not_in_state"})
 
 
 # How one call's arguments were read when they arrived in an older or Home

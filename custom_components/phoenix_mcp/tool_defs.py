@@ -99,7 +99,7 @@ def _select_schema(description: str) -> dict:
                 {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
             ], "description": "How the device connects."},
             "power": {"type": "string", "enum": list(SEARCH_POWER_TYPES),
-                      "description": "battery: devices that report a battery level or low battery."},
+                      "description": "battery: devices whose battery level or low battery is a diagnostic reading."},
             "area": {"type": "string", "description": "An area or floor."},
             "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
         },
@@ -179,7 +179,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "In summary mode entity_id may be a list, one compact row each, or select may name them by "
             "search_entities filters instead: the way to ask which sensors entered a state in a period, "
             "in one call; with in_state only the entities that were in that state are listed, and select {} with "
-            "in_state checks every entity (which went unavailable today). Each row names the entity and its area. "
+            "in_state checks every entity (which went unavailable today); not_in_state lists only the entities "
+            "never in those states, so which sensors did not trigger this week is not_in_state on, without reading "
+            "every row. Each row names the entity and its area. "
             "With state_changes, an entity_id list returns each entity's own page in one call (limit and "
             "order apply per entity; continue one alone with its next_cursor). "
             "A state's last_entered is when it last began, such as when someone last arrived home; a row "
@@ -236,13 +238,19 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 },
                 "select": _select_schema(
                     "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
-                    "match (diagnostic and configuration entities only with include_diagnostic). With in_state, "
-                    "an empty select scans every accessible entity."
+                    "match (diagnostic and configuration entities only with include_diagnostic). With in_state "
+                    "or not_in_state, an empty select scans every accessible entity."
                 ),
                 "in_state": {
                     "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
                     "description": "Summary of several entities only: keep the entities that were in one of these "
                                    "states at some point in the range, e.g. unavailable; the rest are only counted in scanned.",
+                },
+                "not_in_state": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                    "description": "Summary of several entities only: keep the entities never in any of these states "
+                                   "in the range, including at its start, e.g. on for sensors that did not trigger; "
+                                   "the rest are only counted in scanned. Not with in_state.",
                 },
             },
         },
@@ -2107,8 +2115,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "power": {
                     "type": "string", "enum": list(SEARCH_POWER_TYPES),
                     "description": (
-                        "battery: only entities whose device reports a battery level or low battery, which includes "
-                        "phones, cars and home battery storage. Home Assistant records no mains or other power source."
+                        "battery: only entities whose device runs on a battery, shown by a diagnostic battery level or "
+                        "low-battery entity; phones and battery cameras count, a car's or home storage battery does not. "
+                        "Home Assistant records no mains or other power source."
                     ),
                 },
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},

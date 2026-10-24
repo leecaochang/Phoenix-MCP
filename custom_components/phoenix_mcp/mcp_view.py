@@ -1202,7 +1202,8 @@ async def _history_summary_select(
         return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
     if str(args.get("mode") or "").strip().lower() != "summary":
         return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
-    resolved = await _resolve_select(select, tool, access_key, hass, data, every=bool(args.get("in_state")))
+    resolved = await _resolve_select(select, tool, access_key, hass, data,
+                                     every=bool(args.get("in_state") or args.get("not_in_state")))
     if not isinstance(resolved[0], list):
         return cast(tuple[dict, str, str], resolved)
     chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
@@ -1243,10 +1244,15 @@ async def _history_summary_many(
         return _tool_error(
             f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
         ), "invalid_request", tool
-    raw_in_state = args.get("in_state")
+    raw_in_state, raw_not_in_state = args.get("in_state"), args.get("not_in_state")
     in_state = {item.strip() for item in str_list_arg(raw_in_state)}
+    not_in_state = {item.strip() for item in str_list_arg(raw_not_in_state)}
     if raw_in_state not in (None, "", []) and (not in_state or "" in in_state):
         return _tool_error("in_state must be a state or a list of states."), "invalid_request", tool
+    if raw_not_in_state not in (None, "", []) and (not not_in_state or "" in not_in_state):
+        return _tool_error("not_in_state must be a state or a list of states."), "invalid_request", tool
+    if in_state and not_in_state:
+        return _tool_error("Pass in_state or not_in_state, not both."), "invalid_request", tool
     try:
         window = parse_recorder_window(args, default_range=timedelta(hours=24))
     except ValueError as err:
@@ -1303,6 +1309,7 @@ async def _history_summary_many(
             "mode": "summary",
             **({"attribute": attribute} if attribute is not None else {}),
             **({"in_state": sorted(in_state), "scanned": scanned} if in_state else {}),
+            **({"not_in_state": sorted(not_in_state), "scanned": scanned} if not_in_state else {}),
             "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
             **selected,
             "count": len(kept),
@@ -1352,6 +1359,11 @@ async def _history_summary_many(
                     # Decided on the full totals, which a row's state list may combine.
                     if in_state and not any(totals.duration_us or totals.entered
                                             for state, totals in summary.totals.items() if state in in_state):
+                        continue
+                    # "Which sensors never triggered": an entity that held or entered one of
+                    # these states, even when the range began in it, is left out.
+                    if not_in_state and any(totals.duration_us or totals.entered
+                                            for state, totals in summary.totals.items() if state in not_in_state):
                         continue
                     row = compact_summary_row(summary_body(
                         entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
