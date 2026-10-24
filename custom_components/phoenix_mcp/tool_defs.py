@@ -1031,8 +1031,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "100 accessible entities and devices together, or by one causal context_id. Home-wide "
             "queries are limited to 7 days and resource- or context-narrowed queries to 31 days. The "
             "response reports the post-permission, post-search total before limiting and whether the "
-            "most-recent slice is truncated; when it is, older_end_time as end_time reads the earlier "
-            "entries. This is narrative event history; get_logs is the system "
+            "most-recent slice is truncated; when it is, pass older_end_time as end_time with the same "
+            "start_time to read the earlier entries. This is narrative event history; get_logs is the system "
             "error log, and get_history is raw state history."
         ),
         "cap": "cap_log_read",
@@ -1041,7 +1041,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d, 2w). Defaults to 24h.",
+                    "description": "ISO timestamp or relative string (24h, 7d, 2w). Defaults to 24h before now, also when end_time is given.",
                 },
                 "end_time": {
                     "type": "string",
