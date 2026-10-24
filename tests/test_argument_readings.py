@@ -135,3 +135,17 @@ def test_only_entity_ids_split_on_commas_while_json_lists_read_anywhere():
     # A state can hold a comma; JSON array text is unambiguous for any list field.
     assert decode_container_strings("get_history", {"in_state": "1,234"})["in_state"] == "1,234"
     assert decode_container_strings("get_history", {"in_state": '["on", "off"]'})["in_state"] == ["on", "off"]
+
+
+@pytest.mark.parametrize(("tool", "field", "sent", "read"), [
+    ("get_statistics", "period", "Day", "day"),
+    ("get_history", "order", "NEWEST_FIRST", "newest_first"),
+    ("search_entities", "registry_state", "All", "all"),
+])
+def test_an_enum_in_another_case_is_read_on_reads_only(tool, field, sent, read):
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+
+    arguments, error = scalar_arguments(tool, {field: sent}, read_only=True)
+    assert error is None and arguments[field] == read
+    # A write takes its enum exactly as declared; the handler refuses another spelling.
+    assert scalar_arguments(tool, {field: sent}, read_only=False)[0][field] == sent

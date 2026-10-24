@@ -276,6 +276,22 @@ def _scalar_text(name: str, value: Any, schema: dict) -> Any:
     return read
 
 
+def _enum_case(name: str, value: Any, schema: dict) -> Any:
+    """The schema's own spelling of an enum value sent in another case.
+
+    Some handlers fold case and others do not, so "Day" worked for one tool and
+    was refused by the next; one rule here makes them agree.
+    """
+    allowed = schema.get("enum")
+    if not isinstance(value, str) or not isinstance(allowed, list) or value in allowed:
+        return value
+    matches = [item for item in allowed if isinstance(item, str) and item.casefold() == value.strip().casefold()]
+    if len(matches) != 1:
+        return value
+    note_argument_adjustment(f"Read {name} {json.dumps(value[:40])} as {json.dumps(matches[0])}.")
+    return matches[0]
+
+
 # Empty on a read means "not given", except for a compare-and-swap token. An
 # empty object can be the request itself (select {} with in_state scans every
 # entity, input {} renders a blueprint without inputs), so it is kept.
@@ -326,7 +342,7 @@ def scalar_arguments(tool: str, arguments: dict, *, read_only: bool = False) -> 
         if tool in _NATIVE_TOOLS:
             value = _native_shape(value, field)
         elif read_only:
-            value = _scalar_text(name, value, field)
+            value = _enum_case(name, _scalar_text(name, value, field), field)
         converted = _whole_integers(value, field)
         if (read_only and name in _CLAMPED and isinstance(converted, (int, float)) and not isinstance(converted, bool)
                 and "maximum" in field and converted > field["maximum"]):
