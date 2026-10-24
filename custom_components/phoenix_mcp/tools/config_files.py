@@ -408,8 +408,9 @@ async def _execute_write_file(
         after=_version_content_payload(content, path=rel),
         alias=rel,
     )
+    # The write is read back before this point; a mismatch returns status partial instead.
     body: dict[str, Any] = {
-        "path": path, "bytes_written": len(content.encode("utf-8")),
+        "path": path, "bytes_written": len(content.encode("utf-8")), "verified": True,
         # An overwrite is named, so a write meant as a new file cannot replace one unnoticed.
         "action": "overwrote" if existed else "created",
         "recovery_id": recovery_receipt.get("recovery_id"),
@@ -975,6 +976,7 @@ async def _execute_set_yaml_config(
         _tool_success(json.dumps({
             "path": rel,
             "bytes_written": len(content.encode("utf-8")),
+            "verified": True,
             "recovery_id": recovery_receipt.get("recovery_id"),
             "note": "Run check_ha_config and restart Home Assistant to apply.",
         })),
@@ -1198,6 +1200,7 @@ async def _execute_patch_yaml_config(
             "key": addressed,
             "op": op,
             "bytes_written": len(content.encode("utf-8")),
+            "verified": True,
             "recovery_id": recovery_receipt.get("recovery_id"),
             # Structural like patch_dashboard's card ops, not a blind replace, so
             # the hash is safe to hand back and patches can be chained without

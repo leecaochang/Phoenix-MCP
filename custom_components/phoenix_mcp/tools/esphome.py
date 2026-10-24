@@ -32,6 +32,8 @@ from ..const import (
     ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
     ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
     ESPHOME_BUILDER_JOB_POLL_SECONDS,
+    ESPHOME_BUILDER_CANCEL_POLL_SECONDS,
+    ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS,
     ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS,
     ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS,
     ESPHOME_BUILDER_JOB_WAIT_SECONDS,
@@ -2692,6 +2694,7 @@ async def _tool_cancel_esphome_job(
         return refusal
 
     rel = job["configuration"]
+    body: dict[str, Any] = {"job_id": job.get("job_id"), "file": rel, "cancelled": True}
     try:
         await async_builder_command(
             hass, url, "firmware/cancel", {"job_id": job.get("job_id")},
@@ -2700,19 +2703,32 @@ async def _tool_cancel_esphome_job(
     except BuilderCommandError:
         # The add-on answers not_found for an id it no longer has, which for a
         # job that already finished is the outcome the caller wanted anyway.
-        return (
-            _tool_success(json.dumps({"job_id": job.get("job_id"), "file": rel, "cancelled": False,
-                                      "message": "The job was already finished."})),
-            "allowed",
-            f"esphome:{rel}",
-        )
+        body.update(cancelled=False, message="The job was already finished.")
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
-    return (
-        _tool_success(json.dumps({"job_id": job.get("job_id"), "file": rel, "cancelled": True})),
-        "allowed",
-        f"esphome:{rel}",
-    )
+    status = await _esphome_settled_status(hass, url, str(job.get("job_id")))
+    # Confirmed only by the job reading back as finished; an unreadable job is unknown.
+    body["status"] = status
+    body["verified"] = None if status is None else status in _ESPHOME_JOB_TERMINAL
+    if body["verified"] is False:
+        body["message"] = ("The add-on accepted the cancel, but the job still reports " + status
+                           + "; check it with get_esphome_job.")
+    return _tool_success(json.dumps(body)), "allowed", f"esphome:{rel}"
+
+
+async def _esphome_settled_status(hass: HomeAssistant, url: str, job_id: str) -> str | None:
+    """The job's status once it reads back finished, its last status after a short wait, or None if unreadable."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS
+    while True:
+        try:
+            record = await _esphome_job_record(hass, url, job_id)
+        except BuilderError:
+            return None
+        status = record.get("status") if record is not None else None
+        if not isinstance(status, str) or status in _ESPHOME_JOB_TERMINAL or loop.time() >= deadline:
+            return status if isinstance(status, str) else None
+        await asyncio.sleep(ESPHOME_BUILDER_CANCEL_POLL_SECONDS)
 
 
 async def _tool_get_esphome_device_logs(

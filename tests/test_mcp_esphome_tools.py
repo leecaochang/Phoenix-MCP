@@ -341,7 +341,8 @@ class TestUserServiceDispatch:
              "service_data": {"timings": [1, 2, 3], "repeats": 2}},
             _access_key(), hass)
         assert outcome == "allowed"
-        assert _json(content) == {"success": True}
+        # A device action changes no entity, so there is nothing to read back.
+        assert _json(content)["success"] is True and _json(content)["verified"] is None
         assert len(calls) == 1
         # Target flattening must NOT apply: the device-declared schema has no
         # entity_id field and voluptuous would reject the call outright.

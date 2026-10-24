@@ -90,7 +90,7 @@ async def test_create_uid_readback_and_durable_receipt(calendar_env):
     result = await call(calendar_env, 'create_calendar_event', CREATE)
     assert result[1] == 'allowed'
     body = payload(result)
-    assert body['status'] == 'applied' and body['after']['uid']
+    assert body['status'] == 'applied' and body['after']['uid'] and body['verified'] is True
     assert body['before'] is None
     receipt = await call(calendar_env, 'get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']})
     assert payload(receipt)['after']['uid'] == body['after']['uid']
@@ -108,17 +108,18 @@ async def test_patch_preserves_omissions_and_null_clears(calendar_env):
     assert body['before']['description'] == 'Original'
     assert body['after']['description'] == 'Original'
     assert body['after'].get('location', '') == ''
-    assert body['after']['uid'] == args['uid']
+    assert body['after']['uid'] == args['uid'] and body['verified'] is True
 
 
 async def test_replace_clears_optional_fields_and_delete_keeps_uid(calendar_env):
     await call(calendar_env, 'create_calendar_event', CREATE)
     result = await call(calendar_env, 'update_calendar_event', {**await selection(calendar_env), 'mode': 'replace', 'event': {'summary': 'Replaced', 'start': '2026-10-02', 'end': '2026-10-03'}})
     assert result[1] == 'allowed'
-    assert payload(result)['after'].get('description', '') == ''
+    assert payload(result)['after'].get('description', '') == '' and payload(result)['verified'] is True
     result = await call(calendar_env, 'delete_calendar_event', await selection(calendar_env))
     assert result[1] == 'allowed'
-    assert payload(result)['before']['uid'] and payload(result)['after'] is None
+    # A delete is confirmed by the event no longer reading back, so null after is success here.
+    assert payload(result)['before']['uid'] and payload(result)['after'] is None and payload(result)['verified'] is True
     assert calendar_env[3].events == []
 
 
@@ -575,3 +576,27 @@ async def test_now_starts_a_window(calendars_env):
     # Models send "now" for the current time as readily as an amount ago.
     result = await call(calendars_env, 'get_calendar_events', {"start_time": "now", "entity_id": ["calendar.work"]})
     assert result[1] == "allowed", result
+
+
+async def test_a_field_the_calendar_drops_or_an_unread_write_is_not_claimed(calendar_env, monkeypatch):
+    await call(calendar_env, 'create_calendar_event', CREATE)
+    entity = calendar_env[3]
+    original = entity.async_update_event
+
+    async def drop_description(uid, event, **selectors):
+        await original(uid, {key: value for key, value in event.items() if key != 'description'}, **selectors)
+    monkeypatch.setattr(entity, 'async_update_event', drop_description)
+    result = await call(calendar_env, 'update_calendar_event', {**await selection(calendar_env), 'mode': 'patch', 'event': {'description': 'New'}})
+    assert result[1] == 'allowed' and payload(result)['status'] == 'applied' and payload(result)['verified'] is False
+
+    readable = entity.async_get_events
+
+    async def unreadable_once_deleted(hass, start_date, end_date):
+        if not entity.events:
+            raise RuntimeError('read failed')
+        return await readable(hass, start_date, end_date)
+    selected = await selection(calendar_env)
+    monkeypatch.setattr(entity, 'async_get_events', unreadable_once_deleted)
+    result = await call(calendar_env, 'delete_calendar_event', selected)
+    # Applied, but the read-back failed: unconfirmed rather than a success or a failure.
+    assert payload(result)['status'] == 'applied' and payload(result)['verified'] is None

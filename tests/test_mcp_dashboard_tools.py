@@ -111,7 +111,7 @@ class TestSetDashboardConfig:
         data, versions = _data()
         cfg = {"views": [{"title": "A"}]}
         _c, outcome, _ = await _call("set_dashboard_config", {"config": cfg}, access_key, h, data)
-        assert outcome == "allowed"
+        assert outcome == "allowed" and json.loads(_c["content"][0]["text"])["verified"] is True
         assert await async_get_lovelace_config(h, None) == cfg  # persisted
 
         hist = versions.list_for("dashboard", "lovelace")  # default dashboard keyed "lovelace"

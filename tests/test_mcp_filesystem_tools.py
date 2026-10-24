@@ -99,7 +99,7 @@ class TestWriteFile:
         with open(hass.config.path("www/counter.js"), encoding="utf-8") as stream:
             assert stream.read() == source
         record = data.config_recovery.get(_json(result)["recovery_id"])
-        assert record["source"]["content"] == source
+        assert record["source"]["content"] == source and _json(result)["verified"] is True
         assert record["phase"] == "verified"
 
     @pytest.mark.parametrize("existing", [False, True])

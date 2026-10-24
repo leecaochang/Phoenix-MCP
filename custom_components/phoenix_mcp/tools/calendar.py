@@ -481,6 +481,12 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
             else:
                 candidates = [row for row in rows if row.get("uid") == plan["uid"] and row.get("recurrence_id") == plan.get("recurrence_id")]
             receipt["after"] = candidates[0] if len(candidates) == 1 else None
+            # after alone is ambiguous: null is success for a delete and failure otherwise.
+            if operation == "delete":
+                receipt["verified"] = not candidates
+            else:
+                receipt["verified"] = len(candidates) == 1 and all(
+                    candidates[0].get(key) == value for key, value in plan["event"].items())
             await journal.save()
         except AuthorityChangedError:
             raise
@@ -499,6 +505,8 @@ def _calendar_result(receipt: dict, access_key: AccessKeyRecord, hass: HomeAssis
     check_request_authority()
     _calendar_entity(receipt["entity_id"], access_key, hass)
     body = {key: value for key, value in receipt.items() if key not in ("access_key_id", "identity")}
+    # A write whose read-back failed is applied but unconfirmed.
+    body.setdefault("verified", None)
     if receipt["after"] is not None:
         body["after"] = {**receipt["after"], "content_hash": content_hash(receipt["after"])}
     result = _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass)))

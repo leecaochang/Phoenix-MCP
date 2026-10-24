@@ -2120,6 +2120,7 @@ async def _dispatch_no_target_tool_call(
             _tool_success(json.dumps({
                 "success": True,
                 "partial": True,
+                "verified": None,
                 "message": f"{timeout_noun} dispatched but {subject} did not respond within the timeout window.",
             })),
             "allowed",
@@ -2134,7 +2135,11 @@ async def _dispatch_no_target_tool_call(
         return _tool_error(_validation_error_message(err)), "invalid_request", resource
     except HomeAssistantError:
         return _tool_error("Forbidden."), "denied", resource
-    return _tool_success(json.dumps({"success": True})), "allowed", resource
+    # Nothing to read back: such an action changes no entity's state.
+    return _tool_success(json.dumps({
+        "success": True, "verified": None,
+        "note": "Home Assistant accepted the action; an action without a target has no state to read back.",
+    })), "allowed", resource
 
 
 async def _execute_call_service(

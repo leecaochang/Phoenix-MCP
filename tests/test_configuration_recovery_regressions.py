@@ -320,7 +320,7 @@ async def test_real_blueprint_formatting_is_verified(hass, hass_admin_user):
     content = '# A preserved comment\nblueprint:\n  name: "Audit blueprint"\n  domain: automation\n  input: {}\ntriggers: []\nactions: []\n'
     result = await _execute_create_blueprint({"domain": "automation", "path": "audit/example.yaml", "content": content}, t, hass, d)
     assert result[1] == "allowed", result
-    assert body(result)["saved"] is True, result
+    assert body(result)["saved"] is True and body(result)["verified"] is True, result
     actual = Path(hass.config.path("blueprints", "automation", "audit", "example.yaml")).read_text()
     assert "Audit blueprint" in actual and actual != content
     assert d.config_recovery.records()[0]["phase"] == "verified"

@@ -1181,19 +1181,35 @@ class TestWaiting:
         assert content["content"][0]["text"] == "No such firmware job."
 
 
+def _statuses(*statuses):
+    """firmware/get_job replies that move through these statuses, then stay on the last."""
+    remaining = list(statuses)
+    return lambda _args: _job(status=remaining.pop(0) if len(remaining) > 1 else remaining[0])
+
+
 class TestCancel:
-    async def test_cancels_a_running_job(self, hass, esphome_dir):
-        builder = FakeBuilder(**{"firmware/get_job": _job(status="running")})
-        content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+    async def test_cancels_a_running_job_and_reads_it_back_finished(self, hass, esphome_dir):
+        builder = FakeBuilder(**{"firmware/get_job": _statuses("running", "running", "cancelled")})
+        with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_BUILDER_CANCEL_POLL_SECONDS", 0):
+            content, outcome, _ = await _run(
+                "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
-        assert _json(content)["cancelled"] is True
+        body = _json(content)
+        assert body["cancelled"] is True and body["status"] == "cancelled" and body["verified"] is True
         assert builder.args_for("firmware/cancel") == {"job_id": JOB}
+
+    async def test_a_job_still_running_after_the_wait_is_not_claimed_stopped(self, hass, esphome_dir):
+        builder = FakeBuilder(**{"firmware/get_job": _job(status="running")})
+        with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS", 0):
+            content, _, _ = await _run(
+                "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["verified"] is False and body["status"] == "running" and "get_esphome_job" in body["message"]
 
     async def test_an_already_finished_job_is_not_an_error(self, hass, esphome_dir):
         builder = FakeBuilder(**{
-            "firmware/get_job": _job(status="running"),
+            "firmware/get_job": _statuses("running", "completed"),
             "firmware/cancel": BuilderCommandError("not_found"),
         })
         content, outcome, _ = await _run(
@@ -1201,7 +1217,7 @@ class TestCancel:
 
         assert outcome == "allowed"
         body = _json(content)
-        assert body["cancelled"] is False
+        assert body["cancelled"] is False and body["status"] == "completed" and body["verified"] is True
         assert "already finished" in body["message"]
 
     async def test_scoping_applies(self, hass, esphome_dir, esphome_entries):

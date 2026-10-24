@@ -157,3 +157,35 @@ async def test_a_list_without_uids_is_changed_by_the_items_text(hass, lists):
     # Home Assistant removes items only by uid, so removal is refused plainly rather than failing in the service.
     text, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.plain", "action": "remove", "item": "Soap"}, key)
     assert outcome == "invalid_request" and "removes items only by uid" in text and len(plain.todo_items) == 3
+
+
+async def test_an_update_is_verified_field_by_field(hass, lists):
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "update", "item": "milk",
+                                                        "summary": "Oat milk", "due": "2026-11-02",
+                                                        "description": "Two cartons"})
+    assert outcome == "allowed", body
+    assert body["verified"] is True and "not_applied" not in body
+    assert body["item"]["summary"] == "Oat milk" and body["item"]["description"] == "Two cartons"
+
+
+async def test_a_field_the_list_drops_is_reported_not_applied(hass, lists):
+    # Some lists keep only part of an item; the result says which fields did not take.
+    async def keep_text_only(item):
+        index = next(i for i, existing in enumerate(lists._attr_todo_items) if existing.uid == item.uid)
+        lists._attr_todo_items[index] = TodoItem(uid=item.uid, summary=item.summary, status=item.status)
+        lists.async_write_ha_state()
+    lists.async_update_todo_item = keep_text_only
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "update", "item": "milk",
+                                                        "status": "completed", "description": "Two cartons"})
+    assert outcome == "allowed" and body["applied"] is True and body["verified"] is False
+    assert body["not_applied"] == ["description"] and body["item"]["status"] == "completed"
+
+
+def test_a_due_time_without_an_offset_is_compared_in_local_time(hass):
+    from datetime import datetime
+    from homeassistant.util import dt as dt_util
+    from custom_components.phoenix_mcp.tools.todo import _same_due
+    local = datetime(2026, 11, 2, 18, 0, tzinfo=dt_util.get_default_time_zone())
+    assert _same_due(local.isoformat(), "2026-11-02T18:00") and _same_due(local.isoformat(), "2026-11-02 18:00")
+    assert _same_due(dt_util.as_utc(local).isoformat(), "2026-11-02T18:00")
+    assert not _same_due(local.isoformat(), "2026-11-02T19:00") and not _same_due(None, "2026-11-02")

@@ -421,7 +421,7 @@ class TestDelete:
                 _access_key(), hass, data)
         assert outcome == "allowed"
         assert ws.await_args.args[1] == "blueprint/delete"
-        assert _json(content)["deleted"] is True
+        assert _json(content)["deleted"] is True and _json(content)["verified"] is True
         assert isinstance(_json(content).get("recovery_id"), str)
         rec = versions.list_recent()[0]
         assert rec.action == "delete"

@@ -460,9 +460,9 @@ class TestEditHelperKeepsUnnamedFields:
             "name": "Guest", "icon": "mdi:sofa", "initial": True}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
-        _, outcome, _ = await _call("edit_helper", {
+        content, outcome, _ = await _call("edit_helper", {
             "helper_type": "input_boolean", "helper_id": hid, "config": {"name": "Visitor"}}, _access_key(), hass)
-        assert outcome == "allowed"
+        assert outcome == "allowed" and _json(content)["verified"] is True
         stored = await self._stored(hass, "input_boolean", hid)
         assert stored == {"id": hid, "name": "Visitor", "icon": "mdi:sofa", "initial": True}
 
@@ -564,9 +564,9 @@ class TestEditDeleteHelper:
         await hass.async_block_till_done()  # let the helper entity register
         entity_id = er.async_get(hass).async_get_entity_id("input_boolean", "input_boolean", hid)
         assert entity_id is not None
-        _, outcome, _ = await _call(
+        content, outcome, _ = await _call(
             "delete_helper", {"helper_type": "input_boolean", "helper_id": hid}, _access_key(), hass)
-        assert outcome == "allowed"
+        assert outcome == "allowed" and _json(content)["deleted"] is True and _json(content)["verified"] is True
         await hass.async_block_till_done()
         # Registry integrity: the entry and its live state are both gone.
         assert er.async_get(hass).async_get_entity_id("input_boolean", "input_boolean", hid) is None

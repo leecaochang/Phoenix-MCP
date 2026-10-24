@@ -1128,6 +1128,9 @@ ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS = 10
 # Faster than the 15s keepalive so the reported percentage is fresh when a frame
 # goes out, and so a build that finishes returns promptly rather than on the tick.
 ESPHOME_BUILDER_JOB_POLL_SECONDS = 5.0
+# A cancel is confirmed by re-reading the job until it reports a finished status.
+ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS = 5.0
+ESPHOME_BUILDER_CANCEL_POLL_SECONDS = 0.5
 # The add-on caps a decode at 200 lines of 500 chars and times out server-side
 # at 60s; the client waits a little longer so its own timeout is never the first
 # to fire and mask the add-on's own answer.

@@ -175,7 +175,7 @@ class TestPatchDashboard:
         assert stored["views"][0]["cards"] == LAYOUT["views"][0]["cards"]
         assert stored["views"][0]["badges"][0]["name"] == "Laundry"
         body = _json(content)
-        assert body["saved"] is True
+        assert body["saved"] is True and body["verified"] is True
         assert body["changes"] == [{"op": "set", "path": "views[0].badges[0].entity"}]
         assert body["content_hash"] == content_hash(stored)
         hist = versions.list_for("dashboard", "lovelace")

@@ -14,6 +14,7 @@ import json
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from ..access_key_store import AccessKeyRecord
 from ..const import TODO_ITEMS_DEFAULT_LIMIT, TODO_ITEMS_MAX_LIMIT, TODO_TIMEOUT_SECONDS
@@ -197,6 +198,9 @@ async def _tool_set_todo_item(
             service, service_data = "update_item", {"item": _ref(matched), **changes}
     if action == "add" and description is not None:
         service_data["description"] = description
+    # What the item should now hold, compared field by field once it is read back.
+    expected = {key: value for key, value in service_data.items()
+                if key in ("rename", "status", "due_date", "due_datetime", "description")}
     result = await _tool_call_service(
         {"service": {"domain": "todo", "name": service, "data": service_data},
          "targets": [{"kind": "entity", "ids": [entity_id]}]},
@@ -206,11 +210,39 @@ async def _tool_set_todo_item(
     if outcome != "allowed" or content.get("isError"):
         # A refusal, a failure or a pending approval answers as call_service did.
         return result
-    return await _verified(hass, access_key, entity_id, action, target, summary)
+    return await _verified(hass, access_key, entity_id, action, target, summary, expected)
+
+
+def _same_due(read: Any, sent: str) -> bool:
+    """A due date or time as the list reports it, against the one sent (local time when it has no offset)."""
+    if not isinstance(read, str):
+        return False
+    if "T" not in sent and " " not in sent.strip():
+        return read == sent
+    left, right = dt_util.parse_datetime(read), dt_util.parse_datetime(sent.replace(" ", "T"))
+    if left is None or right is None:
+        return False
+    return dt_util.as_local(left) == (right if right.tzinfo else right.replace(tzinfo=dt_util.get_default_time_zone()))
+
+
+def _unapplied(item: dict, expected: dict) -> list[str]:
+    """The requested fields the read-back item does not hold."""
+    wrong = []
+    for key, value in expected.items():
+        if key == "rename":
+            held = str(item.get("summary") or "").strip() == value
+        elif key in ("due_date", "due_datetime"):
+            held = _same_due(item.get("due"), value)
+        else:
+            held = (item.get(key) or None) == (value or None)
+        if not held:
+            wrong.append("summary" if key == "rename" else "due" if key.startswith("due") else key)
+    return wrong
 
 
 async def _verified(
     hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, action: str, target: dict | None, summary: Any,
+    expected: dict | None = None,
 ) -> tuple[dict, str, str]:
     """Read the list back, so the result says what it now holds rather than what was asked."""
     body: dict[str, Any] = {"list": entity_id, "action": action}
@@ -236,4 +268,8 @@ async def _verified(
         renamed = summary if isinstance(summary, str) and summary.strip() else (target or {}).get("summary")
         after = named(renamed)
         body.update(applied=True, verified=len(after) == 1, item=after[0] if len(after) == 1 else None)
+    # Present is not enough: each requested field must read back as sent.
+    if action != "remove" and body["verified"] and expected and (wrong := _unapplied(body["item"], expected)):
+        body.update(verified=False, not_applied=wrong,
+                    note="The list accepted the change, but these fields do not read back as requested.")
     return _tool_success(_dumps(_safe_calendar_data(body, access_key, hass))), "allowed", entity_id

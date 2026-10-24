@@ -551,6 +551,8 @@ async def _save_blueprint(
         "domain": domain,
         "path": rel,
         "saved": True,
+        # The source is read back before this point; a mismatch returns status partial instead.
+        "verified": True,
         "overrides_existing": bool((result or {}).get("overrides_existing")) if isinstance(result, dict) else before is not None,
         "recovery_id": rid,
     }
@@ -629,5 +631,5 @@ async def _execute_delete_blueprint(
         action="delete", before=_version_content_payload(before), after=None, alias=rel,
     )
     return _tool_success(json.dumps({
-        "domain": domain, "path": rel, "deleted": True, "recovery_id": rid,
+        "domain": domain, "path": rel, "deleted": True, "verified": True, "recovery_id": rid,
     }, default=str)), "allowed", f"blueprint:{domain}/{rel}"

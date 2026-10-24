@@ -98,7 +98,7 @@ class TestAddDashboardCard:
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["cards"] == [CARD_A, CARD_B, NEW_CARD]
         body = _json(content)
-        assert body["saved"] is True and body["op"] == "add"
+        assert body["saved"] is True and body["op"] == "add" and body["verified"] is True
         # The result hash matches the new layout, so card ops can be chained
         # without re-reading.
         assert body["content_hash"] == content_hash(stored)

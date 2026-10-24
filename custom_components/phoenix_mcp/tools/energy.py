@@ -971,8 +971,9 @@ async def _execute_edit_energy_config(
             devices=sum(len(after.get(key) or []) for key in _DEVICE_KEYS),
         ),
     )
+    # The preferences are read back before this point; a mismatch returns status partial instead.
     body = {
-        "saved": True, "recovery_id": rid,
+        "saved": True, "verified": True, "recovery_id": rid,
         **{k: v for k, v in summary.items()}, **_scoped_body(after, True, access_key, hass),
         # Home Assistant's own check of the saved setup, e.g. a statistic with
         # the wrong unit; null means it could not run, not that all is well.

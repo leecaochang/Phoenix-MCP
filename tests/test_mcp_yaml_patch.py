@@ -258,7 +258,7 @@ class TestPatchTool:
             {"key": "recorder.purge_keep_days", "content": "30"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["key"] == "recorder.purge_keep_days" and body["op"] == "set"
+        assert body["key"] == "recorder.purge_keep_days" and body["op"] == "set" and body["verified"] is True
         assert isinstance(body.get("recovery_id"), str)
         assert _read(hass) == SAMPLE.replace("purge_keep_days: 10", "purge_keep_days: 30")
 

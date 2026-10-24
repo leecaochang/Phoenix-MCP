@@ -115,7 +115,7 @@ class TestYamlConfig:
 
         content, outcome, _ = await _call("set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _access_key(), hass)
         assert outcome == "allowed"
-        assert isinstance(_json(content).get("recovery_id"), str)
+        assert isinstance(_json(content).get("recovery_id"), str) and _json(content)["verified"] is True
         with open(path, encoding="utf-8") as f:
             assert f.read() == "default_config:\nfrontend:\n"
 

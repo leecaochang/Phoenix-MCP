@@ -1001,7 +1001,8 @@ async def _execute_set_dashboard_config(
         action="edit" if before is not None else "create",
         before=before, after=config, alias=url_path or "(default)",
     )
-    body: dict[str, Any] = {"url_path": url_path, "saved": True, **recovery_receipt}
+    # The saved layout is read back before this point; a mismatch returns status partial instead.
+    body: dict[str, Any] = {"url_path": url_path, "saved": True, "verified": True, **recovery_receipt}
     warnings = await _card_warnings(config, data, hass)
     if warnings:
         body["warnings"] = warnings
@@ -1334,7 +1335,7 @@ async def _execute_dashboard_card(
         ),
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, **recovery_receipt, "op": op,
+        "url_path": url_path, "saved": True, "verified": True, **recovery_receipt, "op": op,
         "view_index": args.get("view_index"),
         # Unlike a whole-blob replace (which must be re-read and merged after a
         # conflict), a card op is structural, so the resulting layout's hash is
@@ -1571,7 +1572,7 @@ async def _execute_patch_dashboard(
         summary=summary,
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, **recovery_receipt, "changes": applied,
+        "url_path": url_path, "saved": True, "verified": True, **recovery_receipt, "changes": applied,
         # Structural like the card ops, so the resulting hash is safe to hand back
         # and the agent can chain further patches without another read.
         "content_hash": content_hash(new_config),

@@ -2235,7 +2235,9 @@ async def _execute_edit_helper(
         data, access_key, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
         action="edit", before=public_before, after=version_after, alias=config.get("name"),
     )
-    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
+    # The stored row is compared before this point; a mismatch returns status partial instead.
+    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item, "verified": True},
+                                    default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
 async def _tool_delete_helper(
@@ -2363,7 +2365,11 @@ async def _execute_delete_helper(
         action="delete", before=public_before, after=None,
         alias=public_before.get("name") if isinstance(public_before, dict) else None,
     )
-    return _tool_success(f"Helper '{helper_id}' deleted successfully."), "allowed", f"helper:{helper_type}:{helper_id}"
+    # The row's absence is read back before this point; otherwise the deletion is reported unverified.
+    return _tool_success(json.dumps({
+        "deleted": True, "helper_type": helper_type, "helper_id": helper_id, "verified": True,
+        "message": f"Helper '{helper_id}' deleted successfully.",
+    })), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
 def _build_diff_create_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:

@@ -77,7 +77,10 @@ async def _call(hass, env, *, kind="area", operation="update", changes=None, loc
 
 def _body(result):
     assert result[1] == "allowed", result
-    return json.loads(result[0]["content"][0]["text"])
+    body = json.loads(result[0]["content"][0]["text"])
+    # Every successful write was read back and compared before it answers.
+    assert body.get("verified") is True or "write_success" not in body, body
+    return body
 
 
 async def test_area_labels_patch_replace_clear_and_restore(hass, location_env):
