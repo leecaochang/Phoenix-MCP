@@ -1011,7 +1011,7 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, versions = _data()
         res = _text((await _call_tool("delete_entity", {"entity_id": eid}, self._access_key_rw(), hass, data))[0])
-        assert res["deleted"] is True
+        assert res["deleted"] is True and res["verified"] is True
         assert er.async_get(hass).async_get(eid) is None
         hist = versions.list_for("entity", eid)
         assert hist[0].action == "delete"

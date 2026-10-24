@@ -469,6 +469,15 @@ def _resolve_esphome_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, str]
     return candidate, rel
 
 
+def _file_text(path: str) -> str | None:
+    """A file's text as it is on disk now, or None when it cannot be read."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
 def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | None]:
     """Read the ESPHome secrets.yaml INTERNALLY: (values, key names).
 
@@ -924,12 +933,15 @@ async def _execute_set_esphome_yaml(
             await dashboard.async_request_refresh()
         except Exception:  # noqa: BLE001 - best effort, the write already landed
             _LOGGER.debug("ESPHome dashboard refresh failed after write", exc_info=True)
+    # Read the file back, so the hash describes what is on disk, not what was meant.
+    observed = await hass.async_add_executor_job(_file_text, path)
 
     return (
         _tool_success(json.dumps({
             "file": rel,
             "bytes_written": len(raw.encode("utf-8")),
-            "content_hash": content_hash(raw),
+            "verified": observed == raw,
+            "content_hash": content_hash(observed) if observed is not None else None,
             "note": (
                 "Written to disk only. The device keeps running its current firmware "
                 "until a build is compiled and installed."
@@ -1079,11 +1091,13 @@ async def _execute_delete_esphome_yaml(
             await dashboard.async_request_refresh()
         except Exception:  # noqa: BLE001 - best effort, the delete already landed
             _LOGGER.debug("ESPHome dashboard refresh failed after delete", exc_info=True)
+    gone = not await hass.async_add_executor_job(os.path.exists, path)
 
     return (
         _tool_success(json.dumps({
             "file": rel,
             "deleted": True,
+            "verified": gone,
             "note": (
                 "The configuration file is gone. The device itself was not touched: it "
                 "keeps running its current firmware and keeps its Home Assistant "

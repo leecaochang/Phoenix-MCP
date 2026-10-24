@@ -688,7 +688,7 @@ class TestDeviceYamlDelete:
             "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
 
         assert outcome == "allowed"
-        assert _json(content)["deleted"] is True
+        assert _json(content)["deleted"] is True and _json(content)["verified"] is True
         assert not (esphome_dir / "rf-blaster1.yaml").exists()
 
         history = versions.list_for("esphome_yaml", "rf-blaster1.yaml")
@@ -821,6 +821,8 @@ class TestDeviceYamlWrite:
         assert "baud_rate: 115200" in on_disk
         assert "__PHOENIX_REDACTED__" not in on_disk
         assert _json(content)["file"] == "rf-blaster1.yaml"
+        # The result is read back from disk, so its hash is the file's own.
+        assert _json(content)["verified"] is True and _json(content)["content_hash"] == content_hash(on_disk)
 
     async def test_changing_a_credential_refused_before_any_approval(self, hass, esphome_dir):
         read, _, _ = await _call(

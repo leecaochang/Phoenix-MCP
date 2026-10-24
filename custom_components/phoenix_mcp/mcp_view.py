@@ -5823,7 +5823,9 @@ def _commit_delete_entity(
         _LOGGER.error("delete_entity failed for %s: %s", entity_id, exc)
         return _tool_error("Failed to delete entity."), "denied", entity_id
 
-    body: dict[str, Any] = {"entity_id": entity_id, "deleted": True}
+    # Read back: the registry entry is gone. A live entity's integration can still
+    # report state or re-create the entry later; the tool description says so.
+    body: dict[str, Any] = {"entity_id": entity_id, "deleted": True, "verified": reg.async_get(entity_id) is None}
     if mesa_decision.warnings:
         body["mesa_advisory"] = mesa_decision.warnings
         _mesa_advisory_ctx.set(True)
