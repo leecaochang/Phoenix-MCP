@@ -178,6 +178,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "search_entities filters instead: the way to ask which sensors entered a state in a period, "
             "in one call; with in_state only the entities that were in that state are listed, and select {} with "
             "in_state checks every entity (which went unavailable today). Each row names the entity and its area. "
+            "With state_changes, an entity_id list returns each entity's own page in one call (limit and "
+            "order apply per entity; continue one alone with its next_cursor). "
             "A state's last_entered is when it last began, such as when someone last arrived home; a row "
             "with recorded_from has no record before that time, so a state held since then began then or earlier. "
             "Entities past what one result holds are named in not_summarized. With attribute, "
@@ -190,8 +192,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 "entity_id": {"oneOf": [
                     {"type": "string", "description": "Accessible entity whose Recorder history to read."},
                     {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SEARCH_ENTITIES_MAX_LIMIT,
-                     "description": "Several entities, summary mode only."},
-                ], "description": "Entity ID, or in summary mode a list of entity IDs."},
+                     "description": "Several entities, in summary or state_changes mode."},
+                ], "description": "Entity ID, or in summary or state_changes mode a list of entity IDs."},
                 "start_time": {
                     "type": "string",
                     "description": "ISO timestamp or relative string (30min, 24h, 7d, 2w, 1mo). Defaults to 24h before end_time.",

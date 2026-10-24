@@ -625,10 +625,61 @@ async def test_several_entities_summarize_in_one_call_with_the_single_entity_tot
     assert porch["transitions"] == 0 and [item["state"] for item in porch["states"]] == ["off"]
 
 
-async def test_an_explicit_row_mode_for_several_entities_is_refused(hass: HomeAssistant) -> None:
-    args = {"entity_id": ["light.desk", "light.lamp"], "mode": "state_changes", "start_time": "1h"}
+async def _rows(hass: HomeAssistant, ids: list[str], start: float, end: float, **extra) -> dict:
+    args = {"entity_id": ids, "mode": "state_changes", "start_time": _at(start).isoformat(),
+            "end_time": _at(end).isoformat(), **extra}
     content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
-    assert outcome == "invalid_request" and "accepted only with mode summary" in content["content"][0]["text"]
+    assert outcome == "allowed", content
+    return json.loads(content["content"][0]["text"])
+
+
+@pytest.mark.parametrize("order", ["oldest_first", "newest_first"])
+async def test_several_entities_list_each_entitys_own_page(recorder_mock, hass: HomeAssistant, order) -> None:
+    # "When did each of these last change" is one call; each entity's rows and
+    # cursor are its single-entity page, and unknown or hidden ones say not_found.
+    _anchor(hass)
+    _alternate(hass, "light.desk", 6)
+    _set(hass, "light.porch", "off", -60)
+    _set(hass, "light.porch", "on", 120)
+    _set(hass, "switch.hidden", "on", 20)
+    await async_wait_recording_done(hass)
+    many = await _rows(hass, ["light.desk", "light.porch", "light.desk", "light.nowhere", "switch.hidden"], 0, 400,
+                       limit=3, order=order)
+    assert many["mode"] == "state_changes" and many["order"] == order and many["limit"] == 3
+    assert [row["entity_id"] for row in many["entities"]] == ["light.desk", "light.porch"]
+    assert many["count"] == 2 and many["not_found"] == ["light.nowhere", "switch.hidden"]
+    for row in many["entities"]:
+        single = json.loads((await _call(hass, row["entity_id"], 0, 400, mode="state_changes", limit=3,
+                                         order=order))[0]["content"][0]["text"])
+        assert row["history"] == single["history"] and row["count"] == single["count"]
+        assert row["has_more"] is single["has_more"] and row.get("next_cursor") == (single["next_cursor"] or None)
+    desk, porch = many["entities"]
+    assert desk["has_more"] is True and porch["has_more"] is False and "next_cursor" not in porch
+    assert any("single-entity call with its next_cursor" in warning for warning in many["warnings"])
+
+
+@pytest.mark.parametrize(("extra", "message"), [
+    ({"mode": "significant_states"}, "significant_states reads one entity"),
+    ({"mode": "state_changes", "cursor": _at(10).isoformat()}, "cursor continues one entity"),
+    ({"mode": "state_changes", "attribute": "brightness"}, "attribute is accepted only with mode summary"),
+])
+async def test_what_several_entities_cannot_take_is_refused(hass: HomeAssistant, extra, message) -> None:
+    args = {"entity_id": ["light.desk", "light.lamp"], "start_time": "1h", **extra}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+
+
+async def test_entity_pages_past_one_result_are_named_not_dropped(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    ids = [f"light.l{index}" for index in range(6)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 20)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 6000):
+        body = await _rows(hass, ids, 0, 4000)
+    listed = [row["entity_id"] for row in body["entities"]]
+    assert listed and listed + body["not_listed"] == ids
+    assert _stored(body) <= 6000 and any("not_listed" in warning for warning in body["warnings"])
 
 
 async def test_a_list_without_mode_is_summarized_and_paging_is_ignored(recorder_mock, hass: HomeAssistant) -> None:

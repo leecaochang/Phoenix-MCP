@@ -879,6 +879,8 @@ async def _tool_get_history(
             args = {key: value for key, value in args.items() if key not in ignored}
     if "select" in args:
         return await _history_summary_select(args["select"], args, access_key, hass, data)
+    if isinstance(args.get("entity_id"), list) and mode == "state_changes":
+        return await _history_rows_many(args["entity_id"], args, access_key, hass)
     if isinstance(args.get("entity_id"), list):
         return await _history_summary_many(args["entity_id"], args, access_key, hass)
     return await _fit_recorder_page(lambda page_args: _history_page(page_args, access_key, hass), args, "history")
@@ -1224,7 +1226,8 @@ async def _history_summary_many(
     tool = "get_history"
     if str(args.get("mode") or "").strip().lower() != "summary":
         return _tool_error(
-            "A list of entity_id is accepted only with mode summary, which returns one compact row per entity."
+            "A list of entity_id is accepted with mode summary, one compact row per entity, or state_changes, "
+            "each entity's rows; significant_states reads one entity."
         ), "invalid_request", tool
     if any(key in args for key in ("limit", "order", "cursor")):
         return _tool_error(
@@ -1373,6 +1376,142 @@ async def _history_summary_many(
     body = build(still)
     while rows and _stored_bytes(body) > TOOL_RESULT_MAX_BYTES:
         not_summarized.insert(0, rows.popitem()[0])
+        body = build(still)
+    return _tool_success(json.dumps(body)), "allowed", tool
+
+
+async def _history_rows_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> tuple[dict, str, str]:
+    """get_history state_changes for several entities: each entity's own page.
+
+    "When did each person last arrive" then takes one call instead of one per
+    entity. Each entity's rows are the page a single-entity call with the same
+    range, order and limit returns (_history_page reads it), so its next_cursor
+    continues that entity alone; a cursor is therefore refused here. Inaccessible
+    and missing entities share not_found, and access is checked again after the
+    reads. Pages are added in order while they fit TOOL_RESULT_MAX_BYTES and one
+    time budget; the entities past either are named (not_listed, unscanned),
+    never dropped.
+    """
+    tool = "get_history"
+    if "cursor" in args:
+        return _tool_error(
+            "cursor continues one entity: send that entity alone with the next_cursor its row returned."
+        ), "invalid_request", tool
+    if (not raw_ids or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
+        ), "invalid_request", tool
+    order = str(args.get("order") or "oldest_first").strip().lower()
+    if order not in ("oldest_first", "newest_first"):
+        return _tool_error("Invalid order. Must be one of: oldest_first, newest_first."), "invalid_request", tool
+    if args.get("attribute"):
+        return _tool_error(
+            "attribute is accepted only with mode summary, which totals how long the attribute held each value."
+        ), "invalid_request", tool
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(hours=24))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    read_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    page_args = {key: value for key, value in args.items() if key != "entity_id"}
+    rows: dict[str, Any] = {}
+    page_warnings: list[str] = []
+    not_recorded: list[str] = []
+    not_listed: list[str] = []
+    unscanned: list[str] = []
+    unavailable: list[str] = []
+    keep_days: Any = None
+
+    def build(still: set[str]) -> dict[str, Any]:
+        warnings = list(dict.fromkeys(page_warnings))
+        kept = [row for entity_id, row in rows.items() if entity_id in still]
+        if any(row["has_more"] for row in kept):
+            warnings.append(
+                "An entity with has_more has more rows in the range: continue it in a single-entity call with "
+                "its next_cursor and the same order.")
+        if not_listed:
+            warnings.append("The result is full: read not_listed as an entity_id list in another call.")
+        if unscanned:
+            warnings.append("The call's time budget ended before the unscanned entities; read them in another call.")
+        if unavailable:
+            warnings.append("Recorder could not return a page for the entities in unavailable; read each alone.")
+        body: dict[str, Any] = {
+            "mode": "state_changes",
+            "order": order,
+            "requested_range": {"start": iso_utc(window.start), "end": iso_utc(window.end)},
+            "limit": window.limit,
+            "count": len(kept),
+            "entities": kept,
+            "not_found": [e for e in ids if e not in still],
+        }
+        for key, values in (("not_listed", not_listed), ("not_recorded", not_recorded),
+                            ("unscanned", unscanned), ("unavailable", unavailable)):
+            if listed := [e for e in values if e in still]:
+                body[key] = listed
+        body["retention"] = retention_metadata("short_term", keep_days)
+        body["warnings"] = warnings
+        return body
+
+    try:
+        from homeassistant.components.recorder import get_instance, is_entity_recorded
+
+        keep_days = get_instance(hass).keep_days
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        names = [_stored_bytes(entity_id) for entity_id in read_ids]
+        to_come = sum(names)
+        used = _stored_bytes(build(set(read_ids))) + 1024
+        for entity_id, name in zip(read_ids, names):
+            to_come -= name
+            if not is_entity_recorded(hass, entity_id):
+                not_recorded.append(entity_id)
+            elif not_listed:
+                not_listed.append(entity_id)
+            elif time.monotonic() >= deadline:
+                unscanned.append(entity_id)
+            else:
+                content, outcome, _resource = await _history_page(
+                    {**page_args, "entity_id": entity_id}, access_key, hass)
+                if outcome != "allowed" or content.get("isError"):
+                    unavailable.append(entity_id)
+                else:
+                    page = json.loads(content["content"][0]["text"])
+                    page_warnings.extend(page.get("warnings") or [])
+                    state = hass.states.get(entity_id)
+                    row = {"entity_id": entity_id, "name": state.name if state is not None else None,
+                           "area": _area_name_for_entity(entity_id, *registries),
+                           "count": page["count"], "has_more": page["has_more"],
+                           **({"next_cursor": page["next_cursor"]} if page["has_more"] else {}),
+                           "history": page["history"]}
+                    size = _stored_bytes(row)
+                    if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
+                        rows[entity_id] = row
+                        used += size
+                        continue
+                    not_listed.append(entity_id)
+            used += name
+    except Exception:
+        _LOGGER.warning("MCP history rows of several entities failed", exc_info=True)
+        return _tool_error("History call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in read_ids if readable(entity_id)}
+    body = build(still)
+    while rows and _stored_bytes(body) > TOOL_RESULT_MAX_BYTES:
+        not_listed.insert(0, rows.popitem()[0])
         body = build(still)
     return _tool_success(json.dumps(body)), "allowed", tool
 
