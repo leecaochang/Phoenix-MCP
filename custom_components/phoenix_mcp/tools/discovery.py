@@ -60,13 +60,13 @@ from ..device_semantics import (
     entity_name_source,
 )
 from ..service_targets import secondary_target_error, unsupported_secondary_targets
-from ..tool_contracts import normalize_tool_args
+from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
-from ..tool_common import _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
+from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
@@ -1504,6 +1504,13 @@ async def _tool_search_entities(
     include_membership = args.get("include_membership", False)
     if not isinstance(include_membership, bool):
         return _tool_error("include_membership must be a boolean."), "invalid_request", "search_entities"
+    projection = args.get("projection")
+    if projection is not None:
+        if not isinstance(projection, dict):
+            return _tool_error("projection must be an object."), "invalid_request", "search_entities"
+        fields, detailed, error = state_projection(projection)
+        if error:
+            return _tool_error(error), "invalid_request", "search_entities"
 
     for name in ("domain", "device_class", "integration", "radio"):
         raw = args.get(name)
@@ -1602,6 +1609,8 @@ async def _tool_search_entities(
         aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
         if aliases:
             row["_aliases"] = aliases
+        if projection is not None and state is not None:
+            row["_scrubbed"] = e
         matches.append(row)
 
     fuzzy_fallback = False
@@ -1626,6 +1635,10 @@ async def _tool_search_entities(
     results = matches[f.offset:end]
     for row in results:
         row.pop("_aliases", None)
+        if "_scrubbed" in row:
+            # The returned page carries get_state's projection, so the current
+            # values need no follow-up read.
+            row.update(_project_state(row.pop("_scrubbed"), fields, detailed))
 
     _annotate_search_rows(results, registry, data, access_key, hass)
     if include_membership:

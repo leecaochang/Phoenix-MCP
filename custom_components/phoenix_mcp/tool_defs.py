@@ -1918,6 +1918,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "total counts all scoped matching entities before paging; count is the number returned. When has_more "
             "is true, call again with offset set to next_offset for the next page. "
             "For counts alone, use limit=1 to avoid enumerating the full list. "
+            "To read the matching entities' current values too (a temperature with its unit, a thermostat's "
+            "hvac_action), add projection exactly as get_state takes it, which saves a get_state call. "
             "To learn how the matching entities behaved over a period (which did not trigger this week), skip this "
             "listing: call get_history with mode summary and these filters as select, which finds and summarizes "
             "them in one call."
@@ -1966,6 +1968,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "boolean", "default": False,
                     "description": "Add is_group and visible direct member_entity_ids. Lists may be incomplete; hidden HA entities remain visible when permitted. is_group false means no valid explicit membership, not proof of a leaf; null means no live state or resource bounds prevented inspection. Discovery only, not execution or approval scope.",
                 },
+                "projection": {"type": "object", "description": "Optional, as in get_state: compact adds each live entity's key attributes, full all of its state, fields exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields, e.g. attr.unit_of_measurement or last_changed; only with kind fields."}}, "required": ["kind"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": SEARCH_ENTITIES_MAX_LIMIT, "default": 100, "description": "Maximum matching entities to return."},
                 "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Number of ranked matches to skip; pass next_offset from the previous page."},
             },

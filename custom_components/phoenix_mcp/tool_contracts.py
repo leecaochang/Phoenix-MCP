@@ -195,6 +195,22 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
     return " ".join(findings) + f" Valid parameters: {', '.join(sorted(properties))}. Correct the arguments and retry."
 
 
+def state_projection(projection: dict) -> tuple[list | None, bool, str | None]:
+    """Read a get_state-style projection: (fields, detailed, error).
+
+    One reading for every tool that takes it, so compact, full and fields mean
+    the same thing on get_state and search_entities.
+    """
+    kind = projection.get("kind")
+    if kind == "full":
+        return None, True, None
+    if kind == "fields" and isinstance(projection.get("fields"), list):
+        return projection["fields"], False, None
+    if kind != "compact":
+        return None, False, "projection.kind must be compact, full, or fields."
+    return None, False, None
+
+
 def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Translate a Catalog v2 request to the flat shape the executors take.
 
@@ -223,13 +239,13 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         projection = out.pop("projection", None)
         if not isinstance(projection, dict):
             return out, "projection is required and must be an object."
-        kind = projection.get("kind")
-        if kind == "full":
+        fields, detailed, error = state_projection(projection)
+        if error:
+            return out, error
+        if detailed:
             out["detailed"] = True
-        elif kind == "fields" and isinstance(projection.get("fields"), list):
-            out["fields"] = projection["fields"]
-        elif kind != "compact":
-            return out, "projection.kind must be compact, full, or fields."
+        elif fields is not None:
+            out["fields"] = fields
     elif tool == "get_calendar_events":
         pass
     elif tool in {"call_service", "dry_run_service"}:

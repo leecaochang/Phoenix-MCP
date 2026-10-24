@@ -25,6 +25,8 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     DOMAIN,
+    DOMAIN_IMPORTANT_ATTRIBUTES,
+    LEAN_ALWAYS_ATTRS,
     MAX_DIFF_INLINE_BYTES,
     MAX_FILE_BYTES,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
@@ -981,3 +983,72 @@ async def _create_registry_mesa_approval(
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)
     return await _pending_or_inline(hass, data, access_key, approval)
+
+
+# State projections shared by get_state and search_entities.
+
+
+def _normalize_fields(fields: Any) -> list[str]:
+    """Coerce the get_state `fields` arg to a list of field names.
+
+    Accepts a list of strings or a single comma-separated string (a common agent
+    mistake); anything else yields an empty list, which selects the lean default.
+    """
+    if isinstance(fields, str):
+        return [f for f in (p.strip() for p in fields.split(",")) if f]
+    if isinstance(fields, list):
+        return [str(f).strip() for f in fields if str(f).strip()]
+    return []
+
+
+def _select_state_fields(scrubbed: dict, fields: list[str]) -> dict:
+    """Return only the requested fields from an already-scrubbed state dict.
+
+    Top-level keys (state, last_changed, last_updated, ...) are taken as-is;
+    'attr.<name>' selects one attribute; 'attributes' selects all (scrubbed)
+    attributes. entity_id is always included. Unknown fields are ignored. Runs
+    AFTER scrubbing, so a scrubbed attribute can never be selected back in.
+    """
+    attrs = scrubbed.get("attributes", {})
+    out: dict = {"entity_id": scrubbed.get("entity_id")}
+    picked_attrs: dict = {}
+    for f in fields:
+        if f == "attributes":
+            picked_attrs.update(attrs)
+        elif f.startswith("attr."):
+            name = f[len("attr."):]
+            if name in attrs:
+                picked_attrs[name] = attrs[name]
+        elif f in scrubbed and f != "attributes":
+            out[f] = scrubbed[f]
+    if picked_attrs:
+        out["attributes"] = picked_attrs
+    return out
+
+
+def _lean_state(scrubbed: dict) -> dict:
+    """Return the domain-aware lean view of an already-scrubbed state dict."""
+    eid = scrubbed.get("entity_id", "") or ""
+    domain = eid.split(".")[0] if "." in eid else ""
+    attrs = scrubbed.get("attributes", {})
+    keep = set(LEAN_ALWAYS_ATTRS) | set(DOMAIN_IMPORTANT_ATTRIBUTES.get(domain, ()))
+    lean_attrs = {k: v for k, v in attrs.items() if k in keep}
+    out: dict = {"entity_id": eid, "state": scrubbed.get("state")}
+    if lean_attrs:
+        out["attributes"] = lean_attrs
+    return out
+
+
+def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
+    """Apply presentation-only field projection to a scrubbed state dict.
+
+    `detailed` returns the full dict, explicit fields the requested subset,
+    otherwise the domain-aware lean view. Never bypasses scrubbing (the input is
+    already scrubbed).
+    """
+    if detailed:
+        return scrubbed
+    norm = _normalize_fields(fields)
+    if norm:
+        return _select_state_fields(scrubbed, norm)
+    return _lean_state(scrubbed)
