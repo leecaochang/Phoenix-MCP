@@ -65,7 +65,7 @@ _SCRIPT_LOCK_KEY = f"{DOMAIN}_script_lock"
 
 
 async def _finish_entity_write(
-    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["scene", "script"],
+    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["automation", "scene", "script"],
     storage_id: str, config: dict, tool_name: str,
 ) -> tuple[dict, str, str]:
     """Reload a saved, versioned write and report observation separately.
@@ -115,9 +115,12 @@ async def _finish_entity_write(
         )
         body["registration"] = {"status": "observation_failed", "entity_id": None, "state_present": None}
     check_request_authority()
-    if domain == "script":
+    if domain == "automation":
+        # Automation results have always named the entity at the top level.
+        body["entity_id"] = body["registration"]["entity_id"]
+    if domain in ("automation", "script"):
         from .discovery import reference_warnings  # noqa: PLC0415
-        if warnings := reference_warnings(hass, access_key, "script", config):
+        if warnings := reference_warnings(hass, access_key, domain, config):
             body["warnings"] = warnings
     status = body["registration"]["status"]
     if status == "timed_out":
@@ -562,23 +565,6 @@ async def _tool_create_automation(
     return await _execute_create_automation(args, access_key, hass, data)
 
 
-def _automation_receipt(
-    hass: HomeAssistant, access_key: AccessKeyRecord, automation_id: str, config: dict, tool_name: str,
-) -> tuple[dict, str, str]:
-    """Name the saved automation's id and entity, and flag unresolvable references.
-
-    The reload above is blocking and in-process, so the entity is registered by now.
-    """
-    from .discovery import reference_warnings  # noqa: PLC0415
-
-    entity_id = _authoring_entity_id(hass, "automation", automation_id)
-    visible = entity_id is not None and resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
-    body: dict[str, Any] = {"automation_id": automation_id, "entity_id": entity_id if visible else None, "config": config}
-    if warnings := reference_warnings(hass, access_key, "automation", config):
-        body["warnings"] = warnings
-    return _tool_success(json.dumps(body, indent=2, default=str)), "allowed", tool_name
-
-
 async def _execute_create_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -617,7 +603,6 @@ async def _execute_create_automation(
             )
             if not op.ok:
                 return _automation_op_error(op, "create_automation")
-        await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -628,7 +613,9 @@ async def _execute_create_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="create", before=None, after=config, alias=config.get("alias"),
     )
-    return _automation_receipt(hass, access_key, automation_id, config, "create_automation")
+    return await _finish_entity_write(
+        hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="create_automation",
+    )
 
 
 async def _tool_edit_automation(
@@ -692,7 +679,6 @@ async def _execute_edit_automation(
             if not op.ok:
                 return _automation_op_error(op, "edit_automation")
             before_cfg = op.before
-        await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -703,7 +689,9 @@ async def _execute_edit_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="edit", before=before_cfg, after=config, alias=config.get("alias"),
     )
-    return _automation_receipt(hass, access_key, automation_id, config, "edit_automation")
+    return await _finish_entity_write(
+        hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="edit_automation",
+    )
 
 
 async def _tool_delete_automation(
@@ -802,7 +790,7 @@ async def _execute_delete_automation(
         action="delete", before=removed, after=None,
         alias=removed.get("alias") if isinstance(removed, dict) else None,
     )
-    return _tool_success(f"Automation '{automation_id}' deleted successfully."), "allowed", "delete_automation"
+    return await _deletion_receipt(hass, "automation", automation_id, "delete_automation")
 
 
 async def _tool_list_scripts(
@@ -1121,7 +1109,7 @@ async def _execute_delete_script(
         action="delete", before=before_cfg, after=None,
         alias=before_cfg.get("alias") if isinstance(before_cfg, dict) else None,
     )
-    return _tool_success(f"Script '{script_id}' deleted successfully."), "allowed", "delete_script"
+    return await _deletion_receipt(hass, "script", script_id, "delete_script")
 
 
 # HA-COUPLING POINT. From HA 2026.7 hass.data[DATA_TRACE][key] is a TraceBuckets
@@ -1739,7 +1727,7 @@ async def _execute_delete_scene(
         action="delete", before=existing, after=None,
         alias=existing.get("name") if isinstance(existing, dict) else None,
     )
-    return _tool_success(f"Scene '{scene_id}' deleted successfully."), "allowed", "delete_scene"
+    return await _deletion_receipt(hass, "scene", scene_id, "delete_scene")
 
 
 def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
@@ -1754,6 +1742,20 @@ def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass:
                     "target_semantics": "future_native_execution",
                     "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
+
+
+async def _deletion_receipt(hass: HomeAssistant, domain: str, item_id: str, tool_name: str) -> tuple[dict, str, str]:
+    """Read a deletion back after the reload: no stored entry and no entity left."""
+    stored = await _read_config_entry(hass, domain, item_id)
+    remains = _authoring_entity_id(hass, domain, item_id) is not None
+    verified = stored is None and not remains
+    body: dict[str, Any] = {"deleted": True, f"{domain}_id": item_id, "verified": verified,
+                            "message": f"{domain.capitalize()} '{item_id}' deleted successfully."}
+    if not verified:
+        body["message"] = (f"{domain.capitalize()} '{item_id}' was removed from its file, but "
+                           + ("its configuration still reads back" if stored is not None else "its entity is still present")
+                           + "; inspect it before retrying, and do not repeat the delete.")
+    return _tool_success(json.dumps(body)), "allowed", tool_name
 
 
 def _authoring_entity_id(hass: HomeAssistant, domain: str, entry_id: str) -> str | None:

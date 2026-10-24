@@ -15,7 +15,7 @@ from .access_key_store import AccessKeyRecord
 
 
 async def async_observe_registration(
-    hass: HomeAssistant, access_key: AccessKeyRecord, domain: Literal["scene", "script"], storage_id: str,
+    hass: HomeAssistant, access_key: AccessKeyRecord, domain: Literal["automation", "scene", "script"], storage_id: str,
 ) -> dict[str, Any]:
     """Observe identity and state, without promising config freshness or availability.
 
@@ -25,7 +25,7 @@ async def async_observe_registration(
     Cancellation propagates and there are no listeners or background tasks.
     """
     deadline = asyncio.get_running_loop().time() + AUTHORING_REGISTRATION_TIMEOUT_SECONDS
-    platform = "homeassistant" if domain == "scene" else "script"
+    platform = "homeassistant" if domain == "scene" else domain
     registry = er.async_get(hass)
     while True:
         check_request_authority()
