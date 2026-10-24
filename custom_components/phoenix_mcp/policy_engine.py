@@ -683,6 +683,28 @@ def _eligible_for_indirect_expansion(entry: er.RegistryEntry) -> bool:
     return entry.entity_category is None and entry.hidden_by is None
 
 
+def _service_area_ids(hass: HomeAssistant, values: list[str]) -> list[str]:
+    """Area IDs for service area targets given as an ID, a name or an alias.
+
+    The reads accept all three, so an agent that read "Kitchen" from them can
+    target it too. Each area still expands only to the entities the access key
+    may write, so an unknown name and a hidden area both expand to nothing; the
+    reading is not noted, since naming the area ID would confirm an area the key
+    cannot see.
+    """
+    registry = ar.async_get(hass)
+    resolved: list[str] = []
+    for value in values:
+        if registry.async_get_area(value) is not None:
+            resolved.append(value)
+            continue
+        wanted = value.strip().casefold()
+        matches = [area.id for area in registry.async_list_areas()
+                   if wanted in {area.name.casefold(), *(str(alias).casefold() for alias in area.aliases or ())}]
+        resolved.extend(matches)
+    return resolved
+
+
 def expand_service_targets(
     *,
     entity_id: str | list[str] | None,
@@ -752,6 +774,7 @@ def expand_service_targets(
             aids = [a for a in area_id if isinstance(a, str)]
         else:
             aids = []
+        aids = _service_area_ids(hass, aids)
         # Build indexes once to avoid O(A*E) and O(D*E) nested iteration.
         device_entity_index: dict[str, list[str]] = {}
         area_entity_index: dict[str, list[str]] = {}

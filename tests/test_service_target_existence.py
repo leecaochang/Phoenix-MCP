@@ -131,3 +131,20 @@ async def test_call_service_mixed_lists_act_the_same(home):
     assert none_dispatched == []
     _, yaml_dispatched = await call([home.allowed, YAML_ONLY])
     assert yaml_dispatched == [[home.allowed]]
+
+
+async def test_an_area_name_or_alias_targets_like_its_id(home):
+    from homeassistant.helpers import area_registry as ar
+
+    ar.async_get(home.hass).async_update(home.area.id, aliases={"Cookhouse"})
+
+    async def preview(ids):
+        return _body(await _call_tool("dry_run_service", _args("turn_on", {"kind": "area", "ids": ids}),
+                                      home.key, home.hass, _data()))
+
+    by_id = await preview([home.area.id])
+    for spelling in ("Kitchen", "kitchen", "cookhouse"):
+        assert await preview([spelling]) == by_id
+    # An unknown name and an area with nothing visible answer alike, with no note naming an area ID.
+    ar.async_get(home.hass).async_create("Attic")
+    assert await preview(["Nowhere"]) == await preview(["Attic"])

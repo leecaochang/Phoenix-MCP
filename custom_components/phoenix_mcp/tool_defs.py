@@ -492,7 +492,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "service": {"type": "object", "description": "Service to execute.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported calls; use kind all for intentional domain-wide targeting.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported calls; use kind all for intentional domain-wide targeting.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets; an area may also be named by its name or an alias."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -2780,7 +2780,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "service": {"type": "object", "description": "Service to preview.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported service previews.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported service previews.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets; an area may also be named by its name or an alias."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
