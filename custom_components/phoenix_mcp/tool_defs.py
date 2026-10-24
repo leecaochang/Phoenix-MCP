@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import BACKUP_COMPLETION_WAIT_SECONDS, GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -3496,7 +3496,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_backups",
-        "description": "List existing Home Assistant backups (compact, newest first) and the available backup agents. Reports total alongside returned and truncated, so a clipped page is distinguishable from the whole list.",
+        "description": "List existing Home Assistant backups (compact, newest first, each with encrypted) and the available backup agents. Reports total alongside returned and truncated, so a clipped page is distinguishable from the whole list. agent_errors names locations that could not be read; manager_state shows a running backup.",
         "cap": "cap_backup",
         "inputSchema": {
             "type": "object",
@@ -3509,16 +3509,18 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_backup",
         "description": (
-            "Create a new Home Assistant backup. May require admin approval. Defaults to an "
-            "available local backup agent (auto-detected). Phoenix MCP does not support restoring backups (too "
-            "destructive); restore from the Home Assistant UI."
+            "Create a Home Assistant backup. May require admin approval. Locations (never Home Assistant Cloud, "
+            "which keeps one backup), contents and encryption follow Home Assistant's backup settings; the result "
+            f"says when it is unencrypted or local only. Waits up to {BACKUP_COMPLETION_WAIT_SECONDS} seconds: status "
+            "is completed, failed or started (still running), and created says whether it exists anywhere. Phoenix "
+            "MCP does not support restoring backups; restore from the Home Assistant UI."
         ),
         "cap": "cap_backup",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Optional backup name."},
-                "agent_ids": {"type": "array", "items": {"type": "string"}, "description": "Backup agent ids (see list_backups available_agents); defaults to an auto-detected local agent."},
+                "agent_ids": {"type": "array", "items": {"type": "string"}, "description": "Backup agent ids (see list_backups available_agents); omit to use the backup settings."},
             },
         },
     },

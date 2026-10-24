@@ -32,6 +32,16 @@ CALENDAR_EVENT_MAX_BYTES = 32768
 CALENDAR_RESULT_MAX_BYTES = 1048576
 
 PROXY_TIMEOUT_SECONDS = 30
+# create_backup holds the request until Home Assistant reports the backup finished,
+# so the result can say where it landed and what failed. A configuration-only
+# backup fits; one with add-ons can run longer and is then reported as started.
+BACKUP_COMPLETION_WAIT_SECONDS = 45
+# Backup agents that keep one backup per account, so a backup Phoenix MCP sent
+# there would replace the operator's own. Matched on the agent ID's domain.
+BACKUP_SINGLE_SLOT_AGENT_DOMAINS = frozenset({"cloud"})
+# The agents that store a backup on Home Assistant's own disk, in the order
+# create_backup prefers them when the backup settings name no location.
+LOCAL_BACKUP_AGENT_IDS = ("hassio.local", "backup.local")
 AUTHORING_REGISTRATION_TIMEOUT_SECONDS = 5.0
 AUTHORING_REGISTRATION_POLL_SECONDS = 0.1
 RELATIVE_VOLUME_MAX_CONCURRENCY = 8
