@@ -100,9 +100,9 @@ const VERSION_RESOURCE_TYPES = {
 } satisfies Record<VersionResourceType, true>;
 
 describe("frontend/backend version resource type contract", () => {
-  it("the TS union covers exactly what _record_version records", () => {
+  it("the TS union covers exactly what _record_version records, plus history-only types", () => {
     expect(Object.keys(VERSION_RESOURCE_TYPES).sort()).toEqual(
-      [...versionContract.version_resource_types].sort(),
+      [...versionContract.version_resource_types, ...versionContract.history_only_version_resource_types].sort(),
     );
   });
 

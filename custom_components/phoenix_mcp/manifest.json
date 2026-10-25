@@ -10,5 +10,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/leecaochang/Phoenix-MCP/issues",
   "requirements": ["Babel>=2.18.0", "jsonschema>=4.26.0"],
-  "version": "1.4.0"
+  "version": "1.5.0"
 }

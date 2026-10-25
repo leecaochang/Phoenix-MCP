@@ -226,8 +226,8 @@ PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
         "cap_energy_write": CAP_CONFIRM,
         "cap_dashboard_resources": CAP_CONFIRM,
         "cap_backup": CAP_CONFIRM,
-        "cap_filesystem": CAP_CONFIRM,
-        "cap_esphome_yaml": CAP_CONFIRM,
+        "cap_filesystem": CAP_ALLOW,
+        "cap_esphome_yaml": CAP_ALLOW,
         # Denied even for this general-purpose administrator: flashing firmware is
         # a specialist action that can leave a device unreachable, so it is granted
         # on purpose (the esphome persona) rather than inherited.
@@ -262,7 +262,7 @@ PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
         "cap_energy_write": CAP_CONFIRM,
         "cap_dashboard_resources": CAP_CONFIRM,
         "cap_backup": CAP_DENY,
-        "cap_filesystem": CAP_CONFIRM,
+        "cap_filesystem": CAP_ALLOW,
         "cap_esphome_yaml": CAP_DENY,
         "cap_esphome_flash": CAP_DENY,
         "cap_yaml_edit": CAP_DENY,
@@ -329,7 +329,7 @@ PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
         "cap_dashboard_resources": CAP_DENY,
         "cap_backup": CAP_DENY,
         "cap_filesystem": CAP_DENY,
-        "cap_esphome_yaml": CAP_CONFIRM,
+        "cap_esphome_yaml": CAP_ALLOW,
         "cap_esphome_flash": CAP_CONFIRM,
         "cap_yaml_edit": CAP_DENY,
     },

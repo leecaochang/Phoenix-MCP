@@ -228,6 +228,13 @@ describe("ChangesView device YAML detail", () => {
     return view;
   }
 
+  it("shows a configuration file version as history only, with no Restore", async () => {
+    const view = await openDetail(DEVICE.replace("WARN", "DEBUG"));
+    expect(view.container.textContent).toContain("name: rf-blaster2");
+    // Same query the restorable-resource test clicks, so an absent match means no button.
+    expect(view.queryAllByText("Restore this configuration")).toHaveLength(0);
+  });
+
   it("renders the file itself, not a config: block wrapping it", async () => {
     const { container } = await openDetail();
     const text = container.textContent ?? "";

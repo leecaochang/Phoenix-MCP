@@ -46,12 +46,6 @@ describe("friendly approval summary", () => {
       "Home Assistant will be briefly unavailable while it restarts.",
     ],
     [
-      "diff.patch_yaml_config.set",
-      { path: "[11].sensor[3].state", file: "templates.yaml" },
-      "Set configuration in templates.yaml",
-      "Open Details to review the exact proposed change.",
-    ],
-    [
       "diff.dashboard_card.edit.section",
       { card_index: 4, label: "dashboard-steve", view_index: 0, section_index: 5 },
       "Update a card on dashboard 'dashboard-steve'",

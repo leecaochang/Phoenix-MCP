@@ -2167,57 +2167,6 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         }
     },
     {
-        "name": "set_esphome_yaml",
-        "requires": "esphome",
-        "description": (
-            "Write one ESPHome device YAML file. This does NOT flash the device: it writes to "
-            "disk, and the device keeps running its current firmware until a build is compiled "
-            "and installed, which are separate tools. Keep "
-            "any __PHOENIX_REDACTED__ placeholder exactly where it is; the real value is "
-            "restored automatically. A credential cannot be changed to a new literal value: "
-            "to change one, replace it with a !secret reference (the key must already exist "
-            "in the ESPHome secrets.yaml, see defined_secrets) and set the value there. For a "
-            "credential that does NOT exist yet (a new device needing an API/OTA encryption key or "
-            "an ota password), write !phoenix_generate as the value and a strong random one is "
-            "created as the file is written: never invent a key yourself, and note you will not "
-            "be shown what was generated. If API and OTA both specify encryption keys, ESPHome "
-            "requires them to match: use one shared !secret, or let OTA inherit the API key. Pass "
-            "expected_hash from get_esphome_yaml to refuse the write if the file changed."
-        ),
-        "cap": "cap_esphome_yaml",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string", "description": "Device YAML filename, e.g. 'living-room-sensor.yaml'."},
-                "content": {"type": "string", "description": "Full new file content."},
-                "expected_hash": {
-                    "type": "string",
-                    "description": "content_hash from get_esphome_yaml; refuses the write if the file changed since.",
-                },
-            },
-            "required": ["file", "content"],
-        },
-    },
-    {
-        "name": "delete_esphome_yaml",
-        "requires": "esphome",
-        "description": (
-            "Delete one ESPHome device YAML file. This does NOT touch the device: it keeps "
-            "running the firmware it already has and keeps its Home Assistant entities, and it "
-            "is not unadopted. Use this to clean up a configuration that is no longer wanted, "
-            "for example a scratch file or a mistyped filename. The file is snapshotted before "
-            "it is removed, so an administrator can restore it."
-        ),
-        "cap": "cap_esphome_yaml",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string", "description": "Device YAML filename, e.g. 'old-device.yaml'."},
-            },
-            "required": ["file"],
-        },
-    },
-    {
         "name": "get_esphome_overview",
         "requires": "esphome",
         "description": (
@@ -2234,9 +2183,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "requires": "esphome_builder",
         "description": (
             "Check one ESPHome device YAML file for configuration errors, using the ESPHome "
-            "Device Builder. This validates the file AS IT IS ON DISK, so write your changes "
-            "with set_esphome_yaml first and then validate. It does not compile or flash "
-            "anything, and the device is untouched either way. Returns whether the config is "
+            "Device Builder. This validates the file AS IT IS ON DISK. It does not compile or "
+            "flash anything, and the device is untouched either way. Returns whether the config is "
             "valid plus the validator's output, with any credentials removed."
         ),
         "cap": "cap_esphome_yaml",
@@ -2355,37 +2303,6 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
             },
             "required": ["file"],
-        },
-    },
-    {
-        "name": "rename_esphome_device",
-        "requires": "esphome_builder",
-        "description": (
-            "Rename an ESPHome device: its configuration file, its esphome name, and the "
-            "firmware on the device. This COMPILES AND FLASHES, so it carries the same risk as "
-            "install_esphome_firmware and needs the same permission. Entities, entity ids, "
-            "areas and history survive, because Home Assistant keys ESPHome entities on the "
-            "device MAC. What does NOT survive: the device's user-defined actions are exposed "
-            "as services named after the device, so esphome.<old_name>_<action> becomes "
-            "esphome.<new_name>_<action> and any automation calling one must be updated. The "
-            "device MUST BE REACHABLE: the add-on copies the configuration, compiles it, then "
-            "flashes over the air, and if that flash fails it deletes the new copy so nothing "
-            "is renamed at all."
-        ),
-        "cap": "cap_esphome_flash",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
-                "new_name": {
-                    "type": "string",
-                    "description": (
-                        "New device name: lowercase letters, digits and hyphens, not starting "
-                        "or ending with a hyphen, 31 characters or fewer."
-                    ),
-                },
-            },
-            "required": ["file", "new_name"],
         },
     },
     {
@@ -2847,10 +2764,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "restore_configuration",
         "description": (
-            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
+            "Restore a secret-safe Template helper, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
         ),
         "caps_any": [
-            "cap_helper_write", "cap_yaml_edit", "cap_filesystem",
+            "cap_helper_write",
             "cap_blueprint_write", "cap_energy_write", "cap_lovelace_write", "cap_dashboard_resources",
         ],
         "inputSchema": {
@@ -2903,8 +2820,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Read a UTF-8 text file under www/, themes/, or custom_templates/. "
             "Returns 'not found' if the file does not exist or is outside the allowed directories. "
-            "The response includes a content_hash; pass it to write_file as expected_hash to make the "
-            "write conditional on the file not having changed since this read."
+            "The response includes a content_hash that changes whenever the file does."
         ),
         "cap": "cap_filesystem",
         "inputSchema": {
@@ -2913,30 +2829,6 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "path": {"type": "string", "description": "File path under www/, themes/, or custom_templates/."},
             },
             "required": ["path"],
-        },
-    },
-    {
-        "name": "write_file",
-        "description": (
-            "Write a UTF-8 text file under www/, themes/, or custom_templates/ (creates parent dirs). "
-            "These directories hold static assets (dashboard resources, themes, Jinja template files), "
-            "not Home Assistant config; to author automations, scripts, scenes, helpers, or dashboards "
-            "use their dedicated tools. May require admin approval. Paths outside the allowed directories "
-            "are refused. Pass expected_hash (the content_hash from a prior read_file) to make the write "
-            "conditional: if the file changed since you read it, the write is refused instead of "
-            "overwriting the other change. A verified write returns a recovery_id for "
-            "restore_configuration and an action of created or overwrote. A write under themes/ also "
-            "reloads themes so the change takes effect (post_action reports the reload)."
-        ),
-        "cap": "cap_filesystem",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Destination path under www/, themes/, or custom_templates/."},
-                "content": {"type": "string", "description": "Complete UTF-8 text to write."},
-                "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior read_file; the write is refused if the file changed since then."},
-            },
-            "required": ["path", "content"],
         },
     },
     {
@@ -2950,10 +2842,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "secret is visible; keep secrets in secrets.yaml and reference them with !secret. "
             "secrets.yaml, hidden directories, and the esphome directory cannot be read. Use "
             "get_esphome_yaml for ESPHome device files so credentials are masked and entity scope "
-            "is enforced. content_hash is always the "
-            "hash of the WHOLE file, even when key is given; pass it to set_yaml_config as "
-            "expected_hash to make a configuration.yaml write conditional on the file not having "
-            "changed since this read."
+            "is enforced. content_hash is always the hash of the WHOLE file, even when key is "
+            "given. This tool only reads: YAML configuration is edited by the operator, and "
+            "automations, scripts and scenes are changed with their own tools."
         ),
         "cap": "cap_yaml_edit",
         "inputSchema": {
@@ -2962,85 +2853,6 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "file": {"type": "string", "description": "Optional. Path relative to the configuration directory, e.g. 'automations.yaml' or 'packages/kitchen.yaml'. Defaults to configuration.yaml. Must be a .yaml or .yml file outside esphome/."},
                 "key": {"type": "string", "description": "Optional. Dotted path to one mapping key, e.g. 'http' or 'homeassistant.packages'. Returns just that fragment."},
             },
-        },
-    },
-    {
-        "name": "set_yaml_config",
-        "description": (
-            "Replace the entire contents of a YAML configuration file (a full-file replace). With no "
-            "file argument this writes configuration.yaml; pass file to write an !include target such "
-            "as templates.yaml or sensors.yaml, using the same path get_yaml_config reads. A file is "
-            "writable only when configuration.yaml actually loads it and does not load it under "
-            "homeassistant:, http:, frontend: or lovelace:, so a packages file and anything holding "
-            "security settings are refused wherever they live. To author automations, scripts, scenes, "
-            "helpers, or dashboards use their dedicated tools instead. Preserve any existing content "
-            "you are not changing, including !include and !secret lines. May require admin approval. "
-            "High blast "
-            "radius: a broken file prevents Home Assistant from starting. Run check_config and restart "
-            "HA afterwards to apply. Pass expected_hash (the content_hash from a prior get_yaml_config) "
-            "to make the write conditional: if the file changed since you read it, the write is refused "
-            "instead of overwriting the other change. The content must parse as YAML. A few security "
-            "keys cannot be changed here at all (homeassistant: auth_providers / auth_mfa_modules / "
-            "packages, http: trusted_proxies / use_x_forwarded_for / cors_allowed_origins / "
-            "ip_ban_enabled / login_attempts_threshold, frontend: extra_module_url, lovelace: "
-            "resources); copy them through unchanged and the write is accepted. A write that drops a "
-            "top-level key present in the current file is refused unless remove_keys names that key. "
-            "A verified write returns a recovery_id for restore_configuration."
-        ),
-        "cap": "cap_yaml_edit",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string", "description": "Optional. Path relative to the configuration directory, e.g. 'templates.yaml' or 'packages/kitchen.yaml'. Defaults to configuration.yaml. Must be a .yaml or .yml file that configuration.yaml loads."},
-                "content": {"type": "string", "description": "The full new contents of that file."},
-                "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior get_yaml_config; the write is refused if the file changed since then."},
-                "remove_keys": {"type": "array", "items": {"type": "string"}, "description": "Optional. Top-level keys this write intentionally removes, e.g. ['recorder']. A write that drops a top-level key not named here is refused, so an accidental deletion cannot ride along with an unrelated edit."},
-                "remove_entries": {"type": "integer", "description": "Optional. For a file whose top level is a list (templates.yaml, sensors.yaml): the exact number of entries this write intentionally removes. A write that drops entries without this is refused, so an accidental deletion cannot ride along with an unrelated edit. Prefer patch_yaml_config to change one entry without resending the others."},
-            },
-            "required": ["content"],
-        },
-    },
-    {
-        "name": "patch_yaml_config",
-        "description": (
-            "Change ONE key or list entry inside a YAML configuration file without resending the "
-            "file. Prefer this over set_yaml_config for any edit that touches a single setting: "
-            "everything you do "
-            "not address stays exactly as written, comments and ordering included, and the "
-            "approval an administrator sees is that one key rather than the whole file. With no "
-            "file argument this edits configuration.yaml; pass file to edit an !include target "
-            "such as templates.yaml, subject to the same rules set_yaml_config applies to it. "
-            "Address with the address object: kind key or path plus value. A key is a "
-            "dotted path of mapping keys, e.g. 'recorder' or 'recorder.include'; a path is a list "
-            "mixing mapping keys and list indexes, e.g. [0, 'binary_sensor', 0, 'state'], and is "
-            "the only way to reach an entry in a file whose top level is a list (templates.yaml "
-            "and sensors.yaml usually are). Indexes count from 0; one past the last entry appends. "
-            "For a set change, content is the "
-            "YAML for that key's new VALUE, the shape get_yaml_config returns when you pass the "
-            "same key. Address the NARROWEST key you are changing: your content is written "
-            "verbatim, but a value read back arrives in standard YAML style rather than the "
-            "file's own layout and carries none of the comments inside it, so re-writing an "
-            "outer key reformats that whole block. change.kind set replaces the addressed value, or adds a "
-            "missing mapping key; append adds one value to an existing list; remove deletes the addressed "
-            "value. The key's parent must already exist: nothing is "
-            "created along the way, so to add 'recorder.include.entities' when 'recorder.include' "
-            "is absent, set 'recorder.include' with the whole subtree. Read the key first, then "
-            "pass the content_hash from that read as expected_hash to refuse the write if the "
-            "file changed in between; the result returns the new content_hash so further patches "
-            "can be chained. May require admin approval. Run check_ha_config and restart HA "
-            "afterwards to apply. The same security keys set_yaml_config refuses cannot be "
-            "changed here either. A verified write returns a recovery_id for restore_configuration."
-        ),
-        "cap": "cap_yaml_edit",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string", "description": "Optional. Path relative to the configuration directory, e.g. 'templates.yaml'. Defaults to configuration.yaml. Must be a .yaml or .yml file that configuration.yaml loads."},
-                "address": {"type": "object", "description": "Key or path addressed by this patch.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["key", "path"], "description": "Address kind."}, "value": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": ["string", "integer"]}}], "description": "Dotted key or key/index path."}}, "required": ["kind", "value"]},
-                "change": {"type": "object", "description": "Set, append, or remove operation.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "content": {"type": "string", "description": "YAML value for set or append."}}, "required": ["kind"]},
-                "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior get_yaml_config; the write is refused if configuration.yaml changed since then."},
-            },
-            "required": ["address", "change"],
         },
     },
     {
@@ -3928,7 +3740,7 @@ def _annot(read_only: bool, destructive: bool, idempotent: bool, open_world: boo
 #                 _EXECUTOR_REGISTRY and _WRITE_GATED_TOOLS (a guard test pins it).
 #   destructiveHint  false only for genuinely ADDITIVE writes (create_*, card add,
 #                 backup create, permit-join). A whole-object replace (edit_*,
-#                 set_*, write_file) and physical actuation are destructive: they
+#                 set_*) and physical actuation are destructive: they
 #                 overwrite or move something that was in another state.
 #   idempotentHint  true when repeating the identical call leaves the same end
 #                 state (set/replace/delete/turn on/off), false when each call adds
@@ -3995,8 +3807,6 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "search_esphome_yaml": _annot(True, False, True),
     "list_esphome_devices": _annot(True, False, True),
     "list_esphome_jobs": _annot(True, False, True),
-    "set_esphome_yaml": _annot(False, True, True),
-    "delete_esphome_yaml": _annot(False, True, True),
     "validate_esphome_yaml": _annot(True, False, True),
     "get_esphome_board": _annot(True, False, True),
     "get_esphome_component": _annot(True, False, True),
@@ -4009,7 +3819,6 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "clean_esphome_build": _annot(False, True, True),
     # Not idempotent: running it twice renames twice, and the second call
     # addresses the device by its old name, which matches nothing.
-    "rename_esphome_device": _annot(False, True, False),
     "install_esphome_firmware": _annot(False, True, False),
     "get_esphome_job": _annot(True, False, True),
     "wait_for_esphome_job": _annot(True, False, True),
@@ -4062,7 +3871,6 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "delete_dashboard_card": _annot(False, True, True),
     # Destructive: set and remove both replace or drop whatever the path held.
     "patch_dashboard": _annot(False, True, True),
-    "patch_yaml_config": _annot(False, True, True),
     "get_helper_settings": _annot(True, False, True),
     "set_helper_settings": _annot(False, True, True),
     "set_entity": _annot(False, True, True),
@@ -4070,8 +3878,6 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "set_device": _annot(False, True, True),
     "remove_device": _annot(False, True, True),
     "delete_entity": _annot(False, True, True),
-    "write_file": _annot(False, True, True),
-    "set_yaml_config": _annot(False, True, True),
     "set_integration_enabled": _annot(False, True, True),
     "set_integration": _annot(False, True, True),
     "reconfigure_integration": _annot(False, True, False),

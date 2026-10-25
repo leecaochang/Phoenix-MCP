@@ -12,7 +12,6 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
 from custom_components.phoenix_mcp.tools.recovery import _tool_restore_configuration
 from custom_components.phoenix_mcp.tools.lovelace import _execute_set_dashboard_config, _recoverable_dashboard_save
-from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
 from custom_components.phoenix_mcp.tools.energy import _execute_edit_energy_config
 from custom_components.phoenix_mcp.ws_dispatch import async_ws_command, WsDispatchError
 
@@ -30,31 +29,19 @@ def body(result):
 
 
 @pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
-async def test_file_recovery_preserves_line_endings_through_write_read_and_restore(hass, newline):
-    from custom_components.phoenix_mcp.tools.config_files import _execute_write_file, _tool_read_file
+async def test_read_file_returns_line_endings_and_hash_unchanged(hass, newline):
+    """A read keeps the file's own line endings, so its content hash is the file's."""
+    from custom_components.phoenix_mcp.tools.config_files import _tool_read_file
     from custom_components.phoenix_mcp.helpers import content_hash
 
-    t, d = access_key(cap_filesystem="allow"), runtime()
     path = Path(hass.config.path("www", "endings.txt"))
     path.parent.mkdir(parents=True, exist_ok=True)
-    before = newline.join(["original", "text", ""])
-    wanted = newline.join(["changed", "text", ""])
-    path.write_bytes(before.encode())
-    result = await _execute_write_file({"path": "www/endings.txt", "content": wanted,
-                                        "expected_hash": content_hash(before)}, t, hass, d)
-    assert result[1] == "allowed", result
-    saved = d.config_recovery.get(body(result)["recovery_id"])
-    assert saved["phase"] == "verified"
-    assert saved["before"]["content"] == before
-    assert saved["source"]["content"] == wanted
-    assert path.read_bytes() == wanted.encode()
-    read = await _tool_read_file({"path": "www/endings.txt"}, t, hass)
-    assert body(read)["content"] == wanted
-    restored = await _execute_write_file({"path": "www/endings.txt", "content": saved["before"]["content"],
-                                          "expected_hash": content_hash(wanted)}, t, hass, d)
-    assert restored[1] == "allowed", restored
-    assert d.config_recovery.get(body(restored)["recovery_id"])["phase"] == "verified"
-    assert path.read_bytes() == before.encode()
+    text = newline.join(["original", "text", ""])
+    path.write_bytes(text.encode())
+    read = await _tool_read_file({"path": "www/endings.txt"}, access_key(cap_filesystem="allow"), hass)
+    assert read[1] == "allowed", read
+    assert body(read)["content"] == text
+    assert body(read)["content_hash"] == content_hash(text)
 
 
 async def test_real_dashboard_registry_restore_updates_only_supported_fields(hass, hass_admin_user):
@@ -231,21 +218,25 @@ async def test_dashboard_layout_restore_records_only_verified_history(hass, stal
     assert len(current_versions - previous_versions) == (0 if stale_readback else 1)
 
 
-async def test_file_restore_preview_compares_live_content(hass):
-    d, t = runtime(), access_key(cap_filesystem="allow")
-    rel = "www/audit.txt"
-    p = Path(hass.config.path(rel))
+async def test_blueprint_restore_preview_compares_live_content(hass):
+    from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
+    d, t = runtime(), access_key(cap_blueprint_write="allow", cap_automation_write="allow")
+    rel = "audit/preview.yaml"
+    current = "blueprint:\n  name: After\n  domain: automation\ntriggers: []\nactions: []\n"
+    saved = current.replace("After", "Before")
+    p = Path(hass.config.path("blueprints", "automation", "audit", "preview.yaml"))
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("After")
-    snapshot = _authored_file_snapshot(rel, True, "Before")
-    rid = await d.config_recovery.begin(f"authored_file:{rel}", "write_file", t.id, snapshot)
+    p.write_text(current)
+    snapshot = _blueprint_recovery_snapshot("automation", rel, saved)
+    rid = await d.config_recovery.begin(f"blueprint:automation/{rel}", "edit_blueprint", t.id, snapshot)
     await d.config_recovery.mark(rid, "verified")
     d.config_recovery.leave(rid)
     result = await _tool_restore_configuration({"recovery_id": rid, "side": "before"}, t, hass, d)
+    assert result[1] == "allowed", result
     diff = body(result)["diff"]
-    assert diff["before"] == "After"
-    assert diff["after"] == "Before"
-    assert p.read_text() == "After"
+    assert diff["before"] == current
+    assert diff["after"] == saved
+    assert p.read_text() == current
 
 
 async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
@@ -286,17 +277,24 @@ async def test_energy_partial_readback_returns_observed_state(hass):
     assert not d.versions.list_recent()
 
 
-async def test_admin_restore_button_restores_another_access_keys_file(hass, hass_admin_user):
+@pytest.mark.parametrize("family", ["authored_file", "yaml_file"])
+async def test_admin_restore_button_refuses_a_stored_file_record(hass, hass_admin_user, family):
+    """An administrator restore of configuration file text is refused and writes nothing.
+
+    No current tool records file snapshots, so the record is built in its stored form.
+    The blueprint and other families restore through the same button.
+    """
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
     from custom_components.phoenix_mcp.const import DOMAIN
     d = runtime()
     hass.data[DOMAIN] = d
-    path = Path(hass.config.path("www/audit.txt"))
+    rel = "packages/audit.yaml" if family == "yaml_file" else "www/audit.txt"
+    path = Path(hass.config.path(rel))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("After")
-    snapshot = _authored_file_snapshot("www/audit.txt", True, "Before")
-    rid = await d.config_recovery.begin("authored_file:www/audit.txt", "write_file", "audit", snapshot)
+    snapshot = {"snapshot_type": family, "schema": 1, "resource_id": rel, "exists": True, "content": "Before"}
+    rid = await d.config_recovery.begin(f"{family}:{rel}", "file_write", "audit", snapshot)
     await d.config_recovery.mark(rid, "verified")
     d.config_recovery.leave(rid)
     values = {KEY_HASS_USER: hass_admin_user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "audit"}
@@ -308,8 +306,14 @@ async def test_admin_restore_button_restores_another_access_keys_file(hass, hass
     with patch("custom_components.phoenix_mcp.admin_view._read_body", AsyncMock(return_value={"action": "restore", "side": "before"})):
         result = await view.post(request, recovery_id=rid)
     assert result.status == 200
-    assert json.loads(result.text)["outcome"] == "allowed"
-    assert path.read_text() == "Before"
+    response = json.loads(result.text)
+    assert response["outcome"] == "invalid_request"
+    assert response["result"]["content"][0]["text"].startswith(
+        "This recovery record holds configuration file text, which Phoenix does not write back."
+    )
+    assert path.read_text() == "After"
+    assert [record["id"] for record in d.config_recovery.records()] == [rid]
+    assert d.config_recovery.get(rid)["phase"] == "verified"
 
 
 async def test_real_blueprint_formatting_is_verified(hass, hass_admin_user):
@@ -375,7 +379,7 @@ async def test_template_recreation_refuses_revoked_entity_scope(hass, scope, exi
     assert len(d.config_recovery.records()) == 1
 
 
-@pytest.mark.parametrize("family", ["yaml_file", "blueprint_source", "energy_preferences", "dashboard_layout", "dashboard_registry"])
+@pytest.mark.parametrize("family", ["blueprint_source", "energy_preferences", "dashboard_layout", "dashboard_registry"])
 async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, family):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
@@ -397,11 +401,7 @@ async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, fa
             return dict(current_prefs)
         return await original_ws(host, command, payload)
 
-    if family == "yaml_file":
-        path = Path(hass.config.path("configuration.yaml"))
-        path.write_text("default_config:\ninput_boolean: {}\n")
-        snapshot = _authored_file_snapshot("configuration.yaml", True, "default_config:\n", "yaml_file")
-    elif family == "blueprint_source":
+    if family == "blueprint_source":
         assert await async_setup_component(hass, "automation", {})
         path = Path(hass.config.path("blueprints", "automation", "test", "admin.yaml"))
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -434,9 +434,7 @@ async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, fa
     assert response.status == 200, response.text
     assert json.loads(response.text)["outcome"] == "allowed", response.text
     assert d.config_recovery.records()[0]["phase"] == "verified"
-    if family == "yaml_file":
-        assert path.read_text() == "default_config:\n"
-    elif family == "blueprint_source":
+    if family == "blueprint_source":
         assert "name: Restored" in path.read_text()
     elif family == "energy_preferences":
         assert current_prefs["device_consumption"] == []
@@ -640,16 +638,3 @@ async def test_admin_energy_version_restore_keeps_a_durable_pre_image(hass):
         with patch.object(d.config_recovery, "begin", AsyncMock(side_effect=ConfigurationRecoveryError("store unavailable"))):
             refused = await async_restore_energy_prefs({"device_consumption": []}, t, hass, d)
     assert refused[1] == "invalid_request" and prefs == saved
-
-
-async def test_write_file_names_an_overwrite_and_reloads_a_theme(hass):
-    from custom_components.phoenix_mcp.tools.config_files import _execute_write_file
-    t, d = access_key(cap_filesystem="allow"), runtime()
-    reloads = []
-    hass.services.async_register("frontend", "reload_themes", lambda call: reloads.append(call))
-    created = await _execute_write_file({"path": "themes/calm.yaml", "content": "calm:\n  primary-color: teal\n"}, t, hass, d)
-    assert body(created)["action"] == "created" and body(created)["post_action"] == "themes_reloaded"
-    overwritten = await _execute_write_file({"path": "themes/calm.yaml", "content": "calm:\n  primary-color: navy\n"}, t, hass, d)
-    assert body(overwritten)["action"] == "overwrote" and len(reloads) == 2
-    plain = await _execute_write_file({"path": "www/note.txt", "content": "x"}, t, hass, d)
-    assert "post_action" not in body(plain)

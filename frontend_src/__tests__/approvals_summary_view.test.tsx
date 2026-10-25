@@ -166,38 +166,38 @@ describe("approval Summary modal", () => {
     const resolved = record({
       status: "approved",
       resolved_at: "2026-08-13T04:05:00Z",
-      tool_name: "patch_yaml_config",
+      tool_name: "edit_dashboard_card",
       diff: {
-        kind: "yaml_diff",
-        summary: "Set [11].sensor[3].state in templates.yaml",
-        summary_key: "diff.patch_yaml_config.set",
-        summary_params: { path: "[11].sensor[3].state", file: "templates.yaml" },
+        kind: "config_diff",
+        summary: "Replace card 2 on dashboard 'Home' (view 0)",
+        summary_key: "diff.dashboard_card.edit",
+        summary_params: { card_index: 2, label: "Home", view_index: 0 },
       },
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [resolved], total: 1, limit: 50, offset: 0 });
     const view = render(<ApprovalsView tab="history" onTabChange={() => {}} />);
-    expect(await view.findByText("Set configuration in templates.yaml")).toBeTruthy();
-    expect(view.queryByText("Set [11].sensor[3].state in templates.yaml")).toBeNull();
+    expect(await view.findByText("Update a card on dashboard 'Home'")).toBeTruthy();
+    expect(view.queryByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeNull();
 
     fireEvent.click(view.getByRole("button", { name: "Details", pressed: false }));
-    expect(await view.findByText("Set [11].sensor[3].state in templates.yaml")).toBeTruthy();
-    expect(view.queryByText("Set configuration in templates.yaml")).toBeNull();
+    expect(await view.findByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeTruthy();
+    expect(view.queryByText("Update a card on dashboard 'Home'")).toBeNull();
   });
 
   it("uses friendly titles in Pending before the modal opens", async () => {
     const pending = record({
-      tool_name: "patch_yaml_config",
+      tool_name: "edit_dashboard_card",
       diff: {
-        kind: "yaml_diff",
-        summary: "Set [11].sensor[3].state in templates.yaml",
-        summary_key: "diff.patch_yaml_config.set",
-        summary_params: { path: "[11].sensor[3].state", file: "templates.yaml" },
+        kind: "config_diff",
+        summary: "Replace card 2 on dashboard 'Home' (view 0)",
+        summary_key: "diff.dashboard_card.edit",
+        summary_params: { card_index: 2, label: "Home", view_index: 0 },
       },
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [pending], total: 1, limit: 50, offset: 0 });
     const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-    expect(await view.findByText("Set configuration in templates.yaml")).toBeTruthy();
-    expect(view.queryByText("Set [11].sensor[3].state in templates.yaml")).toBeNull();
+    expect(await view.findByText("Update a card on dashboard 'Home'")).toBeTruthy();
+    expect(view.queryByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeNull();
   });
 
   it.each([

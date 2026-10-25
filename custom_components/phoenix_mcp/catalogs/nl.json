@@ -136,11 +136,11 @@
         "label": "Aangepast"
       },
       "dashboard_designer": {
-        "description": "Kan entiteiten ontdekken en dashboards bouwen. Thema- en aangepaste kaartbestanden vereisen goedkeuring. Kan geen apparaten bedienen of andere configuratie bewerken.",
+        "description": "Kan entiteiten ontdekken, dashboards bouwen en thema- en aangepaste kaartbestanden lezen. Het registreren van aangepaste kaartbestanden vereist goedkeuring. Kan geen apparaten bedienen of andere configuratie bewerken.",
         "label": "Dashboardontwerper"
       },
       "esphome": {
-        "description": "Leest ESPHome-apparaatstatus, diagnostiek en logboeken. Het bewerken van apparaat-YAML en het flashen van firmware vereisen elk goedkeuring. YAML-inloggegevens blijven verborgen en onwijzigbaar. Geen apparaatbediening of andere configuratie.",
+        "description": "Leest ESPHome-apparaatstatus, diagnostiek, logboeken en apparaat-YAML, en valideert en compileert die. Het flashen van firmware vereist goedkeuring. YAML-inloggegevens blijven verborgen. Geen apparaatbediening of andere configuratie.",
         "label": "ESPHome-apparaten"
       },
       "helper": "Een persona stelt de initiële mogelijkheden in. Je kunt afzonderlijke mogelijkheden aanpassen onder Geavanceerd. De persona verandert in Aangepast wanneer je instellingen niet meer overeenkomen met een voorinstelling.",
@@ -158,7 +158,7 @@
       },
       "noEsphome": "ESPHome is niet gedetecteerd op dit systeem",
       "power_user": {
-        "description": "Kan de meeste configuratie lezen en bewerken en Home Assistant herstarten. Gevoelige systeemwijzigingen vereisen goedkeuring. Bestandssysteem- en onbewerkte YAML-toegang blijven geblokkeerd.",
+        "description": "Kan de meeste configuratie lezen en bewerken en Home Assistant herstarten. Gevoelige systeemwijzigingen vereisen goedkeuring. Toegang tot bestanden en YAML-configuratie blijft geblokkeerd.",
         "label": "Ervaren gebruiker"
       },
       "read_only": {
@@ -419,12 +419,12 @@
         "label": "ESPHome-firmware flashen"
       },
       "cap_esphome_yaml": {
-        "description": "ESPHome-apparaat-YAML lezen en bewerken in een eigen afgeschermde omgeving onder esphome/, valideren en compileren. Inloggegevens worden bij het lezen gemaskeerd en kunnen niet worden gewijzigd. Compileren maakt alleen een binair bestand; voor het flashen van een apparaat is de aparte mogelijkheid ESPHome-firmware flashen nodig.",
+        "description": "ESPHome-apparaat-YAML lezen in een eigen afgeschermde omgeving onder esphome/, valideren en compileren. Inloggegevens worden bij het lezen gemaskeerd. Compileren maakt alleen een binair bestand; voor het flashen van een apparaat is de aparte mogelijkheid ESPHome-firmware flashen nodig.",
         "label": "ESPHome-apparaat-YAML"
       },
       "cap_filesystem": {
-        "description": "Bestanden lezen en schrijven onder www/, themes/ en custom_templates/.",
-        "label": "Bestandssysteemtoegang"
+        "description": "Bestanden lezen onder www/, themes/ en custom_templates/.",
+        "label": "Bestanden lezen"
       },
       "cap_helper_write": {
         "description": "Helpers zoals invoeren, tellers en timers maken, bewerken en verwijderen.",
@@ -495,8 +495,8 @@
         "label": "Automatiseringstraces"
       },
       "cap_yaml_edit": {
-        "description": "configuration.yaml en de YAML-bestanden die het rechtstreeks laadt lezen en bewerken. Goedkeuring wordt sterk aanbevolen. Inline-secrets worden blootgelegd, dus bewaar secrets in secrets.yaml met !secret.",
-        "label": "Onbewerkte YAML bewerken"
+        "description": "configuration.yaml en de andere YAML-bestanden in de configuratiemap lezen, de configuratie controleren en in YAML gedefinieerde domeinen opnieuw laden. Inline-secrets worden blootgelegd, dus bewaar secrets in secrets.yaml met !secret.",
+        "label": "YAML-configuratie"
       },
       "confirmUnavailable": "Deze mogelijkheid kan geen goedkeuring vereisen.",
       "esphomeBadgeTitle": "De ESPHome-tools blijven verborgen voor deze toegangssleutel totdat de add-on beschikbaar is. De mogelijkheid kan nu al worden ingesteld.",
@@ -621,8 +621,6 @@
       "dashboard_card.edit.section": "Kaart {card_index} vervangen op dashboard '{label}' (weergave {view_index}, sectie {section_index})",
       "delete_automation": "Automatisering '{automation_id}' verwijderen",
       "delete_entity": "Registeritem voor {entity_id} verwijderen",
-      "delete_esphome_yaml": "ESPHome-apparaatconfiguratie {rel} verwijderen. Het apparaat zelf blijft ongewijzigd.",
-      "delete_esphome_yaml.device": "ESPHome-apparaatconfiguratie {rel} verwijderen ({device}). Het apparaat zelf blijft ongewijzigd.",
       "delete_helper": "Helper '{helper_id}' verwijderen ({helper_type})",
       "delete_scene": "Scène '{scene_id}' verwijderen",
       "delete_script": "Script '{script_id}' verwijderen",
@@ -658,23 +656,11 @@
       "patch_dashboard.append": "Toevoegen aan {path} op dashboard '{label}'",
       "patch_dashboard.remove": "{path} verwijderen uit dashboard '{label}'",
       "patch_dashboard.set": "{path} instellen op dashboard '{label}'",
-      "patch_yaml_config.append": "Toevoegen aan {path} in {file}",
-      "patch_yaml_config.remove": "{path} verwijderen uit {file}",
-      "patch_yaml_config.set": "{path} instellen in {file}",
       "remove_device": "{device_id} verwijderen uit configuratie-item {config_entry_id}",
-      "rename_esphome_device": "ESPHome-apparaat {device} hernoemen naar {new_name}. Dit compileert en flasht het apparaat.",
-      "rename_esphome_device.services": "ESPHome-apparaat {device} hernoemen naar {new_name}, met hernoeming van {count} actieservice(s). Dit compileert en flasht het apparaat.",
       "restart_ha": "Home Assistant herstarten",
       "set_dashboard_config": "Dashboardindeling '{label}' instellen",
       "set_device": "Apparaatregister-metagegevens bijwerken ({fields}) voor {device_id}",
       "set_entity": "Registermetagegevens bijwerken ({fields}) voor {entity_id}",
-      "set_esphome_yaml": "ESPHome-apparaatconfiguratie {rel} bewerken. Dit flasht het apparaat niet.",
-      "set_esphome_yaml.device": "ESPHome-apparaatconfiguratie {rel} bewerken ({device}, {count} entiteiten). Dit flasht het apparaat niet.",
-      "set_yaml_config": "{file} vervangen",
-      "set_yaml_config.removing": "{file} vervangen en de bovenliggende {keys} verwijderen",
-      "set_yaml_config.removing_entries": "{file} vervangen en {count} items verwijderen",
-      "set_yaml_config.removing_entry": "{file} vervangen en 1 item verwijderen",
-      "write_file": "Bestand '{path}' schrijven",
       "zigbee_binding": "Zigbee-apparaatbinding wijzigen",
       "zigbee_binding.devices": "{operation} Zigbee-binding van {source} naar {target}",
       "zigbee_group": "Zigbee-groep wijzigen",
@@ -1990,10 +1976,6 @@
       "delete_automation.title": "Automatisering '{automation_id}' verwijderen",
       "delete_entity.body": "Hiermee wordt het registeritem voor {entity_id} verwijderd. De entiteit kan later opnieuw worden aangemaakt door zijn integratie.",
       "delete_entity.title": "Het registeritem voor {entity_id} verwijderen",
-      "delete_esphome_yaml.body": "Hiermee wordt {rel} permanent verwijderd. Het ESPHome-apparaat zelf wordt niet gewijzigd.",
-      "delete_esphome_yaml.device.body": "Hiermee wordt {rel} permanent verwijderd. Het ESPHome-apparaat {device} zelf wordt niet gewijzigd.",
-      "delete_esphome_yaml.device.title": "ESPHome-apparaatconfiguratie {rel} verwijderen ({device})",
-      "delete_esphome_yaml.title": "ESPHome-apparaatconfiguratie {rel} verwijderen",
       "delete_helper.body": "Hiermee wordt helper {helper_id} permanent verwijderd.",
       "delete_helper.title": "Helper '{helper_id}' verwijderen ({helper_type})",
       "delete_scene.body": "Hiermee wordt scène {scene_id} permanent verwijderd.",
@@ -2117,18 +2099,8 @@
       "patch_dashboard.remove.title": "Dashboard '{label}' bijwerken",
       "patch_dashboard.set.body": "Hiermee wordt de Home Assistant-dashboardconfiguratie bijgewerkt. Open Details om de exacte voorgestelde wijziging te bekijken.",
       "patch_dashboard.set.title": "Dashboard '{label}' bijwerken",
-      "patch_yaml_config.append.body": "Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "patch_yaml_config.append.title": "Configuratie toevoegen aan {file}",
-      "patch_yaml_config.remove.body": "Hiermee wordt configuratie uit {file} verwijderd. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "patch_yaml_config.remove.title": "Configuratie verwijderen uit {file}",
-      "patch_yaml_config.set.body": "Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "patch_yaml_config.set.title": "Configuratie instellen in {file}",
       "remove_device.body": "Hiermee wordt {device_id} uit zijn integratie verwijderd. Het apparaat moet mogelijk opnieuw worden toegevoegd.",
       "remove_device.title": "{device_id} verwijderen uit configuratie-item {config_entry_id}",
-      "rename_esphome_device.body": "Hiermee wordt {device} hernoemd, wordt de configuratie gecompileerd en wordt het apparaat geflasht. Koppel het niet los tijdens de update.",
-      "rename_esphome_device.services.body": "Hiermee wordt {device} hernoemd, worden de actieservices bijgewerkt, wordt de configuratie gecompileerd en wordt het apparaat geflasht. Koppel het niet los tijdens de update.",
-      "rename_esphome_device.services.title": "ESPHome-apparaat {device} hernoemen naar {new_name}, met hernoeming van {count} actieservice(s)",
-      "rename_esphome_device.title": "ESPHome-apparaat {device} hernoemen naar {new_name}",
       "restart_ha.body": "Home Assistant is kort niet beschikbaar tijdens het herstarten.",
       "restart_ha.title": "Home Assistant herstarten",
       "set_dashboard_config.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
@@ -2137,23 +2109,9 @@
       "set_device.title": "Apparaatregister-metagegevens bijwerken ({fields}) voor {device_id}",
       "set_entity.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
       "set_entity.title": "Registermetagegevens bijwerken ({fields}) voor {entity_id}",
-      "set_esphome_yaml.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_esphome_yaml.device.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_esphome_yaml.device.title": "ESPHome-apparaatconfiguratie {rel} bewerken ({device}, {count} entiteiten)",
-      "set_esphome_yaml.title": "ESPHome-apparaatconfiguratie {rel} bewerken",
-      "set_yaml_config.body": "Hiermee wordt de volledige inhoud van {file} vervangen. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_yaml_config.removing.body": "Hiermee wordt de volledige inhoud van {file} vervangen en configuratie verwijderd. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_yaml_config.removing.title": "{file} bijwerken",
-      "set_yaml_config.removing_entries.body": "Hiermee wordt de volledige inhoud van {file} vervangen en {count} items verwijderd. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_yaml_config.removing_entries.title": "{file} bijwerken",
-      "set_yaml_config.removing_entry.body": "Hiermee wordt de volledige inhoud van {file} vervangen en één item verwijderd. Open Details om de exacte voorgestelde wijziging te bekijken.",
-      "set_yaml_config.removing_entry.title": "{file} bijwerken",
-      "set_yaml_config.title": "{file} bijwerken",
       "view.defaultAria": "Standaardgoedkeuringsweergave",
       "view.details": "Details",
       "view.summary": "Samenvatting",
-      "write_file.body": "Hiermee wordt naar {path} geschreven. Bestaande inhoud op dat pad kan worden vervangen.",
-      "write_file.title": "Bestand '{path}' schrijven",
       "zigbee_binding.body": "Hiermee wordt de directe besturing tussen twee Zigbee-apparaten gewijzigd. Open Details om beide apparaten en de geselecteerde clusters te bekijken.",
       "zigbee_binding.devices.body": "Hiermee wordt {operation} directe Zigbee-besturing van {source} naar {target}. Open Details om de exacte relatie te bekijken.",
       "zigbee_binding.devices.title": "{operation} Zigbee-binding van {source} naar {target}",

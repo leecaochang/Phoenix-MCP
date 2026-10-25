@@ -131,9 +131,6 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.caps.cap_service_response.description": ("conversation.process",),
     "panel.caps.cap_esphome_yaml.description": ("esphome/",),
     "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
-    # panel.diff.set_yaml_config does not pin configuration.yaml: the tool writes
-    # any include target, so the summary carries a {file} placeholder and a pinned
-    # literal would force every locale to name the wrong file.
     # These echo an API field name back at the caller; translating it would name
     # a field that does not exist in the request body.
     "panel.adminError.expiresImmutable": ("expires_at",),

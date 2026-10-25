@@ -224,8 +224,8 @@
         "description": "Create and list backups. Restore them from Home Assistant."
       },
       "cap_filesystem": {
-        "label": "Filesystem access",
-        "description": "Read and write files under www/, themes/, and custom_templates/."
+        "label": "Read files",
+        "description": "Read files under www/, themes/, and custom_templates/."
       },
       "cap_dashboard_resources": {
         "label": "Dashboard resources",
@@ -233,15 +233,15 @@
       },
       "cap_esphome_yaml": {
         "label": "ESPHome device YAML",
-        "description": "Read and edit ESPHome device YAML in its own jail under esphome/, validate it, and compile it. Credentials are masked on read and cannot be changed. Compiling only builds a binary; flashing a device needs the separate ESPHome firmware flashing capability."
+        "description": "Read ESPHome device YAML in its own jail under esphome/, validate it, and compile it. Credentials are masked on read. Compiling only builds a binary; flashing a device needs the separate ESPHome firmware flashing capability."
       },
       "cap_esphome_flash": {
         "label": "ESPHome firmware flashing",
         "description": "Install compiled firmware onto an ESPHome device over the air, replacing what it is running. A bad image can leave a device unreachable until it is reflashed over a cable, so Confirm is strongly recommended."
       },
       "cap_yaml_edit": {
-        "label": "Edit raw YAML",
-        "description": "Read and edit configuration.yaml and the YAML files it loads directly. Approval is strongly recommended. Inline secrets are exposed, so store secrets in secrets.yaml with !secret."
+        "label": "YAML configuration",
+        "description": "Read configuration.yaml and the other YAML files in the configuration directory, check the configuration, and reload domains defined in YAML. Inline secrets are exposed, so store secrets in secrets.yaml with !secret."
       },
       "noBuilder": "Device Builder add-on not detected",
       "noEsphome": "ESPHome not detected",
@@ -276,11 +276,11 @@
       },
       "dashboard_designer": {
         "label": "Dashboard designer",
-        "description": "Can discover entities and build dashboards. Theme and custom card files require approval. Cannot control devices or edit other configuration."
+        "description": "Can discover entities, build dashboards, and read theme and custom card files. Registering custom card files requires approval. Cannot control devices or edit other configuration."
       },
       "esphome": {
         "label": "ESPHome devices",
-        "description": "Reads ESPHome device status, diagnostics, and logs. Editing device YAML and flashing firmware each need approval. YAML credentials stay hidden and unchangeable. No device control or other configuration."
+        "description": "Reads ESPHome device status, diagnostics, logs, and device YAML, and validates and compiles it. Flashing firmware needs approval. YAML credentials stay hidden. No device control or other configuration."
       },
       "helper": "A persona sets the initial capabilities. You can adjust individual capabilities in Advanced. The persona changes to Custom when your settings no longer match a preset.",
       "home_admin": {
@@ -298,7 +298,7 @@
       "noEsphome": "ESPHome was not detected on this system",
       "power_user": {
         "label": "Power user",
-        "description": "Can read and edit most configuration and restart Home Assistant. Sensitive system changes require approval. Filesystem and raw YAML access stay blocked."
+        "description": "Can read and edit most configuration and restart Home Assistant. Sensitive system changes require approval. File and YAML configuration access stay blocked."
       },
       "read_only": {
         "label": "Read-only observer",
@@ -1575,8 +1575,6 @@
       "delete_automation": "Delete automation '{automation_id}'",
       "delete_calendar_event": "Delete calendar event",
       "delete_entity": "Delete the registry entry for {entity_id}",
-      "delete_esphome_yaml": "Delete ESPHome device configuration {rel}. The device itself is not touched.",
-      "delete_esphome_yaml.device": "Delete ESPHome device configuration {rel} ({device}). The device itself is not touched.",
       "delete_helper": "Delete {helper_type} helper '{helper_id}'",
       "delete_scene": "Delete scene '{scene_id}'",
       "delete_script": "Delete script '{script_id}'",
@@ -1616,24 +1614,12 @@
       "patch_dashboard.multi": "Apply {count} changes to dashboard '{label}'",
       "patch_dashboard.remove": "Remove {path} from dashboard '{label}'",
       "patch_dashboard.set": "Set {path} on dashboard '{label}'",
-      "patch_yaml_config.append": "Append to {path} in {file}",
-      "patch_yaml_config.remove": "Remove {path} from {file}",
-      "patch_yaml_config.set": "Set {path} in {file}",
       "remove_device": "Remove {device_id} from config entry {config_entry_id}",
-      "rename_esphome_device": "Rename ESPHome device {device} to {new_name}. This compiles and flashes the device.",
-      "rename_esphome_device.services": "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s). This compiles and flashes the device.",
       "restart_ha": "Restart Home Assistant",
       "set_dashboard_config": "Set dashboard layout '{label}'",
       "set_device": "Update device registry metadata ({fields}) for {device_id}",
       "set_entity": "Update registry metadata ({fields}) for {entity_id}",
-      "set_esphome_yaml": "Edit ESPHome device configuration {rel}. This does not flash the device.",
-      "set_esphome_yaml.device": "Edit ESPHome device configuration {rel} ({device}, {count} entities). This does not flash the device.",
-      "set_yaml_config": "Replace {file}",
-      "set_yaml_config.removing": "Replace {file}, removing the top-level {keys}",
-      "set_yaml_config.removing_entries": "Replace {file}, removing {count} entries",
-      "set_yaml_config.removing_entry": "Replace {file}, removing 1 entry",
       "update_calendar_event": "Update calendar event",
-      "write_file": "Write file '{path}'",
       "zigbee_binding": "Change a Zigbee device binding",
       "zigbee_binding.devices": "{operation} Zigbee binding from {source} to {target}",
       "zigbee_group": "Change a Zigbee group",
@@ -1930,10 +1916,6 @@
       "delete_calendar_event.title": "Delete calendar event",
       "delete_entity.body": "This will delete the registry entry for {entity_id}. The entity may be recreated later by its integration.",
       "delete_entity.title": "Delete the registry entry for {entity_id}",
-      "delete_esphome_yaml.body": "This will permanently delete {rel}. The ESPHome device itself will not be changed.",
-      "delete_esphome_yaml.device.body": "This will permanently delete {rel}. The ESPHome device {device} itself will not be changed.",
-      "delete_esphome_yaml.device.title": "Delete ESPHome device configuration {rel} ({device})",
-      "delete_esphome_yaml.title": "Delete ESPHome device configuration {rel}",
       "delete_helper.body": "This will permanently delete helper {helper_id}.",
       "delete_helper.title": "Delete {helper_type} helper '{helper_id}'",
       "delete_scene.body": "This will permanently delete scene {scene_id}.",
@@ -2065,18 +2047,8 @@
       "patch_dashboard.remove.title": "Update dashboard '{label}'",
       "patch_dashboard.set.body": "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
       "patch_dashboard.set.title": "Update dashboard '{label}'",
-      "patch_yaml_config.append.body": "Open Details to review the exact proposed change.",
-      "patch_yaml_config.append.title": "Append configuration in {file}",
-      "patch_yaml_config.remove.body": "This will remove configuration from {file}. Open Details to review the exact proposed change.",
-      "patch_yaml_config.remove.title": "Remove configuration from {file}",
-      "patch_yaml_config.set.body": "Open Details to review the exact proposed change.",
-      "patch_yaml_config.set.title": "Set configuration in {file}",
       "remove_device.body": "This will remove {device_id} from its integration. The device may need to be added again.",
       "remove_device.title": "Remove {device_id} from config entry {config_entry_id}",
-      "rename_esphome_device.body": "This will rename {device}, compile its configuration, and flash the device. Do not disconnect it during the update.",
-      "rename_esphome_device.services.body": "This will rename {device}, update its action services, compile its configuration, and flash the device. Do not disconnect it during the update.",
-      "rename_esphome_device.services.title": "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s)",
-      "rename_esphome_device.title": "Rename ESPHome device {device} to {new_name}",
       "restart_ha.body": "Home Assistant will be briefly unavailable while it restarts.",
       "restart_ha.title": "Restart Home Assistant",
       "set_dashboard_config.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
@@ -2085,18 +2057,6 @@
       "set_device.title": "Update device registry metadata ({fields}) for {device_id}",
       "set_entity.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
       "set_entity.title": "Update registry metadata ({fields}) for {entity_id}",
-      "set_esphome_yaml.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
-      "set_esphome_yaml.device.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
-      "set_esphome_yaml.device.title": "Edit ESPHome device configuration {rel} ({device}, {count} entities)",
-      "set_esphome_yaml.title": "Edit ESPHome device configuration {rel}",
-      "set_yaml_config.body": "This will replace the whole contents of {file}. Open Details to review the exact proposed change.",
-      "set_yaml_config.removing.body": "This will replace the whole contents of {file} and remove configuration. Open Details to review the exact proposed change.",
-      "set_yaml_config.removing.title": "Update {file}",
-      "set_yaml_config.removing_entries.body": "This will replace the whole contents of {file} and remove {count} entries. Open Details to review the exact proposed change.",
-      "set_yaml_config.removing_entries.title": "Update {file}",
-      "set_yaml_config.removing_entry.body": "This will replace the whole contents of {file} and remove one entry. Open Details to review the exact proposed change.",
-      "set_yaml_config.removing_entry.title": "Update {file}",
-      "set_yaml_config.title": "Update {file}",
       "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
       "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
       "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
@@ -2105,8 +2065,6 @@
       "view.defaultAria": "Default approval view",
       "view.details": "Details",
       "view.summary": "Summary",
-      "write_file.body": "This will write to {path}. Existing contents at that path may be replaced.",
-      "write_file.title": "Write file '{path}'",
       "zigbee_binding.body": "This will change direct control between two Zigbee devices. Open Details to review both devices and the selected clusters.",
       "zigbee_binding.devices.body": "This will {operation} direct Zigbee control from {source} to {target}. Open Details to review the exact relationship.",
       "zigbee_binding.devices.title": "{operation} Zigbee binding from {source} to {target}",

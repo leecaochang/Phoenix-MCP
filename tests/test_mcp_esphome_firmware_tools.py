@@ -9,6 +9,7 @@ compile.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,7 +26,6 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from tests.test_mcp_esphome_tools import (
-    _ApprStore,
     _call,
     _device_info,
     _esphome_entry,
@@ -68,6 +68,21 @@ def _flash_access_key(**caps):
 
 def _dash():
     return SimpleNamespace(url="http://127.0.0.1:6052", data={}, last_update_success=True)
+
+
+class _ApprStore:
+    """Minimal store the confirm gate can persist a real approval into."""
+
+    def __init__(self) -> None:
+        self._p: list = []
+        self.async_lock = asyncio.Lock()
+        self.async_save = AsyncMock()
+
+    def get_pending_approvals(self) -> list:
+        return self._p
+
+    def set_pending_approvals(self, v: list) -> None:
+        self._p = v
 
 
 def _job(**over):
@@ -816,10 +831,11 @@ class TestJobLookupByFile:
 class TestChainAcrossConfigurations:
     """The two jobs of a chain do not always share a configuration.
 
-    On a rename the add-on renames the file up front, so the compile job already
-    carries the NEW filename while the flash job queued behind it still carries
-    the old one. A dependent lookup filtered by configuration finds nothing, and
-    the rename appears to finish at the compile with no flash reported.
+    When the Device Builder renames a device it renames the file up front, so the
+    compile job already carries the NEW filename while the flash job queued
+    behind it still carries the old one. A dependent lookup filtered by
+    configuration alone finds nothing, and the chain appears to finish at the
+    compile with no flash reported.
     """
 
     async def test_the_dependent_job_is_found_even_under_another_configuration(

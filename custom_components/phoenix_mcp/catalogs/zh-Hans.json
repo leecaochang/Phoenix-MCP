@@ -77,11 +77,11 @@
       },
       "cap_esphome_yaml": {
         "label": "ESPHome 设备 YAML",
-        "description": "在 esphome/ 下的独立沙箱中读取和编辑 ESPHome 设备 YAML，并进行校验和编译。凭据在读取时会被隐藏，且无法修改。编译只会生成固件文件；刷写设备需要单独的“ESPHome 固件刷写”能力。"
+        "description": "在 esphome/ 下的独立沙箱中读取 ESPHome 设备 YAML，并进行校验和编译。凭据在读取时会被隐藏。编译只会生成固件文件；刷写设备需要单独的“ESPHome 固件刷写”能力。"
       },
       "cap_filesystem": {
-        "label": "文件系统访问",
-        "description": "读写 www/、themes/ 和 custom_templates/ 下的文件。"
+        "label": "读取文件",
+        "description": "读取 www/、themes/ 和 custom_templates/ 下的文件。"
       },
       "cap_helper_write": {
         "label": "管理辅助元素",
@@ -156,8 +156,8 @@
         "description": "读取执行跟踪记录以排查自动化问题。"
       },
       "cap_yaml_edit": {
-        "label": "直接编辑 YAML",
-        "description": "直接读取和编辑 configuration.yaml 及其加载的 YAML 文件。强烈建议要求审批。文件中的内联敏感信息会暴露，因此请使用 !secret 将敏感信息存放在 secrets.yaml 中。"
+        "label": "YAML 配置",
+        "description": "读取 configuration.yaml 及配置目录中的其他 YAML 文件，检查配置，并重新加载在 YAML 中定义的域。文件中的内联敏感信息会暴露，因此请使用 !secret 将敏感信息存放在 secrets.yaml 中。"
       },
       "confirmUnavailable": "此能力不支持要求审批。",
       "esphomeBadgeTitle": "在加载项可用之前，ESPHome 工具对此访问密钥保持隐藏。但现在仍可先设置该能力。",
@@ -196,11 +196,11 @@
       },
       "dashboard_designer": {
         "label": "仪表盘设计者",
-        "description": "可发现实体并搭建仪表盘。主题和自定义卡片文件需要审批。不能控制设备，也不能修改其他配置。"
+        "description": "可发现实体、搭建仪表盘，并读取主题和自定义卡片文件。注册自定义卡片文件需要审批。不能控制设备，也不能修改其他配置。"
       },
       "esphome": {
         "label": "ESPHome 设备",
-        "description": "读取 ESPHome 设备的状态、诊断信息和日志。编辑设备 YAML 和刷写固件均需审批。YAML 中的凭据保持隐藏且无法修改。不能控制设备，也不能修改其他配置。"
+        "description": "读取 ESPHome 设备的状态、诊断信息、日志和设备 YAML，并进行校验和编译。刷写固件需要审批。YAML 中的凭据保持隐藏。不能控制设备，也不能修改其他配置。"
       },
       "home_admin": {
         "label": "家庭管理员",
@@ -216,7 +216,7 @@
       },
       "power_user": {
         "label": "高级用户",
-        "description": "可读取和修改大部分配置，并可重启 Home Assistant。敏感的系统变更需要审批。文件系统访问和直接编辑 YAML 仍被禁止。"
+        "description": "可读取和修改大部分配置，并可重启 Home Assistant。敏感的系统变更需要审批。文件和 YAML 配置访问仍被禁止。"
       },
       "read_only": {
         "label": "只读观察者",
@@ -917,8 +917,6 @@
       "dashboard_card.edit.section": "替换仪表盘“{label}”中的第 {card_index} 个卡片（第 {view_index} 个视图，第 {section_index} 个分区）",
       "delete_automation": "删除自动化“{automation_id}”",
       "delete_entity": "删除 {entity_id} 的注册表条目",
-      "delete_esphome_yaml": "删除 ESPHome 设备配置 {rel}。设备本身不会受到影响。",
-      "delete_esphome_yaml.device": "删除 ESPHome 设备配置 {rel}（{device}）。设备本身不会受到影响。",
       "delete_helper": "删除 {helper_type} 辅助元素“{helper_id}”",
       "delete_scene": "删除场景“{scene_id}”",
       "delete_script": "删除脚本“{script_id}”",
@@ -944,17 +942,11 @@
       "integration.update": "更新集成 {label}",
       "integration.log_level": "更改集成 {label} 的日志级别",
       "mesa_service": "{domain}.{service} 的 MESA 确认",
-      "rename_esphome_device": "将 ESPHome 设备 {device} 重命名为 {new_name}。此操作会编译并刷写该设备。",
-      "rename_esphome_device.services": "将 ESPHome 设备 {device} 重命名为 {new_name}，同时重命名 {count} 个动作服务。此操作会编译并刷写该设备。",
       "restart_ha": "重启 Home Assistant",
       "remove_device": "从配置条目 {config_entry_id} 移除设备 {device_id}",
       "set_dashboard_config": "设置仪表盘“{label}”的布局",
       "set_device": "更新 {device_id} 的设备注册表元数据（{fields}）",
       "set_entity": "更新 {entity_id} 的注册表元数据（{fields}）",
-      "set_esphome_yaml": "编辑 ESPHome 设备配置 {rel}。此操作不会刷写设备。",
-      "set_esphome_yaml.device": "编辑 ESPHome 设备配置 {rel}（{device}，{count} 个实体）。此操作不会刷写设备。",
-      "set_yaml_config": "替换 {file}",
-      "write_file": "写入文件“{path}”",
       "zigbee_binding": "更改 Zigbee 设备绑定",
       "zigbee_binding.devices": "{operation} 从 {source} 到 {target} 的 Zigbee 绑定",
       "zigbee_group": "更改 Zigbee 组",
@@ -974,7 +966,6 @@
       "zigbee_reporting.device": "配置 {label} 的 {cluster}.{attribute} 上报",
       "zigbee_topology": "扫描 Zigbee 拓扑",
       "zigbee_topology.backend": "扫描 {backend} 邻居表以生成权限范围内的 Zigbee 拓扑图",
-      "set_yaml_config.removing": "替换 {file}，移除顶层 {keys}",
       "patch_dashboard.set": "设置仪表盘“{label}”的 {path}",
       "patch_dashboard.append": "向仪表盘“{label}”的 {path} 追加内容",
       "patch_dashboard.remove": "从仪表盘“{label}”删除 {path}",
@@ -985,12 +976,7 @@
       "edit_energy_config.set_source.create": "能源：新增 {source_type} 来源（{fields}）",
       "edit_energy_config.rename_device": "能源：将“{old_label}”重命名为“{label}”",
       "edit_energy_config.remove_source": "能源：移除 {source_type} 来源（{old_statistic}）",
-      "patch_yaml_config.set": "设置 {file} 中的 {path}",
-      "patch_yaml_config.append": "向 {file} 中的 {path} 追加内容",
-      "patch_yaml_config.remove": "从 {file} 删除 {path}",
       "config_entry.options": "更改助手“{label}”的 {keys}",
-      "set_yaml_config.removing_entry": "替换 {file}，移除 1 个条目",
-      "set_yaml_config.removing_entries": "替换 {file}，移除 {count} 个条目",
       "configuration_recovery.restore": "恢复 {resource} 的已保存配置",
       "configuration_recovery.acknowledge": "检查 {resource} 的更改中断后的配置",
       "create_calendar_event": "创建日历事件",
@@ -1912,10 +1898,6 @@
       "delete_automation.title": "删除自动化“{automation_id}”",
       "delete_entity.body": "这将删除 {entity_id} 的实体注册表条目。其集成稍后可能会重新创建该实体。",
       "delete_entity.title": "删除 {entity_id} 的注册表条目",
-      "delete_esphome_yaml.body": "这将永久删除 {rel}。ESPHome 设备本身不会被更改。",
-      "delete_esphome_yaml.device.body": "这将永久删除 {rel}。ESPHome 设备 {device} 本身不会被更改。",
-      "delete_esphome_yaml.device.title": "删除 ESPHome 设备配置 {rel}（{device}）",
-      "delete_esphome_yaml.title": "删除 ESPHome 设备配置 {rel}",
       "delete_helper.body": "这将永久删除辅助工具 {helper_id}。",
       "delete_helper.title": "删除 {helper_type} 辅助元素“{helper_id}”",
       "delete_scene.body": "这将永久删除场景 {scene_id}。",
@@ -2039,18 +2021,8 @@
       "patch_dashboard.remove.title": "更新仪表盘“{label}”",
       "patch_dashboard.set.body": "这将更新 Home Assistant 仪表盘配置。打开详细信息可查看具体更改内容。",
       "patch_dashboard.set.title": "更新仪表盘“{label}”",
-      "patch_yaml_config.append.body": "打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.append.title": "向 {file} 添加配置",
-      "patch_yaml_config.remove.body": "这将从 {file} 中移除配置。打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.remove.title": "从 {file} 删除配置",
-      "patch_yaml_config.set.body": "打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.set.title": "在 {file} 中设置配置",
       "remove_device.body": "这将从所属集成中移除 {device_id}。可能需要重新添加该设备。",
       "remove_device.title": "从配置条目 {config_entry_id} 移除设备 {device_id}",
-      "rename_esphome_device.body": "这将重命名 {device}、编译其配置并刷写设备。更新期间请勿断开设备连接。",
-      "rename_esphome_device.services.body": "这将重命名 {device}、更新其操作服务、编译配置并刷写设备。更新期间请勿断开设备连接。",
-      "rename_esphome_device.services.title": "将 ESPHome 设备 {device} 重命名为 {new_name}，同时重命名 {count} 个动作服务",
-      "rename_esphome_device.title": "将 ESPHome 设备 {device} 重命名为 {new_name}",
       "restart_ha.body": "Home Assistant 重启期间将暂时不可用。",
       "restart_ha.title": "重启 Home Assistant",
       "set_dashboard_config.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
@@ -2059,23 +2031,9 @@
       "set_device.title": "更新 {device_id} 的设备注册表元数据（{fields}）",
       "set_entity.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
       "set_entity.title": "更新 {entity_id} 的注册表元数据（{fields}）",
-      "set_esphome_yaml.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
-      "set_esphome_yaml.device.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
-      "set_esphome_yaml.device.title": "编辑 ESPHome 设备配置 {rel}（{device}，{count} 个实体）",
-      "set_esphome_yaml.title": "编辑 ESPHome 设备配置 {rel}",
-      "set_yaml_config.body": "这将替换 {file} 的全部内容。打开详细信息可查看具体更改内容。",
-      "set_yaml_config.removing.body": "这将替换 {file} 的全部内容并移除配置。打开详细信息可查看具体更改内容。",
-      "set_yaml_config.removing.title": "更新 {file}",
-      "set_yaml_config.removing_entries.body": "这将替换 {file} 的全部内容并移除 {count} 个条目。打开详细信息可查看具体更改内容。",
-      "set_yaml_config.removing_entries.title": "更新 {file}",
-      "set_yaml_config.removing_entry.body": "这将替换 {file} 的全部内容并移除一个条目。打开详细信息可查看具体更改内容。",
-      "set_yaml_config.removing_entry.title": "更新 {file}",
-      "set_yaml_config.title": "更新 {file}",
       "view.defaultAria": "批准列表和模态框的默认视图",
       "view.details": "详细信息",
       "view.summary": "摘要",
-      "write_file.body": "这将写入 {path}。该路径下的现有内容可能会被替换。",
-      "write_file.title": "写入文件“{path}”",
       "zigbee_binding.body": "这将更改两个 Zigbee 设备之间的直接控制。请在详细信息中查看两个设备和所选集群。",
       "zigbee_binding.devices.body": "这将 {operation} 从 {source} 到 {target} 的直接 Zigbee 控制。请在详细信息中查看确切关系。",
       "zigbee_binding.devices.title": "{operation} 从 {source} 到 {target} 的 Zigbee 绑定",

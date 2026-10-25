@@ -81,7 +81,7 @@ def immediate_command_observation(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass, tmp_path):
-    """Keep any device-YAML writes out of the shared testing config dir."""
+    """Give each test its own config dir, so files a test lays out never leak between tests."""
     hass.config.config_dir = str(tmp_path)
     return tmp_path
 

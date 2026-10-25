@@ -1176,8 +1176,7 @@ function DiffView({ record }: {
   const previewSide = cardSideOk[side] ? side : (cardSideOk.before ? "before" : "after");
   const previewConfig = isWholeLayout ? wholeConfig : (previewSide === "before" ? beforeCardConfig : afterCardConfig);
 
-  if (kind === "yaml_diff" || kind === "config_diff" || kind === "file_write"
-      || kind === "esphome_yaml") {
+  if (kind === "yaml_diff" || kind === "config_diff") {
     const modeToggle = canPreview ? (
       <SegmentedToggle
         value={mode}

@@ -7,10 +7,11 @@ An edit may carry an expected_hash (a content_hash from the matching read tool),
 checked before gating and again at apply time; a delete captures the reviewed
 entry's hash and compares it again under that lock.
 
-`yaml_includes` does the reads and writes because a domain can be split across
-!include files: a write splices into the leaf file that actually holds the entry
-and fails closed rather than touching configuration.yaml, so a domain defined
-inline there or in a package is not edited.
+`yaml_includes` does the reads and writes. Reads follow every !include, so an
+entry is found wherever it is defined. Writes reach only Home Assistant's own
+editor file for the domain and only entries its editor would change; an entry in
+a split file, an include directory, a package or inline in configuration.yaml is
+hand-written YAML and is refused before any approval exists.
 
 Scene writes add one check: a scene captures member entities' states, so
 `_unwritable_scene_members` refuses a scene naming an entity the access key cannot
@@ -27,6 +28,7 @@ import logging
 import os
 import re
 import uuid
+from functools import partial
 from collections.abc import Awaitable, Callable
 from traceback import format_exc, format_tb
 from typing import Any, Literal
@@ -369,6 +371,23 @@ def _automation_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[di
     return _tool_error(op.error_text), outcome, tool_name
 
 
+async def _editor_file_refusal(
+    hass: HomeAssistant, domain: str, entry_id: str, tool_name: str, *, create: bool
+) -> tuple[dict, str, str] | None:
+    """Refuse, before any approval exists, a change Home Assistant's editor could not make.
+
+    Only entries in the domain's editor file are written; anything defined in
+    hand-written YAML stays the operator's. The write itself checks again.
+    """
+    op = await hass.async_add_executor_job(
+        partial(yaml_includes.write_target_refusal, hass.config.config_dir, domain, entry_id, create=create)
+    )
+    if op is None:
+        return None
+    outcome = "invalid_request" if op.error_kind == "io_error" else "denied"
+    return _tool_error(op.error_text), outcome, tool_name
+
+
 async def _automation_write_precheck(
     args: dict, hass: HomeAssistant, tool_name: str, *, require_id: bool
 ) -> tuple[dict, str, str] | None:
@@ -396,7 +415,8 @@ async def _automation_write_precheck(
         )
         if not op.ok:
             return _automation_op_error(op, tool_name)
-    return None
+        return None
+    return await _editor_file_refusal(hass, "automation", "", tool_name, create=True)
 
 
 async def _tool_create_automation(
@@ -585,6 +605,9 @@ async def _tool_delete_automation(
     args, current = await _bind_delete_args(args, hass, "automation", automation_id)
     if current is None:
         return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "delete_automation"
+    refused = await _editor_file_refusal(hass, "automation", automation_id, "delete_automation", create=False)
+    if refused is not None:
+        return refused
     blocked = await _gate(
         "cap_automation_write", access_key, hass, data,
         tool_name="delete_automation", args=args, request_id=request_id,
@@ -726,10 +749,13 @@ async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str
         return _tool_error(error), "invalid_request", tool_name
     script_id = args["script_id"].strip()
     config = args["config"]
-    return await _config_validation_error(
+    invalid = await _config_validation_error(
         _validate_script_config, hass, script_id, config,
         tool_name=tool_name, invalid_message=_SCRIPT_INVALID_MESSAGE,
     )
+    if invalid is not None:
+        return invalid
+    return await _editor_file_refusal(hass, "script", script_id, tool_name, create=tool_name == "create_script")
 
 
 async def _tool_create_script(
@@ -914,6 +940,9 @@ async def _tool_delete_script(
     args, current = await _bind_delete_args(args, hass, "script", script_id)
     if current is None:
         return _tool_error(f"No script found with id '{script_id}'."), "denied", "delete_script"
+    refused = await _editor_file_refusal(hass, "script", script_id, "delete_script", create=False)
+    if refused is not None:
+        return refused
     blocked = await _gate(
         "cap_script_write", access_key, hass, data,
         tool_name="delete_script", args=args, request_id=request_id,
@@ -1318,6 +1347,9 @@ async def _tool_create_scene(
     pre = _scene_write_precheck(args, "create_scene", require_id=False)
     if pre is not None:
         return pre
+    refused = await _editor_file_refusal(hass, "scene", "", "create_scene", create=True)
+    if refused is not None:
+        return refused
     blocked = await _gate(
         "cap_scene_write", access_key, hass, data,
         tool_name="create_scene", args=args, request_id=request_id,
@@ -1353,6 +1385,14 @@ async def _tool_edit_scene(
     pre = _scene_write_precheck(args, "edit_scene", require_id=True)
     if pre is not None:
         return pre
+    scene_id = str(args.get("scene_id") or "").strip()
+    current = await _read_config_entry(hass, "scene", scene_id)
+    # Only a scene this key may already edit is located, so the refusal is no
+    # existence oracle; anything else meets the executor's not-found answer.
+    if current is not None and not _unwritable_scene_members(current, access_key, hass):
+        refused = await _editor_file_refusal(hass, "scene", scene_id, "edit_scene", create=False)
+        if refused is not None:
+            return refused
     stale = await _entry_cas_conflict(
         args, hass, "scene", str(args.get("scene_id") or "").strip(), "edit_scene",
     )
@@ -1398,6 +1438,9 @@ async def _tool_delete_scene(
     args, current = await _bind_delete_args(args, hass, "scene", scene_id)
     if current is None or _unwritable_scene_members(current, access_key, hass):
         return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
+    refused = await _editor_file_refusal(hass, "scene", scene_id, "delete_scene", create=False)
+    if refused is not None:
+        return refused
     blocked = await _gate(
         "cap_scene_write", access_key, hass, data,
         tool_name="delete_scene", args=args, request_id=request_id,

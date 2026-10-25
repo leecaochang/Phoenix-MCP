@@ -136,11 +136,11 @@
         "label": "Niestandardowe"
       },
       "dashboard_designer": {
-        "description": "Może wykrywać encje i budować panele. Pliki motywów i niestandardowych kart wymagają zatwierdzenia. Nie może sterować urządzeniami ani edytować innej konfiguracji.",
+        "description": "Może wykrywać encje, budować panele i odczytywać pliki motywów i niestandardowych kart. Rejestrowanie plików niestandardowych kart wymaga zatwierdzenia. Nie może sterować urządzeniami ani edytować innej konfiguracji.",
         "label": "Projektant paneli"
       },
       "esphome": {
-        "description": "Odczytuje status urządzeń ESPHome, diagnostykę i logi. Edycja YAML urządzenia i wgrywanie oprogramowania wymagają zatwierdzenia. Poświadczenia YAML pozostają ukryte i niezmienne. Brak sterowania urządzeniami ani innej konfiguracji.",
+        "description": "Odczytuje status urządzeń ESPHome, diagnostykę, logi i YAML urządzenia oraz go waliduje i kompiluje. Wgrywanie oprogramowania wymaga zatwierdzenia. Poświadczenia YAML pozostają ukryte. Brak sterowania urządzeniami ani innej konfiguracji.",
         "label": "Urządzenia ESPHome"
       },
       "helper": "Persona ustawia początkowe możliwości. Poszczególne możliwości możesz dostosować w sekcji Zaawansowane. Persona zmienia się na Niestandardowe, gdy Twoje ustawienia przestają odpowiadać ustawieniu wstępnemu.",
@@ -158,7 +158,7 @@
       },
       "noEsphome": "Nie wykryto ESPHome w tym systemie",
       "power_user": {
-        "description": "Może odczytywać i edytować większość konfiguracji oraz ponownie uruchamiać Home Assistant. Wrażliwe zmiany systemowe wymagają zatwierdzenia. Dostęp do systemu plików i surowego YAML pozostaje zablokowany.",
+        "description": "Może odczytywać i edytować większość konfiguracji oraz ponownie uruchamiać Home Assistant. Wrażliwe zmiany systemowe wymagają zatwierdzenia. Dostęp do plików i konfiguracji YAML pozostaje zablokowany.",
         "label": "Zaawansowany użytkownik"
       },
       "read_only": {
@@ -427,12 +427,12 @@
         "label": "Wgrywanie oprogramowania ESPHome"
       },
       "cap_esphome_yaml": {
-        "description": "Odczytuj i edytuj YAML urządzenia ESPHome w jego własnej klatce pod esphome/, waliduj go i kompiluj. Poświadczenia są maskowane przy odczycie i nie można ich zmienić. Kompilacja tworzy tylko plik binarny; wgranie na urządzenie wymaga osobnej możliwości wgrywania oprogramowania ESPHome.",
+        "description": "Odczytuj YAML urządzenia ESPHome w jego własnej klatce pod esphome/, waliduj go i kompiluj. Poświadczenia są maskowane przy odczycie. Kompilacja tworzy tylko plik binarny; wgranie na urządzenie wymaga osobnej możliwości wgrywania oprogramowania ESPHome.",
         "label": "YAML urządzenia ESPHome"
       },
       "cap_filesystem": {
-        "description": "Odczytuj i zapisuj pliki w www/, themes/ i custom_templates/.",
-        "label": "Dostęp do systemu plików"
+        "description": "Odczytuj pliki w www/, themes/ i custom_templates/.",
+        "label": "Odczyt plików"
       },
       "cap_helper_write": {
         "description": "Twórz, edytuj i usuwaj pomocniki, takie jak pola wejściowe, liczniki i timery.",
@@ -503,8 +503,8 @@
         "label": "Ślady automatyzacji"
       },
       "cap_yaml_edit": {
-        "description": "Odczytuj i edytuj configuration.yaml oraz pliki YAML, które ładuje bezpośrednio. Zdecydowanie zaleca się zatwierdzanie. Sekrety wpisane wprost są ujawniane, więc przechowuj sekrety w secrets.yaml z !secret.",
-        "label": "Edytuj surowy YAML"
+        "description": "Odczytuj configuration.yaml i pozostałe pliki YAML w katalogu konfiguracji, sprawdzaj konfigurację i przeładowuj domeny zdefiniowane w YAML. Sekrety wpisane wprost są ujawniane, więc przechowuj sekrety w secrets.yaml z !secret.",
+        "label": "Konfiguracja YAML"
       },
       "confirmUnavailable": "Ta możliwość nie może wymagać zatwierdzenia.",
       "esphomeBadgeTitle": "Narzędzia ESPHome pozostają ukryte dla tego klucza dostępu, dopóki dodatek nie będzie dostępny. Możliwość można ustawić już teraz.",
@@ -629,8 +629,6 @@
       "dashboard_card.edit.section": "Zastąp kartę {card_index} w panelu '{label}' (widok {view_index}, sekcja {section_index})",
       "delete_automation": "Usuń automatyzację '{automation_id}'",
       "delete_entity": "Usuń wpis rejestru dla {entity_id}",
-      "delete_esphome_yaml": "Usuń konfigurację urządzenia ESPHome {rel}. Samo urządzenie pozostaje nietknięte.",
-      "delete_esphome_yaml.device": "Usuń konfigurację urządzenia ESPHome {rel} ({device}). Samo urządzenie pozostaje nietknięte.",
       "delete_helper": "Usuń pomocnik '{helper_id}' ({helper_type})",
       "delete_scene": "Usuń scenę '{scene_id}'",
       "delete_script": "Usuń skrypt '{script_id}'",
@@ -666,23 +664,11 @@
       "patch_dashboard.append": "Dodaj do {path} w panelu '{label}'",
       "patch_dashboard.remove": "Usuń {path} z panelu '{label}'",
       "patch_dashboard.set": "Ustaw {path} w panelu '{label}'",
-      "patch_yaml_config.append": "Dodaj do {path} w {file}",
-      "patch_yaml_config.remove": "Usuń {path} z {file}",
-      "patch_yaml_config.set": "Ustaw {path} w {file}",
       "remove_device": "Usuń {device_id} z wpisu konfiguracji {config_entry_id}",
-      "rename_esphome_device": "Zmień nazwę urządzenia ESPHome {device} na {new_name}. Spowoduje to kompilację i wgranie oprogramowania na urządzenie.",
-      "rename_esphome_device.services": "Zmień nazwę urządzenia ESPHome {device} na {new_name}, zmieniając {count} usług akcji. Spowoduje to kompilację i wgranie oprogramowania na urządzenie.",
       "restart_ha": "Uruchom ponownie Home Assistant",
       "set_dashboard_config": "Ustaw układ panelu '{label}'",
       "set_device": "Zaktualizuj metadane rejestru urządzeń ({fields}) dla {device_id}",
       "set_entity": "Zaktualizuj metadane rejestru ({fields}) dla {entity_id}",
-      "set_esphome_yaml": "Edytuj konfigurację urządzenia ESPHome {rel}. Nie spowoduje to wgrania oprogramowania na urządzenie.",
-      "set_esphome_yaml.device": "Edytuj konfigurację urządzenia ESPHome {rel} ({device}, {count} encji). Nie spowoduje to wgrania oprogramowania na urządzenie.",
-      "set_yaml_config": "Zastąp {file}",
-      "set_yaml_config.removing": "Zastąp {file}, usuwając klucze najwyższego poziomu {keys}",
-      "set_yaml_config.removing_entries": "Zastąp {file}, usuwając {count} wpisów",
-      "set_yaml_config.removing_entry": "Zastąp {file}, usuwając 1 wpis",
-      "write_file": "Zapisz plik '{path}'",
       "zigbee_binding": "Zmień powiązanie urządzenia Zigbee",
       "zigbee_binding.devices": "{operation} powiązanie Zigbee z {source} do {target}",
       "zigbee_group": "Zmień grupę Zigbee",
@@ -2020,10 +2006,6 @@
       "delete_automation.title": "Usuń automatyzację '{automation_id}'",
       "delete_entity.body": "Spowoduje to usunięcie wpisu rejestru dla {entity_id}. Encja może zostać później odtworzona przez swoją integrację.",
       "delete_entity.title": "Usuń wpis rejestru dla {entity_id}",
-      "delete_esphome_yaml.body": "Spowoduje to trwałe usunięcie {rel}. Samo urządzenie ESPHome nie zostanie zmienione.",
-      "delete_esphome_yaml.device.body": "Spowoduje to trwałe usunięcie {rel}. Samo urządzenie ESPHome {device} nie zostanie zmienione.",
-      "delete_esphome_yaml.device.title": "Usuń konfigurację urządzenia ESPHome {rel} ({device})",
-      "delete_esphome_yaml.title": "Usuń konfigurację urządzenia ESPHome {rel}",
       "delete_helper.body": "Spowoduje to trwałe usunięcie pomocnika {helper_id}.",
       "delete_helper.title": "Usuń pomocnik '{helper_id}' ({helper_type})",
       "delete_scene.body": "Spowoduje to trwałe usunięcie sceny {scene_id}.",
@@ -2147,18 +2129,8 @@
       "patch_dashboard.remove.title": "Zaktualizuj panel '{label}'",
       "patch_dashboard.set.body": "Spowoduje to zaktualizowanie konfiguracji panelu Home Assistant. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
       "patch_dashboard.set.title": "Zaktualizuj panel '{label}'",
-      "patch_yaml_config.append.body": "Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "patch_yaml_config.append.title": "Dodaj konfigurację do {file}",
-      "patch_yaml_config.remove.body": "Spowoduje to usunięcie konfiguracji z {file}. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "patch_yaml_config.remove.title": "Usuń konfigurację z {file}",
-      "patch_yaml_config.set.body": "Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "patch_yaml_config.set.title": "Ustaw konfigurację w {file}",
       "remove_device.body": "Spowoduje to usunięcie {device_id} z jego integracji. Urządzenie może wymagać ponownego dodania.",
       "remove_device.title": "Usuń {device_id} z wpisu konfiguracji {config_entry_id}",
-      "rename_esphome_device.body": "Spowoduje to zmianę nazwy {device}, kompilację jego konfiguracji i wgranie oprogramowania na urządzenie. Nie odłączaj go podczas aktualizacji.",
-      "rename_esphome_device.services.body": "Spowoduje to zmianę nazwy {device}, aktualizację jego usług akcji, kompilację jego konfiguracji i wgranie oprogramowania na urządzenie. Nie odłączaj go podczas aktualizacji.",
-      "rename_esphome_device.services.title": "Zmień nazwę urządzenia ESPHome {device} na {new_name}, zmieniając {count} usług akcji",
-      "rename_esphome_device.title": "Zmień nazwę urządzenia ESPHome {device} na {new_name}",
       "restart_ha.body": "Home Assistant będzie przez chwilę niedostępny podczas ponownego uruchamiania.",
       "restart_ha.title": "Uruchom ponownie Home Assistant",
       "set_dashboard_config.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
@@ -2167,23 +2139,9 @@
       "set_device.title": "Zaktualizuj metadane rejestru urządzeń ({fields}) dla {device_id}",
       "set_entity.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
       "set_entity.title": "Zaktualizuj metadane rejestru ({fields}) dla {entity_id}",
-      "set_esphome_yaml.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_esphome_yaml.device.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_esphome_yaml.device.title": "Edytuj konfigurację urządzenia ESPHome {rel} ({device}, {count} encji)",
-      "set_esphome_yaml.title": "Edytuj konfigurację urządzenia ESPHome {rel}",
-      "set_yaml_config.body": "Spowoduje to zastąpienie całej zawartości {file}. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_yaml_config.removing.body": "Spowoduje to zastąpienie całej zawartości {file} i usunięcie konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_yaml_config.removing.title": "Zaktualizuj {file}",
-      "set_yaml_config.removing_entries.body": "Spowoduje to zastąpienie całej zawartości {file} i usunięcie {count} wpisów. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_yaml_config.removing_entries.title": "Zaktualizuj {file}",
-      "set_yaml_config.removing_entry.body": "Spowoduje to zastąpienie całej zawartości {file} i usunięcie jednego wpisu. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
-      "set_yaml_config.removing_entry.title": "Zaktualizuj {file}",
-      "set_yaml_config.title": "Zaktualizuj {file}",
       "view.defaultAria": "Domyślny widok zatwierdzenia",
       "view.details": "Szczegóły",
       "view.summary": "Podsumowanie",
-      "write_file.body": "Spowoduje to zapis do {path}. Istniejąca zawartość w tej ścieżce może zostać zastąpiona.",
-      "write_file.title": "Zapisz plik '{path}'",
       "zigbee_binding.body": "Spowoduje to zmianę bezpośredniego sterowania między dwoma urządzeniami Zigbee. Otwórz Szczegóły, aby przejrzeć oba urządzenia i wybrane klastry.",
       "zigbee_binding.devices.body": "Spowoduje to {operation} bezpośredniego sterowania Zigbee z {source} do {target}. Otwórz Szczegóły, aby przejrzeć dokładną relację.",
       "zigbee_binding.devices.title": "{operation} powiązanie Zigbee z {source} do {target}",

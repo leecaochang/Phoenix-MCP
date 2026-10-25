@@ -1,12 +1,12 @@
-"""ESPHome tools: device YAML, Device Builder reads, firmware jobs and status.
+"""ESPHome tools: device YAML reads, Device Builder reads, firmware jobs and status.
 
-The whole ESPHome surface: get/search/set/delete device YAML behind the
-config/esphome path jail and the credential masking in esphome_yaml.py, the
-Device Builder lookups (validate, boards, components, automations, devices), the
-firmware job tier (compile, install, list/poll/wait/cancel, device logs,
-backtrace), the lifecycle tools (rename, clean, delete) and the fleet status
-read. Compiling rides cap_esphome_yaml; only putting an image on hardware
-(install, rename) needs cap_esphome_flash.
+The whole ESPHome surface: get/search device YAML behind the config/esphome path
+jail and the credential masking in esphome_yaml.py, the Device Builder lookups
+(validate, boards, components, automations, devices), the firmware job tier
+(compile, install, list/poll/wait/cancel, device logs, backtrace), cleaning a
+build and the fleet status read. Device YAML is the operator's own configuration,
+so no tool here edits or deletes it. Compiling rides cap_esphome_yaml; only
+putting an image on hardware (install) needs cap_esphome_flash.
 
 mcp_view registers these tools and this module never imports it. Shared
 primitives come from ..tool_common.
@@ -52,7 +52,6 @@ from ..const import (
     ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS,
     ESPHOME_YAML_SEARCH_MAX_MATCHES,
     ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
-    MAX_FILE_BYTES,
     VOICE_AGENT_CLIENT_IP,
 )
 from ..data import PhoenixData
@@ -75,17 +74,14 @@ from ..esphome_builder import (
     async_builder_capture,
     async_builder_command,
     collect_output_lines,
-    version_mismatch_note,
 )
 from ..esphome_yaml import (
-    EsphomeSecretViolation,
     esphome_rel_path_ok,
     inline_secret_values,
     redact_esphome_text,
     scrub_secret_values,
     secret_keys_from_text,
     secret_values_from_text,
-    splice_esphome_text,
 )
 from .. import yaml_includes
 
@@ -93,16 +89,10 @@ from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
     _read_text_capped,
-    _record_version,
-    _restore_ctx,
     _set_progress_status,
-    _text_file_cas_conflict,
     _tool_error,
     _tool_success,
-    _truncate,
     _usable_path_arg,
-    _version_content_payload,
-    _write_text_atomic,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -435,8 +425,7 @@ _ESPHOME_DIR = "esphome"
 
 _ESPHOME_PATH_REFUSED = (
     "Only jailed .yaml and .yml files inside the ESPHome configuration directory "
-    "can be read or written; secrets.yaml, the archive folder, and hidden files are "
-    "excluded."
+    "can be read; secrets.yaml, the archive folder, and hidden files are excluded."
 )
 
 
@@ -495,10 +484,9 @@ def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | Non
     """Read the ESPHome secrets.yaml INTERNALLY: (values, key names).
 
     Never returned through any tool in any form; values feed the layer-3
-    redaction cross-check and key names validate !secret references. An
-    unreadable file degrades to (empty values, None keys) so redaction falls back
-    to layers 1 and 2 and !secret validation is skipped, rather than failing
-    every read and write.
+    redaction cross-check and key names feed `defined_secrets`. An unreadable
+    file degrades to (empty values, None keys) so redaction falls back to layers
+    1 and 2, rather than failing every read.
     """
     path = os.path.join(hass.config.config_dir, _ESPHOME_DIR, yaml_includes.SECRETS_YAML)
     try:
@@ -541,7 +529,7 @@ def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
 
 
 def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel: str, *, write: bool) -> bool:
-    """Whether the access key may read (or write) the device YAML at rel.
+    """Whether the access key may read the device YAML at rel, or with write, build from it.
 
     Every adopted owner must be in scope, even when unloaded. Orphan files
     follow the capability alone.
@@ -755,7 +743,7 @@ async def _tool_get_esphome_yaml(
     body = {
         "file": rel,
         "content": redacted,
-        # Hash of the RAW bytes on disk, so compare-and-swap still works even
+        # Hash of the RAW bytes on disk, so it changes whenever the file does even
         # though the caller only ever sees the masked text.
         "content_hash": content_hash(raw),
         "redacted_paths": redacted_paths,
@@ -764,352 +752,6 @@ async def _tool_get_esphome_yaml(
     if secret_keys is not None:
         body["defined_secrets"] = sorted(secret_keys)
     return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
-
-
-def _esphome_write_precheck(args: dict) -> tuple[dict, str, str] | None:
-    """Structural checks that run before the gate; None means OK to proceed."""
-    content = args.get("content")
-    if not isinstance(content, str):
-        return _tool_error("content must be a string."), "invalid_request", "set_esphome_yaml"
-    if len(content.encode("utf-8")) > MAX_FILE_BYTES:
-        return _tool_error("content exceeds the maximum file size."), "invalid_request", "set_esphome_yaml"
-    return None
-
-
-def _esphome_prepare_write(
-    hass: HomeAssistant, args: dict, rel: str, path: str, restoring: bool = False
-) -> tuple[str, str, bool]:
-    """Validate the proposed content and return (raw_to_write, before, existed).
-
-    Runs the structural parse and the credential splice together, because both
-    need the on-disk text. Raises YamlParseError or EsphomeSecretViolation.
-
-    `restoring` must be passed in rather than read from _restore_ctx here: this
-    runs via async_add_executor_job, and a ContextVar is not propagated into the
-    worker thread, so reading it here would silently always see the default.
-    """
-    existed = os.path.exists(path)
-    before = _read_text_capped(path) if existed else ""
-    secret_values, secret_keys = _read_esphome_secrets(hass)
-    # Structural only: real validation is a Device Builder compile, which this
-    # tier deliberately does not reach.
-    yaml_includes.load_tagged_lenient(args["content"])
-    raw = splice_esphome_text(
-        args["content"], before, secret_values, secret_keys,
-        allow_literal_credentials=restoring,
-    )
-    return raw, before, existed
-
-
-async def _build_diff_set_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """Approval diff for a device-YAML write, with both sides masked."""
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    rel = resolved[1] if resolved else str(args.get("file"))
-    before_masked = ""
-    if resolved is not None:
-        try:
-            secret_values, _ = await hass.async_add_executor_job(_read_esphome_secrets, hass)
-            raw = await hass.async_add_executor_job(_read_text_capped, resolved[0])
-            before_masked, _ = await hass.async_add_executor_job(
-                redact_esphome_text, raw, secret_values
-            )
-        except Exception:  # noqa: BLE001 - diff builders are best-effort
-            before_masked = ""
-
-    entry = _esphome_device_for_file(hass, rel) if resolved else None
-    device_info = getattr(getattr(entry, "runtime_data", None), "device_info", None)
-    device = getattr(device_info, "name", None)
-    count = 0
-    if entry is not None:
-        count = len(er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id))
-
-    fields = (
-        _summary("set_esphome_yaml.device", rel=rel, device=device, count=count)
-        if device else _summary("set_esphome_yaml", rel=rel)
-    )
-    return {
-        "kind": "esphome_yaml",
-        **fields,
-        "before": _truncate(before_masked),
-        "after": _truncate(str(args.get("content", ""))),
-        "preview": {
-            "file": rel,
-            "device": device,
-            # The write lands on disk only. Until a person installs from the
-            # Device Builder, the device keeps running its current firmware.
-            "flashes_device": False,
-        },
-    }
-
-
-async def _tool_set_esphome_yaml(
-    args: dict,
-    access_key: AccessKeyRecord,
-    hass: HomeAssistant,
-    data: PhoenixData,
-    request_id: str = "",
-    client_ip: str | None = None,
-) -> tuple[dict, str, str]:
-    """MCP tool: write one ESPHome device YAML file (Confirm-eligible)."""
-    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_esphome_yaml"
-
-    pre = _esphome_write_precheck(args)
-    if pre is not None:
-        return pre
-
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    if resolved is None:
-        return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "set_esphome_yaml"
-    path, rel = resolved
-    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
-        return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
-
-    # Parse and splice BEFORE the gate (after the cap-deny check) so a doomed or
-    # credential-violating write never becomes a pending approval.
-    try:
-        await hass.async_add_executor_job(_esphome_prepare_write, hass, args, rel, path)
-    except yaml_includes.YamlParseError as err:
-        return _tool_error(f"The content is not valid YAML: {err}"), "invalid_request", f"esphome:{rel}"
-    except EsphomeSecretViolation as err:
-        return _tool_error(str(err)), "invalid_request", f"esphome:{rel}"
-    except (OSError, ValueError):
-        return _tool_error("Failed to read the existing ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
-
-    conflict = await _text_file_cas_conflict(
-        args.get("expected_hash"), path, hass, f"esphome:{rel}")
-    if conflict is not None:
-        return conflict
-
-    blocked = await _gate(
-        "cap_esphome_yaml", access_key, hass, data,
-        tool_name="set_esphome_yaml", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_set_esphome_yaml(args, access_key, hass),
-    )
-    if blocked is not None:
-        return blocked
-    return await _execute_set_esphome_yaml(args, access_key, hass, data)
-
-
-async def _execute_set_esphome_yaml(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
-) -> tuple[dict, str, str]:
-    """Apply a device-YAML write, re-validating everything against current disk."""
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    if resolved is None:
-        return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "set_esphome_yaml"
-    path, rel = resolved
-    # Re-check scope, parse, splice, and CAS at apply time: an approval window is
-    # minutes long and permissions or disk content can drift inside it.
-    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
-        return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
-    # Read the ContextVar HERE, in the event loop, and hand the answer to the
-    # worker thread: the executor job does not inherit this context.
-    restoring = _restore_ctx.get() is not None
-    try:
-        raw, before, existed = await hass.async_add_executor_job(
-            _esphome_prepare_write, hass, args, rel, path, restoring)
-    except yaml_includes.YamlParseError as err:
-        return _tool_error(f"The content is not valid YAML: {err}"), "invalid_request", f"esphome:{rel}"
-    except EsphomeSecretViolation as err:
-        return _tool_error(str(err)), "invalid_request", f"esphome:{rel}"
-    except (OSError, ValueError):
-        return _tool_error("Failed to read the existing ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
-
-    conflict = await _text_file_cas_conflict(
-        args.get("expected_hash"), path, hass, f"esphome:{rel}")
-    if conflict is not None:
-        return conflict
-
-    try:
-        await hass.async_add_executor_job(_write_text_atomic, path, raw)
-    except OSError:
-        _LOGGER.exception("set_esphome_yaml failed to write %s", rel)
-        return _tool_error("Failed to write the ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
-
-    # RAW before/after: restore must reproduce the file exactly, and this is an
-    # admin-only surface holding values that are already plaintext on disk.
-    await _record_version(
-        data, access_key, resource_type="esphome_yaml", resource_id=rel,
-        action="edit" if existed else "create",
-        before=_version_content_payload(before, path=rel),
-        after=_version_content_payload(raw, path=rel),
-        alias=rel,
-    )
-    dashboard = _esphome_dashboard(hass)
-    if dashboard is not None:
-        try:
-            await dashboard.async_request_refresh()
-        except Exception:  # noqa: BLE001 - best effort, the write already landed
-            _LOGGER.debug("ESPHome dashboard refresh failed after write", exc_info=True)
-
-    return (
-        _tool_success(json.dumps({
-            "file": rel,
-            "bytes_written": len(raw.encode("utf-8")),
-            "content_hash": content_hash(raw),
-            "note": (
-                "Written to disk only. The device keeps running its current firmware "
-                "until a build is compiled and installed."
-                # Models do not reach for the checking tools unprompted, so the
-                # write result points at the next step of the loop. Both named
-                # tools ride the capability this write already used, so this can
-                # never advertise something the caller cannot then call.
-                + (
-                    " Check it with validate_esphome_yaml, then prove it builds with"
-                    " compile_esphome_firmware."
-                    if _esphome_dashboard(hass) is not None else ""
-                )
-            ),
-        })),
-        "allowed", f"esphome:{rel}",
-    )
-
-
-async def _esphome_delete_precheck(hass: HomeAssistant, access_key: AccessKeyRecord, args: dict) -> tuple | None:
-    """Refuse a delete that cannot work, BEFORE it becomes a pending approval.
-
-    Runs after the cap-deny check, so a fully denied access key still
-    learns nothing about which files exist.
-    """
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    if resolved is None:
-        return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
-    path, rel = resolved
-    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
-        return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
-    if not await hass.async_add_executor_job(os.path.exists, path):
-        # Byte-identical to the out-of-scope refusal above, so the refusal is not
-        # an existence oracle; only the audit outcome differs.
-        return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
-    return None
-
-
-async def _build_diff_delete_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """Approval diff for a device-YAML delete. The Before side is masked."""
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    rel = resolved[1] if resolved else str(args.get("file"))
-    before_masked = ""
-    if resolved is not None:
-        try:
-            secret_values, _ = await hass.async_add_executor_job(_read_esphome_secrets, hass)
-            raw = await hass.async_add_executor_job(_read_text_capped, resolved[0])
-            before_masked, _ = await hass.async_add_executor_job(redact_esphome_text, raw, secret_values)
-        except Exception:  # noqa: BLE001 - diff builders are best-effort
-            before_masked = ""
-
-    entry = _esphome_device_for_file(hass, rel) if resolved else None
-    device_info = getattr(getattr(entry, "runtime_data", None), "device_info", None)
-    device = getattr(device_info, "name", None)
-
-    fields = (
-        _summary("delete_esphome_yaml.device", rel=rel, device=device)
-        if device else _summary("delete_esphome_yaml", rel=rel)
-    )
-    return {
-        "kind": "esphome_yaml",
-        **fields,
-        "before": _truncate(before_masked),
-        "after": "",
-        "preview": {
-            "file": rel,
-            "device": device,
-            # The consequence most likely to be misread: deleting the config does
-            # NOT stop, unadopt, or remove anything. Saying so on the card is the
-            # difference between an informed approval and a surprised one.
-            "device_still_running": device is not None,
-            "warning": (
-                "Deletes the configuration file only. The device keeps running its "
-                "current firmware and keeps its Home Assistant entities; nothing is "
-                "unadopted. The file is snapshotted first, so this is restorable "
-                "from the Changes tab."
-            ),
-        },
-    }
-
-
-async def _tool_delete_esphome_yaml(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
-    request_id: str = "", client_ip: str | None = None,
-) -> tuple[dict, str, str]:
-    """MCP tool: delete one ESPHome device YAML file.
-
-    Phoenix MCP owns this rather than allowlisting the add-on's devices/delete,
-    for one reason: the add-on's delete would bypass version capture, so a
-    mistaken delete of a heavily worked configuration would be unrecoverable.
-    Going through an executor snapshots the file first, which makes the delete
-    an ordinary restorable entry in the Changes tab.
-    """
-    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_esphome_yaml"
-
-    refusal = await _esphome_delete_precheck(hass, access_key, args)
-    if refusal is not None:
-        return refusal
-
-    blocked = await _gate(
-        "cap_esphome_yaml", access_key, hass, data,
-        tool_name="delete_esphome_yaml", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_delete_esphome_yaml(args, access_key, hass),
-    )
-    if blocked is not None:
-        return blocked
-    return await _execute_delete_esphome_yaml(args, access_key, hass, data)
-
-
-async def _execute_delete_esphome_yaml(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
-) -> tuple[dict, str, str]:
-    """Remove the file, after snapshotting it so the delete can be rolled back."""
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    if resolved is None:
-        return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
-    path, rel = resolved
-    # Re-check at apply time: an approval window is minutes long and both the
-    # access key's scope and the file itself can drift inside it.
-    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
-        return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
-    if not await hass.async_add_executor_job(os.path.exists, path):
-        return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
-
-    try:
-        before = await hass.async_add_executor_job(_read_text_capped, path)
-    except (OSError, ValueError):
-        return _tool_error("Failed to read the ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
-
-    # Snapshot BEFORE removing: a version recorded after a failed delete would
-    # claim a rollback point that does not describe anything that happened, and
-    # one recorded after a successful delete is a window where the only copy is
-    # in memory.
-    await _record_version(
-        data, access_key, resource_type="esphome_yaml", resource_id=rel, action="delete",
-        before=_version_content_payload(before, path=rel), after=None, alias=rel,
-    )
-    try:
-        await hass.async_add_executor_job(os.remove, path)
-    except OSError:
-        _LOGGER.exception("delete_esphome_yaml failed to remove %s", rel)
-        return _tool_error("Failed to delete the ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
-
-    dashboard = _esphome_dashboard(hass)
-    if dashboard is not None:
-        try:
-            await dashboard.async_request_refresh()
-        except Exception:  # noqa: BLE001 - best effort, the delete already landed
-            _LOGGER.debug("ESPHome dashboard refresh failed after delete", exc_info=True)
-
-    return (
-        _tool_success(json.dumps({
-            "file": rel,
-            "deleted": True,
-            "note": (
-                "The configuration file is gone. The device itself was not touched: it "
-                "keeps running its current firmware and keeps its Home Assistant "
-                "entities. Restore the file from the Changes tab if this was wrong."
-            ),
-        })),
-        "allowed", f"esphome:{rel}",
-    )
 
 
 _ESPHOME_BUILDER_ABSENT = "The ESPHome Device Builder add-on is not available."
@@ -1151,9 +793,9 @@ async def _esphome_file_precheck(
     own "not found" can never produce a different body than an out-of-scope
     refusal: both must be indistinguishable.
 
-    `write` is set by the tools that start a firmware job. Creating a build for a
-    device is at least as consequential as editing its YAML, so it must not be
-    reachable from read-only scope; the lookups and diagnostics stay on read.
+    `write` is set by the tools that start a firmware job. Building for a device
+    acts on it rather than describing it, so it must not be reachable from
+    read-only scope; the lookups and diagnostics stay on read.
     The path is resolved and probed in one executor job; the scope decision stays
     on the event loop, and still runs before the probe result is used.
     """
@@ -1218,9 +860,8 @@ async def _tool_validate_esphome_yaml(
     security boundary rather than a convenience. ESPHome evaluates configuration
     at validation time, and a config carrying external_components fetches and
     executes remote code to do it. Validating an arbitrary payload would
-    therefore be an unreviewed code-execution primitive; a file on disk got
-    there through set_esphome_yaml, which is capability-gated and can require an
-    admin's approval. So the loop is write first, then validate.
+    therefore be an unreviewed code-execution primitive, while a file on disk is
+    one the operator put there.
     """
     if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "validate_esphome_yaml"
@@ -1612,21 +1253,6 @@ async def _tool_list_esphome_devices(
     return _tool_success(json.dumps(_esphome_paged(rows, args, "devices"))), "allowed", resource
 
 
-def _esphome_job_id(value: Any) -> str | None:
-    """A job id out of either a bare id or a whole job record.
-
-    devices/rename returns the full job RECORD under "job" and "tail_job", not
-    the bare id its documentation's `<job_id>` notation implies, and a dict is not
-    a job_id any polling tool accepts. Both shapes are accepted.
-    """
-    if isinstance(value, str):
-        return value or None
-    if isinstance(value, dict):
-        inner = value.get("job_id")
-        return inner if isinstance(inner, str) and inner else None
-    return None
-
-
 async def _esphome_active_job(hass: HomeAssistant, url: str, rel: str) -> dict | None:
     """A queued or running job for this configuration, if there is one.
 
@@ -1789,14 +1415,11 @@ async def _esphome_job_output(
 async def _esphome_dependent_job(
     hass: HomeAssistant, url: str, rel: str, job_id: str
 ) -> dict | None:
-    """The job queued behind this one, if any: an install's upload, a rename's flash.
+    """The job queued behind this one, if any, such as an install's upload.
 
     Looks under `rel` first and then unfiltered, because the two jobs of a chain
-    do NOT always share a configuration. A rename's tail job keeps the OLD
-    filename while its compile job already carries the new one, so the filtered
-    lookup alone finds nothing and the rename appears to finish at the compile.
-    The filtered call stays first so the common install case keeps its cheap,
-    well-scoped query.
+    do NOT always share a configuration. The filtered call stays first so the
+    common case keeps its cheap, well-scoped query.
     """
     for args in ({"configuration": rel}, {}):
         try:
@@ -1862,307 +1485,8 @@ async def _tool_compile_esphome_firmware(
 
 
 # ESPHome hostnames: lowercase letters, digits and hyphens, not starting or
-# ending with one. Checked here so a bad name is refused before an approval
-# exists rather than failing inside the add-on after a click.
+# ending with one. Builder-reported names outside this shape are not listed.
 _ESPHOME_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,29}[a-z0-9])?$")
-
-
-def _esphome_action_services(hass: HomeAssistant, rel: str) -> list[str]:
-    """The HA service names this device's user-defined actions currently occupy."""
-    entry = _esphome_device_for_file(hass, rel)
-    runtime = getattr(entry, "runtime_data", None) if entry is not None else None
-    device_info = getattr(runtime, "device_info", None)
-    if runtime is None or device_info is None:
-        return []
-    return [a["ha_service"] for a in _esphome_declared_actions(hass, device_info, runtime)]
-
-
-_ESPHOME_SUBST_RE = re.compile(r"^\$\{?([a-zA-Z0-9_]+)\}?$")
-
-
-def _esphome_configured_name(path: str, rel: str) -> str:
-    """This configuration's real esphome name, NOT its filename stem.
-
-    The two diverge: an imported configuration keeps its raw name while the file
-    is slugified, and a renamed device leaves a file whose stem is the ORIGINAL
-    name. Comparing a rename target against the stem would refuse a legitimate
-    rename or blame a conflict that does not exist. Mirrors the add-on's own
-    resolved_device_name, which is what the rename is checked against. Resolves a
-    ${sub} reference (generated configurations use one). Falls back to the stem,
-    as the add-on does, for an unreadable or odd file.
-    """
-    stem = os.path.splitext(os.path.basename(rel))[0]
-    try:
-        with open(path, encoding="utf-8") as handle:
-            doc = yaml_includes.load_tagged_lenient(handle.read())
-    except (OSError, yaml_includes.YamlParseError):
-        return stem
-    if not isinstance(doc, dict):
-        return stem
-    section = doc.get("esphome")
-    name = section.get("name") if isinstance(section, dict) else None
-    if not isinstance(name, str) or not name.strip():
-        return stem
-    match = _ESPHOME_SUBST_RE.match(name.strip())
-    if match is None:
-        return name.strip()
-    subs = doc.get("substitutions")
-    value = subs.get(match.group(1)) if isinstance(subs, dict) else None
-    return value.strip() if isinstance(value, str) and value.strip() else stem
-
-
-async def _rename_esphome_precheck(
-    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict
-) -> tuple[tuple[dict, str, str] | None, str, str]:
-    """Everything rename checks before anything is enqueued."""
-    refusal, path, rel = await _esphome_file_precheck(
-        hass, access_key, args, "rename_esphome_device", write=True
-    )
-    if refusal is not None:
-        return refusal, "", ""
-
-    new_name = args.get("new_name")
-    if not isinstance(new_name, str) or not _ESPHOME_NAME_RE.match(new_name):
-        return (
-            _tool_error(
-                "new_name must be a valid ESPHome device name: lowercase letters, digits "
-                "and hyphens, not starting or ending with a hyphen, 31 characters or fewer."
-            ),
-            "invalid_request", f"esphome:{rel}",
-        ), "", ""
-
-    target = f"{new_name}.yaml"
-    # An IN-PLACE rename: the new name slugifies to this device's own file, so
-    # only esphome.name changes. The add-on supports it and forces its
-    # config-only path there, because the over-the-air chain needs a distinct
-    # filename to compile against. It is not a no-op and must not be refused.
-    in_place = target == rel
-    configured = await hass.async_add_executor_job(_esphome_configured_name, path, rel)
-    if new_name == configured:
-        return (
-            _tool_error("The device already has that name."),
-            "invalid_request", f"esphome:{rel}",
-        ), "", ""
-    if not in_place:
-        resolved_target = await hass.async_add_executor_job(_resolve_esphome_path, hass, target)
-        target_exists = resolved_target is not None and await hass.async_add_executor_job(
-            os.path.exists, resolved_target[0],
-        )
-        if target_exists:
-            # The add-on writes the renamed YAML up front; landing on an existing
-            # file would be a silent overwrite of somebody else's device. Skipped
-            # when in place, where the file it "collides" with is its own.
-            return (
-                _tool_error(f"A configuration named {target} already exists."),
-                "invalid_request", f"esphome:{rel}",
-            ), "", ""
-
-    inflight = await _esphome_inflight_refusal(hass, url, rel, f"esphome:{rel}")
-    if inflight is not None:
-        return inflight, "", ""
-    return None, rel, new_name
-
-
-async def _build_diff_rename_esphome_device(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """Approval diff for a rename. The action-service break is the headline."""
-    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
-    rel = resolved[1] if resolved else str(args.get("file"))
-    new_name = str(args.get("new_name", ""))
-
-    entry = _esphome_device_for_file(hass, rel) if resolved else None
-    runtime = getattr(entry, "runtime_data", None)
-    device_info = getattr(runtime, "device_info", None)
-    device = getattr(device_info, "name", None)
-    # runtime.available, not entry.state: a LOADED entry says the integration set
-    # the device up, not that the device is answering, and a powered-off device
-    # keeps its entry loaded. Using the entry state would report every offline
-    # device as online and drop the note below in exactly the case it exists for.
-    online = bool(getattr(runtime, "available", False))
-
-    preview: dict[str, Any] = {
-        "file": rel,
-        "device": device,
-        "new_name": new_name,
-        "new_file": f"{new_name}.yaml",
-        "compiles_and_flashes": True,
-        "device_online": online,
-    }
-
-    # The one thing a rename silently breaks. Entities, entity ids, areas,
-    # history and MESA profiles all survive it, because HA keys ESPHome entities
-    # on the device MAC rather than its name, but a user-defined action's HA
-    # SERVICE name is built from the device name, so every automation or script
-    # calling one stops resolving the moment this lands.
-    services = _esphome_action_services(hass, rel)
-    if services:
-        renamed = [f"{s} becomes esphome.{new_name.replace('-', '_')}_{s.split('_', 1)[-1]}"
-                   for s in services]
-        preview["action_services_renamed"] = renamed
-        preview["action_services_warning"] = (
-            "Any automation, script or scene calling one of these actions will stop "
-            "working until it is updated to the new service name. LIVE-CONFIRMED: the "
-            "new service is not registered until this device's ESPHome config entry "
-            "reconnects, so reload that entry (or restart Home Assistant) after the "
-            "flash, or the renamed action stays uncallable even once the device is back."
-        )
-
-    preview["retained"] = (
-        "Entities, entity ids, areas, history and MESA profiles are keyed on the "
-        "device MAC, not its name, so they survive the rename."
-    )
-    if not online:
-        # Deliberately does NOT promise a file-only rename. This flag is Home
-        # Assistant's API connection; the add-on decides whether to flash by its
-        # OWN reachability probe and never consults this one, so a device Home
-        # Assistant calls unavailable can still answer on the OTA port and be
-        # compiled and flashed.
-        preview["offline_note"] = (
-            "Home Assistant cannot reach this device, so the flash will probably "
-            "fail. The add-on judges reachability separately and may still compile "
-            "and attempt an over-the-air flash anyway. A rename whose flash fails "
-            "is reverted in full, so nothing is left half-applied."
-        )
-
-    fields = (
-        _summary("rename_esphome_device.services",
-                 device=device or rel, new_name=new_name, count=len(services))
-        if services
-        else _summary("rename_esphome_device", device=device or rel, new_name=new_name)
-    )
-    return {
-        "kind": "system_action",
-        **fields,
-        "preview": preview,
-    }
-
-
-async def _tool_rename_esphome_device(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
-    request_id: str = "", client_ip: str | None = None,
-) -> tuple[dict, str, str]:
-    """MCP tool: rename an ESPHome device, its file, and its running firmware.
-
-    Gated on cap_esphome_flash rather than cap_esphome_yaml, and that is the
-    whole reason this is safe to expose: the add-on's rename is a compile then an
-    OTA-flash-then-swap chain, so putting it under the authoring capability would
-    let an access key explicitly denied cap_esphome_flash flash a device through a tool
-    whose name says "rename".
-
-    NOT versioned: the file change is inseparable from the flash, so a restorable
-    snapshot of the old file could not actually undo anything. The add-on already
-    deletes the new YAML and leaves the original untouched if the compile or
-    flash fails.
-    """
-    if effective_cap(access_key, "cap_esphome_flash") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "rename_esphome_device"
-
-    url = _esphome_builder_url(hass)
-    if url is None:
-        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "rename_esphome_device"
-
-    refusal, rel, _new = await _rename_esphome_precheck(hass, access_key, url, args)
-    if refusal is not None:
-        return refusal
-
-    blocked = await _gate(
-        "cap_esphome_flash", access_key, hass, data,
-        tool_name="rename_esphome_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_rename_esphome_device(args, access_key, hass),
-    )
-    if blocked is not None:
-        return blocked
-    return await _execute_rename_esphome_device(args, access_key, hass, data)
-
-
-async def _execute_rename_esphome_device(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
-) -> tuple[dict, str, str]:
-    """Apply the rename, re-validating everything against current state."""
-    url = _esphome_builder_url(hass)
-    if url is None:
-        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "rename_esphome_device"
-
-    # Re-run every check: an approval window is minutes long, and a build the
-    # operator started meanwhile must not be destroyed by an approval click.
-    refusal, rel, new_name = await _rename_esphome_precheck(hass, access_key, url, args)
-    if refusal is not None:
-        return refusal
-
-    try:
-        res = await async_builder_command(
-            hass, url, "devices/rename",
-            {"configuration": rel, "new_name": new_name},
-            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
-        )
-    except BuilderError as err:
-        return _builder_refusal(err, f"esphome:{rel}")
-
-    result = res.result if isinstance(res.result, dict) else {}
-    # The add-on returns the whole job RECORD under "job" and "tail_job", not the
-    # bare id its docs' `<job_id>` notation implies; _esphome_job_id accepts both.
-    raw_job = result.get("job")
-    job_id = _esphome_job_id(raw_job)
-    # THE dangerous shape drift in this tier, so it fails LOUD. A missing or null
-    # "job" is the add-on's documented config-only reply, but a job that cannot be
-    # READ is a third shape, and the branch below treats anything without an id as
-    # config-only. Left silent, a rewrapped record would have Phoenix report
-    # "nothing was compiled or flashed" while a compile-and-flash chain ran on the
-    # device: the operator told the opposite of what is happening to their hardware.
-    if raw_job is not None and job_id is None:
-        note = version_mismatch_note("devices/rename", res.server_version, res.esphome_version)
-        return _tool_error(
-            "The ESPHome Device Builder replied with a rename job this version of "
-            "Phoenix MCP cannot read, so it is not possible to say whether the "
-            "device is being reflashed. Check the ESPHome dashboard directly before "
-            "doing anything else." + (f" {note}" if note else "")
-        ), "invalid_request", f"esphome:{rel}"
-    body: dict[str, Any] = {
-        "file": rel,
-        "new_file": f"{new_name}.yaml",
-        "new_name": new_name,
-    }
-    if job_id:
-        body["job_id"] = job_id
-        body["tail_job_id"] = _esphome_job_id(result.get("tail_job"))
-        body["note"] = (
-            "Renaming now: a build followed by an over-the-air flash is queued. "
-            f"{_ESPHOME_FOLLOW_NOTE} UNTIL IT FINISHES both the old and the new "
-            "configuration are listed, because the add-on copies the file and drops "
-            "one only at the end: that is normal, and neither copy is yours to clean "
-            "up. The device only answers to the new name once the flash has finished. "
-            "IF THE FLASH FAILS, the add-on removes the new copy by itself: the "
-            "rename did not happen, NOTHING is left half-applied, and a listing back "
-            "to just the old name is that cleanup rather than a partial rename. "
-            "Do NOT try to finish it by installing firmware from either file: that "
-            "cannot complete a rename, it only reflashes what the device already runs. "
-            "The ONLY recovery is to make the device reachable and call "
-            "rename_esphome_device again. AFTERWARDS, on success, this "
-            "device's user-defined action services stay unregistered until its ESPHome "
-            "config entry reconnects, because Home Assistant registers them on connect "
-            "and never removes the old ones: tell the operator to reload the ESPHome "
-            "entry for this device (or restart Home Assistant) before expecting "
-            "esphome.<name>_<action> to work again. Entities, areas and history are "
-            "unaffected and need nothing."
-        )
-    else:
-        # The add-on's config-only rename (job: None). Reached only by an IN-PLACE
-        # rename, where the new name slugifies to this device's own file and the
-        # over-the-air chain has no distinct filename to compile against (Phoenix
-        # never sends the explicit config_only argument). The FILE changed and the
-        # DEVICE did not: unlike the failed-flash case, the configuration on disk
-        # carries the new name, so installing it is the correct way to finish.
-        body["flashed"] = False
-        body["config_only"] = True
-        body["note"] = (
-            "The configuration was rewritten, but nothing was compiled or flashed: "
-            "the device is still running its old firmware and still answers to its "
-            "OLD name. This is what happens when the new name maps to the same "
-            "configuration file, since building over the air needs a distinct "
-            "filename. Report it as a configuration change and NOT as a completed "
-            "device rename. To finish it, install the firmware from this file once "
-            "the device is reachable."
-        )
-    return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
 
 
 async def _tool_clean_esphome_build(

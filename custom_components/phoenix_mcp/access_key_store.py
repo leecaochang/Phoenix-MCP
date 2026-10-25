@@ -44,6 +44,8 @@ from .const import (
     DETAIL_LEVELS,
     DETAIL_LEVEL_BALANCED,
     DETAIL_LEVEL_CONCISE,
+    CAP_ALLOW,
+    CAP_CONFIRM,
     CAP_DENY,
     CAP_MODES,
     CAPABILITY_NAMES,
@@ -197,6 +199,20 @@ class PermissionTree:
         )
 
 
+def _stored_cap_mode(cap_name: str, value: Any) -> str:
+    """A stored capability mode, read leniently.
+
+    An unknown value is deny. Confirm on a capability that no longer offers it
+    reads as allow: such a capability now gates reads only, and Confirm already
+    allowed reads, so the stored intent is kept without inventing an approval step.
+    """
+    if value not in CAP_MODES:
+        return CAP_DENY
+    if value == CAP_CONFIRM and cap_name not in CONFIRM_AVAILABLE_CAPS:
+        return CAP_ALLOW
+    return value
+
+
 @dataclass
 class AccessKeyPreset:
     """A named snapshot of an access key's full settings (the workspace model).
@@ -241,8 +257,7 @@ class AccessKeyPreset:
         caps: dict[str, str] = {}
         raw_caps = data.get("caps") or {}
         for cap_name in CAPABILITY_NAMES:
-            value = raw_caps.get(cap_name)
-            caps[cap_name] = value if value in CAP_MODES else CAP_DENY
+            caps[cap_name] = _stored_cap_mode(cap_name, raw_caps.get(cap_name))
         persona = data.get("persona", PERSONA_CUSTOM)
         if persona not in PERSONA_NAMES:
             persona = PERSONA_CUSTOM
@@ -452,10 +467,7 @@ class AccessKeyRecord:
     def from_dict(cls, data: dict) -> AccessKeyRecord:
         cap_kwargs: dict[str, str] = {}
         for cap_name in CAPABILITY_NAMES:
-            value = data.get(cap_name)
-            if value not in CAP_MODES:
-                value = CAP_DENY
-            cap_kwargs[cap_name] = value
+            cap_kwargs[cap_name] = _stored_cap_mode(cap_name, data.get(cap_name))
         persona = data.get("persona", PERSONA_CUSTOM)
         if persona not in PERSONA_NAMES:
             persona = PERSONA_CUSTOM

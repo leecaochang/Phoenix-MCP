@@ -698,9 +698,9 @@ class TestPayloadRedaction:
         log = AuditLog()
         log.record(
             request_id=generate_request_id(), access_key_id="t", access_key_name="n",
-            method="set_yaml_config", resource="yaml", outcome="allowed",
+            method="edit_blueprint", resource="blueprint", outcome="allowed",
             client_ip="1.2.3.4", settings=_settings(),
-            payload={"name": "set_yaml_config", "arguments": {"content": "password: hunter2"}},
+            payload={"name": "edit_blueprint", "arguments": {"content": "password: hunter2"}},
         )
         stored = log.query()[0].payload
         assert "hunter2" not in stored

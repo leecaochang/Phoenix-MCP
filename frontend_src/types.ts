@@ -622,8 +622,7 @@ export type ApprovalStatus =
   | "cancelled";
 
 export interface ApprovalDiff {
-  kind?: "yaml_diff" | "config_diff" | "service_preview" | "system_action" | "file_write"
-    | "esphome_yaml";
+  kind?: "yaml_diff" | "config_diff" | "service_preview" | "system_action";
   summary?: string;
   /** Catalog key + params for `summary`, so the panel can render it localized.
    *  Absent on older records and on any key this bundle does not know; both fall

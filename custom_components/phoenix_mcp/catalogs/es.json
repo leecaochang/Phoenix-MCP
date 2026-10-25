@@ -102,20 +102,20 @@
         "description": "Crea y enumera copias de seguridad. Restáuralas desde Home Assistant."
       },
       "cap_filesystem": {
-        "label": "Acceso al sistema de archivos",
-        "description": "Lee y escribe archivos en www/, themes/ y custom_templates/."
+        "label": "Leer archivos",
+        "description": "Lee archivos en www/, themes/ y custom_templates/."
       },
       "cap_esphome_yaml": {
         "label": "YAML de dispositivos ESPHome",
-        "description": "Lee y edita el YAML de dispositivos ESPHome en su propio entorno restringido bajo esphome/, lo valida y lo compila. Las credenciales se ocultan al leerlas y no pueden cambiarse. Compilar solo genera un binario; flashear un dispositivo requiere la capacidad independiente de flasheo de firmware de ESPHome."
+        "description": "Lee el YAML de dispositivos ESPHome en su propio entorno restringido bajo esphome/, lo valida y lo compila. Las credenciales se ocultan al leerlas. Compilar solo genera un binario; flashear un dispositivo requiere la capacidad independiente de flasheo de firmware de ESPHome."
       },
       "cap_esphome_flash": {
         "label": "Flasheo de firmware de ESPHome",
         "description": "Instala firmware compilado en un dispositivo ESPHome por el aire, reemplazando lo que está ejecutando. Una imagen defectuosa puede dejar un dispositivo inalcanzable hasta que se reflashee por cable, por lo que se recomienda encarecidamente usar Confirmar."
       },
       "cap_yaml_edit": {
-        "label": "Editar YAML sin procesar",
-        "description": "Lee y edita configuration.yaml y los archivos YAML que carga directamente. Se recomienda encarecidamente la aprobación. Los secretos en línea quedan expuestos, así que guarde los secretos en secrets.yaml con !secret."
+        "label": "Configuración YAML",
+        "description": "Lee configuration.yaml y los demás archivos YAML del directorio de configuración, comprueba la configuración y recarga los dominios definidos en YAML. Los secretos en línea quedan expuestos, así que guarde los secretos en secrets.yaml con !secret."
       },
       "noBuilder": "Complemento Device Builder no detectado",
       "noEsphome": "ESPHome no detectado",
@@ -794,8 +794,6 @@
       "dashboard_card.edit.section": "Reemplazar la tarjeta {card_index} del panel de control '{label}' (vista {view_index}, sección {section_index})",
       "delete_automation": "Eliminar la automatización '{automation_id}'",
       "delete_entity": "Eliminar la entrada del registro de {entity_id}",
-      "delete_esphome_yaml": "Eliminar la configuración del dispositivo ESPHome {rel}. El dispositivo en sí no se modifica.",
-      "delete_esphome_yaml.device": "Eliminar la configuración del dispositivo ESPHome {rel} ({device}). El dispositivo en sí no se modifica.",
       "delete_helper": "Eliminar el ayudante {helper_type} '{helper_id}'",
       "delete_scene": "Eliminar la escena '{scene_id}'",
       "delete_script": "Eliminar el script '{script_id}'",
@@ -831,23 +829,11 @@
       "patch_dashboard.append": "Añadir a {path} en el panel de control '{label}'",
       "patch_dashboard.remove": "Eliminar {path} del panel de control '{label}'",
       "patch_dashboard.set": "Establecer {path} en el panel de control '{label}'",
-      "patch_yaml_config.append": "Añadir a {path} en {file}",
-      "patch_yaml_config.remove": "Eliminar {path} de {file}",
-      "patch_yaml_config.set": "Establecer {path} en {file}",
       "remove_device": "Eliminar {device_id} de la entrada de configuración {config_entry_id}",
-      "rename_esphome_device": "Renombrar el dispositivo ESPHome {device} a {new_name}. Esto compila y graba el dispositivo.",
-      "rename_esphome_device.services": "Renombrar el dispositivo ESPHome {device} a {new_name}, renombrando {count} servicio(s) de acción. Esto compila y graba el dispositivo.",
       "restart_ha": "Reiniciar Home Assistant",
       "set_dashboard_config": "Establecer la disposición del panel de control '{label}'",
       "set_device": "Actualizar los metadatos del registro del dispositivo ({fields}) de {device_id}",
       "set_entity": "Actualizar los metadatos del registro ({fields}) de {entity_id}",
-      "set_esphome_yaml": "Editar la configuración del dispositivo ESPHome {rel}. Esto no graba el dispositivo.",
-      "set_esphome_yaml.device": "Editar la configuración del dispositivo ESPHome {rel} ({device}, {count} entidades). Esto no graba el dispositivo.",
-      "set_yaml_config": "Reemplazar {file}",
-      "set_yaml_config.removing": "Reemplazar {file}, eliminando las claves de nivel superior {keys}",
-      "set_yaml_config.removing_entries": "Reemplazar {file}, eliminando {count} entradas",
-      "set_yaml_config.removing_entry": "Reemplazar {file}, eliminando 1 entrada",
-      "write_file": "Escribir el archivo '{path}'",
       "zigbee_binding": "Cambiar un enlace de dispositivo Zigbee",
       "zigbee_binding.devices": "{operation} enlace Zigbee de {source} a {target}",
       "zigbee_group": "Cambiar un grupo Zigbee",
@@ -1821,10 +1807,6 @@
       "delete_automation.title": "Eliminar automatización «{automation_id}»",
       "delete_entity.body": "Se eliminará la entrada del registro de {entity_id}. La integración podría volver a crear la entidad más tarde.",
       "delete_entity.title": "Eliminar la entrada del registro de {entity_id}",
-      "delete_esphome_yaml.body": "Se eliminará permanentemente {rel}. El dispositivo ESPHome no se modificará.",
-      "delete_esphome_yaml.device.body": "Se eliminará permanentemente {rel}. El dispositivo ESPHome {device} no se modificará.",
-      "delete_esphome_yaml.device.title": "Eliminar la configuración del dispositivo ESPHome {rel} ({device})",
-      "delete_esphome_yaml.title": "Eliminar la configuración del dispositivo ESPHome {rel}",
       "delete_helper.body": "Se eliminará permanentemente el ayudante {helper_id}.",
       "delete_helper.title": "Eliminar ayudante {helper_type} «{helper_id}»",
       "delete_scene.body": "Se eliminará permanentemente la escena {scene_id}.",
@@ -1948,18 +1930,8 @@
       "patch_dashboard.remove.title": "Actualizar panel de control «{label}»",
       "patch_dashboard.set.body": "Se actualizará la configuración del panel de control de Home Assistant. Abra Detalles para revisar el cambio exacto propuesto.",
       "patch_dashboard.set.title": "Actualizar panel de control «{label}»",
-      "patch_yaml_config.append.body": "Abra Detalles para revisar el cambio exacto propuesto.",
-      "patch_yaml_config.append.title": "Añadir configuración a {file}",
-      "patch_yaml_config.remove.body": "Se eliminará configuración de {file}. Abra Detalles para revisar el cambio exacto propuesto.",
-      "patch_yaml_config.remove.title": "Eliminar configuración de {file}",
-      "patch_yaml_config.set.body": "Abra Detalles para revisar el cambio exacto propuesto.",
-      "patch_yaml_config.set.title": "Establecer la configuración en {file}",
       "remove_device.body": "Se eliminará {device_id} de su integración. Es posible que el dispositivo deba volver a añadirse.",
       "remove_device.title": "Eliminar {device_id} de la entrada de configuración {config_entry_id}",
-      "rename_esphome_device.body": "Se renombrará {device}, se compilará su configuración y se grabará el dispositivo. No lo desconecte durante la actualización.",
-      "rename_esphome_device.services.body": "Se renombrará {device}, se actualizarán sus servicios de acción, se compilará su configuración y se grabará el dispositivo. No lo desconecte durante la actualización.",
-      "rename_esphome_device.services.title": "Renombrar el dispositivo ESPHome {device} a {new_name}, renombrando {count} servicio(s) de acción",
-      "rename_esphome_device.title": "Renombrar el dispositivo ESPHome {device} a {new_name}",
       "restart_ha.body": "Home Assistant no estará disponible brevemente mientras se reinicia.",
       "restart_ha.title": "Reiniciar Home Assistant",
       "set_dashboard_config.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
@@ -1968,23 +1940,9 @@
       "set_device.title": "Actualizar los metadatos del registro del dispositivo ({fields}) para {device_id}",
       "set_entity.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
       "set_entity.title": "Actualizar los metadatos del registro ({fields}) para {entity_id}",
-      "set_esphome_yaml.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_esphome_yaml.device.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_esphome_yaml.device.title": "Editar la configuración del dispositivo ESPHome {rel} ({device}, {count} entidades)",
-      "set_esphome_yaml.title": "Editar la configuración del dispositivo ESPHome {rel}",
-      "set_yaml_config.body": "Se sustituirá todo el contenido de {file}. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_yaml_config.removing.body": "Se sustituirá todo el contenido de {file} y se eliminará configuración. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_yaml_config.removing.title": "Actualizar {file}",
-      "set_yaml_config.removing_entries.body": "Se sustituirá todo el contenido de {file} y se eliminarán {count} entradas. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_yaml_config.removing_entries.title": "Actualizar {file}",
-      "set_yaml_config.removing_entry.body": "Se sustituirá todo el contenido de {file} y se eliminará una entrada. Abra Detalles para revisar el cambio exacto propuesto.",
-      "set_yaml_config.removing_entry.title": "Actualizar {file}",
-      "set_yaml_config.title": "Actualizar {file}",
       "view.defaultAria": "Vista de aprobación predeterminada",
       "view.details": "Detalles",
       "view.summary": "Resumen",
-      "write_file.body": "Se escribirá en {path}. El contenido existente en esa ruta podría sustituirse.",
-      "write_file.title": "Escribir el archivo «{path}»",
       "zigbee_binding.body": "Se cambiará el control directo entre dos dispositivos Zigbee. Abra Detalles para revisar ambos dispositivos y los clústeres seleccionados.",
       "zigbee_binding.devices.body": "Se {operation} el control directo Zigbee de {source} a {target}. Abra Detalles para revisar la relación exacta.",
       "zigbee_binding.devices.title": "{operation} enlace Zigbee de {source} a {target}",
@@ -2087,11 +2045,11 @@
       },
       "dashboard_designer": {
         "label": "Diseñador de paneles de control",
-        "description": "Puede descubrir entidades y crear paneles de control. Los archivos de temas y de tarjetas personalizadas requieren aprobación. No puede controlar dispositivos ni editar otra configuración."
+        "description": "Puede descubrir entidades, crear paneles de control y leer archivos de temas y de tarjetas personalizadas. Registrar archivos de tarjetas personalizadas requiere aprobación. No puede controlar dispositivos ni editar otra configuración."
       },
       "esphome": {
         "label": "Dispositivos ESPHome",
-        "description": "Lee el estado, los diagnósticos y los registros de los dispositivos ESPHome. Editar el YAML del dispositivo y grabar el firmware requieren aprobación. Las credenciales de YAML permanecen ocultas e inmodificables. Sin control de dispositivos ni otra configuración."
+        "description": "Lee el estado, los diagnósticos, los registros y el YAML de los dispositivos ESPHome, y lo valida y compila. Grabar el firmware requiere aprobación. Las credenciales de YAML permanecen ocultas. Sin control de dispositivos ni otra configuración."
       },
       "helper": "Una persona establece las capacidades iniciales. Puede ajustar cada capacidad en Avanzado. La persona cambia a Personalizado cuando la configuración deja de coincidir con un ajuste predefinido.",
       "home_admin": {
@@ -2109,7 +2067,7 @@
       "noEsphome": "No se detectó ESPHome en este sistema",
       "power_user": {
         "label": "Usuario avanzado",
-        "description": "Puede leer y editar la mayor parte de la configuración y reiniciar Home Assistant. Los cambios confidenciales del sistema requieren aprobación. El acceso al sistema de archivos y al YAML sin procesar permanece bloqueado."
+        "description": "Puede leer y editar la mayor parte de la configuración y reiniciar Home Assistant. Los cambios confidenciales del sistema requieren aprobación. El acceso a archivos y a la configuración YAML permanece bloqueado."
       },
       "read_only": {
         "label": "Observador de solo lectura",

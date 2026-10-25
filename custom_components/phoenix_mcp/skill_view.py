@@ -123,59 +123,18 @@ grain of the model gives the smoothest results and avoids dead ends.
   `find_available_actions` both list. `dry_run_service` will name any argument
   you got wrong before you send it.
 
-### Editing ESPHome device YAML
-
-If you have `get_esphome_yaml` / `set_esphome_yaml`, read this before your first
-edit. The rules are strict but simple, and knowing them up front avoids a loop
-of refusals.
+### Reading ESPHome device YAML
 
 - Call `get_esphome_yaml` with no arguments to list the device files you can
-  see, then with `file` to read one.
-- Credentials come back as `__PHOENIX_REDACTED__<path>__` placeholders. **Leave
-  every placeholder exactly as it is.** The real value is put back when you
-  write. Editing around them is normal and safe; comments and formatting are
-  preserved.
-- You cannot change a credential to a new value. If asked to, do NOT invent a
-  literal: replace it with a `!secret` reference instead. The referenced name
-  must already exist in the ESPHome `secrets.yaml`, and `defined_secrets` in
-  the read response tells you which names do.
-- If the name you need is missing, say so and stop. Adding it is a human step
-  (`secrets.yaml` is not reachable from here). Ask the operator to add the key,
-  with the value that is currently inline, and then do the swap across every
-  file in one pass. That migration changes nothing functionally, so it is safe.
-- For a credential that does not exist yet, such as the API encryption key or
-  OTA password on a brand-new device file, write `!phoenix_generate` as the
-  value. A strong random one is created as the file is written. **Never invent a
-  key or password yourself**: you cannot produce cryptographic randomness, and a
-  guessable device key is worse than none. You will not be told what was
-  generated; the operator can read it from the ESPHome dashboard when Home
-  Assistant asks for it.
-- `!phoenix_generate` only works where nothing is set yet. It is refused on a
-  credential that already has a value, because rotating a key the device is
-  already running takes it off the network until Home Assistant is given the new
-  one, and can need a cable. It is also refused on the wifi ssid and password,
-  which belong to the house rather than the device.
-- Pass the `content_hash` you read as `expected_hash` on the write, so an edit
-  that raced with someone else is refused instead of clobbering them.
-- **Writing does not flash the device.** It updates the file; the device keeps
-  running its current firmware until a build is compiled and installed. Say that
-  plainly rather than implying the change is live. See the build-and-flash loop
-  below for how (and whether) you can take it further.
-- `delete_esphome_yaml` removes a configuration you no longer want, such as a
-  scratch file or one created under the wrong name. It does NOT touch the
-  device: it keeps running, keeps its Home Assistant entities, and stays
-  adopted. Deleting a live device's configuration is almost never what an
-  operator means, so say what it will and will not do before proposing it. The
-  file is snapshotted first, so an administrator can restore it.
-- `rename_esphome_device` renames the file, the device, and the firmware, so it
-  compiles and flashes and needs flashing permission. Entity ids, areas and
-  history survive. The device's user-defined actions do not: their service names
-  are built from the device name, so `esphome.old_name_action` becomes
-  `esphome.new_name_action` and any automation calling one breaks. Check for
-  such automations and tell the operator before renaming. After the flash the
-  renamed action stays UNREGISTERED, and so uncallable, until that device's
-  ESPHome config entry reconnects: tell the operator to reload it (or restart
-  Home Assistant). Entities, areas and history need nothing.
+  see, then with `file` to read one. `search_esphome_yaml` finds text across
+  them.
+- Credentials come back as `__PHOENIX_REDACTED__<path>__` placeholders, and
+  `defined_secrets` lists the names in the ESPHome `secrets.yaml`, never their
+  values. Never ask for a credential's value and never invent one.
+- These tools only read. Device YAML is the operator's own configuration and is
+  edited in the ESPHome dashboard. When a change is needed, show the operator
+  the exact lines to add or change, then validate, compile and install from the
+  file once they have saved it.
 
 ### Checking ESPHome work, and looking things up
 
@@ -184,9 +143,8 @@ your tool list, it is not installed, and you should say so rather than guessing
 at what they would have told you.
 
 - `validate_esphome_yaml` checks one file for configuration errors. It reads the
-  file **from disk**, so the order is always write first, then validate. It does
-  not compile or flash anything, and a failure leaves the device untouched, so
-  the loop is cheap: write, validate, fix, validate again. Do this after any
+  file **from disk**, so it checks what the operator saved. It does not compile
+  or flash anything, and a failure leaves the device untouched. Run it after any
   non-trivial edit rather than declaring the change good.
 - `get_esphome_board` gives a board's real pin map, including which pins are
   already taken and which carry warnings. Look the board up before choosing
@@ -200,7 +158,7 @@ at what they would have told you.
 
 ### Building and flashing ESPHome firmware
 
-The full loop is write, validate, compile, install. Validation catches schema
+The full loop is edit, validate, compile, install. Validation catches schema
 and pin errors; compiling catches the C++ and lambda errors it cannot, which is
 where hand-written ESPHome configs usually break. Do not tell an operator a
 config is good on the strength of validation alone if you can compile it.
@@ -623,48 +581,22 @@ mode: single
   may reject removal. Successful removal versions are audit-only and cannot be
   restored.
 
-### Raw YAML configuration
+### YAML configuration
 
-- These tools reach `configuration.yaml` and any YAML file it loads through an
-  `!include`, such as `templates.yaml` or `sensors.yaml`. Pass `file` with the
-  path relative to the configuration directory; omit it for `configuration.yaml`.
-  A file is writable only where Home Assistant loads it at an ordinary
-  integration key: a packages file, and anything loaded under `homeassistant:`,
-  `http:`, `frontend:` or `lovelace:`, is refused wherever it lives. If you are
-  unsure which file holds a setting, read `configuration.yaml` and look at its
-  `!include` lines.
-- To change ONE setting, use `patch_yaml_config`. Its `address` selects a dotted
-  key (`{"kind":"key","value":"recorder.include"}`) or a mixed key/index path.
-  Its typed `change` uses `kind: "set"` with YAML `content` to replace a value,
-  `kind: "append"` with `content` to add one value to an existing list, or
-  `kind: "remove"` to delete the address. Everything else stays exactly as
-  written, comments included, and the human approving it sees that address
-  rather than the whole file.
-- An `!include` target is usually a top-level LIST. Use an address with
-  `kind: "path"` and a value mixing mapping keys and 0-based indexes, such as
-  `[0, "binary_sensor", 0, "state"]` to change one template's `state`. To add
-  an entry, address its existing list and use `change.kind: "append"`.
-- Address the NARROWEST key you are actually changing. Your `content` is written
-  verbatim, but a value you read back arrives in standard YAML style rather than
-  the file's own layout, and comments inside it are not part of what a read
-  returns. Reading `recorder`, adding a line and writing `recorder` back
-  reformats that block and drops comments inside it; patching `recorder.include`
-  touches only those lines.
-- Only use `set_yaml_config` when you are genuinely rewriting the file. It
-  replaces all of it, so anything you do not resend is destroyed, and a
-  reviewer has to read every line to see your change. A write that drops a
-  top-level key is refused unless `remove_keys` names it; on a list-shaped file
-  a write that drops entries is refused unless `remove_entries` gives the exact
-  count. Both mean the same thing: state a removal, do not let one ride along.
-- Nothing is created along the way. To add `recorder.include.entities` when
-  `recorder.include` does not exist yet, set `recorder.include` with the whole
-  subtree.
-- Pass the `content_hash` from your read as `expected_hash` either way; each
-  patch returns the file's new `content_hash`, so several can be chained.
-- Neither tool can change the keys that define Home Assistant's own
-  authentication, proxy trust, or dashboard code loading; copy them through
-  unchanged. Supplied patch content cannot contain YAML anchors or aliases. After either, run `check_ha_config`; it withholds detailed errors, so inspect the Home Assistant configuration check and logs when validation fails. Then tell the user a restart is
-  needed. These changes do NOT reload on their own.
+- `get_yaml_config` reads `configuration.yaml` and the other YAML files in the
+  configuration directory, such as `templates.yaml` or a packages file. Pass
+  `file` with the path relative to the configuration directory and `key` for one
+  dotted mapping key; omit both for `configuration.yaml`. `secrets.yaml`, hidden
+  directories and ESPHome device files are not readable here.
+- YAML configuration is the operator's to edit, so there is no tool that writes
+  it. Automations, scripts and scenes that Home Assistant's own editor manages
+  are changed with their own tools; anything defined in hand-written YAML is
+  changed by the operator. Show the exact lines to add or change and say which
+  file holds them.
+- After the operator edits YAML, run `check_ha_config`; it withholds detailed
+  errors, so point them at the Home Assistant configuration check and logs when
+  validation fails. Then a reload of the affected domain, or a restart, applies
+  the change. Edits do NOT take effect on their own.
 
 ### Climate
 

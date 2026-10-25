@@ -1,9 +1,9 @@
-"""Tests for the ESPHome MCP tools (fleet status, device YAML)."""
+"""Tests for the ESPHome MCP tools (fleet status, device YAML reads and history)."""
 
 from __future__ import annotations
 
-import asyncio
 import json
+import os
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,9 +18,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.tools import esphome
-from custom_components.phoenix_mcp.mcp_view import _call_tool, _execute_set_esphome_yaml, async_restore_version
+from custom_components.phoenix_mcp.mcp_view import _call_tool, async_restore_version
 from custom_components.phoenix_mcp.tools.esphome import esphome_availability
-from custom_components.phoenix_mcp.version_store import VersionStore
+from custom_components.phoenix_mcp.const import VERSION_STORAGE_VERSION
+from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 from custom_components.phoenix_mcp.policy_engine import resolve_esphome_user_service
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
@@ -117,21 +118,6 @@ def _esphome_entry(
         fake.runtime_data = runtime
     entries.append(fake)
     return fake
-
-
-class _ApprStore:
-    """Minimal store the confirm gate can persist a real approval into."""
-
-    def __init__(self) -> None:
-        self._p: list = []
-        self.async_lock = asyncio.Lock()
-        self.async_save = AsyncMock()
-
-    def get_pending_approvals(self) -> list:
-        return self._p
-
-    def set_pending_approvals(self, v: list) -> None:
-        self._p = v
 
 
 def _dashboard(data=None, last_update_success=True):
@@ -546,7 +532,8 @@ class TestDeviceYamlRead:
         assert "realotapassword" not in content["content"][0]["text"]
         assert body["redacted_paths"] == ["api.encryption.key", "ota[0].password"]
         assert body["content_hash"] == content_hash(DEVICE_YAML)
-        # Formatting and tag references survive so an edit round-trips cleanly.
+        # Formatting and tag references survive, so the masked text still reads
+        # as the operator wrote it.
         assert "# Enable Home Assistant API" in body["content"]
         assert "ssid: !secret wifi_ssid" in body["content"]
         assert "baud_rate: 9600" in body["content"]
@@ -644,297 +631,129 @@ async def test_ambiguous_yaml_owners_require_all_scopes(hass, esphome_entries):
     assert not _esphome_file_in_scope(hass, _yaml_access_key(), "same.yaml", write=True)
 
 
-class TestDeviceYamlDelete:
-    """Phoenix owns the delete rather than allowlisting the add-on's devices/delete.
+class TestFilePrecheck:
+    """The shared resolve-and-authorize step every file-bound Builder tool awaits first.
 
-    The add-on's delete bypasses version capture, so a mistaken delete would be
-    unrecoverable; going through an executor snapshots first and makes it an
-    ordinary Changes entry.
+    Path resolution and the existence probe run in one worker job; the scope
+    decision stays on the event loop and is taken before the probe result is
+    used, so a file outside the access key's tree never reveals whether it exists.
     """
 
-    async def test_cap_denied_touches_nothing_and_reveals_nothing(self, hass, esphome_dir):
-        content, outcome, _ = await _call(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"},
-            _yaml_access_key(cap_esphome_yaml="deny"), hass)
-        assert outcome == "denied"
-        assert "rf-blaster1" not in content["content"][0]["text"]
-        assert (esphome_dir / "rf-blaster1.yaml").exists()
+    async def test_an_in_scope_file_resolves_to_its_real_path(self, hass, esphome_dir):
+        refusal, path, rel = await esphome._esphome_file_precheck(
+            hass, _yaml_access_key(), {"file": "rf-blaster1.yaml"}, "validate_esphome_yaml")
+        assert refusal is None
+        assert rel == "rf-blaster1.yaml"
+        assert path == os.path.realpath(esphome_dir / "rf-blaster1.yaml")
 
-    async def test_missing_and_out_of_jail_are_byte_identical(self, hass, esphome_dir):
-        missing, out_missing, _ = await _call(
-            "delete_esphome_yaml", {"file": "no-such-device.yaml"}, _yaml_access_key(), hass)
-        # An archived file is outside the jail; both must read the same to the
-        # caller while the audit distinguishes them.
-        secrets, out_secrets, _ = await _call(
-            "delete_esphome_yaml", {"file": "secrets.yaml"}, _yaml_access_key(), hass)
+    async def test_scope_is_decided_before_existence(self, hass, esphome_dir, esphome_entries):
+        _esphome_entry(hass, esphome_entries, entity_ids=("light.not_mine",),
+                       runtime=_runtime(_device_info(name="ghost")))
+        missing, _path, _rel = await esphome._esphome_file_precheck(
+            hass, _yaml_access_key(), {"file": "nope.yaml"}, "validate_esphome_yaml")
+        hidden, _path, rel = await esphome._esphome_file_precheck(
+            hass, _yaml_access_key(), {"file": "ghost.yaml"}, "validate_esphome_yaml")
+        # Neither file exists; only the audit outcome tells them apart.
+        assert missing[1] == "not_found"
+        assert hidden[1] == "denied"
+        assert rel == "ghost.yaml"
+        assert missing[0] == hidden[0]
 
-        assert out_missing == "not_found"
-        assert out_secrets == "invalid_request"
-        assert (esphome_dir / "secrets.yaml").exists()
-
-    async def test_secrets_yaml_can_never_be_deleted(self, hass, esphome_dir):
-        for name in ("secrets.yaml", "./secrets.yaml", "archive/old-device.yaml"):
-            _c, outcome, _ = await _call("delete_esphome_yaml", {"file": name}, _yaml_access_key(), hass)
-            assert outcome == "invalid_request", name
-        assert (esphome_dir / "secrets.yaml").exists()
-        assert (esphome_dir / "archive" / "old-device.yaml").exists()
-
-    async def test_deletes_the_file_and_snapshots_it_first(self, hass, esphome_dir):
-        versions = VersionStore()
-        data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-
-        content, outcome, _ = await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
-
-        assert outcome == "allowed"
-        assert _json(content)["deleted"] is True
-        assert not (esphome_dir / "rf-blaster1.yaml").exists()
-
-        history = versions.list_for("esphome_yaml", "rf-blaster1.yaml")
-        assert [v.action for v in history] == ["delete"]
-        # The snapshot is RAW, so the restore below can reproduce the file exactly.
-        assert history[0].before["content"] == DEVICE_YAML
-        assert history[0].after is None
-
-    async def test_a_deleted_config_can_be_restored(self, hass, esphome_dir):
-        # The whole justification for owning this tool.
-        versions = VersionStore()
-        data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-        await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
-        assert not (esphome_dir / "rf-blaster1.yaml").exists()
-
-        ver = versions.list_for("esphome_yaml", "rf-blaster1.yaml")[0]
-        _res, outcome, _r = await async_restore_version(ver, "admin-1", hass, data, side="before")
-
-        assert outcome == "allowed"
-        assert (esphome_dir / "rf-blaster1.yaml").read_text() == DEVICE_YAML
-
-    async def test_the_result_says_the_device_was_not_touched(self, hass, esphome_dir):
-        # The consequence most likely to be misread by an agent reporting back.
-        versions = VersionStore()
-        data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-        content, _o, _r = await _call_tool(
-            "delete_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass, data)
-        note = _json(content)["note"]
-        assert "keeps running" in note
-        assert "entities" in note
-
-    async def test_a_doomed_delete_never_becomes_a_pending_approval(self, hass, esphome_dir):
-        # A confirm-gated delete validates before the approval is created. The
-        # executor re-checks existence too, so the precheck is observable only
-        # with a confirm-mode capability in play.
-        data = MagicMock()
-        data.store.get_pending_approvals.return_value = []
-        _c, outcome, _ = await _call_tool(
-            "delete_esphome_yaml", {"file": "no-such-device.yaml"},
-            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
-
-        assert outcome == "not_found"
-        data.store.set_pending_approvals.assert_not_called()
-
-    async def test_an_out_of_jail_delete_never_becomes_a_pending_approval(self, hass, esphome_dir):
-        data = MagicMock()
-        data.store.get_pending_approvals.return_value = []
-        _c, outcome, _ = await _call_tool(
-            "delete_esphome_yaml", {"file": "secrets.yaml"},
-            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
-
-        assert outcome == "invalid_request"
-        data.store.set_pending_approvals.assert_not_called()
-        assert (esphome_dir / "secrets.yaml").exists()
-
-    async def test_the_approval_diff_masks_credentials_and_states_the_consequence(
-        self, hass, esphome_dir
+    async def test_job_starters_need_write_scope_and_lookups_only_read(
+        self, hass, esphome_dir, esphome_entries
     ):
-        diff = await esphome._build_diff_delete_esphome_yaml(
-            {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        assert diff["kind"] == "esphome_yaml"
-        assert "REALAPIKEY123456=" not in diff["before"]
-        assert "__PHOENIX_REDACTED__" in diff["before"]
-        assert diff["after"] == ""
-        assert "not touched" in diff["summary"]
-        assert "keeps running" in diff["preview"]["warning"]
+        _esphome_entry(hass, esphome_entries, runtime=_runtime())
+        read_only = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
+            domains={"sensor": PermissionNode(state="YELLOW")}))
+        lookup, _path, _rel = await esphome._esphome_file_precheck(
+            hass, read_only, {"file": "rf-blaster1.yaml"}, "validate_esphome_yaml")
+        start, _path, _rel = await esphome._esphome_file_precheck(
+            hass, read_only, {"file": "rf-blaster1.yaml"}, "compile_esphome_firmware", write=True)
+        assert lookup is None
+        assert start[1] == "denied"
+
+    @pytest.mark.parametrize("bad", ["secrets.yaml", "archive/old-device.yaml", "../configuration.yaml", None])
+    async def test_jail_refusal_carries_no_path(self, hass, esphome_dir, bad):
+        refusal, path, rel = await esphome._esphome_file_precheck(
+            hass, _yaml_access_key(), {"file": bad}, "validate_esphome_yaml")
+        assert refusal[1] == "invalid_request"
+        assert (path, rel) == ("", "")
 
 
-class TestDeviceYamlRestore:
-    """Restoring a file that carries an inline credential must work.
+class TestDeviceYamlHistory:
+    """A stored device-file version is history only.
 
-    The raw snapshot re-writes that literal at a frozen path, and the
-    write-freeze would otherwise read an unchanged rewrite as a change. The
-    executor must notice it is restoring (a ContextVar cannot cross into the
-    executor thread on its own), so these tests pin the wiring, not just the
-    waiver.
+    Device YAML is the operator's configuration, so a version stays readable for
+    copying by hand while the restore path refuses it and the file on disk keeps
+    its current bytes.
     """
 
-    async def test_a_file_with_inline_credentials_can_be_rolled_back(self, hass, esphome_dir):
-        versions = VersionStore()
-        data = PhoenixData(
+    @staticmethod
+    async def _seed(*, before, after, action):
+        """History as an upgraded install holds it: loaded from storage, never recorded anew."""
+        stored = VersionRecord(
+            id=uuid.uuid4().hex, resource_type="esphome_yaml", resource_id="rf-blaster1.yaml",
+            alias="rf-blaster1.yaml", action=action,
+            before=None if before is None else {"content": before},
+            after=None if after is None else {"content": after},
+            access_key_id=None, access_key_name="agent", request_id=None,
+            approved_by_user_id=None, timestamp=utcnow().isoformat(),
+        )
+        store = MagicMock()
+        store.async_load = AsyncMock(return_value={
+            "version": VERSION_STORAGE_VERSION, "versions": [stored.to_dict()]})
+        store.async_save = AsyncMock()
+        versions = VersionStore(store)
+        await versions.async_load()
+        return versions, versions.get(stored.id)
+
+    @staticmethod
+    def _data(versions):
+        return PhoenixData(
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-        access_key = _yaml_access_key()
 
-        read, _, _ = await _call_tool("get_esphome_yaml", {"file": "rf-blaster1.yaml"}, access_key, hass, data)
-        masked = _json(read)
-        edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
-        _c, outcome, _r = await _call_tool(
-            "set_esphome_yaml",
-            {"file": "rf-blaster1.yaml", "content": edited, "expected_hash": masked["content_hash"]},
-            access_key, hass, data)
+    @pytest.mark.parametrize("side", ["before", "after"])
+    async def test_restoring_an_edit_is_refused_and_the_file_is_untouched(
+        self, hass, esphome_dir, side
+    ):
+        earlier = DEVICE_YAML.replace("baud_rate: 9600", "baud_rate: 115200")
+        versions, record = await self._seed(before=earlier, after=DEVICE_YAML, action="edit")
+        (esphome_dir / "rf-blaster1.yaml").write_text(earlier + "\nlogger:\n")
+
+        content, outcome, _ = await async_restore_version(
+            record, "admin-1", hass, self._data(versions), side=side)
+
+        text = content["content"][0]["text"]
+        assert outcome == "invalid_request"
+        assert "does not write back" in text
+        # The refusal names the way out and echoes none of the stored text.
+        assert "by hand" in text
+        assert "REALAPIKEY123456=" not in text
+        assert (esphome_dir / "rf-blaster1.yaml").read_text() == earlier + "\nlogger:\n"
+        assert versions.list_for("esphome_yaml", "rf-blaster1.yaml") == [record]
+
+    async def test_restoring_a_delete_never_recreates_the_file(self, hass, esphome_dir):
+        versions, record = await self._seed(before=DEVICE_YAML, after=None, action="delete")
+        (esphome_dir / "rf-blaster1.yaml").unlink()
+
+        content, outcome, _ = await async_restore_version(
+            record, "admin-1", hass, self._data(versions), side="before")
+
+        assert outcome == "invalid_request"
+        assert "does not write back" in content["content"][0]["text"]
+        assert not (esphome_dir / "rf-blaster1.yaml").exists()
+
+    async def test_the_refused_file_is_still_readable_masked(self, hass, esphome_dir):
+        versions, record = await self._seed(before=DEVICE_YAML, after=DEVICE_YAML, action="edit")
+        _content, outcome, _ = await async_restore_version(
+            record, "admin-1", hass, self._data(versions), side="before")
+        assert outcome == "invalid_request"
+
+        read, outcome, _ = await _call(
+            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
-        assert "baud_rate: 115200" in (esphome_dir / "rf-blaster1.yaml").read_text()
-
-        ver = versions.list_for("esphome_yaml", "rf-blaster1.yaml")[0]
-        _res, outcome, _r = await async_restore_version(ver, "admin-1", hass, data, side="before")
-        assert outcome == "allowed"
-        # Byte-faithful, with the inline credentials still intact and unmasked.
-        assert (esphome_dir / "rf-blaster1.yaml").read_text() == DEVICE_YAML
-
-    async def test_restoring_does_not_waive_the_rules_for_a_normal_write(self, hass, esphome_dir):
-        # The waiver must not leak: an agent rewriting the file it just read,
-        # credentials and all, is still refused outside the restore path.
-        data = MagicMock()
-        content, outcome, _ = await _call_tool(
-            "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": DEVICE_YAML},
-            _yaml_access_key(), hass, data)
-        assert outcome == "invalid_request"
-        assert "masked credential" in content["content"][0]["text"]
-
-
-class TestDeviceYamlWrite:
-    async def test_non_secret_edit_preserves_credentials_on_disk(self, hass, esphome_dir):
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        masked = _json(read)
-        edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
-        content, outcome, _ = await _call(
-            "set_esphome_yaml",
-            {"file": "rf-blaster1.yaml", "content": edited,
-             "expected_hash": masked["content_hash"]},
-            _yaml_access_key(), hass)
-        assert outcome == "allowed"
-        on_disk = (esphome_dir / "rf-blaster1.yaml").read_text()
-        assert 'key: "REALAPIKEY123456="' in on_disk
-        assert 'password: "realotapassword"' in on_disk
-        assert "baud_rate: 115200" in on_disk
-        assert "__PHOENIX_REDACTED__" not in on_disk
-        assert _json(content)["file"] == "rf-blaster1.yaml"
-
-    async def test_changing_a_credential_refused_before_any_approval(self, hass, esphome_dir):
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        bad = _json(read)["content"].replace(
-            "__PHOENIX_REDACTED__api.encryption.key__", '"ATTACKERKEY123="')
-        data = MagicMock()
-        data.store.get_pending_approvals.return_value = []
-        content, outcome, _ = await _call_tool(
-            "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": bad},
-            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
-        assert outcome == "invalid_request"
-        # A doomed write must not become a pending approval.
-        data.store.set_pending_approvals.assert_not_called()
-        msg = content["content"][0]["text"]
-        assert "!secret" in msg and "secrets.yaml" in msg
-        assert 'key: "REALAPIKEY123456="' in (esphome_dir / "rf-blaster1.yaml").read_text()
-
-    async def test_migration_to_defined_secret_allowed(self, hass, esphome_dir):
-        (esphome_dir / "secrets.yaml").write_text(
-            SECRETS_YAML + "rf_api_key: REALAPIKEY123456=\n")
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        migrated = _json(read)["content"].replace(
-            "__PHOENIX_REDACTED__api.encryption.key__", "!secret rf_api_key")
-        _, outcome, _ = await _call(
-            "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": migrated},
-            _yaml_access_key(), hass)
-        assert outcome == "allowed"
-        on_disk = (esphome_dir / "rf-blaster1.yaml").read_text()
-        assert "key: !secret rf_api_key" in on_disk
-        assert "REALAPIKEY123456=" not in on_disk
-
-    async def test_migration_to_undefined_secret_refused(self, hass, esphome_dir):
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        migrated = _json(read)["content"].replace(
-            "__PHOENIX_REDACTED__api.encryption.key__", "!secret rf_api_key")
-        content, outcome, _ = await _call(
-            "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": migrated},
-            _yaml_access_key(), hass)
-        assert outcome == "invalid_request"
-        assert "rf_api_key" in content["content"][0]["text"]
-
-    async def test_stale_hash_refused(self, hass, esphome_dir):
-        _, outcome, _ = await _call(
-            "set_esphome_yaml",
-            {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: x\n",
-             "expected_hash": "0" * 64},
-            _yaml_access_key(), hass)
-        assert outcome == "invalid_request"
-
-    async def test_invalid_yaml_refused(self, hass, esphome_dir):
-        content, outcome, _ = await _call(
-            "set_esphome_yaml",
-            {"file": "rf-blaster1.yaml", "content": "esphome:\n  name: [unclosed\n"},
-            _yaml_access_key(), hass)
-        assert outcome == "invalid_request"
-        assert "not valid YAML" in content["content"][0]["text"]
-
-    async def test_new_file_creation_allowed(self, hass, esphome_dir):
-        _, outcome, _ = await _call(
-            "set_esphome_yaml",
-            {"file": "new-device.yaml", "content": "esphome:\n  name: new-device\n"},
-            _yaml_access_key(), hass)
-        assert outcome == "allowed"
-        assert (esphome_dir / "new-device.yaml").exists()
-
-    async def test_write_to_secrets_refused(self, hass, esphome_dir):
-        _, outcome, _ = await _call(
-            "set_esphome_yaml", {"file": "secrets.yaml", "content": "wifi_password: pwned\n"},
-            _yaml_access_key(), hass)
-        assert outcome == "invalid_request"
-        assert (esphome_dir / "secrets.yaml").read_text() == SECRETS_YAML
-
-
-class TestDeviceYamlApprovalFlow:
-    async def test_diff_and_stored_args_carry_no_credentials(self, hass, esphome_dir):
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        edited = _json(read)["content"].replace("baud_rate: 9600", "baud_rate: 115200")
-
-        store = _ApprStore()
-        data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
-        content, outcome, _ = await _call_tool(
-            "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": edited},
-            _yaml_access_key(cap_esphome_yaml="confirm"), hass, data)
-
-        assert outcome == "pending_approval"
-        assert len(store._p) == 1
-        appr = store._p[0]
-        assert appr["tool_name"] == "set_esphome_yaml"
-        assert appr["cap_name"] == "cap_esphome_yaml"
-        # Nothing anywhere in the record may carry a real credential.
-        blob = json.dumps(appr)
-        for secret in ("REALAPIKEY123456=", "realotapassword", "housepassword1", "MyHomeNetwork"):
-            assert secret not in blob, secret
-        assert "does not flash" in appr["diff"]["summary"]
-        assert appr["diff"]["preview"]["flashes_device"] is False
-        # The write must not have happened yet.
-        assert "baud_rate: 9600" in (esphome_dir / "rf-blaster1.yaml").read_text()
-
-    async def test_executor_recheck_catches_drift(self, hass, esphome_dir):
-        read, _, _ = await _call(
-            "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        masked = _json(read)
-        edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
-        # An admin edits the file during the approval window.
-        (esphome_dir / "rf-blaster1.yaml").write_text(DEVICE_YAML + "\nlogger:\n")
-        content, outcome, _ = await _execute_set_esphome_yaml(
-            {"file": "rf-blaster1.yaml", "content": edited,
-             "expected_hash": masked["content_hash"]},
-            _yaml_access_key(), hass, MagicMock())
-        assert outcome == "invalid_request"
+        assert _json(read)["content_hash"] == content_hash(DEVICE_YAML)
+        assert "REALAPIKEY123456=" not in read["content"][0]["text"]
 
 
 async def _inventory_call(hass, name, args, result, access_key=None):
@@ -1075,6 +894,42 @@ class TestScopedEsphomeInventory:
         assert builder.await_args.args[2] == "devices/list"
         (content, _, _), _builder = await _inventory_call(hass, "list_esphome_devices", {"state": "online"}, result)
         assert _json(content)["count"] == 1
+
+    @pytest.mark.parametrize(("name", "result"), [
+        ("list_esphome_jobs", [
+            {"job_id": "a", "configuration": "rf-blaster1.yaml", "status": "completed"},
+            {"job_id": "b", "configuration": "gone.yaml", "status": "failed"},
+        ]),
+        ("list_esphome_devices", {"configured": [
+            {"name": "rf-blaster1", "configuration": "rf-blaster1.yaml"},
+            {"name": "gone", "configuration": "gone.yaml"},
+        ]}),
+    ])
+    async def test_reported_paths_are_located_in_one_worker_pass(self, hass, esphome_dir, name, result):
+        with patch.object(esphome, "_locate_esphome_files", wraps=esphome._locate_esphome_files) as locate:
+            (content, outcome, _), _builder = await _inventory_call(hass, name, {}, result)
+        assert outcome == "allowed"
+        locate.assert_called_once()
+        assert locate.call_args.args[1] == ["rf-blaster1.yaml", "gone.yaml"]
+        # A row whose file is no longer on disk is dropped, not reported.
+        assert _json(content)["count"] == 1
+
+    def test_locating_keeps_only_existing_jailed_files(self, hass, esphome_dir, tmp_path):
+        outside = tmp_path / "outside.yaml"
+        outside.write_text("esphome:\n  name: outside\n")
+        (esphome_dir / "escape.yaml").symlink_to(outside)
+        (esphome_dir / "secret-alias.yaml").symlink_to(esphome_dir / "secrets.yaml")
+        (esphome_dir / "alias.yaml").symlink_to(esphome_dir / "rf-blaster1.yaml")
+        found = esphome._locate_esphome_files(hass, [
+            "rf-blaster1.yaml", "alias.yaml", "rf-blaster1.yaml", "missing.yaml",
+            "../configuration.yaml", "secrets.yaml", "secret-alias.yaml", "escape.yaml",
+            "archive/old-device.yaml", None, 7,
+        ])
+        assert set(found) == {"rf-blaster1.yaml", "alias.yaml"}
+        # Keyed by the reported string; the value is the resolved file.
+        real = os.path.realpath(esphome_dir / "rf-blaster1.yaml")
+        assert found["alias.yaml"] == (real, "rf-blaster1.yaml")
+        assert found["rf-blaster1.yaml"] == (real, "rf-blaster1.yaml")
 
 
 class TestWsAllowlistGuard:

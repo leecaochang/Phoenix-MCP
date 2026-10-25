@@ -223,20 +223,20 @@
         "description": "バックアップを作成して一覧表示します。復元は Home Assistant から行います。"
       },
       "cap_filesystem": {
-        "label": "ファイルシステムへのアクセス",
-        "description": "www/、themes/、custom_templates/ 配下のファイルを読み書きします。"
+        "label": "ファイルの読み取り",
+        "description": "www/、themes/、custom_templates/ 配下のファイルを読み取ります。"
       },
       "cap_esphome_yaml": {
         "label": "ESPHome デバイスの YAML",
-        "description": "esphome/ 配下の専用領域で ESPHome デバイスの YAML を読み取り、編集、検証、コンパイルします。認証情報は読み取り時にマスクされ、変更できません。コンパイルで作成されるのはバイナリだけです。デバイスへの書き込みには、別の ESPHome ファームウェア書き込み機能が必要です。"
+        "description": "esphome/ 配下の専用領域で ESPHome デバイスの YAML を読み取り、検証、コンパイルします。認証情報は読み取り時にマスクされます。コンパイルで作成されるのはバイナリだけです。デバイスへの書き込みには、別の ESPHome ファームウェア書き込み機能が必要です。"
       },
       "cap_esphome_flash": {
         "label": "ESPHome ファームウェアの書き込み",
         "description": "コンパイル済みのファームウェアを無線経由で ESPHome デバイスにインストールし、実行中の内容を置き換えます。不正なイメージを使うと、ケーブル経由で再書き込みするまでデバイスに接続できなくなる可能性があるため、確認を強く推奨します。"
       },
       "cap_yaml_edit": {
-        "label": "未加工の YAML を編集",
-        "description": "configuration.yaml と、そこから直接読み込まれる YAML ファイルを読み取り、編集します。承認を強く推奨します。インラインのシークレットは公開されるため、!secret を使用して secrets.yaml に保存してください。"
+        "label": "YAML 設定",
+        "description": "configuration.yaml と設定ディレクトリ内のほかの YAML ファイルを読み取り、設定を確認し、YAML で定義されたドメインを再読み込みします。インラインのシークレットは公開されるため、!secret を使用して secrets.yaml に保存してください。"
       },
       "noBuilder": "Device Builder アドオンが検出されませんでした",
       "noEsphome": "ESPHome が検出されませんでした",
@@ -275,11 +275,11 @@
       },
       "dashboard_designer": {
         "label": "ダッシュボード設計者",
-        "description": "エンティティを検出してダッシュボードを作成できます。テーマとカスタムカードのファイルには承認が必要です。デバイスの制御やほかの設定の編集はできません。"
+        "description": "エンティティを検出してダッシュボードを作成し、テーマとカスタムカードのファイルを読み取れます。カスタムカードのファイルの登録には承認が必要です。デバイスの制御やほかの設定の編集はできません。"
       },
       "esphome": {
         "label": "ESPHome デバイス",
-        "description": "ESPHome デバイスのステータス、診断、ログを読み取ります。デバイス YAML の編集とファームウェアの書き込みには、それぞれ承認が必要です。YAML の認証情報は非表示のままで変更できません。デバイスの制御やほかの設定の編集はできません。"
+        "description": "ESPHome デバイスのステータス、診断、ログ、デバイス YAML を読み取り、検証とコンパイルを行います。ファームウェアの書き込みには承認が必要です。YAML の認証情報は非表示のままです。デバイスの制御やほかの設定の編集はできません。"
       },
       "helper": "ペルソナは機能の初期設定を行います。詳細設定では個々の機能を調整できます。設定がプリセットと一致しなくなると、ペルソナはカスタムに変わります。",
       "home_admin": {
@@ -297,7 +297,7 @@
       "noEsphome": "このシステムでは ESPHome が検出されませんでした",
       "power_user": {
         "label": "パワーユーザー",
-        "description": "ほとんどの設定を読み取り、編集し、Home Assistant を再起動できます。機密性の高いシステム変更には承認が必要です。ファイルシステムと未加工の YAML へのアクセスはブロックされたままです。"
+        "description": "ほとんどの設定を読み取り、編集し、Home Assistant を再起動できます。機密性の高いシステム変更には承認が必要です。ファイルと YAML 設定へのアクセスはブロックされたままです。"
       },
       "read_only": {
         "label": "読み取り専用の閲覧者",
@@ -1243,8 +1243,6 @@
       "dashboard_card.edit.section": "ダッシュボード「{label}」のカード {card_index} を置換（ビュー {view_index}、セクション {section_index}）",
       "delete_automation": "オートメーション「{automation_id}」を削除",
       "delete_entity": "{entity_id} のレジストリエントリを削除",
-      "delete_esphome_yaml": "ESPHome デバイス設定 {rel} を削除。デバイス自体には影響しません。",
-      "delete_esphome_yaml.device": "ESPHome デバイス設定 {rel}（{device}）を削除。デバイス自体には影響しません。",
       "delete_helper": "{helper_type} ヘルパー「{helper_id}」を削除",
       "delete_scene": "シーン「{scene_id}」を削除",
       "delete_script": "スクリプト「{script_id}」を削除",
@@ -1280,23 +1278,11 @@
       "patch_dashboard.append": "ダッシュボード「{label}」の {path} に追加",
       "patch_dashboard.remove": "ダッシュボード「{label}」から {path} を削除",
       "patch_dashboard.set": "ダッシュボード「{label}」の {path} を設定",
-      "patch_yaml_config.remove": "{file} から {path} を削除",
-      "patch_yaml_config.append": "{file} の {path} に追加",
-      "patch_yaml_config.set": "{file} の {path} を設定",
       "remove_device": "設定エントリ {config_entry_id} から {device_id} を削除",
-      "rename_esphome_device": "ESPHome デバイス {device} を {new_name} に変更。デバイスをコンパイルして書き込みます。",
-      "rename_esphome_device.services": "ESPHome デバイス {device} を {new_name} に変更し、{count} 個のアクションサービス名も変更。デバイスをコンパイルして書き込みます。",
       "restart_ha": "Home Assistant を再起動",
       "set_dashboard_config": "ダッシュボード「{label}」のレイアウトを設定",
       "set_device": "{device_id} のデバイスレジストリメタデータ（{fields}）を更新",
       "set_entity": "{entity_id} のレジストリメタデータ（{fields}）を更新",
-      "set_esphome_yaml": "ESPHome デバイス設定 {rel} を編集。デバイスには書き込みません。",
-      "set_esphome_yaml.device": "ESPHome デバイス設定 {rel}（{device}、エンティティ {count} 個）を編集。デバイスには書き込みません。",
-      "set_yaml_config": "{file} を置換",
-      "set_yaml_config.removing": "{file} を置換し、最上位の {keys} を削除",
-      "set_yaml_config.removing_entries": "{file} を置換し、{count} 個のエントリを削除",
-      "set_yaml_config.removing_entry": "{file} を置換し、1 個のエントリを削除",
-      "write_file": "ファイル「{path}」を書き込む",
       "zigbee_binding": "Zigbee デバイスのバインディングを変更",
       "zigbee_binding.devices": "{source} から {target} への Zigbee バインディングを {operation}",
       "zigbee_group": "Zigbee グループを変更",
@@ -1912,10 +1898,6 @@
       "delete_automation.title": "オートメーション「{automation_id}」を削除",
       "delete_entity.body": "{entity_id}のエンティティレジストリエントリを削除します。後でインテグレーションによって再作成される場合があります。",
       "delete_entity.title": "{entity_id} のレジストリエントリを削除",
-      "delete_esphome_yaml.body": "{rel}を完全に削除します。ESPHomeデバイス自体は変更されません。",
-      "delete_esphome_yaml.device.body": "{rel}を完全に削除します。ESPHomeデバイス{device}自体は変更されません。",
-      "delete_esphome_yaml.device.title": "ESPHome デバイス設定 {rel}（{device}）を削除",
-      "delete_esphome_yaml.title": "ESPHome デバイス設定 {rel} を削除",
       "delete_helper.body": "ヘルパー{helper_id}を完全に削除します。",
       "delete_helper.title": "{helper_type} ヘルパー「{helper_id}」を削除",
       "delete_scene.body": "シーン{scene_id}を完全に削除します。",
@@ -2039,18 +2021,8 @@
       "patch_dashboard.remove.title": "ダッシュボード「{label}」を更新",
       "patch_dashboard.set.body": "Home Assistantのダッシュボード設定を更新します。正確な変更内容を確認するには、詳細を開いてください。",
       "patch_dashboard.set.title": "ダッシュボード「{label}」を更新",
-      "patch_yaml_config.append.body": "正確な変更内容を確認するには、詳細を開いてください。",
-      "patch_yaml_config.append.title": "{file} に設定を追加",
-      "patch_yaml_config.remove.body": "{file}から設定を削除します。正確な変更内容を確認するには、詳細を開いてください。",
-      "patch_yaml_config.remove.title": "{file} から設定を削除",
-      "patch_yaml_config.set.body": "正確な変更内容を確認するには、詳細を開いてください。",
-      "patch_yaml_config.set.title": "{file} の設定を変更",
       "remove_device.body": "{device_id}をインテグレーションから削除します。デバイスの再追加が必要になる場合があります。",
       "remove_device.title": "設定エントリ {config_entry_id} から {device_id} を削除",
-      "rename_esphome_device.body": "{device}の名前を変更し、設定をコンパイルしてデバイスに書き込みます。更新中はデバイスを切断しないでください。",
-      "rename_esphome_device.services.body": "{device}の名前とアクションサービスを更新し、設定をコンパイルしてデバイスに書き込みます。更新中はデバイスを切断しないでください。",
-      "rename_esphome_device.services.title": "ESPHome デバイス {device} を {new_name} に変更し、{count} 個のアクションサービス名も変更",
-      "rename_esphome_device.title": "ESPHome デバイス {device} を {new_name} に変更",
       "restart_ha.body": "再起動中はHome Assistantを一時的に利用できなくなります。",
       "restart_ha.title": "Home Assistant を再起動",
       "set_dashboard_config.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
@@ -2059,23 +2031,9 @@
       "set_device.title": "{device_id} のデバイスレジストリメタデータ（{fields}）を更新",
       "set_entity.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
       "set_entity.title": "{entity_id} のレジストリメタデータ（{fields}）を更新",
-      "set_esphome_yaml.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_esphome_yaml.device.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_esphome_yaml.device.title": "ESPHome デバイス設定 {rel}（{device}、エンティティ {count} 個）を編集",
-      "set_esphome_yaml.title": "ESPHome デバイス設定 {rel} を編集",
-      "set_yaml_config.body": "{file}の内容全体を置き換えます。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_yaml_config.removing.body": "{file}の内容全体を置き換え、設定を削除します。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_yaml_config.removing.title": "{file}を更新",
-      "set_yaml_config.removing_entries.body": "{file}の内容全体を置き換え、{count}件のエントリを削除します。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_yaml_config.removing_entries.title": "{file}を更新",
-      "set_yaml_config.removing_entry.body": "{file}の内容全体を置き換え、ひとつのエントリを削除します。正確な変更内容を確認するには、詳細を開いてください。",
-      "set_yaml_config.removing_entry.title": "{file}を更新",
-      "set_yaml_config.title": "{file}を更新",
       "view.defaultAria": "承認リストとモーダルの既定表示",
       "view.details": "詳細",
       "view.summary": "概要",
-      "write_file.body": "{path}に書き込みます。そのパスにある既存の内容は置き換えられる場合があります。",
-      "write_file.title": "ファイル「{path}」を書き込む",
       "zigbee_binding.body": "両方の Zigbee デバイス間の直接制御を変更します。詳細で両方のデバイスと選択したクラスターを確認してください。",
       "zigbee_binding.devices.body": "{source} から {target} への直接 Zigbee 制御を {operation} します。詳細で正確な関係を確認してください。",
       "zigbee_binding.devices.title": "{source} から {target} への Zigbee バインディングを {operation}",

@@ -28,10 +28,7 @@ CASES = [
     ('delete_dashboard', {'dashboard': 'private'}, 'dashboard_id'),
     ('list_files', {'directory': 'www'}, 'path'),
     ('read_file', {'filename': 'www/private.txt'}, 'path'),
-    ('write_file', {'filename': 'www/private.txt', 'content': 'changed'}, 'path'),
     ('get_yaml_config', {'filename': 'private.yaml'}, 'file'),
-    ('set_yaml_config', {'file_path': 'private.yaml', 'content': 'changed: true'}, 'file'),
-    ('patch_yaml_config', {'file_path': 'private.yaml', 'address': {'kind': 'key', 'value': 'default_config'}, 'change': {'kind': 'set', 'content': '{}'}}, 'file'),
     ('set_entity', {'entity_ids': ['light.private'], 'changes': {'name': 'new'}}, 'entity_id'),
     ('delete_entity', {'entity': 'light.private'}, 'entity_id'),
     ('set_device', {'device': 'private', 'changes': {'name': 'new'}}, 'device_id'),
@@ -77,7 +74,6 @@ async def test_fixed_capability_guard_precedes_io_and_approval(hass, name, args,
         patch('custom_components.phoenix_mcp.tools.config_files._resolve_yaml_read_path') as yaml_path,
         patch('custom_components.phoenix_mcp.tools.config_files._resolve_fs_path') as file_path,
         patch('custom_components.phoenix_mcp.tools.lovelace._gate', new_callable=AsyncMock) as dashboard_gate,
-        patch('custom_components.phoenix_mcp.tools.config_files._gate', new_callable=AsyncMock) as file_gate,
         patch('custom_components.phoenix_mcp.mcp_view._gate', new_callable=AsyncMock) as registry_gate,
     ):
         result, outcome, _ = await _call_tool(name, args, access_key(**{cap: mode}), hass, data)
@@ -87,12 +83,12 @@ async def test_fixed_capability_guard_precedes_io_and_approval(hass, name, args,
         assert 'Forbidden' in text and 'Valid parameters' not in text and expected not in text
     else:
         assert expected in text and 'Valid parameters' in text
-    for boundary in (read, yaml_path, file_path, dashboard_gate, file_gate, registry_gate):
+    for boundary in (read, yaml_path, file_path, dashboard_gate, registry_gate):
         boundary.assert_not_called()
     assert not data.mock_calls
 
 
-@pytest.mark.parametrize('name', ['patch_dashboard', 'patch_yaml_config', 'set_entity', 'set_device', 'set_integration', 'dry_run_service'])
+@pytest.mark.parametrize('name', ['patch_dashboard', 'set_entity', 'set_device', 'set_integration', 'dry_run_service'])
 async def test_denied_capability_precedes_existing_normalization_errors(hass, name):
     cap = DEFINITIONS[name]['cap']
     result, outcome, _ = await _call_tool(name, {}, access_key(**{cap: 'deny'}), hass, MagicMock())
@@ -100,7 +96,7 @@ async def test_denied_capability_precedes_existing_normalization_errors(hass, na
     assert 'Forbidden' in result['content'][0]['text']
 
 
-@pytest.mark.parametrize('name', ['set_dashboard_config', 'write_file', 'set_yaml_config', 'patch_dashboard', 'patch_yaml_config'])
+@pytest.mark.parametrize('name', ['set_dashboard_config', 'patch_dashboard'])
 def test_hash_typos_and_conflicting_selectors_are_not_ignored(name):
     assert 'expected_hash' in unknown_argument_error(name, {'expected_hahs': 'secret'})
     assert 'expected_hash' in unknown_argument_error(name, {'expected_hash': 'valid', 'expected_hahs': 'secret'})
@@ -153,14 +149,16 @@ async def test_service_typo_cannot_actuate_domain_fallback(hass):
     assert not data.mock_calls
 
 
-async def test_yaml_typo_leaves_default_file_unchanged(hass):
-    path = Path(hass.config.path('configuration.yaml'))
-    path.write_text('default_config: {}\n')
-    _, outcome, _ = await _call_tool('set_yaml_config', {
-        'filename': 'other.yaml', 'content': 'changed: true',
+async def test_yaml_typo_does_not_fall_back_to_the_default_file(hass):
+    """A misspelled file argument is refused rather than read as configuration.yaml."""
+    Path(hass.config.path('configuration.yaml')).write_text('default_config: {}\n')
+    result, outcome, _ = await _call_tool('get_yaml_config', {
+        'filename': 'other.yaml',
     }, access_key(cap_yaml_edit='allow'), hass, MagicMock())
     assert outcome == 'invalid_request'
-    assert path.read_text() == 'default_config: {}\n'
+    assert 'default_config' not in result['content'][0]['text']
+    result, outcome, _ = await _call_tool('get_yaml_config', {}, access_key(cap_yaml_edit='allow'), hass, MagicMock())
+    assert outcome == 'allowed' and 'default_config' in result['content'][0]['text']
 
 
 async def test_intentional_default_reaches_read_and_unrelated_extra_is_refused(hass):

@@ -1,8 +1,7 @@
 """Credential masking for ESPHome device YAML.
 
 Device files routinely carry credentials inline rather than behind `!secret`.
-Phoenix MCP must read and edit them without exposing the values to an agent or
-an approval record, or letting a blind write repoint a device at another network.
+Phoenix MCP reads them without exposing the values to an agent or a stored record.
 
 Masking is span-surgical: `yaml.compose` gives each scalar's exact source span,
 so a placeholder is spliced into the RAW text and comments, ordering and
@@ -11,19 +10,13 @@ layers feed one span set: curated paths (api.encryption.key, ...); any scalar
 whose KEY looks like a credential, at any depth; any scalar whose whole value
 matches a secrets.yaml value.
 
-Over-redaction is the accepted failure direction. Redacted spans are WRITE-FROZEN:
-a caller may replace one with a `!secret` reference but never a different
-literal, because `api.encryption.key` must match the noise PSK in HA's config
-entry and `ota[].password` governs the next upload, so a blind change can leave a
-device unreachable (a physical-access problem). `secrets.yaml` is never readable
-or writable through any tool; it is parsed here only to know what NOT to emit.
+Over-redaction is the accepted failure direction. `secrets.yaml` is never
+readable through any tool; it is parsed here only to know what NOT to emit.
 """
 
 from __future__ import annotations
 
-import base64
 import re
-import secrets as secrets_module
 from collections.abc import Iterator
 from typing import Any
 
@@ -60,36 +53,9 @@ MIN_CROSS_CHECK_LENGTH = 8
 
 _PLACEHOLDER_PREFIX = "__PHOENIX_REDACTED__"
 _PLACEHOLDER_SUFFIX = "__"
-_PLACEHOLDER_RE = re.compile(
-    re.escape(_PLACEHOLDER_PREFIX) + r"(?P<path>[^\s]*?)" + re.escape(_PLACEHOLDER_SUFFIX)
-)
 
 _ALLOWED_SUFFIXES = (".yaml", ".yml")
 _ARCHIVE_DIR = "archive"
-
-# Write-time marker letting an agent ask for a credential it must never choose.
-# A language model does not produce cryptographic randomness, so the fix is
-# Phoenix MCP GENERATING rather than Phoenix MCP accepting: the agent writes the
-# tag, the real value is substituted here as the file is written, and every
-# later read masks it. The agent therefore never learns the value, and because
-# substitution happens at write time the approval record and its diff carry the
-# INTENT (the tag) rather than a secret.
-PHOENIX_GENERATE_TAG = "!phoenix_generate"
-
-# Never generated, whatever the key name looks like: these are the HOUSE's
-# credentials rather than the device's. Replacing one with randomness would take
-# the device off the network with no route back except a cable, and in the wifi
-# case would do it to every device that shares the secret.
-_NEVER_GENERATE: frozenset[tuple[str, ...]] = frozenset({
-    ("wifi", "password"),
-    ("wifi", "ssid"),
-    ("wifi", "networks", "[]", "password"),
-})
-
-
-class EsphomeSecretViolation(Exception):
-    """Raised when a write would change, duplicate, or introduce a credential."""
-
 
 def placeholder_for(path: str) -> str:
     """The placeholder that stands in for the value at a dotted path.
@@ -102,12 +68,12 @@ def placeholder_for(path: str) -> str:
 
 
 def esphome_rel_path_ok(rel: str) -> bool:
-    """Whether a config-relative path may be read or written as device YAML.
+    """Whether a config-relative path may be read as device YAML.
 
     Same hidden-path, extension and secrets.yaml rules as the generic YAML reader
     (_yaml_read_path_ok), except that `archive/` (the Device Builder's trash) is
     refused and the `esphome/` directory is admitted. secrets.yaml is never
-    reachable in either direction.
+    reachable.
     """
     if not isinstance(rel, str) or not rel.strip():
         return False
@@ -182,7 +148,7 @@ def _is_tagged(node: yaml.ScalarNode) -> bool:
     """Whether a scalar carries a custom tag (!secret, !lambda, ...).
 
     A tagged scalar is a reference or an expression, not a literal value, so
-    there is nothing to hide and nothing to freeze.
+    there is nothing to hide.
     """
     return isinstance(node.tag, str) and node.tag.startswith("!")
 
@@ -206,7 +172,7 @@ def secret_values_from_text(text: str) -> set[str]:
 
 
 def secret_keys_from_text(text: str) -> set[str]:
-    """Key NAMES defined in a secrets.yaml, for !secret reference validation."""
+    """Key NAMES defined in a secrets.yaml, reported as defined_secrets."""
     try:
         data = yaml.load(text, Loader=PhoenixLenientLoader)
     except yaml.YAMLError:
@@ -283,192 +249,11 @@ def scrub_secret_values(text: str, values: set[str]) -> str:
     """Replace every occurrence of every known credential in free text.
 
     Longest first, so a value that contains another leaves no readable remainder
-    behind. The placeholder is fixed rather than path-derived: this is
-    unstructured output, not a file position a later write could splice back.
+    behind. The placeholder is fixed rather than path-derived, because this is
+    unstructured output rather than a position in a file.
     """
     out = text
     for value in sorted(values, key=len, reverse=True):
         if value:
             out = out.replace(value, "<redacted>")
-    return out
-
-
-def _placeholder_at(node: yaml.ScalarNode) -> str | None:
-    """The dotted path embedded in a scalar that is exactly one placeholder."""
-    value = node.value
-    if not isinstance(value, str):
-        return None
-    match = _PLACEHOLDER_RE.fullmatch(value.strip())
-    return match.group("path") if match else None
-
-
-def _generated_value(path: tuple[str, ...]) -> str:
-    """Fresh randomness for one credential path.
-
-    ESPHome's API and OTA encryption keys must be 32 base64-encoded bytes and
-    nothing else is accepted. Passwords are free-form, so a URL-safe token keeps
-    them clear of every YAML quoting corner case.
-    """
-    normalized = _normalized_path(path)
-    if normalized in {
-        ("api", "encryption", "key"),
-        ("ota", "encryption", "key"),
-        ("ota", "[]", "encryption", "key"),
-    }:
-        return base64.b64encode(secrets_module.token_bytes(32)).decode("ascii")
-    return secrets_module.token_urlsafe(24)
-
-
-def _generate_refusal(
-    dotted: str, path: tuple[str, ...], key: str, disk_spans: dict[str, Any]
-) -> str | None:
-    """Why this generate request cannot be honored, or None if it can."""
-    normalized = _normalized_path(path)
-    if normalized in _NEVER_GENERATE:
-        return (
-            f"'{dotted}' is one of the house's own wifi credentials, which is never "
-            f"generated: replacing it would take this device (and anything sharing the "
-            f"secret) off the network. Use a !secret reference instead."
-        )
-    if not (_path_matches_curated(normalized) or _SECRET_KEY_RE.search(key)):
-        return (
-            f"'{dotted}' is not a credential field, so there is nothing to generate there. "
-            f"{PHOENIX_GENERATE_TAG} is only for credential values such as an API "
-            f"encryption key or an OTA password."
-        )
-    if dotted in disk_spans:
-        return (
-            f"'{dotted}' already holds a credential, and regenerating it would change the "
-            "value the device is currently running: the device can be left unreachable "
-            "until it is reflashed over a cable, and Home Assistant would need the new key "
-            "before it could reconnect. Leave the existing placeholder in place to keep it."
-        )
-    return None
-
-
-def _quote_scalar(value: str) -> str:
-    """Render a generated value as a double-quoted YAML scalar.
-
-    Quoted unconditionally so a value beginning with a character YAML treats as
-    structural can never change the document's shape.
-    """
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
-def splice_esphome_text(
-    new_text: str,
-    disk_text: str,
-    secret_values: set[str] | None = None,
-    secret_keys: set[str] | None = None,
-    allow_literal_credentials: bool = False,
-) -> str:
-    """Return the raw text to write, restoring credentials behind placeholders.
-
-    The frozen span set is recomputed from DISK content on every call, never from
-    anything the caller claims about the file.
-
-    Raises EsphomeSecretViolation when a write would change a credential,
-    duplicate one into another location, introduce a new inline one, or reference
-    a `!secret` key that does not exist.
-
-    allow_literal_credentials is for the version-restore path ONLY. It waives the
-    three LITERAL refusals (changing a masked value, repeating a secrets.yaml
-    value, a new inline credential), which exist to stop an AGENT authoring
-    credentials. A restore re-applies raw text Phoenix itself recorded, inline
-    credentials included as literals, so without the waiver nearly every restore
-    would be refused for "changing" a value it rewrites unaltered. The waiver is
-    scoped to restore rather than accepting a byte-identical literal generally,
-    because accepted-versus-refused would tell a caller whether a guessed
-    credential was correct. Placeholder rules and the !secret existence check
-    still apply on both paths.
-    """
-    secret_values = secret_values or set()
-    disk_spans = {dotted: (start, end) for start, end, dotted in _secret_spans(disk_text, secret_values)}
-
-    new_root = _compose(new_text)
-    if new_root is None:
-        return new_text
-
-    replacements: list[tuple[int, int, str]] = []
-    for dotted, path, key, node in _walk(new_root, ()):
-        tagged = _is_tagged(node)
-
-        if tagged:
-            if node.tag == PHOENIX_GENERATE_TAG:
-                refusal = _generate_refusal(dotted, path, key, disk_spans)
-                if refusal is not None:
-                    raise EsphomeSecretViolation(refusal)
-                # Substituted HERE, as the file is written, so the value exists
-                # only on disk. It is never returned to the caller, never in the
-                # approval record (which holds the caller's own text), and is
-                # masked by every subsequent read.
-                replacements.append((
-                    node.start_mark.index,
-                    node.end_mark.index,
-                    _quote_scalar(_generated_value(path)),
-                ))
-                continue
-
-            # A !secret reference is the supported way to replace an inline
-            # credential, so it is never a violation. Validate the target exists:
-            # a write does not compile, so a dangling reference would otherwise
-            # only surface as a broken build much later.
-            if node.tag == "!secret" and secret_keys is not None:
-                name = str(node.value).strip()
-                if name and name not in secret_keys:
-                    raise EsphomeSecretViolation(
-                        f"'{dotted}' references the secret '{name}', which is not defined in "
-                        "the ESPHome secrets.yaml. Add it there first (with the value that is "
-                        "currently inline), then retry this edit."
-                    )
-            continue
-
-        embedded = _placeholder_at(node)
-        if embedded is not None:
-            if embedded != dotted:
-                raise EsphomeSecretViolation(
-                    f"The placeholder for '{embedded}' was moved to '{dotted}'. A masked value "
-                    "cannot be copied to another location; leave each placeholder where it was."
-                )
-            span = disk_spans.get(dotted)
-            if span is None:
-                raise EsphomeSecretViolation(
-                    f"'{dotted}' has no masked value on disk to restore. In new content, use a "
-                    "!secret reference at this path instead of a placeholder."
-                )
-            original = disk_text[span[0]:span[1]]
-            replacements.append((node.start_mark.index, node.end_mark.index, original))
-            continue
-
-        value = node.value
-        if not isinstance(value, str) or not value:
-            continue
-
-        if allow_literal_credentials:
-            continue
-
-        if dotted in disk_spans:
-            raise EsphomeSecretViolation(
-                f"'{dotted}' is a masked credential and cannot be changed to a new value. "
-                "Replace it with a !secret reference and set the value in secrets.yaml "
-                "instead. Changing an API encryption key or OTA password in place can also "
-                "leave the device unreachable until it is reflashed over a cable."
-            )
-
-        if len(value) >= MIN_CROSS_CHECK_LENGTH and value in secret_values:
-            raise EsphomeSecretViolation(
-                f"'{dotted}' would write a value that is defined in secrets.yaml. Use a "
-                "!secret reference rather than repeating the literal."
-            )
-
-        if _SECRET_KEY_RE.search(key) or _path_matches_curated(_normalized_path(path)):
-            raise EsphomeSecretViolation(
-                f"'{dotted}' is a credential field and cannot be given an inline value. "
-                "Use a !secret reference and set the value in secrets.yaml."
-            )
-
-    out = new_text
-    for start, end, original in sorted(replacements, key=lambda r: r[0], reverse=True):
-        out = out[:start] + original + out[end:]
     return out

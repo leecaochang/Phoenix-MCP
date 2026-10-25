@@ -530,9 +530,8 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
     - firmware/clean takes a configuration and discards only that build, unlike
       reset_build_env (no argument, cancels every in-flight job, wipes the shared
       environment), which stays out.
-    - devices/rename compiles and OTA-flashes, so its only caller must be gated
-      on cap_esphome_flash. The allowlist cannot express that, so a separate
-      capability pin on the rename tool is also required.
+    - Commands that write or rename a device's YAML stay out: device YAML is
+      the operator's own configuration.
     """
     assert ESPHOME_BUILDER_ALLOWED_COMMANDS == {
         # Reads.
@@ -555,7 +554,6 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
         "firmware/follow_job",
         "firmware/cancel",
         "firmware/clean",
-        "devices/rename",
     }
 
 

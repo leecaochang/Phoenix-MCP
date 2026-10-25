@@ -23,7 +23,6 @@ from custom_components.phoenix_mcp.tool_input import tool_arguments_error
     ("set_integration", {"entry_id": "reviewed", "changes": {"title": "Updated", "entry_id": "other"}}),
     ("edit_energy_config", {"operation": "remove_device", "target": {"kind": "statistic", "id": "sensor.reviewed"}, "changes": {"op": "set_source"}}),
     ("patch_dashboard", {"changes": [{"path": ["views", True], "kind": "remove"}]}),
-    ("patch_yaml_config", {"address": {"kind": "path", "value": ["a", True]}, "change": {"kind": "remove"}}),
     ("get_logbook", {"target": None}),
     ("get_logbook", {"target": {"kind": "context", "id": "context", "entity_ids": ["sensor.other"]}}),
     ("get_state", {"entity_id": "sensor.reviewed", "projection": {"kind": "compact", "fields": ["state"]}}),

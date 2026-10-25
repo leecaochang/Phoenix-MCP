@@ -14,7 +14,7 @@ from home_assistant_intents import get_languages as _assist_languages
 # served to the panel by admin_view.PhoenixAdminCatalogView.
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
-PHOENIX_VERSION = "1.4.0"
+PHOENIX_VERSION = "1.5.0"
 # Minimum supported HA release; runtime imports and boundaries are exercised at this floor.
 MIN_HA_VERSION = "2026.7.0"
 ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
@@ -253,8 +253,8 @@ MAX_VERSIONS_PER_RESOURCE = 20
 # fixture and the TS union but missing here silently fails to record every
 # version of that resource.
 VERSIONED_RESOURCE_TYPES = frozenset(
-    {"automation", "script", "scene", "helper", "dashboard", "yaml_config", "file", "entity", "device",
-     "blueprint", "esphome_yaml", "energy", "config_entry", "area", "floor"}
+    {"automation", "script", "scene", "helper", "dashboard", "entity", "device",
+     "blueprint", "energy", "config_entry", "area", "floor"}
 )
 
 # Dashboard card catalog. Which Lovelace cards this instance can actually render,
@@ -841,10 +841,9 @@ PHYSICAL_GATE_SERVICES = frozenset({
 # call to an explicit entity_id list (device_id, area_id and "all" never reach HA),
 # which these services' schemas reject ("extra keys not allowed @
 # data['entity_id']"), so they are handled by a
-# dedicated no-target branch that calls them with bare service_data. They are the
-# "apply" step for a raw set_yaml_config / write_file edit, so they gate on
-# cap_yaml_edit (the same capability that authorized the edit authorizes the
-# reload). HA-version-sensitive: this is a curated list of stable core reload
+# dedicated no-target branch that calls them with bare service_data. They apply
+# configuration the operator edited by hand, so they gate on cap_yaml_edit, the
+# capability that reads that configuration. HA-version-sensitive: this is a curated list of stable core reload
 # services, deliberately conservative (integration-specific reloads like
 # mqtt/rest/command_line are omitted); re-verify and extend on HA upgrades.
 # homeassistant/reload_config_entry is excluded on purpose: it takes a target.
@@ -948,13 +947,16 @@ CAPABILITY_TIERS: dict[str, str] = {
     # Dashboard resources are the JavaScript and CSS files every browser loads
     # when it opens a dashboard, so registering a JavaScript file runs code
     # with the viewing person's Home Assistant session. That is why it is separate from
-    # cap_lovelace_write (layouts are data) and grouped with file and YAML
-    # editing; YAML_PROTECTED_SUBTREES refuses the same list through YAML.
+    # cap_lovelace_write (layouts are data) and sits in the irreversible tier.
     "cap_dashboard_resources": "irreversible",
     "cap_backup": "irreversible",
-    "cap_filesystem": "irreversible",
-    "cap_yaml_edit": "irreversible",
-    "cap_esphome_yaml": "config_write",
+    # Both are reads of configuration the operator owns; cap_yaml_edit also gates
+    # the no-target reload services that apply that configuration.
+    "cap_filesystem": "read",
+    "cap_yaml_edit": "system",
+    # Device YAML reads plus Device Builder work (validate, compile, jobs, logs)
+    # that touches no device; putting firmware on hardware is cap_esphome_flash.
+    "cap_esphome_yaml": "everyday",
     # Flashing is not config authoring: it actuates hardware, and a bad image can
     # leave a device unreachable until someone reaches it with a cable. It sits
     # with cap_radio_write, its nearest sibling in consequence.
@@ -981,9 +983,7 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
     "cap_energy_write",
     "cap_dashboard_resources",
     "cap_backup",
-    "cap_filesystem",
     "cap_yaml_edit",
-    "cap_esphome_yaml",
     "cap_esphome_flash",
 })
 
@@ -1498,40 +1498,10 @@ SEARCH_FUZZY_MATCH_CUTOFF = 0.6
 # Directories (relative to the HA config dir) the cap_filesystem tools may touch.
 # Paths are realpath-resolved and must stay within one of these, blocking traversal.
 FILESYSTEM_ALLOWED_DIRS = ("www", "themes", "custom_templates")
-# Maximum file size (bytes) the filesystem read/write tools will handle inline.
+# Maximum file size (bytes) the file and YAML read tools will return inline.
 MAX_FILE_BYTES = 1_048_576
 YAML_MAX_DEPTH = 64
 YAML_MAX_EXPANDED_NODES = 100_000
-
-# configuration.yaml subtrees set_yaml_config may never add, remove, or modify,
-# as {top-level key: protected child keys}. Not operator-configurable, and not a
-# general "powerful keys" list: command_line, shell_command and rest stay writable
-# because command execution and outbound HTTP are already accepted surface for a
-# access key holding cap_yaml_edit. These four are different in kind, because each one
-# redefines Home Assistant's OWN trust boundary rather than acting within it:
-#   homeassistant: auth_providers / auth_mfa_modules change how the instance
-#     authenticates anyone, and packages redirects which folder is loaded as
-#     configuration, i.e. the very surface this tool is bounded by (an access key that
-#     can also write www/ could then point packages at content it controls).
-#   http: trusted_proxies + use_x_forwarded_for turn a spoofable X-Forwarded-For
-#     header into an authentication bypass; cors_allowed_origins, ip_ban_enabled
-#     and login_attempts_threshold disarm the brute-force and origin defenses.
-#   frontend: extra_module_url and lovelace: resources load arbitrary JavaScript
-#     into the authenticated dashboard, which is a stored-XSS foothold with access
-#     to the instance and its access keys. Storage-mode dashboard resources have
-#     their own capability, cap_dashboard_resources, and never ride on this one.
-# An admin edits these by hand. Enforced by tools.config_files._yaml_protected_check
-# on both the pre-gate and the apply-time path; unchanged values always pass.
-YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
-    "homeassistant": ("auth_providers", "auth_mfa_modules", "packages"),
-    "http": (
-        "trusted_proxies", "use_x_forwarded_for", "cors_allowed_origins",
-        "ip_ban_enabled", "login_attempts_threshold",
-    ),
-    "frontend": ("extra_module_url",),
-    "lovelace": ("resources",),
-}
-
 
 # Approval diff summaries, as format templates keyed by a stable slug.
 #
@@ -1598,18 +1568,7 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "zigbee_topology.backend": "Scan {backend} neighbor tables for the scoped Zigbee map",
     # System.
     "restart_ha": "Restart Home Assistant",
-    # {file} rather than a literal configuration.yaml: these tools write any
-    # include target, so a summary naming the wrong file is a false line in
-    # the History an admin reads. {path} is already the addressed KEY here.
-    "set_yaml_config": "Replace {file}",
-    "set_yaml_config.removing": "Replace {file}, removing the top-level {keys}",
-    "set_yaml_config.removing_entry": "Replace {file}, removing 1 entry",
-    "set_yaml_config.removing_entries": "Replace {file}, removing {count} entries",
-    "patch_yaml_config.set": "Set {path} in {file}",
-    "patch_yaml_config.append": "Append to {path} in {file}",
-    "patch_yaml_config.remove": "Remove {path} from {file}",
     "config_entry.options": "Change {keys} on helper '{label}'",
-    "write_file": "Write file '{path}'",
     "integration.enable": "Enable integration {label}",
     "integration.disable": "Disable integration {label}",
     "integration.update": "Update integration {label}",
@@ -1620,20 +1579,6 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "create_backup": "Create backup",
     "create_backup.named": 'Create backup "{name}"',
     # ESPHome.
-    "set_esphome_yaml": "Edit ESPHome device configuration {rel}. This does not flash the device.",
-    "set_esphome_yaml.device": (
-        "Edit ESPHome device configuration {rel} ({device}, {count} entities). "
-        "This does not flash the device."
-    ),
-    "delete_esphome_yaml": "Delete ESPHome device configuration {rel}. The device itself is not touched.",
-    "delete_esphome_yaml.device": (
-        "Delete ESPHome device configuration {rel} ({device}). The device itself is not touched."
-    ),
-    "rename_esphome_device": "Rename ESPHome device {device} to {new_name}. This compiles and flashes the device.",
-    "rename_esphome_device.services": (
-        "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s). "
-        "This compiles and flashes the device."
-    ),
     "install_esphome_firmware": "Flash ESPHome firmware to {label}",
     "install_esphome_firmware.jump": "Flash ESPHome firmware to {label} (ESPHome version change: {jump})",
     # Dashboards. The card ops spell out the location rather than passing a
@@ -1697,21 +1642,6 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
 # known diff key gets a title and consequence so Summary never has to expose a
 # technical path or rendered YAML. The generated catalog is the frontend API.
 _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
-    "set_yaml_config": "Update {file}",
-    "set_yaml_config.removing": "Update {file}",
-    "set_yaml_config.removing_entry": "Update {file}",
-    "set_yaml_config.removing_entries": "Update {file}",
-    "patch_yaml_config.set": "Set configuration in {file}",
-    "patch_yaml_config.append": "Append configuration in {file}",
-    "patch_yaml_config.remove": "Remove configuration from {file}",
-    "set_esphome_yaml": "Edit ESPHome device configuration {rel}",
-    "set_esphome_yaml.device": "Edit ESPHome device configuration {rel} ({device}, {count} entities)",
-    "delete_esphome_yaml": "Delete ESPHome device configuration {rel}",
-    "delete_esphome_yaml.device": "Delete ESPHome device configuration {rel} ({device})",
-    "rename_esphome_device": "Rename ESPHome device {device} to {new_name}",
-    "rename_esphome_device.services": (
-        "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s)"
-    ),
     "dashboard_card.add": "Add a card to dashboard '{label}'",
     "dashboard_card.add.section": "Add a card to dashboard '{label}'",
     "dashboard_card.edit": "Update a card on dashboard '{label}'",
@@ -1753,18 +1683,6 @@ _APPROVAL_SUMMARY_BODIES = {
     "integration.remove": "This will remove the {label} integration and its configuration from Home Assistant.",
     "delete_entity": "This will delete the registry entry for {entity_id}. The entity may be recreated later by its integration.",
     "remove_device": "This will remove {device_id} from its integration. The device may need to be added again.",
-    "set_yaml_config": "This will replace the whole contents of {file}. Open Details to review the exact proposed change.",
-    "set_yaml_config.removing": "This will replace the whole contents of {file} and remove configuration. Open Details to review the exact proposed change.",
-    "set_yaml_config.removing_entry": "This will replace the whole contents of {file} and remove one entry. Open Details to review the exact proposed change.",
-    "set_yaml_config.removing_entries": "This will replace the whole contents of {file} and remove {count} entries. Open Details to review the exact proposed change.",
-    "patch_yaml_config.set": "Open Details to review the exact proposed change.",
-    "patch_yaml_config.append": "Open Details to review the exact proposed change.",
-    "patch_yaml_config.remove": "This will remove configuration from {file}. Open Details to review the exact proposed change.",
-    "write_file": "This will write to {path}. Existing contents at that path may be replaced.",
-    "delete_esphome_yaml": "This will permanently delete {rel}. The ESPHome device itself will not be changed.",
-    "delete_esphome_yaml.device": "This will permanently delete {rel}. The ESPHome device {device} itself will not be changed.",
-    "rename_esphome_device": "This will rename {device}, compile its configuration, and flash the device. Do not disconnect it during the update.",
-    "rename_esphome_device.services": "This will rename {device}, update its action services, compile its configuration, and flash the device. Do not disconnect it during the update.",
     "install_esphome_firmware": "This will compile and flash firmware to {label}. Do not disconnect the device during the update.",
     "install_esphome_firmware.jump": "This will change the ESPHome version, compile, and flash firmware to {label}. Do not disconnect the device during the update.",
     "blueprint.delete": "This will permanently delete the {domain} blueprint {rel}.",
@@ -2606,10 +2524,7 @@ UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
     "delete_dashboard": ("dashboard_id",),
     "list_files": ("path",),
     "read_file": ("path",),
-    "write_file": ("path", "expected_hash"),
     "get_yaml_config": ("file", "key"),
-    "set_yaml_config": ("file", "expected_hash", "remove_keys", "remove_entries"),
-    "patch_yaml_config": ("file", "address", "expected_hash"),
     "set_entity": ("entity_id",),
     "delete_entity": ("entity_id",),
     "set_device": ("device_id",),

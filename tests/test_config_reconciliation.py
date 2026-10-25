@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.http.const import KEY_HASS_USER
+from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.admin_view import _approve_approval, _resolve_approval
@@ -18,16 +19,32 @@ from custom_components.phoenix_mcp.config_reconciliation import (
 from custom_components.phoenix_mcp.const import DOMAIN, CONFIG_RECOVERY_UNRESOLVED
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
-from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
+from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
 
 
 @pytest.fixture
-def runtime(hass):
+async def runtime(hass, hass_admin_user):
+    # The automation integration registers the blueprint commands a restore uses,
+    # and the reload that follows a blueprint save reads configuration.yaml.
+    Path(hass.config.path("configuration.yaml")).write_text("{}\n", encoding="utf-8")
+    assert await async_setup_component(hass, "automation", {})
     store = AccessKeyStore(hass, MagicMock(async_save=AsyncMock()))
     store.get_settings().mesa_mode = "off"
     value = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = value
     return value
+
+
+_REL = "reconciliation/example.yaml"
+_RESOURCE = f"blueprint:automation/{_REL}"
+
+
+def blueprint(name: str) -> str:
+    """Blueprint source in the form Home Assistant's blueprint/save writes back."""
+    return f"blueprint:\n  name: {name}\n  domain: automation\n  input: {{}}\ntriggers: []\nactions: []\n"
+
+
+SAVED, INTENDED, UNEXPECTED = blueprint("Saved"), blueprint("Intended"), blueprint("Unexpected")
 
 
 def request():
@@ -38,14 +55,14 @@ def request():
     return req
 
 
-async def interrupted(hass, runtime, current="unexpected", *, expected=True, phase="unknown", leave=True):
-    rel = "www/reconciliation.txt"
-    path = Path(hass.config.path(rel))
+async def interrupted(hass, runtime, current=UNEXPECTED, *, expected=True, phase="unknown", leave=True):
+    """An interrupted blueprint edit whose saved side is SAVED and intended side INTENDED."""
+    path = Path(hass.config.path("blueprints", "automation", *_REL.split("/")))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(current, encoding="utf-8")
-    before = _authored_file_snapshot(rel, True, "saved")
-    wanted = _authored_file_snapshot(rel, True, "intended") if expected else None
-    rid = await runtime.config_recovery.begin(f"authored_file:{rel}", "write_file", "former-agent", before, expected=wanted)
+    before = _blueprint_recovery_snapshot("automation", _REL, SAVED)
+    wanted = _blueprint_recovery_snapshot("automation", _REL, INTENDED) if expected else None
+    rid = await runtime.config_recovery.begin(_RESOURCE, "edit_blueprint", "former-agent", before, expected=wanted)
     if phase != "prepared":
         await runtime.config_recovery.mark(rid, phase)
     if leave:
@@ -54,19 +71,19 @@ async def interrupted(hass, runtime, current="unexpected", *, expected=True, pha
 
 
 async def test_matching_state_clears_without_command_or_notification(hass, runtime):
-    rid, path = await interrupted(hass, runtime, "intended")
+    rid, path = await interrupted(hass, runtime, INTENDED)
     with patch("custom_components.phoenix_mcp.approvals.create_approval_notification") as notify:
         await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == "verified"
     assert runtime.config_recovery.get(rid)["observations"]["execution_attribution"] == "unproven"
-    assert path.read_text() == "intended"
+    assert path.read_text() == INTENDED
     assert runtime.store.get_pending_approvals() == []
     notify.assert_not_called()
-    next_id = await runtime.config_recovery.begin("authored_file:www/reconciliation.txt", "write_file", "t", {})
+    next_id = await runtime.config_recovery.begin(_RESOURCE, "edit_blueprint", "t", {})
     runtime.config_recovery.leave(next_id)
 
 
-async def test_native_approval_restores_saved_file_and_dismisses_notification(hass, runtime):
+async def test_native_approval_restores_saved_blueprint_and_dismisses_notification(hass, runtime):
     rid, path = await interrupted(hass, runtime)
     with patch("homeassistant.components.persistent_notification.async_create") as notify, patch(
         "homeassistant.components.persistent_notification.async_dismiss"
@@ -82,11 +99,11 @@ async def test_native_approval_restores_saved_file_and_dismisses_notification(ha
         response = await _approve_approval(hass, request(), approval_id)
         assert response.status == 200, response.body
         assert get_approval(runtime.store, approval_id).status == "approved", response.body
-        assert path.read_text() == "saved"
+        assert path.read_text() == SAVED
         assert runtime.config_recovery.get(rid)["phase"] == "reviewed"
         assert dismiss.called
         await _approve_approval(hass, request(), approval_id)
-        assert path.read_text() == "saved"
+        assert path.read_text() == SAVED
         assert len(runtime.config_recovery.records()) == 2
 
 
@@ -96,7 +113,7 @@ async def test_reject_keeps_current_and_unblocks_using_native_endpoint(hass, run
     approval_id = runtime.config_recovery.get(rid)["approval_id"]
     response = await _resolve_approval(hass, request(), approval_id, terminal_status="rejected", auto_reason=None)
     assert response.status == 200
-    assert path.read_text() == "unexpected"
+    assert path.read_text() == UNEXPECTED
     assert runtime.config_recovery.get(rid)["decision"] == "keep_current"
     await reconcile_configurations(hass, runtime)
     assert len(runtime.store.get_pending_approvals()) == 1
@@ -106,16 +123,16 @@ async def test_changed_target_refuses_then_replaces_stale_approval(hass, runtime
     rid, path = await interrupted(hass, runtime)
     await reconcile_configurations(hass, runtime)
     old_id = runtime.config_recovery.get(rid)["approval_id"]
-    path.write_text("changed by someone else")
+    path.write_text(blueprint("Changed elsewhere"))
     response = await _approve_approval(hass, request(), old_id)
     assert response.status == 200
     assert get_approval(runtime.store, old_id).status == "failed"
-    assert path.read_text() == "changed by someone else"
+    assert path.read_text() == blueprint("Changed elsewhere")
     assert runtime.config_recovery.get(rid)["phase"] in CONFIG_RECOVERY_UNRESOLVED
     await reconcile_configurations(hass, runtime)
     new_id = runtime.config_recovery.get(rid)["approval_id"]
     assert new_id != old_id
-    path.write_text("another change")
+    path.write_text(blueprint("Changed again"))
     await reconcile_configurations(hass, runtime)
     assert get_approval(runtime.store, new_id).status == "cancelled"
     assert runtime.config_recovery.get(rid)["approval_id"] != new_id
@@ -125,7 +142,7 @@ async def test_readback_resolution_cancels_existing_native_request(hass, runtime
     rid, path = await interrupted(hass, runtime)
     await reconcile_configurations(hass, runtime)
     approval_id = runtime.config_recovery.get(rid)["approval_id"]
-    path.write_text("intended")
+    path.write_text(INTENDED)
     with patch("homeassistant.components.persistent_notification.async_dismiss") as dismiss:
         await reconcile_configurations(hass, runtime)
         dismiss.assert_called_once()
@@ -136,7 +153,7 @@ async def test_readback_resolution_cancels_existing_native_request(hass, runtime
 
 @pytest.mark.parametrize("phase", ["prepared", "dispatching", "partial", "unknown"])
 async def test_active_operation_is_never_reconciled(hass, runtime, phase):
-    rid, _ = await interrupted(hass, runtime, "intended", phase=phase, leave=False)
+    rid, _ = await interrupted(hass, runtime, INTENDED, phase=phase, leave=False)
     await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == phase
     assert runtime.store.get_pending_approvals() == []
@@ -150,13 +167,58 @@ async def test_prepared_record_does_not_offer_a_restore(hass, runtime):
 
 
 async def test_legacy_record_without_intended_state_is_not_assumed_successful(hass, runtime):
-    rid, _ = await interrupted(hass, runtime, "saved", expected=False)
+    rid, _ = await interrupted(hass, runtime, SAVED, expected=False)
     await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == "unknown"
     assert runtime.config_recovery.get(rid)["approval_id"]
 
 
-async def test_unreadable_file_is_unknown_not_absence(hass, runtime):
+def stored_file_snapshot(snapshot_type: str, rel: str, content: str) -> dict:
+    """A configuration file snapshot in the stored form earlier releases wrote."""
+    return {"snapshot_type": snapshot_type, "schema": 1, "resource_id": rel, "exists": True, "content": content}
+
+
+@pytest.mark.parametrize("family", ["blueprint_source", "authored_file", "yaml_file"])
+async def test_file_record_is_only_acknowledged_while_a_blueprint_is_restored(hass, runtime, family):
+    """Configuration file text is never written back, even through administrator review.
+
+    A stored file record has no observation adapter, so the sweep offers only an
+    acknowledgement, and approving it leaves the file as it is. An interrupted
+    blueprint record is offered and applied as a restore.
+    """
+    if family == "blueprint_source":
+        rid, path = await interrupted(hass, runtime)
+    else:
+        rel = "packages/legacy.yaml" if family == "yaml_file" else "www/legacy.txt"
+        path = Path(hass.config.path(rel))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("current: true\n", encoding="utf-8")
+        rid = await runtime.config_recovery.begin(
+            f"{family}:{rel}", "file_write", "former-agent",
+            stored_file_snapshot(family, rel, "saved: true\n"),
+            expected=stored_file_snapshot(family, rel, "intended: true\n"),
+        )
+        await runtime.config_recovery.mark(rid, "unknown")
+        runtime.config_recovery.leave(rid)
+        with pytest.raises(ConfigurationRecoveryError, match=r"^This configuration has no observation adapter\.$"):
+            await observe_configuration(hass, runtime.config_recovery.get(rid))
+    current = path.read_text()
+    await reconcile_configurations(hass, runtime)
+    approval = get_approval(runtime.store, runtime.config_recovery.get(rid)["approval_id"])
+    restores = family == "blueprint_source"
+    assert approval.args["_resolution"] == ("restore" if restores else "acknowledge")
+    response = await _approve_approval(hass, request(), approval.id)
+    assert response.status == 200, response.body
+    assert runtime.config_recovery.get(rid)["phase"] == "reviewed"
+    if restores:
+        assert path.read_text() == SAVED
+    else:
+        assert path.read_text() == current
+        assert runtime.config_recovery.get(rid)["decision"] == "acknowledged"
+        assert len(runtime.config_recovery.records()) == 1
+
+
+async def test_unreadable_source_is_unknown_not_absence(hass, runtime):
     rid, _ = await interrupted(hass, runtime)
     with patch("custom_components.phoenix_mcp.tool_common._read_text_capped", side_effect=PermissionError):
         with pytest.raises(PermissionError):
@@ -218,7 +280,7 @@ async def test_durable_claim_failure_prevents_restore(hass, runtime):
     runtime.store._store.async_save.side_effect = OSError
     response = await _approve_approval(hass, request(), runtime.config_recovery.get(rid)["approval_id"])
     assert response.status == 503
-    assert path.read_text() == "unexpected"
+    assert path.read_text() == UNEXPECTED
 
 
 async def test_system_approval_requires_durable_back_reference(hass, runtime):
@@ -229,7 +291,7 @@ async def test_system_approval_requires_durable_back_reference(hass, runtime):
     assert not is_recovery_approval(get_approval(runtime.store, approval_id), runtime)
     response = await _approve_approval(hass, request(), approval_id)
     assert response.status == 404
-    assert path.read_text() == "unexpected"
+    assert path.read_text() == UNEXPECTED
 
 
 async def test_retention_prunes_completed_but_never_unresolved(runtime):
@@ -262,7 +324,7 @@ async def test_runtime_authority_loss_during_readback_prevents_restore(hass, run
     with patch.object(config_reconciliation, "observe_configuration", side_effect=stop_during_read):
         response = await _approve_approval(hass, request(), runtime.config_recovery.get(rid)["approval_id"])
     assert response.status == 200
-    assert path.read_text() == "unexpected"
+    assert path.read_text() == UNEXPECTED
     assert runtime.config_recovery.get(rid)["phase"] == "unknown"
 
 

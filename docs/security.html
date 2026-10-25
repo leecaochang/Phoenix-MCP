@@ -93,7 +93,7 @@
             <li><strong>Diagnostics</strong> (and the device tools) reveal installation topology: Home Assistant version, integration health, device manufacturer, model, and firmware. Useful for troubleshooting, broader than controlling a single entity.</li>
             <li><strong>System log read</strong> exposes system logs. Logs are free-form text from every integration; the redactor catches access-key-shaped and URL-credential patterns, but cannot recognise every possible secret.</li>
             <li><strong>Service response data</strong> returns whatever a called service replies with. Phoenix MCP redacts entity IDs and secret-named fields, but a service can return sensitive data under an ordinary key name.</li>
-            <li><strong>Filesystem access</strong> and <strong>Edit raw YAML</strong> read files as they are written inside their jail. A secret typed inline in a YAML file, rather than kept in <code>secrets.yaml</code>, reaches the agent with the rest of the file.</li>
+            <li><strong>Read files</strong> and <strong>YAML configuration</strong> read files as they are written inside their jail. A secret typed inline in a YAML file, rather than kept in <code>secrets.yaml</code>, reaches the agent with the rest of the file.</li>
           </ul>
           </div>
         </div>

@@ -70,12 +70,6 @@ _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
         "stat_cost": "changes.stat_cost",
         "stat_compensation": "changes.stat_compensation",
     },
-    "patch_yaml_config": {
-        "key": 'address: {"kind":"key","value":"..."}',
-        "path": 'address: {"kind":"path","value":[...]}',
-        "op": "change.kind",
-        "content": "change.content",
-    },
     "patch_dashboard": {
         "url_path": "target.url_path",
         "path": "changes[].path",
@@ -304,19 +298,6 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
             out["source_type"] = target["source_type"]
         else:
             return out, "target must identify a statistic, device_name, or source."
-    elif tool == "patch_yaml_config":
-        address, change = out.pop("address", None), out.pop("change", None)
-        if not isinstance(address, dict) or not isinstance(change, dict):
-            return out, "address and change must be objects."
-        if address.get("kind") == "key" and isinstance(address.get("value"), str):
-            out["key"] = address["value"]
-        elif address.get("kind") == "path" and isinstance(address.get("value"), list):
-            out["path"] = address["value"]
-        else:
-            return out, "address must be a key or path selector."
-        out["op"] = change.get("kind")
-        if "content" in change:
-            out["content"] = change["content"]
     elif tool == "patch_dashboard":
         target, changes = out.pop("target", None), out.pop("changes", None)
         if target is not None and not isinstance(target, dict):

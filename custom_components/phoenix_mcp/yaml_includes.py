@@ -11,9 +11,10 @@ secrets. This is the safe alternative for the automation/script/scene executors:
   checks against the config directory; a locator finds an entry's leaf and span.
 - Edit/delete splice ONLY those lines, after re-parsing and verifying the result
   entry-by-entry, so a span bug is a refusal, never a corrupted file.
-- scan_mount_points reports which top-level configuration.yaml keys can reach a
-  file: an include target inherits the trust of the key it is LOADED at, not of
-  its own filename; the raw-YAML write tools decide on that.
+- Writes reach only Home Assistant's own editor files (automations.yaml,
+  scripts.yaml, scenes.yaml) and only entries the editor itself would change.
+  An entry defined anywhere else is hand-written YAML and stays the operator's:
+  reads follow every include, writes refuse it.
 
 The perform_* / read_entry wrappers run in an executor job under the per-domain
 asyncio lock and report fallback=True when configuration.yaml cannot be read.
@@ -49,8 +50,8 @@ INCLUDE_TAGS = frozenset({
 })
 OPAQUE_TAGS = INCLUDE_TAGS | frozenset({"!secret", "!env_var", "!input"})
 
-# Default-layout files, used by read_entry's fallback when configuration.yaml is
-# missing or unparseable.
+# Home Assistant's own editor files: the only files the write paths change, and
+# read_entry's fallback when configuration.yaml is missing or unparseable.
 DEFAULT_FILES = {
     "automation": "automations.yaml",
     "script": "scripts.yaml",
@@ -101,12 +102,12 @@ MSG_CREATE_UNPROVABLE = (
     "an unused one generated."
 )
 MSG_CREATE_NO_ROUTE = (
-    "configuration.yaml does not route {domain} to an editable YAML file, "
-    "so Phoenix MCP cannot determine where to create it."
+    "configuration.yaml does not load {editor}, Home Assistant's {domain} editor file, "
+    "so Phoenix MCP has nowhere to create it. Create it in your own YAML instead."
 )
-MSG_CREATE_MULTI = (
-    "configuration.yaml routes {domain} to multiple include targets, "
-    "so Phoenix MCP cannot choose where to create it."
+MSG_HAND_WRITTEN = (
+    "This {domain} is defined in hand-written YAML ({name}). Phoenix MCP changes only "
+    "{domain}s in Home Assistant's editor file, {editor}; edit this one in its file."
 )
 MSG_SHAPE_MISMATCH = (
     "configuration.yaml routes {domain} through {tag}, "
@@ -459,159 +460,6 @@ def _iter_dir_files(directory: str) -> list[str]:
 
 
 @dataclass(frozen=True)
-class MountScan:
-    """Which configuration.yaml top-level keys can reach a given file.
-
-    A raw-YAML write is bounded by WHERE the file's content lands in the
-    configuration tree, not by its own shape: an ordinary-looking include target
-    mounted at `http:` puts trusted_proxies at its top level, and a packages file
-    carries whole integration configs. A caller deciding whether a file may be
-    written asks this, and refuses on anything it cannot prove.
-
-    `keys` are label-stripped (`automation manual` reports as `automation`):
-    the trust question is about the integration a key configures, and HA merges
-    labeled variants into the same one.
-
-    `opaque` makes fail-closed possible: a branch whose files cannot be read might
-    route the target somewhere this scan never saw, so a caller must treat an
-    opaque protected key exactly like a reached one. Empty `keys` with `readable`
-    True is a real negative; `readable` False means configuration.yaml itself is
-    missing or unparseable and NOTHING is known.
-    """
-
-    keys: frozenset[str]
-    opaque: frozenset[str]
-    readable: bool
-
-
-def _load_lenient_file(path: str) -> Any:
-    """Parse a file for the mount scan, tolerating unknown third-party tags.
-
-    Deliberately the LENIENT loader, unlike the authoring paths: a vendor tag in
-    an included file would otherwise make its branch opaque and refuse writes to
-    unrelated files.
-    """
-    with open(path, "r", encoding="utf-8") as f:
-        return load_tagged_lenient(f.read())
-
-
-def _collect_directives(
-    containing_file: str, node: Any, config_dir: str
-) -> list[tuple[str, str]]:
-    """Return every (flavor, realpath) an include directive under `node` names.
-
-    Walks the whole value, since a directive can sit at any depth (`http:
-    {trusted_proxies: !include proxies.yaml}`). A target resolving outside the
-    configuration directory is dropped: it cannot name a file the caller may write,
-    which is jailed to config_dir already.
-    """
-    found: list[tuple[str, str]] = []
-    stack = [node]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, TaggedValue):
-            if current.tag in INCLUDE_TAGS:
-                resolved = _resolve_include_path(containing_file, current.value, config_dir)
-                if resolved is not None:
-                    found.append((current.tag, resolved))
-        elif isinstance(current, dict):
-            stack.extend(current.values())
-        elif isinstance(current, list):
-            stack.extend(current)
-    return found
-
-
-def _is_within(directory: str, candidate: str) -> bool:
-    """True when candidate sits inside directory (both already realpaths)."""
-    return candidate.startswith(directory + os.sep)
-
-
-def _reaches_target(
-    directives: list[tuple[str, str]],
-    target: str,
-    config_dir: str,
-    depth: int,
-    seen: set[str],
-) -> tuple[bool, bool]:
-    """Walk an include branch. Returns (target is reachable, branch is opaque).
-
-    A directory include matches by CONTAINMENT rather than by enumerating the files
-    HA would load, which fails closed twice over: it covers a file the caller is
-    about to create inside that directory and a name HA's `*.yaml` filter would
-    skip. Traversal still walks only files HA actually loads, since a file HA never
-    reads cannot route anything.
-    """
-    if depth > MAX_INCLUDE_DEPTH:
-        return False, True
-    reachable = False
-    opaque = False
-    for flavor, path in directives:
-        if flavor == "!include":
-            if path == target:
-                reachable = True
-            leaves = [path]
-        else:
-            if _is_within(path, target):
-                reachable = True
-            leaves = _iter_dir_files(path)
-        for leaf in leaves:
-            real = os.path.realpath(leaf)
-            if real in seen or not os.path.isfile(real):
-                continue
-            seen.add(real)
-            try:
-                document = _load_lenient_file(real)
-            except (OSError, YamlParseError):
-                opaque = True
-                continue
-            nested = _collect_directives(real, document, config_dir)
-            if not nested:
-                continue
-            sub_reachable, sub_opaque = _reaches_target(
-                nested, target, config_dir, depth + 1, seen)
-            reachable = reachable or sub_reachable
-            opaque = opaque or sub_opaque
-    return reachable, opaque
-
-
-def scan_mount_points(config_dir: str, target: str) -> MountScan:
-    """Which top-level configuration.yaml keys route to `target`.
-
-    Every key is walked independently with its own `seen` set, so a file shared
-    between two keys is reported under BOTH. That is the case the scan exists for:
-    a file mounted at an ordinary domain key AND reachable from a protected one is
-    not safe to write, and a first-match answer would report only the first key.
-    """
-    config_path = os.path.join(config_dir, CONFIGURATION_YAML)
-    if not os.path.isfile(config_path):
-        return MountScan(frozenset(), frozenset(), readable=False)
-    try:
-        root = _load_lenient_file(config_path)
-    except (OSError, YamlParseError):
-        return MountScan(frozenset(), frozenset(), readable=False)
-    if not isinstance(root, dict):
-        return MountScan(frozenset(), frozenset(), readable=False)
-
-    resolved_target = os.path.realpath(target)
-    reached: set[str] = set()
-    opaque: set[str] = set()
-    for key, value in root.items():
-        if not isinstance(key, str):
-            continue
-        directives = _collect_directives(config_path, value, config_dir)
-        if not directives:
-            continue
-        is_reachable, is_opaque = _reaches_target(
-            directives, resolved_target, config_dir, 1, set())
-        top_key = key.split(" ", 1)[0]
-        if is_reachable:
-            reached.add(top_key)
-        if is_opaque:
-            opaque.add(top_key)
-    return MountScan(frozenset(reached), frozenset(opaque), readable=True)
-
-
-@dataclass(frozen=True)
 class DomainEntries:
     """Every entry a domain defines, and every branch that could not be read.
 
@@ -737,11 +585,11 @@ class LocateError(Exception):
 class LocatedEntry:
     """A uniquely located entry.
 
-    ref_file/ref_kind/span describe where the entry is REFERENCED (the lines a
-    delete removes). When the entry's body lives in a separate file reached via
-    a plain !include value (e.g. "foo: !include foo.yaml"), content_file names
-    it: edit rewrites content_file and leaves the reference intact; delete
-    splices the reference and leaves the file orphaned on disk.
+    ref_file/ref_kind/span describe where the entry is REFERENCED (the lines an
+    edit or delete splices). When the entry's body lives in a separate file
+    reached via a plain !include value (e.g. "foo: !include foo.yaml"),
+    content_file names it. Such an entry, like a whole-file one, is hand-written
+    YAML: reads report it and the write paths refuse it.
     """
 
     ref_file: str
@@ -1172,16 +1020,74 @@ def _layout_or_result(config_dir: str, domain: str) -> DomainLayout | OpResult:
     return layout
 
 
-def _write_entry_files(located: LocatedEntry, domain: str, config: dict) -> OpResult:
-    """Apply an edit to a located entry (splice or whole-file rewrite)."""
+def _editor_file(config_dir: str, domain: str) -> str:
+    """Home Assistant's own editor file for a domain, as a realpath."""
+    return os.path.realpath(os.path.join(config_dir, DEFAULT_FILES[domain]))
+
+
+def _hand_written_refusal(located: LocatedEntry, domain: str, config_dir: str) -> OpResult | None:
+    """Refuse an entry Home Assistant's own editor would not change; None when it would.
+
+    The editor changes an entry written inline in its own file. An entry in any
+    other file, a file holding one entry whole, or a body behind a plain !include
+    is hand-written YAML.
+    """
+    if (
+        located.content_file is None
+        and located.ref_kind in ("list_item", "named_value")
+        and os.path.realpath(located.ref_file) == _editor_file(config_dir, domain)
+    ):
+        return None
+    return OpResult(ok=False, error_kind="refused", message=MSG_HAND_WRITTEN.format(
+        domain=domain, name=os.path.basename(located.content_file or located.ref_file),
+        editor=DEFAULT_FILES[domain],
+    ))
+
+
+def _create_route(layout: DomainLayout, domain: str) -> str | OpResult:
+    """The editor file a new entry is appended to, or the refusal when nothing loads it."""
+    editor = _editor_file(layout.config_dir, domain)
+    for target in layout.targets:
+        if target.flavor == "!include" and target.path == editor:
+            return target.path
+    return OpResult(ok=False, error_kind="refused", message=MSG_CREATE_NO_ROUTE.format(
+        domain=domain, editor=DEFAULT_FILES[domain],
+    ))
+
+
+def write_target_refusal(config_dir: str, domain: str, entry_id: str, *, create: bool) -> OpResult | None:
+    """Whether Home Assistant's own editor could make this change; None when it could.
+
+    Side-effect free, for the prechecks that run before an approval exists. The
+    write repeats the check, because files can change while an approval waits. A
+    missing or unlocatable entry is left to the callers' own existence checks.
+    """
+    try:
+        layout = _layout_or_result(config_dir, domain)
+        if isinstance(layout, OpResult):
+            # The fallback writes the editor file directly.
+            return None if layout.fallback else layout
+        if create:
+            route = _create_route(layout, domain)
+            return route if isinstance(route, OpResult) else None
+        try:
+            located = locate_entry(layout, entry_id)
+        except LocateError:
+            return None
+        return _hand_written_refusal(located, domain, config_dir)
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return OpResult(ok=False, error_kind="io_error", message=(
+            f"Cannot safely read the {domain} configuration. Check the YAML files and "
+            "filesystem permissions before retrying."
+        ))
+
+
+def _write_entry_files(located: LocatedEntry, domain: str, config: dict, config_dir: str) -> OpResult:
+    """Splice an edit into a located entry of the domain's editor file."""
+    refusal = _hand_written_refusal(located, domain, config_dir)
+    if refusal is not None:
+        return refusal
     encoded_before = encode_tags(located.config)
-    if located.content_file is not None:
-        # Body lives in its own plain-included file; rewrite it, reference intact.
-        write_utf8_file_atomic(located.content_file, dump_tagged(config))
-        return OpResult(ok=True, before=encoded_before, file=located.content_file)
-    if located.ref_kind == "whole_file":
-        write_utf8_file_atomic(located.ref_file, dump_tagged(config))
-        return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
     # (key, config) the post-splice self-check expects to find at that index.
     # A list item has no key; a mapping entry carries its own.
@@ -1301,9 +1207,18 @@ def _automation_write_checked(
         conflict = automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash)
         if conflict is not None:
             return conflict
+        route = _create_route(layout, "automation")
+        if isinstance(route, OpResult):
+            return route
         if dry_run:
             return OpResult(ok=True)
         return perform_create(config_dir, "automation", entry_id, config, generated_id=generated_id)
+    if not create:
+        # Before the identity checks, so an edit of hand-written YAML is refused
+        # outright instead of first being asked for a content hash.
+        refusal = _hand_written_refusal(located, "automation", config_dir)
+        if refusal is not None:
+            return refusal
     current = encode_tags(located.config)
     conflict = automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash)
     if conflict is not None:
@@ -1312,11 +1227,11 @@ def _automation_write_checked(
         return OpResult(ok=False, error_kind="refused", message=MSG_INCLUDE_REFUSAL.format(name=os.path.basename(located.ref_file)))
     if dry_run:
         return OpResult(ok=True, before=current)
-    return _write_entry_files(located, "automation", config)
+    return _write_entry_files(located, "automation", config, config_dir)
 
 
 def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> OpResult:
-    """Replace an entry's config in place, preserving the include layout."""
+    """Replace an entry's config in place in the domain's editor file."""
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
@@ -1329,7 +1244,7 @@ def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> O
             ok=False, error_kind="refused",
             message=MSG_INCLUDE_REFUSAL.format(name=os.path.basename(located.ref_file)),
         )
-    return _write_entry_files(located, domain, config)
+    return _write_entry_files(located, domain, config, config_dir)
 
 
 def perform_delete(
@@ -1338,7 +1253,7 @@ def perform_delete(
     entry_id: str,
     expected_hash: str | None = None,
 ) -> OpResult:
-    """Remove an entry in place if it still matches the reviewed content."""
+    """Remove an entry from the domain's editor file if it still matches the reviewed content."""
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
@@ -1346,6 +1261,9 @@ def perform_delete(
         located = locate_entry(layout, entry_id)
     except LocateError as exc:
         return _locate_error_result(exc)
+    refusal = _hand_written_refusal(located, domain, config_dir)
+    if refusal is not None:
+        return refusal
     encoded_before = encode_tags(located.config)
     if expected_hash is not None and content_hash(encoded_before) != expected_hash:
         return OpResult(
@@ -1357,9 +1275,6 @@ def perform_delete(
             ),
         )
 
-    if located.ref_kind == "whole_file":
-        os.unlink(located.ref_file)
-        return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
     new_text = _splice(located.ref_text, located.start_line, located.end_line, None)
     index = _entry_index(located.ref_text, located.start_line)
@@ -1369,23 +1284,11 @@ def perform_delete(
             message="Phoenix MCP could not verify the edited file would remain intact; nothing was written.",
         )
     write_utf8_file_atomic(located.ref_file, new_text)
-    # A plain-included body file is left orphaned on disk deliberately;
-    # deleting it could destroy content shared by another include.
     return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
 
-_FILENAME_SAFE_RE = re.compile(r"[^a-z0-9_-]+")
-
-
-def _create_filename(entry_id: str) -> str:
-    stem = _FILENAME_SAFE_RE.sub("_", entry_id.lower()).strip("_") or "entry"
-    if not stem.startswith("phoenix_mcp_"):
-        stem = f"phoenix_mcp_{stem}"
-    return f"{stem}.yaml"
-
-
 def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *, generated_id: bool = False) -> OpResult:
-    """Create an entry, routing by the domain's include flavor."""
+    """Create an entry by appending it to the domain's editor file."""
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
@@ -1420,58 +1323,14 @@ def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *,
         else:
             return OpResult(ok=False, error_kind="already_exists", message=exists_msg)
 
-    targets = layout.targets
-    if not targets:
-        return OpResult(
-            ok=False, error_kind="refused",
-            message=MSG_CREATE_NO_ROUTE.format(domain=domain),
-        )
-    if len(targets) > 1:
-        plain = [t for t in targets if t.flavor == "!include"]
-        if len(plain) == 1:
-            target = plain[0]
-        else:
-            return OpResult(
-                ok=False, error_kind="refused",
-                message=MSG_CREATE_MULTI.format(domain=domain),
-            )
-    else:
-        target = targets[0]
-
-    shape = _DOMAIN_SHAPES[domain]
-    if target.flavor == "!include":
-        return _create_append(target.path, shape, entry_id, config)
-
-    # Directory flavors write a new file.
-    if not os.path.isdir(target.path):
-        return OpResult(
-            ok=False, error_kind="io_error",
-            message=f"Include directory '{os.path.basename(target.path)}' does not exist.",
-        )
-    if target.flavor in ("!include_dir_named", "!include_dir_merge_named"):
-        fname = f"{entry_id}.yaml"
-    else:
-        fname = _create_filename(entry_id)
-    new_path = os.path.join(target.path, fname)
-    if os.path.exists(new_path):
-        return OpResult(
-            ok=False, error_kind="io_error",
-            message=f"A file named '{fname}' already exists in the include directory.",
-        )
-    if target.flavor == "!include_dir_list":
-        content = dump_tagged(config)
-    elif target.flavor == "!include_dir_merge_list":
-        content = dump_tagged([config])
-    elif target.flavor == "!include_dir_named":
-        content = dump_tagged(config)
-    else:  # !include_dir_merge_named
-        content = dump_tagged({entry_id: config})
-    write_utf8_file_atomic(new_path, content)
-    return OpResult(ok=True, file=new_path)
+    route = _create_route(layout, domain)
+    if isinstance(route, OpResult):
+        return route
+    return _create_append(route, _DOMAIN_SHAPES[domain], entry_id, config)
 
 
 def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResult:
-    """Append an entry to a plain !include file, creating the file if missing."""
+    """Append an entry to the editor file, creating the file if missing."""
     text = ""
     doc = None
     if os.path.isfile(path):

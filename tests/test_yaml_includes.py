@@ -1,8 +1,10 @@
-"""yaml_includes: include-graph resolution, locate, and splice editing.
+"""yaml_includes: include-graph resolution, locate, and the editor-file write boundary.
 
 Pure-module tests (no hass fixture): everything runs against tmp_path config
-trees. The oracle tests cross-check Phoenix MCP's include semantics against HA's
-own annotatedyaml loader on the same tree.
+trees. Reads follow every include flavor; writes splice only entries written
+inline in Home Assistant's editor files and refuse hand-written YAML without
+touching it. The oracle tests cross-check Phoenix MCP's include semantics
+against HA's own annotatedyaml loader on the same tree.
 """
 
 from __future__ import annotations
@@ -192,144 +194,6 @@ def test_layout_non_include_tag_routes_nothing(tmp_path):
     write(tmp_path, "configuration.yaml", "automation: !secret weird\n")
     layout = yi.resolve_domain_layout(str(tmp_path), "automation")
     assert layout.targets == () and layout.error is None and not layout.has_inline
-
-
-# ---------------------------------------------------------------------------
-# Mount point scan
-# ---------------------------------------------------------------------------
-
-
-USER_CONFIGURATION = """\
-    automation: !include automations.yaml
-    script: !include scripts.yaml
-    scene: !include scenes.yaml
-    sensor: !include sensors.yaml
-    template: !include templates.yaml
-"""
-
-
-@pytest.mark.parametrize("rel,key", [
-    ("automations.yaml", "automation"),
-    ("scripts.yaml", "script"),
-    ("scenes.yaml", "scene"),
-    ("sensors.yaml", "sensor"),
-    ("templates.yaml", "template"),
-])
-def test_mount_scan_finds_each_include_target(tmp_path, rel, key):
-    write(tmp_path, "configuration.yaml", USER_CONFIGURATION)
-    write(tmp_path, rel, "[]\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / rel))
-    assert scan.readable
-    assert scan.keys == {key}
-    assert scan.opaque == frozenset()
-
-
-def test_mount_scan_reports_nothing_for_an_unrouted_file(tmp_path):
-    write(tmp_path, "configuration.yaml", USER_CONFIGURATION)
-    write(tmp_path, "notes.yaml", "a: 1\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "notes.yaml"))
-    assert scan.readable and scan.keys == frozenset()
-
-
-def test_mount_scan_strips_a_label_from_the_key(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation manual: !include manual.yaml\n")
-    write(tmp_path, "manual.yaml", "[]\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "manual.yaml"))
-    assert scan.keys == {"automation"}
-
-
-def test_mount_scan_finds_a_nested_include(tmp_path):
-    write(tmp_path, "configuration.yaml", "http: !include http.yaml\n")
-    write(tmp_path, "http.yaml", "trusted_proxies: !include proxies.yaml\n")
-    write(tmp_path, "proxies.yaml", "- 10.0.0.1\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "proxies.yaml"))
-    assert scan.keys == {"http"}
-
-
-def test_mount_scan_finds_a_directive_below_the_key(tmp_path):
-    """The directive can sit at any depth in the key's value, not just at its head."""
-    write(tmp_path, "configuration.yaml", """\
-        homeassistant:
-          packages: !include_dir_named packages
-    """)
-    write(tmp_path, "packages/kitchen.yaml", "light: []\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "packages/kitchen.yaml"))
-    assert scan.keys == {"homeassistant"}
-
-
-def test_mount_scan_matches_a_directory_by_containment(tmp_path):
-    """A file that does not exist yet still reports the directory's mount."""
-    write(tmp_path, "configuration.yaml", """\
-        homeassistant:
-          packages: !include_dir_named packages
-    """)
-    (tmp_path / "packages").mkdir()
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "packages/new.yaml"))
-    assert scan.keys == {"homeassistant"}
-
-
-def test_mount_scan_reports_every_key_that_reaches_a_shared_file(tmp_path):
-    """A file reachable from two keys reports both, so a caller sees the unsafe one.
-
-    A first-match answer would report whichever key came first in the document,
-    which is exactly how a protected mount would be missed.
-    """
-    write(tmp_path, "configuration.yaml", """\
-        template: !include shared.yaml
-        http: !include http.yaml
-    """)
-    write(tmp_path, "http.yaml", "trusted_proxies: !include shared.yaml\n")
-    write(tmp_path, "shared.yaml", "- 10.0.0.1\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "shared.yaml"))
-    assert scan.keys == {"template", "http"}
-
-
-def test_mount_scan_marks_an_unparseable_branch_opaque(tmp_path):
-    write(tmp_path, "configuration.yaml", """\
-        http: !include http.yaml
-        template: !include templates.yaml
-    """)
-    write(tmp_path, "http.yaml", "{{{ not yaml")
-    write(tmp_path, "templates.yaml", "[]\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "templates.yaml"))
-    assert scan.keys == {"template"}
-    assert scan.opaque == {"http"}
-
-
-def test_mount_scan_tolerates_an_unknown_third_party_tag(tmp_path):
-    """A vendor tag must not make a branch opaque and refuse unrelated writes."""
-    write(tmp_path, "configuration.yaml", """\
-        http: !include http.yaml
-        template: !include templates.yaml
-    """)
-    write(tmp_path, "http.yaml", "trusted_proxies: !vendor_thing arg\n")
-    write(tmp_path, "templates.yaml", "[]\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "templates.yaml"))
-    assert scan.opaque == frozenset()
-
-
-def test_mount_scan_survives_an_include_cycle(tmp_path):
-    write(tmp_path, "configuration.yaml", "template: !include a.yaml\n")
-    write(tmp_path, "a.yaml", "x: !include b.yaml\n")
-    write(tmp_path, "b.yaml", "y: !include a.yaml\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "b.yaml"))
-    assert scan.keys == {"template"}
-
-
-def test_mount_scan_ignores_a_target_outside_the_config_dir(tmp_path):
-    outside = tmp_path.parent / "outside.yaml"
-    outside.write_text("a: 1\n", encoding="utf-8")
-    write(tmp_path, "configuration.yaml", "template: !include ../outside.yaml\n")
-    scan = yi.scan_mount_points(str(tmp_path), str(outside))
-    assert scan.readable and scan.keys == frozenset()
-
-
-@pytest.mark.parametrize("content", [None, "{{{ not yaml", "- just\n- a list\n"])
-def test_mount_scan_is_unreadable_without_a_usable_root(tmp_path, content):
-    if content is not None:
-        write(tmp_path, "configuration.yaml", content)
-    scan = yi.scan_mount_points(str(tmp_path), str(tmp_path / "templates.yaml"))
-    assert not scan.readable and scan.keys == frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +426,7 @@ def test_symlinked_named_dir_leaf_outside_config_refused(tmp_path, flavor):
 
 
 def test_symlinked_leaf_inside_config_still_locates(tmp_path):
-    # A symlink whose target resolves INSIDE the config dir stays editable.
+    # A symlink whose target resolves INSIDE the config dir stays readable.
     write(tmp_path, "shared/common.yaml", "- id: aaa\n  alias: Shared\n")
     (tmp_path / "automations").mkdir()
     os.symlink(tmp_path / "shared" / "common.yaml", tmp_path / "automations" / "common.yaml")
@@ -718,32 +582,208 @@ def test_edit_refuses_entry_with_internal_include(tmp_path):
     assert res.ok
 
 
-def test_edit_content_file_keeps_reference(tmp_path):
-    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
-    write(tmp_path, "automations.yaml", "- !include extra.yaml\n")
-    write(tmp_path, "extra.yaml", "id: aaa\nalias: A\n")
-    res = yi.perform_edit(str(tmp_path), "automation", "aaa", {"id": "aaa", "alias": "A2"})
-    assert res.ok and res.file.endswith("extra.yaml")
-    assert read(tmp_path, "automations.yaml") == "- !include extra.yaml\n"
-    assert yaml.safe_load(read(tmp_path, "extra.yaml")) == {"id": "aaa", "alias": "A2"}
+def snapshot(base: Path) -> dict[str, bytes]:
+    """Every file under the config tree, by relative path, for unchanged-bytes checks."""
+    return {
+        str(p.relative_to(base)): p.read_bytes()
+        for p in sorted(base.rglob("*")) if p.is_file()
+    }
 
 
-def test_delete_content_reference_orphans_file(tmp_path):
+def hand_written(domain: str, editor: str, name: str) -> str:
+    return yi.MSG_HAND_WRITTEN.format(domain=domain, name=name, editor=editor)
+
+
+def test_body_file_entry_is_refused_beside_an_inline_one(tmp_path):
+    """A body behind a plain !include is hand-written even when the editor file references it.
+
+    The inline entry next to the reference stays the editor's to change, and the
+    reference line survives both the refusal and the neighboring write.
+    """
     write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
     write(tmp_path, "automations.yaml", "- id: aaa\n  alias: A\n- !include extra.yaml\n")
     write(tmp_path, "extra.yaml", "id: bbb\nalias: B\n")
-    res = yi.perform_delete(str(tmp_path), "automation", "bbb")
+    before = snapshot(tmp_path)
+    for res in (
+        yi.perform_edit(str(tmp_path), "automation", "bbb", {"id": "bbb", "alias": "B2"}),
+        yi.perform_delete(str(tmp_path), "automation", "bbb"),
+    ):
+        assert not res.ok and res.error_kind == "refused"
+        assert res.message == hand_written("automation", "automations.yaml", "extra.yaml")
+    assert snapshot(tmp_path) == before
+
+    res = yi.perform_edit(str(tmp_path), "automation", "aaa", {"id": "aaa", "alias": "A2"})
+    assert res.ok and res.file.endswith("automations.yaml")
+    assert read(tmp_path, "automations.yaml") == "- id: aaa\n  alias: A2\n- !include extra.yaml\n"
+    res = yi.perform_delete(str(tmp_path), "automation", "aaa")
     assert res.ok
-    assert read(tmp_path, "automations.yaml") == "- id: aaa\n  alias: A\n"
-    assert (tmp_path / "extra.yaml").exists()  # orphaned, never deleted
+    assert read(tmp_path, "automations.yaml") == "- !include extra.yaml\n"
+    assert read(tmp_path, "extra.yaml") == "id: bbb\nalias: B\n"
 
 
-def test_delete_dir_named_unlinks_file(tmp_path):
-    write(tmp_path, "configuration.yaml", "script: !include_dir_named scripts\n")
+def test_whole_file_entry_is_refused_and_never_unlinked(tmp_path):
+    """A !include_dir_named file holding one script whole is hand-written YAML."""
+    write(tmp_path, "configuration.yaml",
+          "script: !include scripts.yaml\nscript manual: !include_dir_named scripts\n")
+    write(tmp_path, "scripts.yaml", "ui:\n  sequence: []\n")
     write(tmp_path, "scripts/hello.yaml", "alias: Hello\nsequence: []\n")
-    res = yi.perform_delete(str(tmp_path), "script", "hello")
-    assert res.ok
-    assert not (tmp_path / "scripts/hello.yaml").exists()
+    before = snapshot(tmp_path)
+    for res in (
+        yi.perform_edit(str(tmp_path), "script", "hello", {"alias": "H2", "sequence": []}),
+        yi.perform_delete(str(tmp_path), "script", "hello"),
+    ):
+        assert not res.ok and res.error_kind == "refused"
+        assert res.message == hand_written("script", "scripts.yaml", "hello.yaml")
+    assert snapshot(tmp_path) == before
+
+    res = yi.perform_delete(str(tmp_path), "script", "ui")
+    assert res.ok and res.file.endswith("scripts.yaml")
+    assert yi.read_entry(str(tmp_path), "script", "ui") is None
+    assert read(tmp_path, "scripts/hello.yaml") == "alias: Hello\nsequence: []\n"
+
+
+_SHAPE_TEXT = {
+    # (inline list/mapping entry text, whole-file body text) per domain.
+    "automation": ("- id: {id}\n  alias: {label}\n", "id: {id}\nalias: {label}\n"),
+    "scene": ("- id: {id}\n  name: {label}\n  entities: {{}}\n", "id: {id}\nname: {label}\nentities: {{}}\n"),
+    "script": ("{id}:\n  alias: {label}\n  sequence: []\n", "alias: {label}\nsequence: []\n"),
+}
+_EDITOR = {"automation": "automations.yaml", "scene": "scenes.yaml", "script": "scripts.yaml"}
+_MERGE_DIR = {"automation": "!include_dir_merge_list", "scene": "!include_dir_merge_list", "script": "!include_dir_merge_named"}
+_WHOLE_DIR = {"automation": "!include_dir_list", "scene": "!include_dir_list", "script": "!include_dir_named"}
+
+
+def _seed_hand_written(base: Path, domain: str, flavor: str) -> str:
+    """Seed an editor-file entry "ui" and a hand-written entry "hand"; return the file named."""
+    entry, whole = _SHAPE_TEXT[domain]
+    editor = _EDITOR[domain]
+    ui = entry.format(id="ui", label="UI")
+    hand = entry.format(id="hand", label="Hand")
+    body = whole.format(id="hand", label="Hand")
+    config = f"{domain}: !include {editor}\n"
+    write(base, editor, ui)
+    if flavor == "split_file":
+        write(base, "configuration.yaml", config + f"{domain} manual: !include manual.yaml\n")
+        write(base, "manual.yaml", hand)
+        return "manual.yaml"
+    if flavor == "merge_dir":
+        write(base, "configuration.yaml", config + f"{domain} manual: {_MERGE_DIR[domain]} manual\n")
+        write(base, "manual/pack.yaml", hand)
+        return "pack.yaml"
+    if flavor == "whole_file":
+        write(base, "configuration.yaml", config + f"{domain} manual: {_WHOLE_DIR[domain]} manual\n")
+        write(base, "manual/hand.yaml", body)
+        return "hand.yaml"
+    assert flavor == "body_file"
+    write(base, "configuration.yaml", config)
+    reference = "hand: !include body.yaml\n" if domain == "script" else "- !include body.yaml\n"
+    write(base, editor, ui + reference)
+    write(base, "body.yaml", body)
+    return "body.yaml"
+
+
+def _changed(domain: str, entry_id: str) -> dict:
+    if domain == "automation":
+        return {"id": entry_id, "alias": "Changed"}
+    if domain == "scene":
+        return {"id": entry_id, "name": "Changed", "entities": {}}
+    return {"alias": "Changed", "sequence": []}
+
+
+@pytest.mark.parametrize("domain", ["automation", "script", "scene"])
+@pytest.mark.parametrize("flavor", ["split_file", "merge_dir", "whole_file", "body_file"])
+def test_write_paths_refuse_hand_written_entries(tmp_path, domain, flavor):
+    """Every write path and the pre-approval check refuse the same entry with the same message.
+
+    The positive control in the same tree shows the editor-file entry is still
+    writable and that writing it leaves every hand-written file byte-identical.
+    """
+    name = _seed_hand_written(tmp_path, domain, flavor)
+    editor = _EDITOR[domain]
+    expected = hand_written(domain, editor, name)
+    hand_config = yi.read_entry(str(tmp_path), domain, "hand")
+    assert hand_config is not None  # reads still follow every include
+    before = snapshot(tmp_path)
+
+    precheck = yi.write_target_refusal(str(tmp_path), domain, "hand", create=False)
+    assert precheck is not None and precheck.error_kind == "refused"
+    assert precheck.message == expected
+    results = [
+        yi.perform_edit(str(tmp_path), domain, "hand", _changed(domain, "hand")),
+        yi.perform_delete(str(tmp_path), domain, "hand"),
+    ]
+    if domain == "automation":
+        current = content_hash(yi.read_entry(str(tmp_path), "automation", "hand"))
+        for dry_run in (True, False):
+            results.append(yi.automation_write(
+                str(tmp_path), "hand", _changed(domain, "hand"), False, current, dry_run))
+    for res in results:
+        assert not res.ok and not res.fallback and res.error_kind == "refused"
+        assert res.message == expected
+    assert snapshot(tmp_path) == before
+
+    assert yi.write_target_refusal(str(tmp_path), domain, "ui", create=False) is None
+    res = yi.perform_edit(str(tmp_path), domain, "ui", _changed(domain, "ui"))
+    assert res.ok, res.message
+    after = snapshot(tmp_path)
+    assert {path for path in after if after[path] != before[path]} == {editor}
+    assert yi.read_entry(str(tmp_path), domain, "hand") == hand_config
+
+
+@pytest.mark.parametrize("configuration", [
+    "automation: !include automations.yaml\nautomation manual:\n  - id: hand\n    alias: Hand\n",
+    "homeassistant:\n  packages: {}\nautomation: !include automations.yaml\n",
+])
+def test_inline_and_package_entries_are_never_written(tmp_path, configuration):
+    """Entries the locator does not read are not found for writing, so nothing is spliced.
+
+    configuration.yaml itself is never a write target, whatever it defines inline.
+    """
+    write(tmp_path, "configuration.yaml", configuration)
+    write(tmp_path, "automations.yaml", "- id: ui\n  alias: UI\n")
+    before = snapshot(tmp_path)
+    for res in (
+        yi.perform_edit(str(tmp_path), "automation", "hand", {"id": "hand", "alias": "Changed"}),
+        yi.perform_delete(str(tmp_path), "automation", "hand"),
+        yi.automation_write(str(tmp_path), "hand", {"id": "hand", "alias": "Changed"}, False),
+    ):
+        assert not res.ok and res.error_kind == "ambiguous"
+        assert res.message == yi.MSG_AMBIGUOUS.format(domain="automation", entry_id="hand")
+    assert snapshot(tmp_path) == before
+
+
+def test_write_target_refusal_leaves_missing_entries_to_existence_checks(tmp_path):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    write(tmp_path, "automations.yaml", "- id: aaa\n  alias: A\n")
+    assert yi.write_target_refusal(str(tmp_path), "automation", "ghost", create=False) is None
+    assert yi.write_target_refusal(str(tmp_path), "automation", "aaa", create=False) is None
+
+
+def test_write_target_refusal_falls_back_without_configuration_yaml(tmp_path):
+    """Without configuration.yaml the legacy path writes the editor file directly."""
+    write(tmp_path, "automations.yaml", "- id: aaa\n  alias: A\n")
+    for create in (True, False):
+        assert yi.write_target_refusal(str(tmp_path), "automation", "aaa", create=create) is None
+
+
+def test_write_target_refusal_reports_a_layout_error(tmp_path):
+    write(tmp_path, "configuration.yaml", "automation: !include ../outside.yaml\n")
+    for create in (True, False):
+        res = yi.write_target_refusal(str(tmp_path), "automation", "aaa", create=create)
+        assert res is not None and res.error_kind == "refused"
+        assert res.message == yi.MSG_OUTSIDE_CONFIG.format(domain="automation")
+
+
+def test_write_target_refusal_reports_an_unreadable_leaf(tmp_path):
+    """A leaf that cannot be decoded is a refusal to read, never an exception or a pass."""
+    write(tmp_path, "configuration.yaml",
+          "automation: !include automations.yaml\nautomation manual: !include_dir_merge_list manual\n")
+    write(tmp_path, "automations.yaml", "- id: aaa\n  alias: A\n")
+    (tmp_path / "manual").mkdir()
+    (tmp_path / "manual" / "broken.yaml").write_bytes(b"- id: \xff\xfe\n")
+    res = yi.write_target_refusal(str(tmp_path), "automation", "aaa", create=False)
+    assert res is not None and res.error_kind == "io_error"
+    assert "Cannot safely read the automation configuration" in res.error_text
 
 
 def test_self_check_aborts_on_bad_span(tmp_path):
@@ -759,7 +799,7 @@ def test_self_check_aborts_on_bad_span(tmp_path):
         start_line=loc.start_line, end_line=loc.end_line + 1,
         key=None, config=loc.config,
     )
-    res = yi._write_entry_files(broken, "automation", {"id": "aaa", "alias": "A2"})
+    res = yi._write_entry_files(broken, "automation", {"id": "aaa", "alias": "A2"}, str(tmp_path))
     assert not res.ok and res.error_kind == "io_error"
     assert read(tmp_path, "automations.yaml") == original
 
@@ -830,39 +870,7 @@ def test_create_append_no_trailing_newline(tmp_path):
         "- id: aaa\n  alias: A\n- id: phoenix_mcp_x\n  alias: X\n")
 
 
-def test_create_dir_list_new_file(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation: !include_dir_list automations\n")
-    (tmp_path / "automations").mkdir()
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})
-    assert res.ok and res.file.endswith("phoenix_mcp_x.yaml")
-    assert yaml.safe_load(read(tmp_path, "automations/phoenix_mcp_x.yaml")) == {"id": "phoenix_mcp_x", "alias": "X"}
-
-
-def test_create_dir_merge_list_new_file(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
-    (tmp_path / "automations").mkdir()
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})
-    assert res.ok
-    assert yaml.safe_load(read(tmp_path, "automations/phoenix_mcp_x.yaml")) == [{"id": "phoenix_mcp_x", "alias": "X"}]
-
-
-def test_create_dir_named_new_file(tmp_path):
-    write(tmp_path, "configuration.yaml", "script: !include_dir_named scripts\n")
-    (tmp_path / "scripts").mkdir()
-    res = yi.perform_create(str(tmp_path), "script", "hello", {"sequence": []})
-    assert res.ok and res.file.endswith("hello.yaml")
-    assert yaml.safe_load(read(tmp_path, "scripts/hello.yaml")) == {"sequence": []}
-
-
-def test_create_dir_merge_named_new_file(tmp_path):
-    write(tmp_path, "configuration.yaml", "script: !include_dir_merge_named scripts\n")
-    (tmp_path / "scripts").mkdir()
-    res = yi.perform_create(str(tmp_path), "script", "hello", {"sequence": []})
-    assert res.ok
-    assert yaml.safe_load(read(tmp_path, "scripts/hello.yaml")) == {"hello": {"sequence": []}}
-
-
-def test_create_multi_branch_prefers_single_plain_include(tmp_path):
+def test_create_beside_a_directory_goes_to_the_editor_file(tmp_path):
     write(tmp_path, "configuration.yaml", """\
         automation: !include automations.yaml
         automation manual: !include_dir_merge_list automations
@@ -871,44 +879,58 @@ def test_create_multi_branch_prefers_single_plain_include(tmp_path):
     (tmp_path / "automations").mkdir()
     res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})
     assert res.ok and res.file.endswith("automations.yaml")
+    assert list((tmp_path / "automations").iterdir()) == []
 
 
-def test_create_multi_branch_ambiguous_refuses(tmp_path):
-    write(tmp_path, "configuration.yaml", """\
-        automation a: !include_dir_merge_list one
-        automation b: !include_dir_merge_list two
-    """)
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x"})
-    assert not res.ok
-    assert res.message == yi.MSG_CREATE_MULTI.format(domain="automation")
+def test_create_through_a_labeled_editor_include(tmp_path):
+    write(tmp_path, "configuration.yaml", "script ui: !include scripts.yaml\n")
+    res = yi.perform_create(str(tmp_path), "script", "hello", {"sequence": []})
+    assert res.ok and res.file.endswith("scripts.yaml")
+    assert yaml.safe_load(read(tmp_path, "scripts.yaml")) == {"hello": {"sequence": []}}
 
 
-def test_create_no_route_refuses(tmp_path):
-    write(tmp_path, "configuration.yaml", "sensor: !include sensors.yaml\n")
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x"})
-    assert not res.ok
-    assert res.message == yi.MSG_CREATE_NO_ROUTE.format(domain="automation")
+@pytest.mark.parametrize("domain,configuration,directory", [
+    pytest.param("automation", "automation: !include_dir_list automations\n", "automations", id="dir-list"),
+    pytest.param("automation", "automation: !include_dir_merge_list automations\n", "automations", id="dir-merge-list"),
+    pytest.param("script", "script: !include_dir_named scripts\n", "scripts", id="dir-named"),
+    pytest.param("script", "script: !include_dir_merge_named scripts\n", "scripts", id="dir-merge-named"),
+    pytest.param("automation", "automation a: !include_dir_merge_list one\nautomation b: !include_dir_merge_list two\n",
+                 "one", id="two-directories"),
+    pytest.param("automation", "automation: !include_dir_merge_list automations\n", None, id="missing-directory"),
+    pytest.param("scene", "scene: !include my_scenes.yaml\n", None, id="another-file"),
+    pytest.param("scene", "scene:\n  - id: s\n    name: S\n    entities: {}\n", None, id="inline"),
+    pytest.param("script", "homeassistant:\n  packages: {}\n", None, id="packages-only"),
+    pytest.param("automation", "sensor: !include sensors.yaml\n", None, id="unrouted"),
+])
+def test_create_refuses_without_the_editor_file(tmp_path, domain, configuration, directory):
+    """A create goes only to the editor file a plain !include in configuration.yaml loads.
 
-
-def test_create_filename_collision_refuses(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
-    write(tmp_path, "automations/phoenix_mcp_x.yaml", "- id: other\n")
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x"})
-    assert not res.ok and res.error_kind == "io_error"
-    assert "phoenix_mcp_x.yaml" in res.message
-
-
-def test_create_missing_dir_refuses(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
-    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x"})
-    assert not res.ok and res.error_kind == "io_error"
-
-
-def test_create_filename_sanitized(tmp_path):
-    write(tmp_path, "configuration.yaml", "automation: !include_dir_list automations\n")
-    (tmp_path / "automations").mkdir()
-    res = yi.perform_create(str(tmp_path), "automation", "Weird ID!", {"id": "Weird ID!"})
-    assert res.ok and res.file.endswith("phoenix_mcp_weird_id.yaml")
+    No file is created anywhere else, the editor file is not created behind
+    configuration.yaml's back, and the pre-approval check gives the same answer.
+    """
+    write(tmp_path, "configuration.yaml", configuration)
+    if directory:
+        (tmp_path / directory).mkdir()
+    before = snapshot(tmp_path)
+    expected = yi.MSG_CREATE_NO_ROUTE.format(domain=domain, editor=_EDITOR[domain])
+    config = {
+        "automation": {"id": "phoenix_mcp_x", "alias": "X"},
+        "scene": {"id": "phoenix_mcp_x", "name": "X", "entities": {}},
+        "script": {"sequence": []},
+    }[domain]
+    results = [
+        yi.write_target_refusal(str(tmp_path), domain, "phoenix_mcp_x", create=True),
+        yi.perform_create(str(tmp_path), domain, "phoenix_mcp_x", config),
+    ]
+    if domain == "automation":
+        results.append(yi.automation_write(
+            str(tmp_path), "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"}, True, None, False, True))
+    for res in results:
+        assert res is not None and not res.ok and res.error_kind == "refused"
+        assert res.message == expected
+    assert snapshot(tmp_path) == before
+    if directory:
+        assert list((tmp_path / directory).iterdir()) == []
 
 
 def test_create_script_proceeds_when_packages_present(tmp_path):
@@ -1018,39 +1040,48 @@ def test_oracle_against_ha_loader(tmp_path):
     from homeassistant.util.yaml import Secrets, load_yaml
 
     write(tmp_path, "configuration.yaml", """\
-        automation: !include_dir_merge_list automations
+        automation: !include automations.yaml
+        automation manual: !include_dir_merge_list automations
         script: !include_dir_merge_named scripts
     """)
     write(tmp_path, "secrets.yaml", "p: hunter2\n")
+    write(tmp_path, "automations.yaml", "- id: ui\n  alias: UI\n")
     write(tmp_path, "automations/a.yaml", "- id: one\n  alias: One\n")
     write(tmp_path, "automations/b.yaml", "- id: two\n  alias: Two\n  password: !secret p\n")
     write(tmp_path, "automations/.hidden.yaml", "- id: hidden\n")
     write(tmp_path, "scripts/pack.yaml", "hello:\n  sequence: []\n")
 
+    def ha_automations() -> dict:
+        resolved = load_yaml(str(tmp_path / "configuration.yaml"), Secrets(tmp_path))
+        merged = list(resolved["automation"]) + list(resolved["automation manual"])
+        return {a["id"]: a for a in merged}
+
     resolved = load_yaml(str(tmp_path / "configuration.yaml"), Secrets(tmp_path))
-    ha_automation_ids = [a["id"] for a in resolved["automation"]]
     ha_script_ids = list(resolved["script"])
 
     # Every entry HA resolves is locatable by Phoenix MCP, and nothing more.
-    for entry_id in ha_automation_ids:
+    for entry_id in ha_automations():
         assert yi.read_entry(str(tmp_path), "automation", entry_id) is not None
     assert yi.read_entry(str(tmp_path), "automation", "hidden") is None
     for entry_id in ha_script_ids:
         assert yi.read_entry(str(tmp_path), "script", entry_id) is not None
 
-    # A routed create is visible to HA's loader afterwards.
+    # A routed create lands in the editor file and is visible to HA's loader.
     res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_new", {"id": "phoenix_mcp_new", "alias": "New"})
-    assert res.ok
-    resolved = load_yaml(str(tmp_path / "configuration.yaml"), Secrets(tmp_path))
-    assert "phoenix_mcp_new" in [a["id"] for a in resolved["automation"]]
+    assert res.ok and res.file.endswith("automations.yaml")
+    assert "phoenix_mcp_new" in ha_automations()
 
     # A splice edit is invisible to HA's loader except for the intended change.
-    res = yi.perform_edit(str(tmp_path), "automation", "one", {"id": "one", "alias": "One v2"})
+    res = yi.perform_edit(str(tmp_path), "automation", "ui", {"id": "ui", "alias": "UI v2"})
     assert res.ok
-    resolved = load_yaml(str(tmp_path / "configuration.yaml"), Secrets(tmp_path))
-    by_id = {a["id"]: a for a in resolved["automation"]}
-    assert by_id["one"]["alias"] == "One v2"
+    by_id = ha_automations()
+    assert by_id["ui"]["alias"] == "UI v2"
     assert by_id["two"] == {"id": "two", "alias": "Two", "password": "hunter2"}
+
+    # A hand-written entry HA loads is refused, and HA still loads it unchanged.
+    res = yi.perform_edit(str(tmp_path), "automation", "one", {"id": "one", "alias": "One v2"})
+    assert not res.ok and res.message == hand_written("automation", "automations.yaml", "a.yaml")
+    assert ha_automations()["one"] == {"id": "one", "alias": "One"}
 
 
 # ---------------------------------------------------------------------------

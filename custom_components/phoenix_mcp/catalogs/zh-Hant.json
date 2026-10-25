@@ -358,10 +358,6 @@
       "delete_automation.title": "刪除自動化「{automation_id}」",
       "delete_entity.body": "這將刪除 {entity_id} 的實體登錄檔條目。其整合稍後可能會重新建立該實體。",
       "delete_entity.title": "刪除 {entity_id} 的登錄檔條目",
-      "delete_esphome_yaml.body": "這將永久刪除 {rel}。ESPHome 裝置本身不會被更改。",
-      "delete_esphome_yaml.device.body": "這將永久刪除 {rel}。ESPHome 裝置 {device} 本身不會被更改。",
-      "delete_esphome_yaml.device.title": "刪除 ESPHome 裝置設定 {rel}（{device}）",
-      "delete_esphome_yaml.title": "刪除 ESPHome 裝置設定 {rel}",
       "delete_helper.body": "這將永久刪除輔助工具 {helper_id}。",
       "delete_helper.title": "刪除 {helper_type} 輔助項目「{helper_id}」",
       "delete_scene.body": "這將永久刪除場景 {scene_id}。",
@@ -485,18 +481,8 @@
       "patch_dashboard.remove.title": "更新儀表板「{label}」",
       "patch_dashboard.set.body": "這將更新 Home Assistant 儀表板設定。開啟詳細資訊可檢視具體更改內容。",
       "patch_dashboard.set.title": "更新儀表板「{label}」",
-      "patch_yaml_config.append.body": "開啟詳細資訊可檢視具體更改內容。",
-      "patch_yaml_config.append.title": "向 {file} 新增設定",
-      "patch_yaml_config.remove.body": "這將從 {file} 中移除設定。開啟詳細資訊可檢視具體更改內容。",
-      "patch_yaml_config.remove.title": "從 {file} 刪除設定",
-      "patch_yaml_config.set.body": "開啟詳細資訊可檢視具體更改內容。",
-      "patch_yaml_config.set.title": "設定 {file} 中的配置",
       "remove_device.body": "這將從所屬整合中移除 {device_id}。可能需要重新新增該裝置。",
       "remove_device.title": "從設定條目 {config_entry_id} 移除裝置 {device_id}",
-      "rename_esphome_device.body": "這將重新命名 {device}、編譯其設定並刷寫裝置。更新期間請勿斷開裝置連線。",
-      "rename_esphome_device.services.body": "這將重新命名 {device}、更新其操作服務、編譯設定並刷寫裝置。更新期間請勿斷開裝置連線。",
-      "rename_esphome_device.services.title": "將 ESPHome 裝置 {device} 重新命名為 {new_name}，同時重新命名 {count} 個動作服務",
-      "rename_esphome_device.title": "將 ESPHome 裝置 {device} 重新命名為 {new_name}",
       "restart_ha.body": "Home Assistant 重新啟動期間將暫時不可用。",
       "restart_ha.title": "重新啟動 Home Assistant",
       "set_dashboard_config.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
@@ -505,23 +491,9 @@
       "set_device.title": "更新 {device_id} 的裝置註冊表後設資料（{fields}）",
       "set_entity.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
       "set_entity.title": "更新 {entity_id} 的登錄檔後設資料（{fields}）",
-      "set_esphome_yaml.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
-      "set_esphome_yaml.device.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
-      "set_esphome_yaml.device.title": "編輯 ESPHome 裝置設定 {rel}（{device}，{count} 個實體）",
-      "set_esphome_yaml.title": "編輯 ESPHome 裝置設定 {rel}",
-      "set_yaml_config.body": "這將替換 {file} 的全部內容。開啟詳細資訊可檢視具體更改內容。",
-      "set_yaml_config.removing.body": "這將替換 {file} 的全部內容並移除設定。開啟詳細資訊可檢視具體更改內容。",
-      "set_yaml_config.removing.title": "更新 {file}",
-      "set_yaml_config.removing_entries.body": "這將替換 {file} 的全部內容並移除 {count} 個條目。開啟詳細資訊可檢視具體更改內容。",
-      "set_yaml_config.removing_entries.title": "更新 {file}",
-      "set_yaml_config.removing_entry.body": "這將替換 {file} 的全部內容並移除一個條目。開啟詳細資訊可檢視具體更改內容。",
-      "set_yaml_config.removing_entry.title": "更新 {file}",
-      "set_yaml_config.title": "更新 {file}",
       "view.defaultAria": "核准列表和模態框的預設檢視",
       "view.details": "詳細資訊",
       "view.summary": "摘要",
-      "write_file.body": "這將寫入 {path}。該路徑下的現有內容可能會被替換。",
-      "write_file.title": "寫入檔案「{path}」",
       "zigbee_binding.body": "這將更改兩個 Zigbee 裝置之間的直接控制。請在詳細資訊中檢視兩個裝置和所選叢集。",
       "zigbee_binding.devices.body": "這將 {operation} 從 {source} 到 {target} 的直接 Zigbee 控制。請在詳細資訊中檢視確切關係。",
       "zigbee_binding.devices.title": "{operation} 從 {source} 到 {target} 的 Zigbee 繫結",
@@ -763,12 +735,12 @@
         "label": "ESPHome 韌體刷寫"
       },
       "cap_esphome_yaml": {
-        "description": "在 esphome/ 下的獨立沙箱中讀取和編輯 ESPHome 裝置 YAML，並進行校驗和編譯。憑據在讀取時會被隱藏，且無法修改。編譯只會生成韌體檔案；刷寫裝置需要單獨的「ESPHome 韌體刷寫」能力。",
+        "description": "在 esphome/ 下的獨立沙箱中讀取 ESPHome 裝置 YAML，並進行校驗和編譯。憑據在讀取時會被隱藏。編譯只會生成韌體檔案；刷寫裝置需要單獨的「ESPHome 韌體刷寫」能力。",
         "label": "ESPHome 裝置 YAML"
       },
       "cap_filesystem": {
-        "description": "讀寫 www/、themes/ 和 custom_templates/ 下的檔案。",
-        "label": "檔案系統存取"
+        "description": "讀取 www/、themes/ 和 custom_templates/ 下的檔案。",
+        "label": "讀取檔案"
       },
       "cap_helper_write": {
         "description": "建立、編輯和刪除輔助項目，例如輸入、計數器和計時器。",
@@ -839,8 +811,8 @@
         "label": "自動化追蹤"
       },
       "cap_yaml_edit": {
-        "description": "直接讀取和編輯 configuration.yaml 及其載入的 YAML 檔案。強烈建議要求核准。檔案中的內聯敏感資訊會暴露，因此請使用 !secret 將敏感資訊存放在 secrets.yaml 中。",
-        "label": "直接編輯 YAML"
+        "description": "讀取 configuration.yaml 及設定目錄中的其他 YAML 檔案，檢查設定，並重新載入在 YAML 中定義的網域。檔案中的內聯敏感資訊會暴露，因此請使用 !secret 將敏感資訊存放在 secrets.yaml 中。",
+        "label": "YAML 設定"
       },
       "confirmUnavailable": "此能力不支援要求核准。",
       "esphomeBadgeTitle": "在載入項可用之前，ESPHome 工具對此存取金鑰保持隱藏。但現在仍可先設定該能力。",
@@ -990,8 +962,6 @@
       "dashboard_card.edit.section": "替換儀表板「{label}」中的第 {card_index} 個卡片（第 {view_index} 個檢視，第 {section_index} 個分割槽）",
       "delete_automation": "刪除自動化「{automation_id}」",
       "delete_entity": "刪除 {entity_id} 的登錄檔條目",
-      "delete_esphome_yaml": "刪除 ESPHome 裝置設定 {rel}。裝置本身不會受到影響。",
-      "delete_esphome_yaml.device": "刪除 ESPHome 裝置設定 {rel}（{device}）。裝置本身不會受到影響。",
       "delete_helper": "刪除 {helper_type} 輔助項目「{helper_id}」",
       "delete_scene": "刪除場景「{scene_id}」",
       "delete_script": "刪除腳本「{script_id}」",
@@ -1027,23 +997,11 @@
       "patch_dashboard.append": "向儀表板「{label}」的 {path} 追加內容",
       "patch_dashboard.remove": "從儀表板「{label}」刪除 {path}",
       "patch_dashboard.set": "設定儀表板「{label}」的 {path}",
-      "patch_yaml_config.append": "向 {file} 中的 {path} 追加內容",
-      "patch_yaml_config.remove": "從 {file} 刪除 {path}",
-      "patch_yaml_config.set": "設定 {file} 中的 {path}",
       "remove_device": "從設定條目 {config_entry_id} 移除裝置 {device_id}",
-      "rename_esphome_device": "將 ESPHome 裝置 {device} 重新命名為 {new_name}。此操作會編譯並刷寫該裝置。",
-      "rename_esphome_device.services": "將 ESPHome 裝置 {device} 重新命名為 {new_name}，同時重新命名 {count} 個動作服務。此操作會編譯並刷寫該裝置。",
       "restart_ha": "重新啟動 Home Assistant",
       "set_dashboard_config": "設定儀表板「{label}」的佈局",
       "set_device": "更新 {device_id} 的裝置註冊表後設資料（{fields}）",
       "set_entity": "更新 {entity_id} 的登錄檔後設資料（{fields}）",
-      "set_esphome_yaml": "編輯 ESPHome 裝置設定 {rel}。此操作不會刷寫裝置。",
-      "set_esphome_yaml.device": "編輯 ESPHome 裝置設定 {rel}（{device}，{count} 個實體）。此操作不會刷寫裝置。",
-      "set_yaml_config": "替換 {file}",
-      "set_yaml_config.removing": "替換 {file}，移除頂層 {keys}",
-      "set_yaml_config.removing_entries": "替換 {file}，移除 {count} 個條目",
-      "set_yaml_config.removing_entry": "替換 {file}，移除 1 個條目",
-      "write_file": "寫入檔案「{path}」",
       "zigbee_binding": "更改 Zigbee 裝置繫結",
       "zigbee_binding.devices": "{operation} 從 {source} 到 {target} 的 Zigbee 繫結",
       "zigbee_group": "更改 Zigbee 組",
@@ -1420,11 +1378,11 @@
         "label": "自定義"
       },
       "dashboard_designer": {
-        "description": "可發現實體並搭建儀表板。主題和自定義卡片檔案需要核准。不能控制裝置，也不能修改其他設定。",
+        "description": "可發現實體、搭建儀表板，並讀取主題和自定義卡片檔案。註冊自定義卡片檔案需要核准。不能控制裝置，也不能修改其他設定。",
         "label": "儀表板設計者"
       },
       "esphome": {
-        "description": "讀取 ESPHome 裝置的狀態、診斷資訊和日誌。編輯裝置 YAML 和刷寫韌體均需核准。YAML 中的憑據保持隱藏且無法修改。不能控制裝置，也不能修改其他設定。",
+        "description": "讀取 ESPHome 裝置的狀態、診斷資訊、日誌和裝置 YAML，並進行校驗和編譯。刷寫韌體需要核准。YAML 中的憑據保持隱藏。不能控制裝置，也不能修改其他設定。",
         "label": "ESPHome 裝置"
       },
       "helper": "角色決定初始的能力設定。您可以在「高階」中逐項調整。當您的設定不再與任何預設匹配時，角色會自動變為「自定義」。",
@@ -1442,7 +1400,7 @@
       },
       "noEsphome": "未在此系統上檢測到 ESPHome",
       "power_user": {
-        "description": "可讀取和修改大部分設定，並可重新啟動 Home Assistant。敏感的系統變更需要核准。檔案系統存取和直接編輯 YAML 仍被禁止。",
+        "description": "可讀取和修改大部分設定，並可重新啟動 Home Assistant。敏感的系統變更需要核准。檔案和 YAML 設定存取仍被禁止。",
         "label": "高階使用者"
       },
       "read_only": {

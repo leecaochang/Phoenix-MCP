@@ -19,7 +19,6 @@ import logging
 import os
 from typing import Any
 
-from homeassistant.util.file import write_utf8_file_atomic as _write_utf8_file_atomic
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
@@ -620,12 +619,11 @@ async def _record_version(
 
 
 def _version_content_payload(content: str | None, **extra: Any) -> dict | None:
-    """Build a before/after payload for raw file / configuration.yaml version capture.
+    """Build a before/after payload for a raw-text version, such as a blueprint source.
 
-    Content within MAX_DIFF_INLINE_BYTES is stored verbatim (raw, like other
-    version records, so an admin restore is byte-faithful); larger content is a
-    non-restorable metadata marker, bounding .storage growth. Returns None when
-    there was no prior content (a fresh create).
+    Content within MAX_DIFF_INLINE_BYTES is stored verbatim, like other version
+    records; larger content is a non-restorable metadata marker, bounding
+    .storage growth. Returns None when there was no prior content (a fresh create).
     """
     if content is None:
         return None
@@ -656,11 +654,6 @@ def _read_text_capped(target: str) -> str:
         raise ValueError("file too large")
     with open(target, "r", encoding="utf-8", newline="") as f:
         return f.read()
-
-
-def _write_text_atomic(target: str, content: str) -> None:
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    _write_utf8_file_atomic(target, content)
 
 
 def _cas_conflict(
@@ -695,31 +688,6 @@ def _cas_conflict(
         "invalid_request",
         tool_name,
     )
-
-
-async def _text_file_cas_conflict(
-    expected: Any, path: str | None, hass: HomeAssistant, tool_name: str
-) -> tuple[dict, str, str] | None:
-    """Pre-gate CAS check for a raw-text-file writer (set_yaml_config, write_file).
-
-    Reads the target's current text (an absent or unreadable file counts as "",
-    matching what its read tool reports) and refuses if it does not hash to
-    expected_hash. Skips the read entirely when expected_hash is absent.
-    """
-    if not expected:
-        return None
-    current = ""
-    # Two separate executor calls: async_add_executor_job is generic over the
-    # callable's return type, so one combined expression would make the type
-    # checker bind a single variable to two differently-typed callables.
-    if path:
-        exists = await hass.async_add_executor_job(os.path.isfile, path)
-        if exists:
-            try:
-                current = await hass.async_add_executor_job(_read_text_capped, path)
-            except (OSError, ValueError):
-                current = ""
-    return _cas_conflict(expected, current, tool_name)
 
 
 def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:

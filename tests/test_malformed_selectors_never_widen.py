@@ -64,13 +64,3 @@ async def test_restart_through_call_service_leaves_the_restart_receipt(hass):
     assert body["status"] == "dispatched" and body["retry_safe"] is False
     assert data.config_recovery.get(body["recovery_id"])["before"]["snapshot_type"] == "restart_receipt"
     call.assert_awaited_once()
-
-
-async def test_a_failed_recovery_snapshot_reports_that_nothing_was_written(hass):
-    from custom_components.phoenix_mcp.tools.config_files import _execute_write_file
-    data = _data()
-    with patch.object(data.config_recovery, "begin", AsyncMock(side_effect=OSError("disk full"))):
-        result = await _execute_write_file({"path": "www/new.txt", "content": "x"},
-                                           _key(cap_filesystem="allow"), hass, data)
-    assert result[1] == "invalid_request"
-    assert "nothing was written" in result[0]["content"][0]["text"]

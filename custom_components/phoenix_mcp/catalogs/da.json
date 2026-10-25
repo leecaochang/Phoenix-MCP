@@ -568,10 +568,6 @@
       "delete_calendar_event.title": "Slet kalenderbegivenhed",
       "delete_entity.body": "Dette sletter registerposten for {entity_id}. Entiteten kan senere genskabes af sin integration.",
       "delete_entity.title": "Slet registerposten for {entity_id}",
-      "delete_esphome_yaml.body": "Dette sletter {rel} permanent. Selve ESPHome-enheden ændres ikke.",
-      "delete_esphome_yaml.device.body": "Dette sletter {rel} permanent. Selve ESPHome-enheden {device} ændres ikke.",
-      "delete_esphome_yaml.device.title": "Slet ESPHome-enhedskonfigurationen {rel} ({device})",
-      "delete_esphome_yaml.title": "Slet ESPHome-enhedskonfiguration {rel}",
       "delete_helper.body": "Dette sletter hjælperen {helper_id} permanent.",
       "delete_helper.title": "Slet {helper_type}-hjælper '{helper_id}'",
       "delete_scene.body": "Dette sletter scenen {scene_id} permanent.",
@@ -703,18 +699,8 @@
       "patch_dashboard.remove.title": "Opdatér betjeningspanelet '{label}'",
       "patch_dashboard.set.body": "Dette opdaterer betjeningspanelets konfiguration i Home Assistant. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
       "patch_dashboard.set.title": "Opdatér betjeningspanelet '{label}'",
-      "patch_yaml_config.append.body": "Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "patch_yaml_config.append.title": "Føj konfiguration til {file}",
-      "patch_yaml_config.remove.body": "Dette fjerner konfiguration fra {file}. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "patch_yaml_config.remove.title": "Fjern konfiguration fra {file}",
-      "patch_yaml_config.set.body": "Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "patch_yaml_config.set.title": "Angiv konfiguration i {file}",
       "remove_device.body": "Dette fjerner {device_id} fra dens integration. Enheden skal måske tilføjes igen.",
       "remove_device.title": "Fjern {device_id} fra konfigurationsposten {config_entry_id}",
-      "rename_esphome_device.body": "Dette omdøber {device}, kompilerer dens konfiguration og flasher enheden. Afbryd den ikke under opdateringen.",
-      "rename_esphome_device.services.body": "Dette omdøber {device}, opdaterer dens handlingstjenester, kompilerer dens konfiguration og flasher enheden. Afbryd den ikke under opdateringen.",
-      "rename_esphome_device.services.title": "Omdøb ESPHome-enheden {device} til {new_name}, og omdøb {count} handlingstjeneste(r)",
-      "rename_esphome_device.title": "Omdøb ESPHome-enheden {device} til {new_name}",
       "restart_ha.body": "Home Assistant vil være kortvarigt utilgængeligt, mens det genstarter.",
       "restart_ha.title": "Genstart Home Assistant",
       "set_dashboard_config.body": "Dette anvender den foreslåede konfigurationsændring. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
@@ -723,18 +709,6 @@
       "set_device.title": "Opdatér metadata i enhedsregistret ({fields}) for {device_id}",
       "set_entity.body": "Dette anvender den foreslåede konfigurationsændring. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
       "set_entity.title": "Opdatér metadata i registret ({fields}) for {entity_id}",
-      "set_esphome_yaml.body": "Dette anvender den foreslåede konfigurationsændring. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_esphome_yaml.device.body": "Dette anvender den foreslåede konfigurationsændring. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_esphome_yaml.device.title": "Redigér konfigurationen for ESPHome-enheden {rel} ({device}, {count} entiteter)",
-      "set_esphome_yaml.title": "Redigér konfigurationen for ESPHome-enheden {rel}",
-      "set_yaml_config.body": "Dette erstatter hele indholdet af {file}. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_yaml_config.removing.body": "Dette erstatter hele indholdet af {file} og fjerner konfiguration. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_yaml_config.removing.title": "Opdatér {file}",
-      "set_yaml_config.removing_entries.body": "Dette erstatter hele indholdet af {file} og fjerner {count} poster. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_yaml_config.removing_entries.title": "Opdatér {file}",
-      "set_yaml_config.removing_entry.body": "Dette erstatter hele indholdet af {file} og fjerner én post. Åbn Detaljer for at gennemgå den præcise foreslåede ændring.",
-      "set_yaml_config.removing_entry.title": "Opdatér {file}",
-      "set_yaml_config.title": "Opdatér {file}",
       "targets.dynamicAccessible": "Tilgængelige enheder bestemmes igen ved udførelsen og kan være ændret.",
       "targets.exact": "Denne godkendelse dækker de entiteter, der er angivet i Detaljer. Ændrede mål kræver en ny anmodning.",
       "targets.futureNative": "Home Assistant bestemmer fremtidige mål, når denne konfiguration kører. Medlemskabet kan ændre sig, og senere udførelse ligger uden for Phoenix-tilladelses- og MESA-kontroller.",
@@ -743,8 +717,6 @@
       "view.defaultAria": "Standardvisning for godkendelse",
       "view.details": "Detaljer",
       "view.summary": "Oversigt",
-      "write_file.body": "Dette skriver til {path}. Eksisterende indhold på den sti kan blive erstattet.",
-      "write_file.title": "Skriv filen '{path}'",
       "zigbee_binding.body": "Dette ændrer den direkte styring mellem to Zigbee-enheder. Åbn Detaljer for at gennemgå begge enheder og de valgte klynger.",
       "zigbee_binding.devices.body": "Dette udfører handlingen {operation} på den direkte Zigbee-styring fra {source} til {target}. Åbn Detaljer for at gennemgå det præcise forhold.",
       "zigbee_binding.devices.title": "Zigbee-binding fra {source} til {target}: {operation}",
@@ -987,12 +959,12 @@
         "label": "Flashning af ESPHome-firmware"
       },
       "cap_esphome_yaml": {
-        "description": "Læs og redigér YAML for ESPHome-enheder i den isolerede mappe under esphome/, validér den, og kompilér den. Legitimationsoplysninger maskeres ved læsning og kan ikke ændres. Kompilering bygger kun en binær fil; flashing af en enhed kræver den separate funktion til flashning af ESPHome-firmware.",
+        "description": "Læs YAML for ESPHome-enheder i den isolerede mappe under esphome/, validér den, og kompilér den. Legitimationsoplysninger maskeres ved læsning. Kompilering bygger kun en binær fil; flashing af en enhed kræver den separate funktion til flashning af ESPHome-firmware.",
         "label": "YAML for ESPHome-enhed"
       },
       "cap_filesystem": {
-        "description": "Læs og skriv filer under www/, themes/ og custom_templates/.",
-        "label": "Adgang til filsystem"
+        "description": "Læs filer under www/, themes/ og custom_templates/.",
+        "label": "Læs filer"
       },
       "cap_helper_write": {
         "description": "Opret, redigér og slet hjælpere såsom input, tællere og timere.",
@@ -1063,8 +1035,8 @@
         "label": "Automatiseringsspor"
       },
       "cap_yaml_edit": {
-        "description": "Læs og redigér configuration.yaml og de YAML-filer, den indlæser direkte. Godkendelse anbefales kraftigt. Indlejrede hemmeligheder eksponeres, så gem hemmeligheder i secrets.yaml med !secret.",
-        "label": "Redigér rå YAML"
+        "description": "Læs configuration.yaml og de øvrige YAML-filer i konfigurationsmappen, tjek konfigurationen, og genindlæs domæner, der er defineret i YAML. Indlejrede hemmeligheder eksponeres, så gem hemmeligheder i secrets.yaml med !secret.",
+        "label": "YAML-konfiguration"
       },
       "confirmUnavailable": "Denne funktion kan ikke kræve godkendelse.",
       "esphomeBadgeTitle": "ESPHome-værktøjerne forbliver skjult for denne adgangsnøgle, indtil tilføjelsesprogrammet er tilgængeligt. Funktionen kan stadig angives nu.",
@@ -1391,8 +1363,6 @@
       "delete_automation": "Slet automatisering '{automation_id}'",
       "delete_calendar_event": "Slet kalenderbegivenhed",
       "delete_entity": "Slet registerposten for {entity_id}",
-      "delete_esphome_yaml": "Slet ESPHome-enhedskonfigurationen {rel}. Selve enheden berøres ikke.",
-      "delete_esphome_yaml.device": "Slet ESPHome-enhedskonfigurationen {rel} ({device}). Selve enheden berøres ikke.",
       "delete_helper": "Slet {helper_type}-hjælper '{helper_id}'",
       "delete_scene": "Slet scene '{scene_id}'",
       "delete_script": "Slet script '{script_id}'",
@@ -1432,24 +1402,12 @@
       "patch_dashboard.multi": "Anvend {count} ændringer på betjeningspanel '{label}'",
       "patch_dashboard.remove": "Fjern {path} fra betjeningspanel '{label}'",
       "patch_dashboard.set": "Angiv {path} på betjeningspanel '{label}'",
-      "patch_yaml_config.append": "Føj til {path} i {file}",
-      "patch_yaml_config.remove": "Fjern {path} fra {file}",
-      "patch_yaml_config.set": "Angiv {path} i {file}",
       "remove_device": "Fjern {device_id} fra konfigurationsposten {config_entry_id}",
-      "rename_esphome_device": "Omdøb ESPHome-enheden {device} til {new_name}. Dette kompilerer og flasher enheden.",
-      "rename_esphome_device.services": "Omdøb ESPHome-enheden {device} til {new_name}, og omdøb {count} handlingsservice(r). Dette kompilerer og flasher enheden.",
       "restart_ha": "Genstart Home Assistant",
       "set_dashboard_config": "Angiv layout for betjeningspanel '{label}'",
       "set_device": "Opdatér metadata i enhedsregistret ({fields}) for {device_id}",
       "set_entity": "Opdatér metadata i registret ({fields}) for {entity_id}",
-      "set_esphome_yaml": "Redigér ESPHome-enhedskonfigurationen {rel}. Dette flasher ikke enheden.",
-      "set_esphome_yaml.device": "Redigér ESPHome-enhedskonfigurationen {rel} ({device}, {count} entiteter). Dette flasher ikke enheden.",
-      "set_yaml_config": "Erstat {file}",
-      "set_yaml_config.removing": "Erstat {file}, og fjern {keys} på øverste niveau",
-      "set_yaml_config.removing_entries": "Erstat {file}, og fjern {count} poster",
-      "set_yaml_config.removing_entry": "Erstat {file}, og fjern 1 post",
       "update_calendar_event": "Opdatér kalenderbegivenhed",
-      "write_file": "Skriv filen '{path}'",
       "zigbee_binding": "Ændr en Zigbee-enhedsbinding",
       "zigbee_binding.devices": "Zigbee-binding fra {source} til {target}: {operation}",
       "zigbee_group": "Ændr en Zigbee-gruppe",
@@ -1817,11 +1775,11 @@
         "label": "Brugerdefineret"
       },
       "dashboard_designer": {
-        "description": "Kan finde entiteter og bygge betjeningspaneler. Tema- og brugerdefinerede kortfiler kræver godkendelse. Kan ikke styre enheder eller redigere anden konfiguration.",
+        "description": "Kan finde entiteter, bygge betjeningspaneler og læse tema- og brugerdefinerede kortfiler. Registrering af brugerdefinerede kortfiler kræver godkendelse. Kan ikke styre enheder eller redigere anden konfiguration.",
         "label": "Betjeningspanel-designer"
       },
       "esphome": {
-        "description": "Læser ESPHome-enhedsstatus, diagnostik og logfiler. Redigering af enheds-YAML og flashing af firmware kræver hver især godkendelse. YAML-legitimationsoplysninger forbliver skjulte og kan ikke ændres. Ingen enhedsstyring eller anden konfiguration.",
+        "description": "Læser ESPHome-enhedsstatus, diagnostik, logfiler og enheds-YAML og validerer og kompilerer den. Flashing af firmware kræver godkendelse. YAML-legitimationsoplysninger forbliver skjulte. Ingen enhedsstyring eller anden konfiguration.",
         "label": "ESPHome-enheder"
       },
       "helper": "En persona fastlægger de oprindelige funktioner. Du kan justere enkelte funktioner under Avanceret. Personaen skifter til Brugerdefineret, når dine indstillinger ikke længere matcher en forudindstilling.",
@@ -1844,7 +1802,7 @@
       },
       "noEsphome": "ESPHome blev ikke fundet på dette system",
       "power_user": {
-        "description": "Kan læse og redigere det meste af konfigurationen og genstarte Home Assistant. Følsomme systemændringer kræver godkendelse. Adgang til filsystem og rå YAML forbliver blokeret.",
+        "description": "Kan læse og redigere det meste af konfigurationen og genstarte Home Assistant. Følsomme systemændringer kræver godkendelse. Adgang til filer og YAML-konfiguration forbliver blokeret.",
         "label": "Avanceret bruger"
       },
       "read_only": {

@@ -2,13 +2,12 @@
 
 An argument a handler acts on but the `inputSchema` never declares is invisible
 to the caller, and a client that validates against the schema cannot send it at
-all, which no server leniency reaches. A removal guard that tells the agent to
-pass `remove_entries` is useless if the schema omits it.
+all, which no server leniency reaches. A refusal that tells the agent to pass an
+argument is useless if the schema omits it.
 
-The walk is per MODULE, not per tool, deliberately. Arguments are read far from
-the handler that received them (`remove_entries` is read in
-`_declared_entry_removals`, called through helpers from `_tool_set_yaml_config`),
-so attributing a read to one tool would need dataflow analysis. Comparing the
+The walk is per MODULE, not per tool, deliberately. Arguments are often read far
+from the handler that received them, in a helper several calls down, so
+attributing a read to one tool would need dataflow analysis. Comparing the
 union a module reads with the union its tools declare is coarser but answers the
 question that matters: is this argument published ANYWHERE.
 
@@ -95,7 +94,6 @@ NORMALIZED_ARGS = {
     "mcp_view.py": {"add_aliases", "add_labels", "area_id", "categories", "context_id", "detailed", "device_class", "domain", "fields", "hidden", "icon", "new_entity_id", "remove_aliases", "remove_labels", "service_data", "title", "use_device_name"},
     "discovery.py": {"area_id", "service_data"},
     "energy.py": {"device_name", "name", "new_statistic", "op", "source_type", "statistic"},
-    "config_files.py": {"op"},
     "lovelace.py": {"op", "path", "value"},
 }
 
@@ -174,7 +172,6 @@ def test_catalog_v2_removes_retired_flat_public_fields():
         "get_logbook": {"entity_ids", "device_ids", "context_id"},
         "get_esphome_job": {"job_id", "file"},
         "edit_energy_config": {"op", "statistic", "device_name", "new_statistic", "source_type"},
-        "patch_yaml_config": {"key", "path", "content", "op"},
         "patch_dashboard": {"url_path", "path", "value", "op"},
         "set_entity": {"name", "icon", "area_id", "new_entity_id"},
         "set_device": {"name", "area_id", "enabled"},
@@ -363,10 +360,10 @@ def test_the_walk_actually_finds_arguments():
     """
     found = {m.name: _args_read(m) for m in MODULES_WITH_TOOLS}
     assert sum(len(v) for v in found.values()) > 100, found
-    assert "content" in found["config_files.py"]
-    assert "remove_entries" in found["config_files.py"], (
-        "the argument whose omission this test exists for is no longer read; "
-        "if it was removed on purpose, pick another live argument here"
+    assert {"path", "file", "key"} <= found["config_files.py"]
+    assert "expected_hash" in found["lovelace.py"], (
+        "an argument read through helpers is no longer found; if it was removed "
+        "on purpose, pick another live argument here"
     )
 
 

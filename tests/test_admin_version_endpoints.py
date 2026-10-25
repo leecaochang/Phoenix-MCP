@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import json
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminVersionRestoreView,
     PhoenixAdminVersionsView,
     PhoenixAdminVersionView,
 )
-from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.const import DOMAIN, VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.version_store import VersionStore
+from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 
 
 def _data() -> PhoenixData:
@@ -75,19 +77,30 @@ def _hass_exec(data: PhoenixData) -> MagicMock:
 
 
 async def _seed_esphome(data: PhoenixData, before: str | None, after: str | None):
-    return await data.versions.record(
-        resource_type="esphome_yaml", resource_id="dev.yaml", action="edit",
+    """Device YAML history as an upgraded install holds it: loaded from storage, never recorded anew."""
+    stored = VersionRecord(
+        id=uuid.uuid4().hex, resource_type="esphome_yaml", resource_id="dev.yaml",
+        alias="dev.yaml", action="edit",
         before=None if before is None else {"content": before},
         after=None if after is None else {"content": after},
-        alias="dev.yaml", access_key_name="agent")
+        access_key_id=None, access_key_name="agent", request_id=None,
+        approved_by_user_id=None, timestamp=utcnow().isoformat(),
+    )
+    store = MagicMock()
+    store.async_load = AsyncMock(return_value={
+        "version": VERSION_STORAGE_VERSION, "versions": [stored.to_dict()]})
+    store.async_save = AsyncMock()
+    data.versions = VersionStore(store)
+    await data.versions.async_load()
+    return data.versions.get(stored.id)
 
 
 class TestVersionDetailEsphomeMasking:
     """Version detail masks ESPHome credentials in what it serves.
 
-    Without masking, the Changes tab renders credentials in clear text, including a
-    value !phoenix_generate produced that the agent itself never saw. Storage stays
-    raw so a restore is byte-faithful; only what is served to the panel is masked.
+    Stored device YAML history can hold credentials the agent was never allowed to
+    see, and without masking the Changes tab would render them in clear text. The
+    stored record stays as it was loaded; only what is served to the panel is masked.
     """
 
     @pytest.mark.asyncio
@@ -110,7 +123,7 @@ class TestVersionDetailEsphomeMasking:
         assert "name: dev" in body["after"]["content"]
 
     @pytest.mark.asyncio
-    async def test_the_stored_snapshot_is_left_raw_so_restore_stays_byte_faithful(self):
+    async def test_the_stored_snapshot_is_left_raw(self):
         data = _data()
         rec = await _seed_esphome(data, DEVICE_YAML, DEVICE_YAML)
         view = PhoenixAdminVersionView()
@@ -148,29 +161,53 @@ class TestVersionDetailEsphomeMasking:
 
 
 class TestVersionRestoreErrorDetail:
-    @pytest.mark.asyncio
-    async def test_the_executors_own_reason_is_relayed(self):
-        # The executor's own reason is relayed: a fixed string would hide a precise,
-        # actionable failure ("'wifi.ap.password' is a masked credential..."), and
-        # this admin-only surface sits behind an HA session, so there is no caller to
-        # keep in the dark.
-        data = _data()
-        rec = await _seed(data)
-        view = PhoenixAdminVersionRestoreView()
-        view.hass = _hass(data)
+    """The restore endpoint relays the executor's own refusal reason.
+
+    A fixed string would hide a precise, actionable failure, and this admin-only
+    surface sits behind an HA session, so there is no caller to keep in the dark.
+    """
+
+    @staticmethod
+    def _post_request() -> MagicMock:
         req = _request()
         req.content_length = 0
         req.content = MagicMock()
         req.content.read = AsyncMock(side_effect=[b"", b""])
+        return req
 
-        failure = ({"content": [{"type": "text", "text": "'wifi.ap.password' is a masked credential."}],
-                    "isError": True}, "invalid_request", "esphome:dev.yaml")
+    @pytest.mark.asyncio
+    async def test_the_executors_own_reason_is_relayed(self):
+        data = _data()
+        rec = await _seed(data)
+        view = PhoenixAdminVersionRestoreView()
+        view.hass = _hass(data)
+
+        failure = ({"content": [{"type": "text", "text": (
+                        "This automation is defined in hand-written YAML (packages/lights.yaml).")}],
+                    "isError": True}, "invalid_request", "automation:aid1")
         with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version",
                    AsyncMock(return_value=failure)):
-            resp = await view.post(req, version_id=rec.id)
+            resp = await view.post(self._post_request(), version_id=rec.id)
 
         assert resp.status == 400
-        assert "wifi.ap.password" in _body(resp)["message"]
+        assert "packages/lights.yaml" in _body(resp)["message"]
+
+    @pytest.mark.asyncio
+    async def test_a_device_yaml_version_is_refused_with_its_reason(self):
+        # Device YAML history is readable for copying by hand; the real restore path
+        # refuses it, and the endpoint shows that reason instead of a generic failure.
+        data = _data()
+        rec = await _seed_esphome(data, DEVICE_YAML, DEVICE_YAML.replace("Kx9fQ2mVb7", "Zz1yTt8wQq"))
+        view = PhoenixAdminVersionRestoreView()
+        view.hass = _hass(data)
+
+        resp = await view.post(self._post_request(), version_id=rec.id)
+
+        assert resp.status == 400
+        assert _body(resp)["message"].startswith(
+            "This version holds configuration file text, which Phoenix does not write back."
+        )
+        assert [v.id for v in data.versions.list_for("esphome_yaml", "dev.yaml")] == [rec.id]
 
 
 class TestVersionsList:

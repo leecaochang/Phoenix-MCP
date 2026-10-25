@@ -21,6 +21,9 @@ import { tRich } from "../i18n/rich";
 // "content: |-" block, hiding the too-large marker and offering Restore on a
 // snapshot the backend would refuse.
 const RAW_CONTENT_TYPES = new Set(["yaml_config", "file", "esphome_yaml", "blueprint"]);
+// Configuration file versions are history only: their text is shown, but
+// Phoenix never writes it back, so they offer no Restore.
+const HISTORY_ONLY_TYPES = new Set(["yaml_config", "file", "esphome_yaml"]);
 
 /** Extract the raw-text snapshot from a version side, or null. content is null
  * when the snapshot was too large to store (a non-restorable marker). */
@@ -419,8 +422,9 @@ function ChangeDetail(
   // A raw snapshot stored as a too-large marker (content null) is not restorable.
   const beforeRestorable = isRaw ? beforeRaw?.content != null : !!record && record.before != null;
   const afterRestorable = isRaw ? afterRaw?.content != null : !!record && record.after != null;
-  const showBefore = beforeRestorable;
-  const showAfter = afterRestorable && !isLatest;
+  const historyOnly = !!record && HISTORY_ONLY_TYPES.has(record.resource_type);
+  const showBefore = beforeRestorable && !historyOnly;
+  const showAfter = afterRestorable && !isLatest && !historyOnly;
   const rawDiff = isRaw ? diffLines(beforeRaw?.content ?? "", afterRaw?.content ?? "") : null;
   // Structured configs (automation/script/scene/helper/dashboard) get the same
   // red/green line diff as raw files, comparing their YAML renderings.

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 from homeassistant.helpers import entity_registry as er
@@ -99,6 +98,12 @@ def _dashboard_registry_lookup_key(record: dict[str, Any], side: str, snapshot: 
     return str(snapshot["resource_id"])
 
 
+_FILE_RECORD_REFUSED = (
+    "This recovery record holds configuration file text, which Phoenix does not write "
+    "back. Copy the content from the record and apply it by hand."
+)
+
+
 async def _tool_restore_configuration(
     args: dict,
     access_key,
@@ -115,7 +120,7 @@ async def _tool_restore_configuration(
     """
     tool = "restore_configuration"
     if all(effective_cap(access_key, cap) == "deny" for cap in (
-        "cap_helper_write", "cap_energy_write", "cap_yaml_edit", "cap_filesystem",
+        "cap_helper_write", "cap_energy_write",
         "cap_blueprint_write", "cap_lovelace_write", "cap_dashboard_resources",
     )):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
@@ -136,9 +141,7 @@ async def _tool_restore_configuration(
             args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
-        return await _tool_restore_file_configuration(
-            args, record, side, access_key, hass, data, request_id, client_ip,
-        )
+        return _tool_error(_FILE_RECORD_REFUSED), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") == "blueprint_source":
         return await _tool_restore_blueprint_configuration(
             args, record, side, access_key, hass, data, request_id, client_ip,
@@ -217,114 +220,6 @@ async def _tool_restore_configuration(
     if blocked is not None:
         return blocked
     return await _execute_restore_configuration(approval_args, access_key, hass, data)
-
-
-async def _tool_restore_file_configuration(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
-    request_id: str, client_ip: str | None,
-) -> tuple[dict, str, str]:
-    """Preflight a jailed file restore and bind its live content fingerprint."""
-    from .config_files import _authored_file_snapshot
-
-    tool = "restore_configuration"
-    snapshot = record.get(side)
-    if not isinstance(snapshot, dict):
-        return _tool_error("The selected file recovery snapshot is unavailable."), "invalid_request", tool
-    family = snapshot.get("snapshot_type")
-    if family not in ("authored_file", "yaml_file"):
-        return _tool_error("Unsupported file recovery adapter."), "invalid_request", tool
-    want_exists = snapshot.get("exists") is True
-    if (snapshot.get("exists") not in (True, False)
-            or (want_exists and not isinstance(snapshot.get("content"), str))
-            or (not want_exists and snapshot.get("content") is not None)):
-        return _tool_error("The selected file snapshot is malformed."), "invalid_request", tool
-    if family == "yaml_file" and not want_exists:
-        return _tool_error("Restoring an absent YAML include would delete configuration; this inverse is refused."), "invalid_request", tool
-    cap = "cap_yaml_edit" if family == "yaml_file" else "cap_filesystem"
-    if effective_cap(access_key, cap) == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
-    rel, content = snapshot.get("resource_id"), snapshot.get("content")
-    if not isinstance(rel, str) or (want_exists and not isinstance(content, str)):
-        return _tool_error("The selected file snapshot is incomplete."), "invalid_request", tool
-    try:
-        if isinstance(content, str) and len(content.encode("utf-8")) > 1_000_000:
-            raise ConfigurationRecoveryError("File snapshot exceeds the restore size limit.")
-        if family == "yaml_file":
-            from .config_files import _yaml_write_target
-            target = await _yaml_write_target(hass, {"file": rel})
-            if target is None or target[1] != rel:
-                raise ConfigurationRecoveryError("The YAML target is outside its current write jail.")
-            path = target[0]
-        else:
-            from .config_files import _resolve_fs_path
-            fs_path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
-            if fs_path is None:
-                raise ConfigurationRecoveryError("The file target is outside its current write jail.")
-            path = fs_path
-        current_exists = await hass.async_add_executor_job(os.path.isfile, path)
-        current_size = await hass.async_add_executor_job(os.path.getsize, path) if current_exists else 0
-        if current_exists and current_size > 1_000_000:
-            raise ConfigurationRecoveryError("The current file exceeds the restore size limit.")
-        if family == "yaml_file" and rel != "configuration.yaml":
-            from .config_files import _yaml_mount_refusal
-            refusal = await hass.async_add_executor_job(
-                _yaml_mount_refusal, hass.config.config_dir, path, rel, tool,
-            )
-            if refusal is not None:
-                raise ConfigurationRecoveryError("The YAML include target is no longer writable.")
-        if current_exists:
-            from ..tool_common import _read_text_capped
-            current_text = await hass.async_add_executor_job(_read_text_capped, path)
-        else:
-            current_text = None
-        if family == "yaml_file":
-            from .config_files import (
-                _yaml_protected_check, _yaml_removal_check, _yaml_write_precheck,
-            )
-            refusal = _yaml_write_precheck({"content": content}, tool)
-            if refusal is not None:
-                return refusal
-            refusal = await hass.async_add_executor_job(
-                _yaml_protected_check, current_text, content, tool,
-            )
-            if refusal is not None:
-                return refusal
-            if _restore_ctx.get() is None:
-                refusal = await hass.async_add_executor_job(
-                    _yaml_removal_check, current_text, content, {"remove_keys": []}, tool,
-                )
-                if refusal is not None:
-                    return refusal
-        target_snapshot = await hass.async_add_executor_job(_authored_file_snapshot, rel, current_exists, current_text, family)
-        digest, fingerprint = content_hash(snapshot), content_hash(target_snapshot)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - path and persisted-state failures fail closed
-        return _tool_error("The selected file target is not usable."), "invalid_request", tool
-    if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
-        diff = {
-            "kind": "config_diff", "summary": "Restore authored file content",
-            "target": {"type": family, "id": rel, "label": rel},
-            "before": current_text, "after": content if want_exists else None,
-        }
-        return _tool_success(json.dumps({
-            "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
-            "snapshot_digest": digest, "target_fingerprint": fingerprint, "diff": diff,
-        })), "allowed", tool
-    if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
-        return _tool_error("The selected file snapshot or target changed; request a fresh restore receipt."), "invalid_request", tool
-    bound = {"recovery_id": record["id"], "side": side,
-             "snapshot_digest": digest, "target_fingerprint": fingerprint}
-    blocked = await _gate(
-        cap, access_key, hass, data, tool_name=tool, args=bound,
-        request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "config_diff", "summary": "Restore authored file content",
-                      "target": {"type": family, "id": rel, "label": rel},
-                      "before": current_text, "after": content if want_exists else None},
-    )
-    if blocked is not None:
-        return blocked
-    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
 def _blueprint_target_snapshot(domain: str, path: str, content: str | None) -> dict:
@@ -680,7 +575,7 @@ async def _execute_restore_configuration(
 ) -> tuple[dict, str, str]:
     """Revalidate owner, snapshot digest and target fingerprint after approval.
 
-    Then run the adapter for the snapshot type (Energy, file, blueprint, dashboard
+    Then run the adapter for the snapshot type (Energy, blueprint, dashboard
     layout, registry or resource, Template).
     """
     tool = "restore_configuration"
@@ -716,7 +611,7 @@ async def _execute_restore_configuration(
         except Exception:  # noqa: BLE001 - family adapter owns the recovery outcome
             return _tool_error("Energy restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
-        return await _execute_restore_file_configuration(args, record, side, selected, access_key, hass, data)
+        return _tool_error(_FILE_RECORD_REFUSED), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") == "blueprint_source":
         return await _execute_restore_blueprint_configuration(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_layout":
@@ -761,80 +656,6 @@ async def _execute_restore_configuration(
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # noqa: BLE001 - restoration adapter owns the detailed recovery receipt
         return _tool_error("Template restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
-
-
-async def _execute_restore_file_configuration(args, record, side, snapshot, access_key, hass, data):
-    """Revalidate a file adapter, then use its own jailed write transaction."""
-    from .config_files import (
-        _authored_file_snapshot, _get_yaml_file_lock, _recoverable_file_delete, _recoverable_file_write,
-        _resolve_fs_path, _yaml_mount_refusal, _yaml_protected_check,
-        _yaml_removal_check, _yaml_write_target,
-    )
-    from ..tool_common import _read_text_capped
-
-    tool = "restore_configuration"
-    family = snapshot.get("snapshot_type")
-    cap = "cap_yaml_edit" if family == "yaml_file" else "cap_filesystem"
-    if effective_cap(access_key, cap) == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
-    want_exists = snapshot.get("exists") is True
-    if (snapshot.get("exists") not in (True, False)
-            or (want_exists and not isinstance(snapshot.get("content"), str))
-            or (not want_exists and snapshot.get("content") is not None)):
-        return _tool_error("The selected file snapshot is malformed."), "invalid_request", tool
-    if family == "yaml_file" and not want_exists:
-        return _tool_error("Restoring an absent YAML include would delete configuration; this inverse is refused."), "invalid_request", tool
-    rel, content = snapshot.get("resource_id"), snapshot["content"]
-    if family == "yaml_file":
-        target = await _yaml_write_target(hass, {"file": rel})
-        if target is None or target[1] != rel:
-            return _tool_error("The YAML target is outside its current write jail."), "invalid_request", tool
-        path = target[0]
-    else:
-        path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
-        if path is None:
-            return _tool_error("The file target is outside its current write jail."), "invalid_request", tool
-    try:
-        async with _get_yaml_file_lock(hass, rel):
-            exists = await hass.async_add_executor_job(os.path.isfile, path)
-            current = await hass.async_add_executor_job(_read_text_capped, path) if exists else None
-            target_snapshot = await hass.async_add_executor_job(_authored_file_snapshot, rel, exists, current, family)
-            if content_hash(snapshot) != args.get("snapshot_digest"):
-                return _tool_error("The file recovery snapshot changed after approval."), "invalid_request", tool
-            if content_hash(target_snapshot) != args.get("target_fingerprint"):
-                return _tool_error("The file target changed after approval."), "invalid_request", tool
-            if not want_exists:
-                if not exists:
-                    return _tool_success(json.dumps({"status": "verified", "already_applied": True})), "allowed", tool
-                return await _recoverable_file_delete(
-                    path=path, rel=rel, before_content=current, access_key=access_key,
-                    data=data, operation=tool, hass=hass,
-                )
-            if family == "yaml_file":
-                if rel != "configuration.yaml":
-                    refusal = await hass.async_add_executor_job(
-                        _yaml_mount_refusal, hass.config.config_dir, path, rel, tool,
-                    )
-                    if refusal is not None:
-                        return _tool_error("The YAML include target is no longer writable."), "invalid_request", tool
-                refusal = await hass.async_add_executor_job(_yaml_protected_check, current, content, tool)
-                if refusal is not None:
-                    return refusal
-                if _restore_ctx.get() is None:
-                    refusal = await hass.async_add_executor_job(
-                        _yaml_removal_check, current, content, {"remove_keys": []}, tool,
-                    )
-                    if refusal is not None:
-                        return refusal
-            return await _recoverable_file_write(
-                path=path, rel=rel, before_exists=exists, before_content=current,
-                content=content, access_key=access_key, data=data, operation=tool,
-                display_path=rel, hass=hass, snapshot_type=family, return_result=True,
-            ) or (_tool_error("File restoration was not applied."), "invalid_request", tool)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - adapter retains uncertain writes for inspection
-        return _tool_error("File restoration failed; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
 async def _execute_restore_blueprint_configuration(args, record, side, snapshot, access_key, hass, data):

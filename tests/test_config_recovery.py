@@ -191,74 +191,89 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
     assert entry.options["state"] == source["options"]["state"]
 
 
-async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
-    from custom_components.phoenix_mcp.helpers import content_hash
-    from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
-    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
-
-    access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="file-agent", access_key_hash="x",
+def _blueprint_agent(**caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
+        id=uuid.uuid4().hex, name="blueprint-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
-        cap_filesystem="allow",
+        **(caps or {"cap_blueprint_write": "allow", "cap_automation_write": "allow"}),
     )
-    path = hass.config.path("www", "recovery-smoke.txt")
+
+
+@pytest.mark.parametrize("family", ["authored_file", "yaml_file"])
+@pytest.mark.parametrize("entry", ["tool", "execute"])
+async def test_stored_file_record_restore_is_refused_on_both_paths(hass, family, entry):
+    """Configuration file text in a recovery record is history; no restore path writes it.
+
+    No current tool records file snapshots, so each record is built in its stored
+    form. A blueprint record owned by the same key is still receipted, so the
+    refusal belongs to the file family and not to the key.
+    """
     from pathlib import Path
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text("current", encoding="utf-8")
-    snapshot = _authored_file_snapshot("www/recovery-smoke.txt", True, "before")
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
+    from custom_components.phoenix_mcp.tools.recovery import _FILE_RECORD_REFUSED, _execute_restore_configuration
+
+    access_key = _blueprint_agent()
     runtime = data()
-    rid = await runtime.config_recovery.begin(
-        "authored_file:www/recovery-smoke.txt", "write_file", access_key.id, snapshot,
-    )
+    rel = "packages/recovery.yaml" if family == "yaml_file" else "www/recovery.txt"
+    target = Path(hass.config.path(rel))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("current: true\n", encoding="utf-8")
+    snapshot = {"snapshot_type": family, "schema": 1, "resource_id": rel, "exists": True, "content": "before: true\n"}
+    rid = await runtime.config_recovery.begin(f"{family}:{rel}", "file_write", access_key.id, snapshot)
     await runtime.config_recovery.mark(rid, "verified")
-    target = _authored_file_snapshot("www/recovery-smoke.txt", True, "current")
+    runtime.config_recovery.leave(rid)
     bound = {
         "recovery_id": rid, "side": "before",
         "snapshot_digest": content_hash(snapshot),
-        "target_fingerprint": content_hash(target),
+        "target_fingerprint": content_hash({**snapshot, "content": "current: true\n"}),
     }
+    if entry == "tool":
+        results = [
+            await _call_tool("restore_configuration", {"recovery_id": rid, "side": "before"}, access_key, hass, runtime),
+            await _call_tool("restore_configuration", bound, access_key, hass, runtime),
+        ]
+    else:
+        results = [await _execute_restore_configuration(bound, access_key, hass, runtime)]
+    for result, outcome, _ in results:
+        assert outcome == "invalid_request", result
+        assert result["content"][0]["text"] == _FILE_RECORD_REFUSED
+    assert target.read_text(encoding="utf-8") == "current: true\n"
+    assert [record["id"] for record in runtime.config_recovery.records()] == [rid]
 
-    result, outcome, _ = await _execute_restore_configuration(bound, access_key, hass, runtime)
-
-    body = json.loads(result["content"][0]["text"])
-    assert outcome == "allowed", body
-    assert body["status"] == "verified"
-    assert Path(path).read_text(encoding="utf-8") == "before"
-
-
-async def test_agent_authored_file_restore_removes_created_file(hass):
-    from pathlib import Path
-    from custom_components.phoenix_mcp.helpers import content_hash
-    from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
-    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
-
-    access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="file-agent", access_key_hash="x",
-        created_at=utcnow(), created_by="test", permissions=PermissionTree(),
-        cap_filesystem="allow",
+    blueprint = Path(hass.config.path("blueprints", "automation", "author", "control.yaml"))
+    blueprint.parent.mkdir(parents=True, exist_ok=True)
+    blueprint.write_text("blueprint:\n  name: Current\n  domain: automation\ntriggers: []\nactions: []\n", encoding="utf-8")
+    control = _blueprint_recovery_snapshot(
+        "automation", "author/control.yaml",
+        "blueprint:\n  name: Before\n  domain: automation\ntriggers: []\nactions: []\n",
     )
-    rel = "www/recovery-created.txt"
-    path = Path(hass.config.path(rel))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("created", encoding="utf-8")
-    absent = _authored_file_snapshot(rel, False, None)
-    current = _authored_file_snapshot(rel, True, "created")
-    runtime = data()
-    rid = await runtime.config_recovery.begin(
-        f"authored_file:{rel}", "write_file", access_key.id, absent, source=current,
+    control_id = await runtime.config_recovery.begin(
+        "blueprint:automation/author/control.yaml", "edit_blueprint", access_key.id, control,
     )
-    await runtime.config_recovery.mark(rid, "verified")
-    result, outcome, _ = await _execute_restore_configuration({
-        "recovery_id": rid, "side": "before",
-        "snapshot_digest": content_hash(absent),
-        "target_fingerprint": content_hash(current),
-    }, access_key, hass, runtime)
+    await runtime.config_recovery.mark(control_id, "verified")
+    runtime.config_recovery.leave(control_id)
+    receipt, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": control_id, "side": "before"}, access_key, hass, runtime,
+    )
+    assert outcome == "allowed", receipt
+    assert json.loads(receipt["content"][0]["text"])["status"] == "needs_confirmation"
 
-    body = json.loads(result["content"][0]["text"])
-    assert outcome == "allowed", body
-    assert body["status"] == "verified"
-    assert not path.exists()
-    assert runtime.config_recovery.records()[0]["source"] == absent
+
+@pytest.mark.parametrize("caps", [
+    {"cap_filesystem": "allow", "cap_yaml_edit": "allow"},
+    {"cap_blueprint_write": "allow"},
+])
+async def test_file_capabilities_alone_do_not_open_restore_configuration(hass, caps):
+    """Reading files and configuration YAML grants no restore authority of its own."""
+    result, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": "missing", "side": "before"},
+        _blueprint_agent(**caps), hass, data(),
+    )
+    if "cap_blueprint_write" in caps:
+        assert outcome == "not_found", result
+    else:
+        assert outcome == "denied", result
 
 
 async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
@@ -651,36 +666,3 @@ async def test_recovery_scans_run_outside_event_loop_and_preserve_owned_copies(h
     assert restored.get(rid)["before"]["content"].startswith("harmless file content")
     assert restored.get(rid)["source"]["content"] == "observed"
     assert restored.get(rid)["observations"] == {"state": "verified"}
-
-
-async def test_file_admission_and_recovery_redaction_run_in_executor(hass, tmp_path):
-    import threading
-    from custom_components.phoenix_mcp.tools import config_files
-
-    loop_thread = threading.get_ident()
-    scan = config_files._redact_secrets_in_text
-    calls = []
-
-    def checked_scan(value):
-        assert threading.get_ident() != loop_thread
-        calls.append(value)
-        return scan(value)
-
-    text = "harmless file content\n" * 24000
-    path = tmp_path / "example.txt"
-    path.write_text("before")
-    runtime = data()
-    runtime.config_recovery = ConfigurationRecovery(hass=hass)
-    with patch.object(config_files, "_redact_secrets_in_text", side_effect=checked_scan):
-        assert await config_files._file_recovery_precheck(hass, str(path), "www/example.txt", text, "write_file") is None
-        result = await config_files._recoverable_file_write(
-            path=str(path), rel="www/example.txt", before_exists=True, before_content="before",
-            content=text, access_key=_restore_access_key("admin"), data=runtime, operation="write_file",
-            display_path="www/example.txt", hass=hass, return_result=True,
-        )
-    assert len(calls) == 5
-    assert result[1] == "allowed"
-    assert path.read_text() == text
-    record = runtime.config_recovery.records()[0]
-    assert record["phase"] == "verified"
-    assert record["source"]["content"] == text

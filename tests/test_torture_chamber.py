@@ -36,7 +36,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
-from custom_components.phoenix_mcp.tools import config_files, discovery
+from custom_components.phoenix_mcp.tools import discovery
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 # Threaded through every attack string. Its absence from a denied response is
@@ -310,7 +310,6 @@ def test_every_adversarial_baseline_normalizes(tool_def):
         "call_service",
         "dry_run_service",
         "get_relationships",
-        "patch_yaml_config",
     ],
 )
 def test_structured_adversarial_baseline_passes_normalization(tool_name: str):
@@ -400,21 +399,6 @@ async def test_structured_relationship_seed_reaches_scope_resolution(
 
     assert result == expected
     resolver.assert_called_once()
-
-
-async def test_structured_yaml_patch_seed_reaches_target_resolution(
-    hass: HomeAssistant,
-):
-    tool_def = next(item for item in ALL_DEFS if item["name"] == "patch_yaml_config")
-    seed = _placeholder("arguments", tool_def["inputSchema"])
-
-    with patch.object(
-        config_files, "_yaml_write_target", side_effect=RuntimeError("target reached")
-    ):
-        with pytest.raises(RuntimeError, match="target reached"):
-            await _call_tool(
-                "patch_yaml_config", seed, _access_key("allow"), hass, _data()
-            )
 
 
 async def test_get_state_attack_reaches_deliberately_broken_resolver(

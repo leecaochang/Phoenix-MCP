@@ -127,7 +127,7 @@ async def test_shared_access_key_history_requires_household_admin(hass, hass_adm
     user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
     context = _context(user.id if identity != "unknown" else None)
     data.audit.record(request_id="private", access_key_id=access_key.id, access_key_name=access_key.name,
-                      method="write_file", resource="file:private-path", outcome="allowed", client_ip="external",
+                      method="edit_blueprint", resource="blueprint:private-path", outcome="allowed", client_ip="external",
                       settings=data.store.get_settings())
     record = await async_create_pending_approval(data.store, access_key_id=access_key.id, access_key_name=access_key.name,
         tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="external", client_ip="external")

@@ -220,8 +220,8 @@ const CAPS: CapDef[] = [
     key: "cap_filesystem",
     labelKey: "caps.cap_filesystem.label",
     descriptionKey: "caps.cap_filesystem.description",
-    tier: "irreversible",
-    confirmAvailable: true,
+    tier: "read",
+    confirmAvailable: false,
   },
   {
     key: "cap_dashboard_resources",
@@ -234,8 +234,8 @@ const CAPS: CapDef[] = [
     key: "cap_esphome_yaml",
     labelKey: "caps.cap_esphome_yaml.label",
     descriptionKey: "caps.cap_esphome_yaml.description",
-    tier: "config_write",
-    confirmAvailable: true,
+    tier: "everyday",
+    confirmAvailable: false,
   },
   {
     key: "cap_esphome_flash",
@@ -248,7 +248,7 @@ const CAPS: CapDef[] = [
     key: "cap_yaml_edit",
     labelKey: "caps.cap_yaml_edit.label",
     descriptionKey: "caps.cap_yaml_edit.description",
-    tier: "irreversible",
+    tier: "system",
     confirmAvailable: true,
   },
 ];

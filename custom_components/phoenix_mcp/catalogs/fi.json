@@ -568,10 +568,6 @@
       "delete_calendar_event.title": "Poista kalenteritapahtuma",
       "delete_entity.body": "Tämä poistaa entiteetin {entity_id} rekisterimerkinnän. Integraatio voi luoda entiteetin myöhemmin uudelleen.",
       "delete_entity.title": "Poista entiteetin {entity_id} rekisterimerkintä",
-      "delete_esphome_yaml.body": "Tämä poistaa pysyvästi kohteen {rel}. Itse ESPHome-laitetta ei muuteta.",
-      "delete_esphome_yaml.device.body": "Tämä poistaa pysyvästi kohteen {rel}. Itse ESPHome-laitetta {device} ei muuteta.",
-      "delete_esphome_yaml.device.title": "Poista ESPHome-laitteen kokoonpano {rel} ({device})",
-      "delete_esphome_yaml.title": "Poista ESPHome-laitteen kokoonpano {rel}",
       "delete_helper.body": "Tämä poistaa pysyvästi apurin {helper_id}.",
       "delete_helper.title": "Poista {helper_type}-apuri '{helper_id}'",
       "delete_scene.body": "Tämä poistaa pysyvästi tilanteen {scene_id}.",
@@ -703,18 +699,8 @@
       "patch_dashboard.remove.title": "Päivitä kojelauta '{label}'",
       "patch_dashboard.set.body": "Tämä päivittää Home Assistantin kojelaudan kokoonpanon. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
       "patch_dashboard.set.title": "Päivitä kojelauta '{label}'",
-      "patch_yaml_config.append.body": "Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "patch_yaml_config.append.title": "Lisää kokoonpanoa tiedostoon {file}",
-      "patch_yaml_config.remove.body": "Tämä poistaa kokoonpanoa tiedostosta {file}. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "patch_yaml_config.remove.title": "Poista kokoonpanoa tiedostosta {file}",
-      "patch_yaml_config.set.body": "Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "patch_yaml_config.set.title": "Aseta kokoonpano tiedostoon {file}",
       "remove_device.body": "Tämä poistaa laitteen {device_id} sen integraatiosta. Laite on ehkä lisättävä uudelleen.",
       "remove_device.title": "Poista {device_id} kokoonpanomerkinnästä {config_entry_id}",
-      "rename_esphome_device.body": "Tämä nimeää laitteen {device} uudelleen, kääntää sen kokoonpanon ja asentaa laitteen laiteohjelmiston. Älä irrota laitetta päivityksen aikana.",
-      "rename_esphome_device.services.body": "Tämä nimeää laitteen {device} uudelleen, päivittää sen toimintapalvelut, kääntää sen kokoonpanon ja asentaa laitteen laiteohjelmiston. Älä irrota laitetta päivityksen aikana.",
-      "rename_esphome_device.services.title": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name} ja nimeä {count} toimintapalvelua uudelleen",
-      "rename_esphome_device.title": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name}",
       "restart_ha.body": "Home Assistant on hetken ajan poissa käytöstä uudelleenkäynnistyksen aikana.",
       "restart_ha.title": "Käynnistä Home Assistant uudelleen",
       "set_dashboard_config.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
@@ -723,18 +709,6 @@
       "set_device.title": "Päivitä laiterekisterin metatiedot ({fields}) laitteelle {device_id}",
       "set_entity.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
       "set_entity.title": "Päivitä rekisterin metatiedot ({fields}) entiteetille {entity_id}",
-      "set_esphome_yaml.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_esphome_yaml.device.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_esphome_yaml.device.title": "Muokkaa ESPHome-laitteen kokoonpanoa {rel} ({device}, {count} entiteettiä)",
-      "set_esphome_yaml.title": "Muokkaa ESPHome-laitteen kokoonpanoa {rel}",
-      "set_yaml_config.body": "Tämä korvaa tiedoston {file} koko sisällön. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_yaml_config.removing.body": "Tämä korvaa tiedoston {file} koko sisällön ja poistaa kokoonpanoa. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_yaml_config.removing.title": "Päivitä {file}",
-      "set_yaml_config.removing_entries.body": "Tämä korvaa tiedoston {file} koko sisällön ja poistaa {count} merkintää. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_yaml_config.removing_entries.title": "Päivitä {file}",
-      "set_yaml_config.removing_entry.body": "Tämä korvaa tiedoston {file} koko sisällön ja poistaa yhden merkinnän. Avaa Yksityiskohdat ja tarkista täsmällinen ehdotettu muutos.",
-      "set_yaml_config.removing_entry.title": "Päivitä {file}",
-      "set_yaml_config.title": "Päivitä {file}",
       "targets.dynamicAccessible": "Käytettävissä olevat laitteet selvitetään uudelleen suoritushetkellä, ja ne voivat olla muuttuneet.",
       "targets.exact": "Tämä hyväksyntä kattaa Yksityiskohdissa luetellut entiteetit. Muuttuneet kohteet vaativat uuden pyynnön.",
       "targets.futureNative": "Home Assistant selvittää tulevat kohteet, kun tämä kokoonpano suoritetaan. Jäsenyys voi muuttua, ja myöhempi suoritus on Phoenix-käyttöoikeus- ja MESA-tarkistusten ulkopuolella.",
@@ -743,8 +717,6 @@
       "view.defaultAria": "Hyväksynnän oletusnäkymä",
       "view.details": "Yksityiskohdat",
       "view.summary": "Yhteenveto",
-      "write_file.body": "Tämä kirjoittaa kohteeseen {path}. Nykyinen sisältö tässä polussa voidaan korvata.",
-      "write_file.title": "Kirjoita tiedostoon '{path}'",
       "zigbee_binding.body": "Tämä muuttaa suoraa ohjausta kahden Zigbee-laitteen välillä. Avaa Yksityiskohdat ja tarkista molemmat laitteet ja valitut klusterit.",
       "zigbee_binding.devices.body": "Tämä {operation} suoraa Zigbee-ohjausta laitteesta {source} laitteeseen {target}. Avaa Yksityiskohdat ja tarkista täsmällinen suhde.",
       "zigbee_binding.devices.title": "{operation} Zigbee-sidonta laitteesta {source} laitteeseen {target}",
@@ -987,12 +959,12 @@
         "label": "ESPHome-laiteohjelmiston asennus"
       },
       "cap_esphome_yaml": {
-        "description": "Lue ja muokkaa ESPHome-laitteen YAMLia sen omassa hiekkalaatikossa esphome/-hakemiston alla, validoi se ja käännä se. Tunnistetiedot peitetään luettaessa, eikä niitä voi muuttaa. Kääntäminen vain rakentaa binääritiedoston; laitteen laiteohjelmiston asentaminen vaatii erillisen ESPHome-laiteohjelmiston asennusominaisuuden.",
+        "description": "Lue ESPHome-laitteen YAMLia sen omassa hiekkalaatikossa esphome/-hakemiston alla, validoi se ja käännä se. Tunnistetiedot peitetään luettaessa. Kääntäminen vain rakentaa binääritiedoston; laitteen laiteohjelmiston asentaminen vaatii erillisen ESPHome-laiteohjelmiston asennusominaisuuden.",
         "label": "ESPHome-laitteen YAML"
       },
       "cap_filesystem": {
-        "description": "Lue ja kirjoita tiedostoja hakemistoissa www/, themes/ ja custom_templates/.",
-        "label": "Tiedostojärjestelmän käyttö"
+        "description": "Lue tiedostoja hakemistoissa www/, themes/ ja custom_templates/.",
+        "label": "Tiedostojen luku"
       },
       "cap_helper_write": {
         "description": "Luo, muokkaa ja poista apureita, kuten syötteet, laskurit ja ajastimet.",
@@ -1063,8 +1035,8 @@
         "label": "Automaatioiden jäljitykset"
       },
       "cap_yaml_edit": {
-        "description": "Lue ja muokkaa configuration.yaml-tiedostoa ja sen suoraan lataamia YAML-tiedostoja. Hyväksyntä on erittäin suositeltavaa. Suoraan tiedostoon kirjoitetut salaisuudet paljastuvat, joten tallenna salaisuudet secrets.yaml-tiedostoon !secret-merkinnällä.",
-        "label": "Muokkaa raakaa YAMLia"
+        "description": "Lue configuration.yaml-tiedostoa ja muita kokoonpanohakemiston YAML-tiedostoja, tarkista kokoonpano ja lataa uudelleen YAML-tiedostoissa määritetyt toimialueet. Suoraan tiedostoon kirjoitetut salaisuudet paljastuvat, joten tallenna salaisuudet secrets.yaml-tiedostoon !secret-merkinnällä.",
+        "label": "YAML-kokoonpano"
       },
       "confirmUnavailable": "Tämä ominaisuus ei voi vaatia hyväksyntää.",
       "esphomeBadgeTitle": "ESPHome-työkalut pysyvät piilossa tältä käyttöavaimelta, kunnes lisäosa on saatavilla. Ominaisuus voidaan silti asettaa nyt.",
@@ -1391,8 +1363,6 @@
       "delete_automation": "Poista automaatio '{automation_id}'",
       "delete_calendar_event": "Poista kalenteritapahtuma",
       "delete_entity": "Poista entiteetin {entity_id} rekisterimerkintä",
-      "delete_esphome_yaml": "Poista ESPHome-laitteen kokoonpano {rel}. Itse ESPHome-laitetta ei muuteta.",
-      "delete_esphome_yaml.device": "Poista ESPHome-laitteen kokoonpano {rel} ({device}). Itse ESPHome-laitetta ei muuteta.",
       "delete_helper": "Poista {helper_type}-apuri '{helper_id}'",
       "delete_scene": "Poista tilanne '{scene_id}'",
       "delete_script": "Poista skripti '{script_id}'",
@@ -1432,24 +1402,12 @@
       "patch_dashboard.multi": "Käytä {count} muutosta kojelautaan '{label}'",
       "patch_dashboard.remove": "Poista {path} kojelaudalta '{label}'",
       "patch_dashboard.set": "Aseta {path} kojelaudassa '{label}'",
-      "patch_yaml_config.append": "Lisää kohtaan {path} tiedostossa {file}",
-      "patch_yaml_config.remove": "Poista {path} tiedostosta {file}",
-      "patch_yaml_config.set": "Aseta {path} tiedostossa {file}",
       "remove_device": "Poista {device_id} kokoonpanomerkinnästä {config_entry_id}",
-      "rename_esphome_device": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name}. Tämä kääntää kokoonpanon ja asentaa laitteen laiteohjelmiston.",
-      "rename_esphome_device.services": "Nimeä ESPHome-laite {device} uudelleen nimeksi {new_name} ja nimeä {count} toimintapalvelua uudelleen. Tämä kääntää kokoonpanon ja asentaa laitteen laiteohjelmiston.",
       "restart_ha": "Käynnistä Home Assistant uudelleen",
       "set_dashboard_config": "Aseta kojelaudan asettelu '{label}'",
       "set_device": "Päivitä laiterekisterin metatiedot ({fields}) laitteelle {device_id}",
       "set_entity": "Päivitä rekisterin metatiedot ({fields}) entiteetille {entity_id}",
-      "set_esphome_yaml": "Muokkaa ESPHome-laitteen kokoonpanoa {rel}. Tämä ei asenna laiteohjelmistoa laitteeseen.",
-      "set_esphome_yaml.device": "Muokkaa ESPHome-laitteen kokoonpanoa {rel} ({device}, {count} entiteettiä). Tämä ei asenna laiteohjelmistoa laitteeseen.",
-      "set_yaml_config": "Korvaa {file}",
-      "set_yaml_config.removing": "Korvaa {file} ja poista ylimmän tason avaimet {keys}",
-      "set_yaml_config.removing_entries": "Korvaa {file} ja poista {count} merkintää",
-      "set_yaml_config.removing_entry": "Korvaa {file} ja poista 1 merkintä",
       "update_calendar_event": "Päivitä kalenteritapahtuma",
-      "write_file": "Kirjoita tiedostoon '{path}'",
       "zigbee_binding": "Muuta Zigbee-laitteen sidontaa",
       "zigbee_binding.devices": "{operation} Zigbee-sidonta laitteesta {source} laitteeseen {target}",
       "zigbee_group": "Muuta Zigbee-ryhmää",
@@ -1817,11 +1775,11 @@
         "label": "Mukautettu"
       },
       "dashboard_designer": {
-        "description": "Voi löytää entiteettejä ja rakentaa kojelautoja. Teema- ja mukautetut korttitiedostot vaativat hyväksynnän. Ei voi ohjata laitteita tai muokata muuta kokoonpanoa.",
+        "description": "Voi löytää entiteettejä, rakentaa kojelautoja ja lukea teema- ja mukautettuja korttitiedostoja. Mukautettujen korttitiedostojen rekisteröinti vaatii hyväksynnän. Ei voi ohjata laitteita tai muokata muuta kokoonpanoa.",
         "label": "Kojelaudan suunnittelija"
       },
       "esphome": {
-        "description": "Lukee ESPHome-laitteen tilan, diagnostiikan ja lokit. Laitteen YAML-tiedoston muokkaus ja laiteohjelmiston asennus vaativat kumpikin hyväksynnän. YAML-tunnistetiedot pysyvät piilotettuina eikä niitä voi muuttaa. Ei laiteohjausta eikä muuta kokoonpanoa.",
+        "description": "Lukee ESPHome-laitteen tilan, diagnostiikan, lokit ja laitteen YAML-tiedoston sekä validoi ja kääntää sen. Laiteohjelmiston asennus vaatii hyväksynnän. YAML-tunnistetiedot pysyvät piilotettuina. Ei laiteohjausta eikä muuta kokoonpanoa.",
         "label": "ESPHome-laitteet"
       },
       "helper": "Persona asettaa alkuperäiset ominaisuudet. Voit säätää yksittäisiä ominaisuuksia Lisäasetuksissa. Persona vaihtuu arvoon Mukautettu, kun asetuksesi eivät enää vastaa esiasetusta.",
@@ -1844,7 +1802,7 @@
       },
       "noEsphome": "ESPHomea ei havaittu tässä järjestelmässä",
       "power_user": {
-        "description": "Voi lukea ja muokata suurinta osaa kokoonpanosta ja käynnistää Home Assistantin uudelleen. Arkaluonteiset järjestelmämuutokset vaativat hyväksynnän. Tiedostojärjestelmän ja raa'an YAML:n käyttö pysyy estettynä.",
+        "description": "Voi lukea ja muokata suurinta osaa kokoonpanosta ja käynnistää Home Assistantin uudelleen. Arkaluonteiset järjestelmämuutokset vaativat hyväksynnän. Tiedostojen ja YAML-kokoonpanon käyttö pysyy estettynä.",
         "label": "Tehokäyttäjä"
       },
       "read_only": {

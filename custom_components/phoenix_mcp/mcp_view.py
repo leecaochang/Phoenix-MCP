@@ -105,15 +105,9 @@ from .recorder_queries import (
 # dispatch or recovery helpers from this module locally (inside functions).
 from .tools.authoring import _execute_create_automation, _execute_create_scene, _execute_create_script, _execute_delete_automation, _execute_delete_scene, _execute_delete_script, _execute_edit_automation, _execute_edit_scene, _execute_edit_script, _tool_create_automation, _tool_create_scene, _tool_create_script, _tool_delete_automation, _tool_delete_scene, _tool_delete_script, _tool_edit_automation, _tool_edit_scene, _tool_edit_script, _tool_get_automation, _tool_get_automation_traces, _tool_get_scene, _tool_get_script, _tool_list_automations, _tool_list_scenes, _tool_list_scripts
 from .tools.config_files import (
-    _execute_patch_yaml_config,
-    _execute_set_yaml_config,
-    _execute_write_file,
     _tool_get_yaml_config,
     _tool_list_files,
     _tool_read_file,
-    _tool_patch_yaml_config,
-    _tool_set_yaml_config,
-    _tool_write_file,
 )
 from .tools.helper import (
     _HELPER_RESTORE_ID,
@@ -241,7 +235,7 @@ from .tools.dashboard_resources import (
     _tool_set_dashboard_resource,
 )
 from .tools.camera import _tool_get_camera_image
-from .tools.esphome import _ESPHOME_DOMAIN, _execute_delete_esphome_yaml, _execute_install_esphome_firmware, _execute_rename_esphome_device, _execute_set_esphome_yaml, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_delete_esphome_yaml, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_rename_esphome_device, _tool_set_esphome_yaml, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
+from .tools.esphome import _ESPHOME_DOMAIN, _execute_install_esphome_firmware, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
 # in tool_defs.py; this module reads it to answer tools/list, build the
 # per-access-key gate map, and compute the catalog fingerprint. The names are
@@ -5716,44 +5710,31 @@ async def async_restore_version(
             # addressed-write rule edit_energy_config enforces does not apply here
             # (a YAML restore is likewise exempt from the dropped-key check).
             return await async_restore_energy_prefs(target, access_key, hass, data)
-        if resource_type in ("yaml_config", "file", "esphome_yaml", "blueprint"):
+        if resource_type in ("yaml_config", "file", "esphome_yaml"):
+            # Configuration files belong to the operator. Their history stays
+            # readable, but a version is never written back to disk.
+            return _tool_error(
+                "This version holds configuration file text, which Phoenix does not write "
+                "back. Copy the content from this version and apply it by hand."
+            ), "invalid_request", "async_restore_version"
+        if resource_type == "blueprint":
             restorable = target.get("content")
             if not isinstance(restorable, str):
                 # Oversized snapshots are stored as a non-restorable marker.
                 return _tool_error("This version is too large to restore inline."), "invalid_request", "async_restore_version"
-            if resource_type == "blueprint":
-                # resource_id is "<domain>/<config-relative path>". Route through
-                # the executors so the path jail, schema validation, and consumer
-                # reload all apply; edit when the file exists, recreate otherwise.
-                bp_domain, _, bp_rel = resource_id.partition("/")
-                resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, bp_domain, bp_rel)
-                bp_exists = (
-                    resolved is not None
-                    and await _read_blueprint_source(hass, resolved[0]) is not None
-                )
-                bp_args = {"domain": bp_domain, "path": bp_rel, "content": restorable}
-                if bp_exists:
-                    return await _execute_edit_blueprint(bp_args, access_key, hass, data)
-                return await _execute_create_blueprint(bp_args, access_key, hass, data)
-            if resource_type == "yaml_config":
-                # resource_id is the config-relative path. Older records, written
-                # before set_yaml_config took a file argument, all carry
-                # "configuration.yaml", which resolves the same way, so they
-                # restore unchanged.
-                return await _execute_set_yaml_config(
-                    {"file": resource_id, "content": restorable}, access_key, hass, data)
-            if resource_type == "esphome_yaml":
-                # Snapshots hold the RAW file, so a restore reproduces it exactly.
-                # It routes through the executor, whose splice is a no-op on raw
-                # content (no placeholders). The executor reads _restore_ctx (set
-                # by the caller below) and waives the three LITERAL credential
-                # refusals for this path only: raw text re-writes the file's inline
-                # credentials verbatim, which those rules read as an agent changing
-                # a frozen value, so without the waiver every restore of a file
-                # with an inline credential would fail. See splice_esphome_text.
-                return await _execute_set_esphome_yaml(
-                    {"file": resource_id, "content": restorable}, access_key, hass, data)
-            return await _execute_write_file({"path": resource_id, "content": restorable}, access_key, hass, data)
+            # resource_id is "<domain>/<config-relative path>". Route through
+            # the executors so the path jail, schema validation, and consumer
+            # reload all apply; edit when the file exists, recreate otherwise.
+            bp_domain, _, bp_rel = resource_id.partition("/")
+            resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, bp_domain, bp_rel)
+            bp_exists = (
+                resolved is not None
+                and await _read_blueprint_source(hass, resolved[0]) is not None
+            )
+            bp_args = {"domain": bp_domain, "path": bp_rel, "content": restorable}
+            if bp_exists:
+                return await _execute_edit_blueprint(bp_args, access_key, hass, data)
+            return await _execute_create_blueprint(bp_args, access_key, hass, data)
         if resource_type in {"area", "floor"}:
             return await restore_location_version(resource_type, resource_id, target, access_key, hass, data)
         if resource_type == "entity":
@@ -10230,16 +10211,10 @@ _register_executor("create_helper", _execute_create_helper)
 _register_executor("edit_helper", _execute_edit_helper)
 _register_executor("delete_helper", _execute_delete_helper)
 _register_executor("restore_configuration", _execute_restore_configuration)
-_register_executor("write_file", _execute_write_file)
 _register_executor("create_blueprint", _execute_create_blueprint)
 _register_executor("edit_blueprint", _execute_edit_blueprint)
 _register_executor("delete_blueprint", _execute_delete_blueprint)
-_register_executor("set_yaml_config", _execute_set_yaml_config)
-_register_executor("patch_yaml_config", _execute_patch_yaml_config)
 _register_executor("set_helper_settings", _execute_set_config_entry_options)
-_register_executor("set_esphome_yaml", _execute_set_esphome_yaml)
-_register_executor("delete_esphome_yaml", _execute_delete_esphome_yaml)
-_register_executor("rename_esphome_device", _execute_rename_esphome_device)
 _register_executor("install_esphome_firmware", _execute_install_esphome_firmware)
 _register_executor("set_integration_enabled", _execute_set_integration_enabled)
 _register_executor("set_integration", _execute_set_integration)
@@ -10399,14 +10374,11 @@ _register_tool("get_esphome_yaml", _tool_get_esphome_yaml)
 _register_tool("search_esphome_yaml", _tool_search_esphome_yaml)
 _register_tool("list_esphome_jobs", _tool_list_esphome_jobs)
 _register_tool("list_esphome_devices", _tool_list_esphome_devices)
-_register_tool("set_esphome_yaml", _tool_set_esphome_yaml)
-_register_tool("delete_esphome_yaml", _tool_delete_esphome_yaml)
 _register_tool("validate_esphome_yaml", _tool_validate_esphome_yaml)
 _register_tool("get_esphome_board", _tool_get_esphome_board)
 _register_tool("get_esphome_component", _tool_get_esphome_component)
 _register_tool("get_esphome_automations", _tool_get_esphome_automations)
 _register_tool("clean_esphome_build", _tool_clean_esphome_build)
-_register_tool("rename_esphome_device", _tool_rename_esphome_device)
 _register_tool("compile_esphome_firmware", _tool_compile_esphome_firmware)
 _register_tool("install_esphome_firmware", _tool_install_esphome_firmware)
 _register_tool("get_esphome_job", _tool_get_esphome_job)
@@ -10436,13 +10408,10 @@ _register_tool("restore_configuration", _tool_restore_configuration)
 _register_tool("watch_entity", _tool_watch_entity)
 _register_tool("list_files", _tool_list_files)
 _register_tool("read_file", _tool_read_file)
-_register_tool("write_file", _tool_write_file)
 _register_tool("get_energy_config", _tool_get_energy_config)
 _register_tool("get_solar_forecast", _tool_get_solar_forecast)
 _register_tool("edit_energy_config", _tool_edit_energy_config)
 _register_tool("get_yaml_config", _tool_get_yaml_config)
-_register_tool("set_yaml_config", _tool_set_yaml_config)
-_register_tool("patch_yaml_config", _tool_patch_yaml_config)
 _register_tool("get_helper_settings", _tool_get_config_entry_options)
 _register_tool("set_helper_settings", _tool_set_config_entry_options)
 _register_tool("list_integrations", _tool_list_integrations)

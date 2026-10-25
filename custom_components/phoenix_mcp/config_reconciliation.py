@@ -59,18 +59,6 @@ async def observe_configuration(hass, record: dict) -> dict:
         ):
             raise ConfigurationRecoveryError("The helper is absent but its entity identity is still occupied.")
         return {"snapshot_type": kind, "entry_id": entry_id, "exists": False}
-    if kind in ("authored_file", "yaml_file"):
-        from .tools.config_files import _authored_file_snapshot, _resolve_fs_path, _yaml_write_target
-        rel = snapshot["resource_id"]
-        if kind == "yaml_file":
-            target = await _yaml_write_target(hass, {"file": rel})
-            path = target[0] if target is not None and target[1] == rel else None
-        else:
-            path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
-        if path is None:
-            raise ConfigurationRecoveryError("The recovery target is outside its current file jail.")
-        text = await _read_file(hass, path)
-        return await hass.async_add_executor_job(_authored_file_snapshot, rel, text is not None, text, kind)
     if kind == "blueprint_source":
         from .tools.blueprint import _resolve_blueprint_path, _blueprint_recovery_snapshot
         domain, rel = snapshot["domain"], snapshot["path"]
