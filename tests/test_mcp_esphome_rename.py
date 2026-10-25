@@ -350,7 +350,7 @@ class TestApprovalDiff:
         # user-defined action SERVICES do not, and every automation calling one
         # stops resolving. That is the fact the card exists to surface.
         _esphome_entry(hass, esphome_entries)
-        diff = esphome._build_diff_rename_esphome_device(
+        diff = await esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["kind"] == "system_action"
@@ -359,7 +359,7 @@ class TestApprovalDiff:
         assert "MAC" in diff["preview"]["retained"]
 
     async def test_it_survives_a_device_it_cannot_resolve(self, hass, esphome_dir):
-        diff = esphome._build_diff_rename_esphome_device(
+        diff = await esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
         assert diff["preview"]["new_file"] == "new-name.yaml"
         assert diff["preview"]["device_online"] is False
@@ -373,7 +373,7 @@ class TestApprovalDiff:
         # would drop the offline note exactly where it applies. Only
         # runtime.available answers it, as the install diff does.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
-        diff = esphome._build_diff_rename_esphome_device(
+        diff = await esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["preview"]["device_online"] is False
@@ -387,9 +387,9 @@ class TestApprovalDiff:
         # OTA port and be flashed. The note must describe that uncertainty
         # rather than promise a file-only rename.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
-        note = esphome._build_diff_rename_esphome_device(
+        note = (await esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass
-        )["preview"]["offline_note"]
+        ))["preview"]["offline_note"]
 
         assert "only rewrite" not in note
         assert "may still compile" in note
@@ -401,7 +401,7 @@ class TestApprovalDiff:
         # The note is specific to an unreachable device, so an always-offline
         # implementation cannot pass.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=True))
-        diff = esphome._build_diff_rename_esphome_device(
+        diff = await esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_access_key(), hass)
 
         assert diff["preview"]["device_online"] is True

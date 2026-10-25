@@ -5726,7 +5726,7 @@ async def async_restore_version(
                 # the executors so the path jail, schema validation, and consumer
                 # reload all apply; edit when the file exists, recreate otherwise.
                 bp_domain, _, bp_rel = resource_id.partition("/")
-                resolved = _resolve_blueprint_path(hass, bp_domain, bp_rel)
+                resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, bp_domain, bp_rel)
                 bp_exists = (
                     resolved is not None
                     and await _read_blueprint_source(hass, resolved[0]) is not None

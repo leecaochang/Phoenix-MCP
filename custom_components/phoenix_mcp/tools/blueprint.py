@@ -277,7 +277,7 @@ async def _blueprint_write_precheck(
     domain = str(args.get("domain") or "").strip().lower()
     if domain not in _BLUEPRINT_DOMAINS:
         return _refuse("domain must be 'automation' or 'script'.")
-    resolved = _resolve_blueprint_path(hass, domain, args.get("path"))
+    resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, args.get("path"))
     if resolved is None:
         return _refuse(_BLUEPRINT_PATH_REFUSED)
     target, rel = resolved
@@ -369,7 +369,7 @@ async def _build_diff_blueprint(
     rewire every automation or script built from the blueprint.
     """
     domain = str(args.get("domain") or "").strip().lower()
-    resolved = _resolve_blueprint_path(hass, domain, args.get("path"))
+    resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, args.get("path"))
     rel = resolved[1] if resolved else str(args.get("path") or "")
     before = await _read_blueprint_source(hass, resolved[0]) if resolved else None
     content = args.get("content") if isinstance(args.get("content"), str) else None

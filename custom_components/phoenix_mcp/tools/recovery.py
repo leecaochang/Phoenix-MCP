@@ -251,13 +251,13 @@ async def _tool_restore_file_configuration(
             raise ConfigurationRecoveryError("File snapshot exceeds the restore size limit.")
         if family == "yaml_file":
             from .config_files import _yaml_write_target
-            target = _yaml_write_target(hass, {"file": rel})
+            target = await _yaml_write_target(hass, {"file": rel})
             if target is None or target[1] != rel:
                 raise ConfigurationRecoveryError("The YAML target is outside its current write jail.")
             path = target[0]
         else:
             from .config_files import _resolve_fs_path
-            fs_path = _resolve_fs_path(hass, rel)
+            fs_path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
             if fs_path is None:
                 raise ConfigurationRecoveryError("The file target is outside its current write jail.")
             path = fs_path
@@ -355,7 +355,7 @@ async def _tool_restore_blueprint_configuration(
     denied = _blueprint_denied(access_key, {"domain": domain}, tool)
     if denied is not None:
         return denied
-    resolved = _resolve_blueprint_path(hass, domain, path)
+    resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, path)
     if resolved is None:
         return _tool_error("The blueprint target is outside its current write jail."), "invalid_request", tool
     target_path, canonical = resolved
@@ -786,12 +786,12 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, acce
         return _tool_error("Restoring an absent YAML include would delete configuration; this inverse is refused."), "invalid_request", tool
     rel, content = snapshot.get("resource_id"), snapshot["content"]
     if family == "yaml_file":
-        target = _yaml_write_target(hass, {"file": rel})
+        target = await _yaml_write_target(hass, {"file": rel})
         if target is None or target[1] != rel:
             return _tool_error("The YAML target is outside its current write jail."), "invalid_request", tool
         path = target[0]
     else:
-        path = _resolve_fs_path(hass, rel)
+        path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
         if path is None:
             return _tool_error("The file target is outside its current write jail."), "invalid_request", tool
     try:
@@ -856,7 +856,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
             or not isinstance(path, str) or type(snapshot.get("exists")) is not bool
             or snapshot.get("exists") != isinstance(snapshot.get("content"), str)):
         return _tool_error("The selected blueprint snapshot is incomplete."), "invalid_request", tool
-    resolved = _resolve_blueprint_path(hass, domain, path)
+    resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, path)
     if resolved is None or resolved[1] != path:
         return _tool_error("The blueprint target is outside its current write jail."), "invalid_request", tool
     target_path = resolved[0]

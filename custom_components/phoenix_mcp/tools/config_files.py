@@ -275,7 +275,7 @@ async def _tool_list_files(
     path = str_arg(args.get("path"))
     if not path:
         return _tool_success(json.dumps({"directories": list(FILESYSTEM_ALLOWED_DIRS)})), "allowed", "list_files"
-    target = _resolve_fs_path(hass, path)
+    target = await hass.async_add_executor_job(_resolve_fs_path, hass, path)
     if target is None or not await hass.async_add_executor_job(os.path.isdir, target):
         return _tool_error("Directory not found."), "not_found", path
     entries = await hass.async_add_executor_job(_listdir, target)
@@ -296,7 +296,7 @@ async def _tool_read_file(
     if error:
         return _tool_error(error), "invalid_request", "read_file"
     path = str_arg(args.get("path"))
-    target = _resolve_fs_path(hass, path)
+    target = await hass.async_add_executor_job(_resolve_fs_path, hass, path)
     if target is None or not await hass.async_add_executor_job(os.path.isfile, target):
         return _tool_error("File not found."), "not_found", path
     try:
@@ -311,14 +311,14 @@ async def _tool_read_file(
     }, default=str)), "allowed", path
 
 
-def _file_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
+async def _file_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for filesystem writes; None means OK to proceed.
 
     Checks the path is inside an allowed directory and content is a size-bounded
     string, so a doomed request never becomes a pending approval. The executor
     re-validates at apply time.
     """
-    if _resolve_fs_path(hass, args.get("path", "")) is None:
+    if await hass.async_add_executor_job(_resolve_fs_path, hass, args.get("path", "")) is None:
         return _tool_error("Path is outside the allowed directories (www/, themes/, custom_templates/)."), "denied", tool_name
     content = args.get("content")
     if not isinstance(content, str):
@@ -338,16 +338,14 @@ async def _tool_write_file(
     error = unknown_argument_error("write_file", args)
     if error:
         return _tool_error(error), "invalid_request", "write_file"
-    pre = _file_write_precheck(args, hass, "write_file")
+    pre = await _file_write_precheck(args, hass, "write_file")
     if pre is not None:
         return pre
-    conflict = await _text_file_cas_conflict(
-        args.get("expected_hash"), _resolve_fs_path(hass, args.get("path", "")), hass, "write_file",
-    )
+    target = await hass.async_add_executor_job(_resolve_fs_path, hass, args["path"])
+    assert target is not None  # The side-effect-free path precheck succeeded.
+    conflict = await _text_file_cas_conflict(args.get("expected_hash"), target, hass, "write_file")
     if conflict is not None:
         return conflict
-    target = _resolve_fs_path(hass, args["path"])
-    assert target is not None  # The side-effect-free path precheck succeeded.
     pre = await _file_recovery_precheck(hass, target, args["path"], args["content"], "write_file")
     if pre is not None:
         return pre
@@ -366,7 +364,7 @@ async def _execute_write_file(
 ) -> tuple[dict, str, str]:
     path = args.get("path", "")
     content = args.get("content")
-    target = _resolve_fs_path(hass, path)
+    target = await hass.async_add_executor_job(_resolve_fs_path, hass, path)
     if target is None:
         return _tool_error("Path is outside the allowed directories (www/, themes/, custom_templates/)."), "denied", "write_file"
     if not isinstance(content, str):
@@ -517,7 +515,7 @@ async def _tool_get_yaml_config(
     error = unknown_argument_error("get_yaml_config", args)
     if error:
         return _tool_error(error), "invalid_request", "get_yaml_config"
-    resolved = _resolve_yaml_read_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_yaml_read_path, hass, args.get("file"))
     if resolved is None:
         return _tool_error(_YAML_READ_REFUSED), "invalid_request", "get_yaml_config"
     path, rel = resolved
@@ -831,14 +829,14 @@ async def _read_yaml_text(hass: HomeAssistant, path: str) -> str | None:
         return None
 
 
-def _yaml_write_target(hass: HomeAssistant, args: dict) -> tuple[str, str] | None:
+async def _yaml_write_target(hass: HomeAssistant, args: dict) -> tuple[str, str] | None:
     """The (realpath, config-relative path) a YAML write targets, or None if refused.
 
-    The jail is the read side's, so both tools agree on what a path is. The mount
-    gate is not included: it does filesystem work, so the caller runs it in an
-    executor job.
+    The jail is the read side's, so both tools agree on what a path is. It runs in
+    an executor job because realpath touches the filesystem; the mount gate is a
+    separate job the caller runs.
     """
-    return _resolve_yaml_read_path(hass, args.get("file"))
+    return await hass.async_add_executor_job(_resolve_yaml_read_path, hass, args.get("file"))
 
 
 async def _tool_set_yaml_config(
@@ -854,7 +852,7 @@ async def _tool_set_yaml_config(
     pre = _yaml_write_precheck(args, "set_yaml_config")
     if pre is not None:
         return pre
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     if target is None:
         return _tool_error(_YAML_WRITE_REFUSED), "invalid_request", "set_yaml_config"
     path, rel = target
@@ -901,7 +899,7 @@ async def _execute_set_yaml_config(
         return _tool_error("content must be a string."), "invalid_request", "set_yaml_config"
     if len(content.encode("utf-8")) > MAX_FILE_BYTES:
         return _tool_error("Content exceeds the maximum file size."), "invalid_request", "set_yaml_config"
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     if target is None:
         return _tool_error(_YAML_WRITE_REFUSED), "invalid_request", "set_yaml_config"
     path, rel = target
@@ -1095,7 +1093,7 @@ async def _tool_patch_yaml_config(
     args, error = normalize_tool_args(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     if target is None:
         return _tool_error(_YAML_WRITE_REFUSED), "invalid_request", tool
     path, rel = target
@@ -1131,7 +1129,7 @@ async def _execute_patch_yaml_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     tool = "patch_yaml_config"
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     if target is None:
         return _tool_error(_YAML_WRITE_REFUSED), "invalid_request", tool
     path, rel = target
@@ -1226,7 +1224,7 @@ def _read_capped_if_file(path: str) -> str | None:
 async def _build_diff_write_file(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     path = args.get("path", "")
     content = args.get("content") if isinstance(args.get("content"), str) else ""
-    target = _resolve_fs_path(hass, path)
+    target = await hass.async_add_executor_job(_resolve_fs_path, hass, path)
     before = None
     if target is not None:
         raw = await hass.async_add_executor_job(_read_capped_if_file, target)
@@ -1248,7 +1246,7 @@ async def _build_diff_set_yaml_config(args: dict, access_key: AccessKeyRecord, h
     # Best-effort like every diff builder: an unresolvable path still produces a
     # readable diff, and the tool path has already refused it by the time an
     # approval could exist.
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     path, rel = target if target is not None else (hass.config.path(_CONFIG_YAML), _CONFIG_YAML)
     raw = await hass.async_add_executor_job(_read_capped_if_file, path)
     before = _truncate(raw) if raw is not None else None
@@ -1299,7 +1297,7 @@ async def _build_diff_patch_yaml_config(args: dict, access_key: AccessKeyRecord,
             yaml_patch.normalize_path(args.get("key"), args.get("path")))
     except yaml_patch.PatchError:
         key = ""
-    target = _yaml_write_target(hass, args)
+    target = await _yaml_write_target(hass, args)
     path, rel = target if target is not None else (hass.config.path(_CONFIG_YAML), _CONFIG_YAML)
     current = await _read_yaml_text(hass, path)
     prepared = await hass.async_add_executor_job(

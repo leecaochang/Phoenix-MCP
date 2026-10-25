@@ -1881,34 +1881,60 @@ def _localized(
     return template.format(**params)
 
 
-@lru_cache(maxsize=16)
-def _catalog_section(language: str, section: str) -> dict[str, str]:
-    """One top-level section of one language file, flattened to dotted keys.
+# Every catalogs/ section, flattened, keyed by (language, section). Rebound whole
+# by load_catalogs, never mutated, so a reader on the event loop sees either the
+# old mapping or the new one.
+_catalog_sections: dict[tuple[str, str], dict[str, str]] = {}
+
+
+def load_catalogs() -> None:
+    """Read every catalogs/ file into memory. Blocking: run it in an executor job.
 
     Reads catalogs/, NOT translations/: hassfest validates translations/ against a
     CLOSED set of Home Assistant categories and rejects the file on an unknown
     one, so Phoenix's own operator-facing strings (panel, notification, voice)
     live in catalogs/ (see CATALOGS_DIR). Only HA's own sections (config, entity)
-    stay in translations/. Cached per (language, section) because the file
-    changes only with the integration; any failure returns an empty mapping so
-    the caller keeps the English.
+    stay in translations/. The files change only with the integration, so one
+    read per setup is enough; an unreadable file leaves that language on English.
     """
-    path = CATALOGS_DIR / f"{language}.json"
-    try:
-        section_data = json.loads(path.read_text(encoding="utf-8")).get(section, {})
-    except (OSError, ValueError):
-        return {}
-    out: dict[str, str] = {}
+    global _catalog_sections
+    sections: dict[tuple[str, str], dict[str, str]] = {}
+    for path in sorted(CATALOGS_DIR.glob("*.json")):
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(document, dict):
+            continue
+        for section, section_data in document.items():
+            out: dict[str, str] = {}
 
-    def walk(node: object, prefix: str) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                walk(value, f"{prefix}.{key}" if prefix else key)
-        elif isinstance(node, str):
-            out[prefix] = node
+            def walk(node: object, prefix: str) -> None:
+                if isinstance(node, dict):
+                    for key, value in node.items():
+                        walk(value, f"{prefix}.{key}" if prefix else key)
+                elif isinstance(node, str):
+                    out[prefix] = node
 
-    walk(section_data, "")
-    return out
+            walk(section_data, "")
+            sections[(path.stem, section)] = out
+    _catalog_sections = sections
+    panel_catalog.cache_clear()
+
+
+async def async_load_catalogs(hass: HomeAssistant) -> None:
+    """Load the catalogs off the event loop, before anything renders a string."""
+    await hass.async_add_executor_job(load_catalogs)
+
+
+def _catalog_section(language: str, section: str) -> dict[str, str]:
+    """One top-level section of one language file, flattened to dotted keys.
+
+    Served from memory only, so a string rendered on the event loop never reads a
+    file. Before load_catalogs has run, or for a language with no file, it is an
+    empty mapping and the caller keeps the English.
+    """
+    return _catalog_sections.get((language, section), {})
 
 
 def _placeholders(value: str) -> frozenset[str]:

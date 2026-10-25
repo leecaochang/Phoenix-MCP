@@ -12,6 +12,14 @@ importlib.import_module("custom_components.phoenix_mcp")
 pytest_plugins = "pytest_homeassistant_custom_component"
 
 
+@pytest.fixture(autouse=True, scope="session")
+def loaded_catalogs():
+    """Entry setup loads the string catalogs; tests that render text without setup need them too."""
+    from custom_components.phoenix_mcp.helpers import load_catalogs
+
+    load_catalogs()
+
+
 @pytest.fixture(autouse=True)
 async def cleanup_mesa_policy_workers(hass):
     """Shut down mesa-core policy workers after each test.

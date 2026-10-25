@@ -750,7 +750,7 @@ class TestDeviceYamlDelete:
     async def test_the_approval_diff_masks_credentials_and_states_the_consequence(
         self, hass, esphome_dir
     ):
-        diff = esphome._build_diff_delete_esphome_yaml(
+        diff = await esphome._build_diff_delete_esphome_yaml(
             {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert diff["kind"] == "esphome_yaml"
         assert "REALAPIKEY123456=" not in diff["before"]

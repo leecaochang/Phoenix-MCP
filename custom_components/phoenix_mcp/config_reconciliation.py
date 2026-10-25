@@ -63,10 +63,10 @@ async def observe_configuration(hass, record: dict) -> dict:
         from .tools.config_files import _authored_file_snapshot, _resolve_fs_path, _yaml_write_target
         rel = snapshot["resource_id"]
         if kind == "yaml_file":
-            target = _yaml_write_target(hass, {"file": rel})
+            target = await _yaml_write_target(hass, {"file": rel})
             path = target[0] if target is not None and target[1] == rel else None
         else:
-            path = _resolve_fs_path(hass, rel)
+            path = await hass.async_add_executor_job(_resolve_fs_path, hass, rel)
         if path is None:
             raise ConfigurationRecoveryError("The recovery target is outside its current file jail.")
         text = await _read_file(hass, path)
@@ -76,7 +76,7 @@ async def observe_configuration(hass, record: dict) -> dict:
         domain, rel = snapshot["domain"], snapshot["path"]
         if domain not in ("automation", "script"):
             raise ConfigurationRecoveryError("Unsupported blueprint domain.")
-        target = _resolve_blueprint_path(hass, domain, rel)
+        target = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, rel)
         if target is None or target[1] != rel:
             raise ConfigurationRecoveryError("The blueprint target is outside its current file jail.")
         return _blueprint_recovery_snapshot(domain, rel, await _read_file(hass, target[0]))

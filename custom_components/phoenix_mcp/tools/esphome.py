@@ -469,6 +469,28 @@ def _resolve_esphome_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, str]
     return candidate, rel
 
 
+def _locate_esphome_file(hass: HomeAssistant, file_arg: Any) -> tuple[str, str, bool] | None:
+    """Resolve a device-YAML argument and probe whether it is a file. Blocking: executor only."""
+    resolved = _resolve_esphome_path(hass, file_arg)
+    if resolved is None:
+        return None
+    return resolved[0], resolved[1], os.path.isfile(resolved[0])
+
+
+def _locate_esphome_files(hass: HomeAssistant, file_args: list[Any]) -> dict[str, tuple[str, str]]:
+    """The existing device files among Builder-reported paths, keyed by the reported path.
+
+    Blocking: one executor job for a whole inventory instead of one per row.
+    """
+    found: dict[str, tuple[str, str]] = {}
+    for file_arg in file_args:
+        if isinstance(file_arg, str) and file_arg not in found:
+            resolved = _resolve_esphome_path(hass, file_arg)
+            if resolved is not None and os.path.isfile(resolved[0]):
+                found[file_arg] = resolved
+    return found
+
+
 def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | None]:
     """Read the ESPHome secrets.yaml INTERNALLY: (values, key names).
 
@@ -702,7 +724,7 @@ async def _tool_get_esphome_yaml(
             ]
         return _tool_success(json.dumps(body, default=str)), "allowed", "get_esphome_yaml"
 
-    resolved = _resolve_esphome_path(hass, file_arg)
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, file_arg)
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "get_esphome_yaml"
     path, rel = resolved
@@ -781,7 +803,7 @@ def _esphome_prepare_write(
 
 async def _build_diff_set_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a device-YAML write, with both sides masked."""
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
     before_masked = ""
     if resolved is not None:
@@ -836,7 +858,7 @@ async def _tool_set_esphome_yaml(
     if pre is not None:
         return pre
 
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "set_esphome_yaml"
     path, rel = resolved
@@ -873,7 +895,7 @@ async def _execute_set_esphome_yaml(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Apply a device-YAML write, re-validating everything against current disk."""
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "set_esphome_yaml"
     path, rel = resolved
@@ -944,35 +966,35 @@ async def _execute_set_esphome_yaml(
     )
 
 
-def _esphome_delete_precheck(hass: HomeAssistant, access_key: AccessKeyRecord, args: dict) -> tuple | None:
+async def _esphome_delete_precheck(hass: HomeAssistant, access_key: AccessKeyRecord, args: dict) -> tuple | None:
     """Refuse a delete that cannot work, BEFORE it becomes a pending approval.
 
     Runs after the cap-deny check, so a fully denied access key still
     learns nothing about which files exist.
     """
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
     path, rel = resolved
     if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
-    if not os.path.exists(path):
+    if not await hass.async_add_executor_job(os.path.exists, path):
         # Byte-identical to the out-of-scope refusal above, so the refusal is not
         # an existence oracle; only the audit outcome differs.
         return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
     return None
 
 
-def _build_diff_delete_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_delete_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a device-YAML delete. The Before side is masked."""
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
     before_masked = ""
     if resolved is not None:
         try:
-            secret_values, _ = _read_esphome_secrets(hass)
-            raw = _read_text_capped(resolved[0])
-            before_masked, _ = redact_esphome_text(raw, secret_values)
+            secret_values, _ = await hass.async_add_executor_job(_read_esphome_secrets, hass)
+            raw = await hass.async_add_executor_job(_read_text_capped, resolved[0])
+            before_masked, _ = await hass.async_add_executor_job(redact_esphome_text, raw, secret_values)
         except Exception:  # noqa: BLE001 - diff builders are best-effort
             before_masked = ""
 
@@ -1021,7 +1043,7 @@ async def _tool_delete_esphome_yaml(
     if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_esphome_yaml"
 
-    refusal = _esphome_delete_precheck(hass, access_key, args)
+    refusal = await _esphome_delete_precheck(hass, access_key, args)
     if refusal is not None:
         return refusal
 
@@ -1039,7 +1061,7 @@ async def _execute_delete_esphome_yaml(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Remove the file, after snapshotting it so the delete can be rolled back."""
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
     path, rel = resolved
@@ -1120,7 +1142,7 @@ def _builder_refusal(err: BuilderError, resource: str) -> tuple[dict, str, str]:
     return _tool_error(message), "invalid_request", resource
 
 
-def _esphome_file_precheck(
+async def _esphome_file_precheck(
     hass: HomeAssistant, access_key: AccessKeyRecord, args: dict, tool_name: str, *, write: bool = False
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Resolve and authorize a device file for the file-bound builder tools.
@@ -1132,14 +1154,16 @@ def _esphome_file_precheck(
     `write` is set by the tools that start a firmware job. Creating a build for a
     device is at least as consequential as editing its YAML, so it must not be
     reachable from read-only scope; the lookups and diagnostics stay on read.
+    The path is resolved and probed in one executor job; the scope decision stays
+    on the event loop, and still runs before the probe result is used.
     """
-    resolved = _resolve_esphome_path(hass, args.get("file"))
-    if resolved is None:
+    located = await hass.async_add_executor_job(_locate_esphome_file, hass, args.get("file"))
+    if located is None:
         return (_tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", tool_name), "", ""
-    path, rel = resolved
+    path, rel, is_file = located
     if not _esphome_file_in_scope(hass, access_key, rel, write=write):
         return (_tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"), path, rel
-    if not os.path.isfile(path):
+    if not is_file:
         return (_tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"), path, rel
     return None, path, rel
 
@@ -1205,7 +1229,7 @@ async def _tool_validate_esphome_yaml(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "validate_esphome_yaml"
 
-    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "validate_esphome_yaml")
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "validate_esphome_yaml")
     if refusal is not None:
         return refusal
 
@@ -1379,7 +1403,7 @@ async def _tool_get_esphome_automations(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_automations"
 
-    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "get_esphome_automations")
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "get_esphome_automations")
     if refusal is not None:
         return refusal
 
@@ -1483,7 +1507,7 @@ async def _tool_list_esphome_jobs(
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
     payload = {}
     if "file" in args:
-        refusal, _path, rel = _esphome_file_precheck(hass, access_key, args, resource)
+        refusal, _path, rel = await _esphome_file_precheck(hass, access_key, args, resource)
         if refusal is not None:
             return refusal
         payload["configuration"] = rel
@@ -1492,10 +1516,14 @@ async def _tool_list_esphome_jobs(
                                             timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
     except BuilderError as err:
         return _builder_refusal(err, resource)
+    jobs = _esphome_job_list(result.result)
+    located = await hass.async_add_executor_job(
+        _locate_esphome_files, hass, [job.get("configuration") for job in jobs])
     rows = []
-    for job in _esphome_job_list(result.result):
-        resolved = _resolve_esphome_path(hass, job.get("configuration"))
-        if resolved is None or not os.path.isfile(resolved[0]):
+    for job in jobs:
+        configuration = job.get("configuration")
+        resolved = located.get(configuration) if isinstance(configuration, str) else None
+        if resolved is None:
             continue
         rel = resolved[1]
         if (not _esphome_file_in_scope(hass, access_key, rel, write=False)
@@ -1537,6 +1565,11 @@ async def _tool_list_esphome_devices(
         return _builder_refusal(err, resource)
     if not isinstance(result.result, dict):
         return _tool_error("The Device Builder returned an unexpected device inventory."), "invalid_request", resource
+    configured = result.result.get("configured")
+    located = await hass.async_add_executor_job(
+        _locate_esphome_files, hass,
+        [d.get("configuration") for d in configured if isinstance(d, dict)] if isinstance(configured, list) else [],
+    )
     rows = []
     for kind in ("configured", "importable") if include else ("configured",):
         candidates = result.result.get(kind)
@@ -1548,8 +1581,9 @@ async def _tool_list_esphome_devices(
                 continue
             row = {"kind": kind, "name": name}
             if kind == "configured":
-                resolved = _resolve_esphome_path(hass, device.get("configuration"))
-                if resolved is None or not os.path.isfile(resolved[0]):
+                configuration = device.get("configuration")
+                resolved = located.get(configuration) if isinstance(configuration, str) else None
+                if resolved is None:
                     continue
                 rel = resolved[1]
                 if not _esphome_file_in_scope(hass, access_key, rel, write=False):
@@ -1688,7 +1722,7 @@ async def _esphome_job_precheck(
     job_id = args.get("job_id")
     has_file = isinstance(args.get("file"), str) and args["file"].strip()
     if allow_file and has_file and (not isinstance(job_id, str) or not job_id.strip()):
-        refusal, _path, rel = _esphome_file_precheck(hass, access_key, args, tool_name, write=False)
+        refusal, _path, rel = await _esphome_file_precheck(hass, access_key, args, tool_name, write=False)
         if refusal is not None:
             return refusal, {}
         job = await _esphome_latest_job_for_file(hass, url, rel)
@@ -1799,7 +1833,7 @@ async def _tool_compile_esphome_firmware(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "compile_esphome_firmware"
 
-    refusal, _path, rel = _esphome_file_precheck(
+    refusal, _path, rel = await _esphome_file_precheck(
         hass, access_key, args, "compile_esphome_firmware", write=True
     )
     if refusal is not None:
@@ -1810,7 +1844,7 @@ async def _tool_compile_esphome_firmware(
         return inflight
 
     check_request_authority()
-    refusal, _path, rel = _esphome_file_precheck(
+    refusal, _path, rel = await _esphome_file_precheck(
         hass, access_key, args, "compile_esphome_firmware", write=True)
     if refusal is not None:
         return refusal
@@ -1881,7 +1915,7 @@ async def _rename_esphome_precheck(
     hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Everything rename checks before anything is enqueued."""
-    refusal, path, rel = _esphome_file_precheck(
+    refusal, path, rel = await _esphome_file_precheck(
         hass, access_key, args, "rename_esphome_device", write=True
     )
     if refusal is not None:
@@ -1910,7 +1944,7 @@ async def _rename_esphome_precheck(
             "invalid_request", f"esphome:{rel}",
         ), "", ""
     if not in_place:
-        resolved_target = _resolve_esphome_path(hass, target)
+        resolved_target = await hass.async_add_executor_job(_resolve_esphome_path, hass, target)
         target_exists = resolved_target is not None and await hass.async_add_executor_job(
             os.path.exists, resolved_target[0],
         )
@@ -1929,9 +1963,9 @@ async def _rename_esphome_precheck(
     return None, rel, new_name
 
 
-def _build_diff_rename_esphome_device(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_rename_esphome_device(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a rename. The action-service break is the headline."""
-    resolved = _resolve_esphome_path(hass, args.get("file"))
+    resolved = await hass.async_add_executor_job(_resolve_esphome_path, hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
     new_name = str(args.get("new_name", ""))
 
@@ -2149,7 +2183,7 @@ async def _tool_clean_esphome_build(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "clean_esphome_build"
 
-    refusal, _path, rel = _esphome_file_precheck(
+    refusal, _path, rel = await _esphome_file_precheck(
         hass, access_key, args, "clean_esphome_build", write=True
     )
     if refusal is not None:
@@ -2225,7 +2259,7 @@ async def _install_esphome_precheck(
             (_tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "install_esphome_firmware"),
             "", "",
         )
-    refusal, _path, rel = _esphome_file_precheck(
+    refusal, _path, rel = await _esphome_file_precheck(
         hass, access_key, args, "install_esphome_firmware", write=True
     )
     if refusal is not None:
@@ -2234,7 +2268,7 @@ async def _install_esphome_precheck(
     if inflight is not None:
         return inflight, url, rel
     check_request_authority()
-    refusal, _path, rel = _esphome_file_precheck(
+    refusal, _path, rel = await _esphome_file_precheck(
         hass, access_key, args, "install_esphome_firmware", write=True)
     if refusal is not None:
         return refusal, url, rel
@@ -2690,7 +2724,7 @@ async def _tool_get_esphome_device_logs(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_device_logs"
 
-    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "get_esphome_device_logs")
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "get_esphome_device_logs")
     if refusal is not None:
         return refusal
 
@@ -2742,7 +2776,7 @@ async def _tool_decode_esphome_backtrace(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "decode_esphome_backtrace"
 
-    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "decode_esphome_backtrace")
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "decode_esphome_backtrace")
     if refusal is not None:
         return refusal
 
