@@ -604,8 +604,8 @@ async def test_requested_event_has_bound_review_link_without_configuration(hass,
     hass.data[DOMAIN] = data
     secret = "sensitive-configuration-" + "x" * 100_000
     approval = await async_create_pending_approval(
-        store, access_key_id="t1", access_key_name="Notification test", tool_name="write_file",
-        cap_name="cap_filesystem",
+        store, access_key_id="t1", access_key_name="Notification test", tool_name="edit_blueprint",
+        cap_name="cap_blueprint_write",
         args={"content": secret, "review_url": "https://untrusted.example/approve"},
         diff={"before": secret, "after": secret, "targets": ["sensor.hidden"]},
         request_id="private-request", client_ip="192.0.2.1",
@@ -706,9 +706,9 @@ class TestArgsRedaction:
     def _approval(self) -> PendingApproval:
         now = utcnow()
         return PendingApproval(
-            id="a1", access_key_id="t", access_key_name="n", tool_name="write_file",
-            cap_name="cap_filesystem",
-            args={"path": "/config/secrets.yaml", "content": "api_key: abc123secret"},
+            id="a1", access_key_id="t", access_key_name="n", tool_name="edit_blueprint",
+            cap_name="cap_blueprint_write",
+            args={"domain": "automation", "path": "author/secrets.yaml", "content": "api_key: abc123secret"},
             diff={}, status=STATUS_PENDING,
             created_at=now, expires_at=now, request_id="r",
         )
@@ -716,7 +716,7 @@ class TestArgsRedaction:
     def test_default_to_dict_redacts_args(self):
         d = self._approval().to_dict()
         assert "abc123secret" not in d["args"]["content"]
-        assert d["args"]["path"] == "/config/secrets.yaml"
+        assert d["args"]["path"] == "author/secrets.yaml"
 
     def test_persistence_to_dict_keeps_raw_args(self):
         d = self._approval().to_dict(redact_args=False)
@@ -735,8 +735,8 @@ class TestArgsRedaction:
     @pytest.mark.asyncio
     async def test_created_approval_persists_raw_args(self, store):
         await async_create_pending_approval(
-            store, access_key_id="t", access_key_name="n", tool_name="write_file",
-            cap_name="cap_filesystem",
+            store, access_key_id="t", access_key_name="n", tool_name="edit_blueprint",
+            cap_name="cap_blueprint_write",
             args={"content": "api_key: abc123secret"}, diff={}, request_id="r",
         )
         stored = store.get_pending_approvals()[0]

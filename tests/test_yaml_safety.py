@@ -1,4 +1,9 @@
-"""YAML intake bounds parsing and expanded consumers before any side effects."""
+"""YAML parsing bounds file size, nesting depth and alias expansion.
+
+Configuration and device YAML is parsed with the bounded loader, so a hostile
+document is refused before a tree walk, a redaction pass or an entry lookup
+consumes it.
+"""
 
 import pytest
 import yaml
@@ -6,8 +11,6 @@ import yaml
 from custom_components.phoenix_mcp.const import MAX_FILE_BYTES, YAML_MAX_DEPTH
 from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_text
 from custom_components.phoenix_mcp.yaml_includes import YamlParseError, load_tagged_lenient, read_entry
-from custom_components.phoenix_mcp.yaml_patch import PatchError, parse_value
-from custom_components.phoenix_mcp.tools.config_files import _yaml_protected_check
 
 
 def alias_graph(depth=8):
@@ -27,7 +30,9 @@ def test_existing_yaml_and_esphome_reject_unbounded_graphs(content, tmp_path):
     assert read_entry(str(tmp_path), "script", "v8") is None
 
 
-def test_patch_depth_refusal_bounds_scanner_work(monkeypatch):
+def test_depth_refusal_bounds_scanner_work(monkeypatch):
+    # Nesting under the limit parses.
+    assert load_tagged_lenient("[" * 8 + "]" * 8) == [[[[[[[[]]]]]]]]
     calls = 0
     original = yaml.scanner.Scanner.fetch_flow_sequence_start
 
@@ -38,15 +43,8 @@ def test_patch_depth_refusal_bounds_scanner_work(monkeypatch):
         return original(scanner)
 
     monkeypatch.setattr(yaml.scanner.Scanner, "fetch_flow_sequence_start", count)
-    with pytest.raises(PatchError, match="depth"):
-        parse_value("[" * 2000 + "]" * 2000)
-
-
-@pytest.mark.parametrize("content", ["v: &v [1]\nx: *v\n", alias_graph(), "[" * 2000 + "]" * 2000])
-def test_whole_file_write_refuses_unsafe_yaml(content):
-    result, outcome, _ = _yaml_protected_check("", content, "set_yaml_config")
-    assert outcome == "invalid_request"
-    assert result["isError"] is True
+    with pytest.raises(YamlParseError, match="depth"):
+        load_tagged_lenient("[" * 2000 + "]" * 2000)
 
 
 def test_size_refusal_precedes_parser_work(monkeypatch):

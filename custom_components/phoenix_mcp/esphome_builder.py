@@ -93,10 +93,6 @@ ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     # contained: it also drops the shared PlatformIO cache, so every device's next
     # build slows; the caller states that cost.
     "firmware/clean",
-    # Compiles a renamed image and OTA-flashes it, so it is reachable ONLY from a
-    # tool gated on cap_esphome_flash. Under the authoring capability it would
-    # flash a device without the capability that governs flashing.
-    "devices/rename",
 })
 
 # The Device Builder colorizes its process output and sends the escape as the

@@ -142,9 +142,9 @@ class TestDashboardDesigner:
         caps = get_persona_caps(PERSONA_DASHBOARD_DESIGNER)
         assert caps["cap_lovelace_write"] == CAP_ALLOW
 
-    def test_filesystem_is_confirm(self):
+    def test_theme_and_card_files_are_readable(self):
         caps = get_persona_caps(PERSONA_DASHBOARD_DESIGNER)
-        assert caps["cap_filesystem"] == CAP_CONFIRM
+        assert caps["cap_filesystem"] == CAP_ALLOW
 
     def test_no_device_control_or_config_authoring(self):
         caps = get_persona_caps(PERSONA_DASHBOARD_DESIGNER)
@@ -223,13 +223,14 @@ class TestDetectPersona:
 class TestEsphome:
     """The esphome persona is a narrow template for device work."""
 
-    def test_only_the_esphome_cap_is_writable(self):
+    def test_reads_and_builds_and_flashes_only_with_approval(self):
         caps = get_persona_caps(PERSONA_ESPHOME)
         writable = {c for c, m in caps.items() if m != CAP_DENY and c.endswith("_write")}
         assert writable == set()
-        assert caps["cap_esphome_yaml"] == CAP_CONFIRM
-        # No device control and no HA config authoring: this access key edits device
-        # files, it does not operate the house.
+        assert caps["cap_esphome_yaml"] == CAP_ALLOW
+        assert caps["cap_esphome_flash"] == CAP_CONFIRM
+        # No device control and no HA config authoring: this access key reads and
+        # builds device files and flashes with approval; it does not operate the house.
         assert caps["cap_physical_control"] == CAP_DENY
         assert caps["cap_yaml_edit"] == CAP_DENY
         assert caps["cap_filesystem"] == CAP_DENY

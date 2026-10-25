@@ -196,8 +196,7 @@ def test_manifest_records_the_immutable_release_source():
 
     assert manifest["source_repository"] == "https://github.com/leecaochang/mesa-core.git"
     assert manifest["source_revision"] == "481554eeb1203fd685a79d7f118ac351f162599f"
-    # 1.4.0 was vendored from its main-branch commit before a release tag existed.
-    assert "source_tag" not in manifest
+    assert manifest["source_tag"] == "v1.4.0"
 
 
 def test_sync_accepts_a_clean_untagged_source_revision(tmp_path):

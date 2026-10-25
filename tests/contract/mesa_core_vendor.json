@@ -3,6 +3,7 @@
   "source_version": "1.4.0",
   "source_repository": "https://github.com/leecaochang/mesa-core.git",
   "source_revision": "481554eeb1203fd685a79d7f118ac351f162599f",
+  "source_tag": "v1.4.0",
   "vendor_prefix": "custom_components.phoenix_mcp.mesa_core",
   "tree_sha256": "2565a158854b0d4356696ecc99f521b4a843340705e7e990e136799fbffa22f2",
   "files": {

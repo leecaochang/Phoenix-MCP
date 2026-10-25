@@ -153,7 +153,7 @@ class TestValidate:
         assert "esphome_version" not in body and "device_builder_version" not in body
 
     async def test_sends_the_filename_and_never_the_content(self, hass, esphome_dir):
-        """Validation must run on approved on-disk content, not a caller payload.
+        """Validation must run on the operator's on-disk content, not a caller payload.
 
         ESPHome evaluates config at validation time and external_components can
         fetch and execute remote code, so accepting arbitrary content here would

@@ -1,15 +1,17 @@
 """Integration tests for configuration version capture.
 
 Exercises the executor capture sites end-to-end with a real VersionStore for the
-YAML-backed resources (automation, script, scene): create, edit and delete must
-record one version each, with correct before/after. A real PhoenixData is supplied
-because capture is a no-op when data is a MagicMock.
+YAML-backed resources (automation, script, scene) and blueprint source: create,
+edit and delete must record one version each, with correct before/after. A real
+PhoenixData is supplied because capture is a no-op when data is a MagicMock.
+Configuration file versions are history only and never restore.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,18 +27,17 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from tests.runtime_fixtures import mesa_off_store
 
-from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUEST_BODY_BYTES
+from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUEST_BODY_BYTES, VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool as _mcp_call_tool, async_restore_version
 from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
-from custom_components.phoenix_mcp.version_store import VersionStore
+from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
 
 
-# The seeded configuration.yaml. set_yaml_config refuses a write that drops a
-# top-level key without declaring it, so every write here stays a superset.
+# The seeded configuration.yaml: Home Assistant's default editor-file includes.
 _SEED_YAML = (
     "automation: !include automations.yaml\n"
     "script: !include scripts.yaml\n"
@@ -76,17 +77,11 @@ def _text(content: dict) -> dict:
 
 
 async def _call_tool(name, args, *rest):
-    """Wrap flat set_entity / patch_yaml_config test arguments in the public envelope shapes."""
+    """Wrap flat set_entity test arguments in the public envelope shape."""
     args = dict(args)
     if name == "set_entity" and "changes" not in args:
         entity_id = args.pop("entity_id")
         args = {"entity_id": entity_id, "changes": args}
-    elif name == "patch_yaml_config" and "address" not in args:
-        address = {"kind": "key", "value": args.pop("key")}
-        change = {"kind": args.pop("op", "set")}
-        if "content" in args:
-            change["content"] = args.pop("content")
-        args.update({"address": address, "change": change})
     return await _mcp_call_tool(name, args, *rest)
 
 
@@ -403,116 +398,136 @@ class TestRestoreEndpoint:
         assert self._alias(hass, aid) == "B"
 
 
-class TestRawWriteCapture:
-    async def test_yaml_config_records_create_then_edit(self, hass):
+# Blueprint source in the form Home Assistant's blueprint/save writes back.
+_BLUEPRINT = (
+    "blueprint:\n  name: Capture probe\n  domain: automation\n  input: {}\n"
+    "triggers: []\nactions: []\n"
+)
+_BLUEPRINT_ID = "automation/capture/probe.yaml"
+
+
+class TestBlueprintVersionCapture:
+    """Blueprint source versions capture HA's persisted text and restore through HA.
+
+    The real automation integration supplies the blueprint commands, so each
+    stored version is what Home Assistant wrote, not what the agent sent.
+    """
+
+    @pytest.fixture
+    async def env(self, hass: HomeAssistant, hass_admin_user):
+        from homeassistant.setup import async_setup_component
+
+        for name in ("automations.yaml", "scenes.yaml"):
+            (Path(hass.config.config_dir) / name).write_text("[]\n", encoding="utf-8")
+        (Path(hass.config.config_dir) / "scripts.yaml").write_text("{}\n", encoding="utf-8")
+        assert await async_setup_component(hass, "automation", {})
+        return hass
+
+    @staticmethod
+    def _access_key() -> AccessKeyRecord:
+        return _access_key(cap_blueprint_write="allow", cap_automation_write="allow")
+
+    @staticmethod
+    def _source(hass) -> str:
+        path = Path(hass.config.config_dir) / "blueprints" / _BLUEPRINT_ID
+        return path.read_text(encoding="utf-8")
+
+    async def test_create_then_edit_records_history_and_restore_records_a_rollback(self, hass, env):
         data, versions = _data()
-        access_key = _access_key(cap_yaml_edit="allow")
-        first_content = _SEED_YAML + "default_config:\n"
-        second_content = first_content + "foo: bar\n"
-        await _call_tool("set_yaml_config", {"content": first_content}, access_key, hass, data)
-        await _call_tool("set_yaml_config", {"content": second_content}, access_key, hass, data)
+        access_key = self._access_key()
+        edited = _BLUEPRINT.replace("Capture probe", "Capture probe v2")
+        for tool, content in (("create_blueprint", _BLUEPRINT), ("edit_blueprint", edited)):
+            result, outcome, _res = await _call_tool(
+                tool, {"domain": "automation", "path": "capture/probe.yaml", "content": content},
+                access_key, hass, data,
+            )
+            assert outcome == "allowed", result
 
-        # configuration.yaml may or may not already exist, so assert on the
-        # before/after content chain rather than on create-vs-edit of the first write.
-        history = versions.list_for("yaml_config", "configuration.yaml")
-        assert len(history) == 2
-        second, first = history  # newest first
-        assert first.after["content"] == first_content
-        assert second.before["content"] == first_content
-        assert second.after["content"] == second_content
-
-    async def test_patch_yaml_config_records_a_restorable_whole_file(self, hass):
-        """A patch is a partial write; its version must not be a partial record.
-
-        Asserted against the STORE and a restore round trip rather than the
-        _record_version call, which swallows failures by design (history must
-        never break a write), so a wiring mistake would otherwise look like a pass.
-        """
-        data, versions = _data()
-        access_key = _access_key(cap_yaml_edit="allow")
-        await _call_tool(
-            "patch_yaml_config", {"key": "recorder", "content": "purge_keep_days: 10\n"},
-            access_key, hass, data)
-        rec = versions.list_for("yaml_config", "configuration.yaml")[0]
-        assert rec.before["content"] == _SEED_YAML
-        assert "purge_keep_days: 10" in rec.after["content"]
-        assert "recorder" in rec.summary
-
-        _r, outcome, _res = await async_restore_version(rec, "admin-1", hass, data, side="before")
-        assert outcome == "allowed"
-        with open(hass.config.path("configuration.yaml"), encoding="utf-8") as f:
-            assert f.read() == _SEED_YAML
-
-    async def test_write_file_records_create_then_edit(self, hass):
-        data, versions = _data()
-        access_key = _access_key(cap_filesystem="allow")
-        rel = "www/phx_cap_test.js"
-        target = os.path.join(hass.config.config_dir, "www", "phx_cap_test.js")
-        if os.path.exists(target):  # the test config dir can persist across runs
-            os.remove(target)
-        await _call_tool("write_file", {"path": rel, "content": "v1"}, access_key, hass, data)
-        await _call_tool("write_file", {"path": rel, "content": "v2"}, access_key, hass, data)
-
-        history = versions.list_for("file", rel)
+        history = versions.list_for("blueprint", _BLUEPRINT_ID)
         assert [v.action for v in history] == ["edit", "create"]
         edit_rec, create_rec = history
-        assert create_rec.before is None and create_rec.after["content"] == "v1"
-        assert edit_rec.before["content"] == "v1" and edit_rec.after["content"] == "v2"
+        assert create_rec.before is None and create_rec.after["content"] == _BLUEPRINT
+        assert edit_rec.before["content"] == _BLUEPRINT and edit_rec.after["content"] == edited
 
-    async def test_oversized_content_stored_as_truncated_marker(self, hass):
-        data, versions = _data()
-        access_key = _access_key(cap_yaml_edit="allow")
-        big = _SEED_YAML + "# " + "x" * (MAX_DIFF_INLINE_BYTES + 50)
-        await _call_tool("set_yaml_config", {"content": big}, access_key, hass, data)
-        rec = versions.list_for("yaml_config", "configuration.yaml")[0]
-        assert rec.after["content"] is None
-        assert rec.after["truncated"] is True
-        assert rec.after["bytes"] == len(big.encode("utf-8"))
-
-
-class TestRawWriteRestore:
-    async def test_restore_yaml_reapplies_and_records_rollback(self, hass):
-        data, versions = _data()
-        access_key = _access_key(cap_yaml_edit="allow")
-        content_a = _SEED_YAML + "a: 1\n"
-        content_b = _SEED_YAML + "b: 2\n"
-        await _call_tool("set_yaml_config", {"content": content_a}, access_key, hass, data)
-        await _call_tool("set_yaml_config", {"content": content_b}, access_key, hass, data)
-        create_ver = versions.list_for("yaml_config", "configuration.yaml")[-1]  # after == content_a
-
-        result, _outcome, _res = await async_restore_version(create_ver, "admin-1", hass, data)
-        assert result.get("isError") is not True
-
-        # Restoring content_a over content_b DROPS the top-level "b", which an
-        # ordinary write would be refused for; the restore path is exempt.
-        with open(hass.config.path("configuration.yaml"), encoding="utf-8") as f:
-            assert f.read() == content_a
-        newest = versions.list_for("yaml_config", "configuration.yaml")[0]
+        result, outcome, _res = await async_restore_version(create_rec, "admin-1", hass, data)
+        assert outcome == "allowed", result
+        assert self._source(hass) == _BLUEPRINT
+        newest = versions.list_for("blueprint", _BLUEPRINT_ID)[0]
         assert newest.action == "rollback"
         assert newest.approved_by_user_id == "admin-1"
 
-    async def test_restore_file_reapplies(self, hass):
+    async def test_oversized_source_is_stored_as_a_marker_that_does_not_restore(self, hass, env):
         data, versions = _data()
-        access_key = _access_key(cap_filesystem="allow")
-        rel = "www/phx_restore_test.js"
-        await _call_tool("write_file", {"path": rel, "content": "first"}, access_key, hass, data)
-        await _call_tool("write_file", {"path": rel, "content": "second"}, access_key, hass, data)
-        create_ver = versions.list_for("file", rel)[-1]  # after == "first"
+        description = "x" * (MAX_DIFF_INLINE_BYTES + 50)
+        content = _BLUEPRINT.replace("  input: {}\n", f"  description: {description}\n  input: {{}}\n")
+        result, outcome, _res = await _call_tool(
+            "create_blueprint", {"domain": "automation", "path": "capture/probe.yaml", "content": content},
+            self._access_key(), hass, data,
+        )
+        assert outcome == "allowed", result
+        rec = versions.list_for("blueprint", _BLUEPRINT_ID)[0]
+        assert rec.after["content"] is None
+        assert rec.after["truncated"] is True
+        assert rec.after["bytes"] > MAX_DIFF_INLINE_BYTES
 
-        await async_restore_version(create_ver, "admin-2", hass, data)
-        with open(os.path.join(hass.config.config_dir, "www", "phx_restore_test.js"), encoding="utf-8") as f:
-            assert f.read() == "first"
-        assert versions.list_for("file", rel)[0].action == "rollback"
-
-    async def test_restore_truncated_version_refused(self, hass):
-        data, versions = _data()
-        access_key = _access_key(cap_yaml_edit="allow")
-        big = _SEED_YAML + "# " + "y" * (MAX_DIFF_INLINE_BYTES + 50)
-        await _call_tool("set_yaml_config", {"content": big}, access_key, hass, data)
-        rec = versions.list_for("yaml_config", "configuration.yaml")[0]
         result, outcome, _res = await async_restore_version(rec, "admin-3", hass, data)
         assert outcome == "invalid_request"
         assert "too large" in result["content"][0]["text"].lower()
+        assert [v.id for v in versions.list_for("blueprint", _BLUEPRINT_ID)] == [rec.id]
+
+
+class TestConfigurationFileVersionsAreHistoryOnly:
+    """configuration.yaml, other config files and ESPHome YAML keep readable history only.
+
+    No current tool records these resource types, so each version is loaded from
+    storage in the form earlier releases wrote. A restore of either side is
+    refused and leaves the file and the history as they were.
+    """
+
+    @staticmethod
+    async def _seed(resource_type: str, resource_id: str):
+        """History as an upgraded install holds it: loaded from storage, never recorded anew."""
+        stored = VersionRecord(
+            id=uuid.uuid4().hex, resource_type=resource_type, resource_id=resource_id,
+            alias=resource_id, action="edit",
+            before={"content": "before: true\n"}, after={"content": "after: true\n"},
+            access_key_id=None, access_key_name="agent", request_id=None,
+            approved_by_user_id=None, timestamp=utcnow().isoformat(),
+        )
+        store = MagicMock()
+        store.async_load = AsyncMock(return_value={
+            "version": VERSION_STORAGE_VERSION, "versions": [stored.to_dict()]})
+        store.async_save = AsyncMock()
+        versions = VersionStore(store)
+        await versions.async_load()
+        return versions, versions.get(stored.id)
+
+    @pytest.mark.parametrize(("resource_type", "resource_id", "rel"), [
+        ("yaml_config", "configuration.yaml", "configuration.yaml"),
+        ("file", "www/history.js", "www/history.js"),
+        ("esphome_yaml", "kitchen.yaml", "esphome/kitchen.yaml"),
+    ])
+    @pytest.mark.parametrize("side", ["before", "after"])
+    async def test_restore_is_refused_and_the_file_is_untouched(self, hass, resource_type, resource_id, rel, side):
+        path = Path(hass.config.config_dir) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text("current: true\n", encoding="utf-8")
+        current = path.read_text(encoding="utf-8")
+        versions, rec = await self._seed(resource_type, resource_id)
+        data = PhoenixData(
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
+        )
+
+        result, outcome, _res = await async_restore_version(rec, "admin-1", hass, data, side=side)
+
+        assert outcome == "invalid_request"
+        assert result["content"][0]["text"].startswith(
+            "This version holds configuration file text, which Phoenix does not write back."
+        )
+        assert path.read_text(encoding="utf-8") == current
+        assert [v.id for v in versions.list_for(resource_type, resource_id)] == [rec.id]
+        assert versions.get(rec.id).before == {"content": "before: true\n"}
 
 
 class TestEntityRegistryWrite:

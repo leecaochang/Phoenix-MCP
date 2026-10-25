@@ -168,12 +168,12 @@ describe("Comparison and Restore", () => {
   });
 
   it("refuses a side whose snapshot was too large to store", async () => {
-    const yaml = version({ id: "v1", resource_type: "yaml_config", resource_id: "configuration.yaml", alias: "configuration.yaml", action: "edit", has_before: true });
-    const newer = version({ id: "v2", resource_type: "yaml_config", resource_id: "configuration.yaml", alias: "configuration.yaml", action: "edit" });
-    vi.mocked(api.listVersions).mockResolvedValueOnce(page([yaml])).mockResolvedValue(page([newer, yaml]));
-    vi.mocked(api.getVersion).mockResolvedValue(record(yaml, { before: { content: null, bytes: 900000 }, after: { content: "a: 1\n" } }));
+    const blueprint = version({ id: "v1", resource_type: "blueprint", resource_id: "automation/motion.yaml", alias: "motion.yaml", action: "edit", has_before: true });
+    const newer = version({ id: "v2", resource_type: "blueprint", resource_id: "automation/motion.yaml", alias: "motion.yaml", action: "edit" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([blueprint])).mockResolvedValue(page([newer, blueprint]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(blueprint, { before: { content: null, bytes: 900000 }, after: { content: "a: 1\n" } }));
     renderChanges();
-    await choose("configuration.yaml");
+    await choose("motion.yaml");
     const [before, after] = openRestore();
     expect(before).toHaveAttribute("title", "This snapshot was too large to store, so it cannot be restored.");
     expect(after).not.toHaveAttribute("aria-disabled", "true");
@@ -280,6 +280,16 @@ describe("Comparison of device YAML", () => {
     await waitFor(() => expect(view.container.querySelector(".yaml-diff-cols")).toBeTruthy());
     return view;
   }
+
+  it("shows a configuration file version as history only, with no Restore", async () => {
+    const view = await openDetail(DEVICE.replace("WARN", "DEBUG"));
+    expect(view.container.textContent).toContain("name: rf-blaster2");
+    const reason = "Phoenix does not write configuration files back, so this version is history only. Copy its content and apply it by hand.";
+    for (const side of openRestore()) {
+      expect(side).toHaveAttribute("aria-disabled", "true");
+      expect(side).toHaveAttribute("title", reason);
+    }
+  });
 
   it("renders the file itself, not a config: block wrapping it", async () => {
     await openDetail();

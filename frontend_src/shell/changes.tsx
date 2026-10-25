@@ -26,6 +26,9 @@ import { useNotify } from "../ui/notify";
 // "content: |-" block, hiding the too-large marker and offering Restore on a
 // snapshot the backend would refuse.
 export const RAW_CONTENT_TYPES = new Set(["yaml_config", "file", "esphome_yaml", "blueprint"]);
+// Configuration file versions are history only: their text is shown, but
+// Phoenix never writes it back, so they offer no Restore.
+const HISTORY_ONLY_TYPES = new Set(["yaml_config", "file", "esphome_yaml"]);
 
 /** Extract the raw-text snapshot from a version side, or null. content is null
  * when the snapshot was too large to store (a non-restorable marker). */
@@ -46,6 +49,7 @@ export type RestoreSide = "before" | "after";
 
 /** Whether a side of a change can be restored, and the reason when it cannot. */
 export function restoreAvailability(record: VersionRecord, history: VersionSummary[], side: RestoreSide): { ok: true } | { ok: false; reason: string } {
+  if (HISTORY_ONLY_TYPES.has(record.resource_type)) return { ok: false, reason: t("changes.historyOnly") };
   const value = side === "before" ? record.before : record.after;
   if (value == null) return { ok: false, reason: t(side === "before" ? "changes.noBefore" : "changes.noAfter") };
   if (RAW_CONTENT_TYPES.has(record.resource_type) && rawSide(value)?.content == null) return { ok: false, reason: t("changes.tooLarge") };

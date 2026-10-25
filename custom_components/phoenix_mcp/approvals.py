@@ -100,7 +100,7 @@ class PendingApproval:
         """Serialise the approval.
 
         Args are redacted by default so admin-API responses never echo secret
-        bearing content (write_file / set_yaml_config bodies, credentials); the
+        bearing content (file bodies, credentials); the
         review surface is the already-redacted diff. The persistence path passes
         redact_args=False to keep the raw args the approved-action executor
         re-runs from. See helpers.redact_structure.

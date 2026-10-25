@@ -12,7 +12,6 @@ from hassil.models import MatchEntity, UnmatchedTextEntity
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, UrlManager
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from homeassistant.util.file import WriteError
 
 from custom_components.phoenix_mcp import panel
 from custom_components.phoenix_mcp.decision_shadow import DecisionShadow
@@ -20,7 +19,6 @@ from custom_components.phoenix_mcp.esphome_builder import _OutputCollector, _TRU
 from custom_components.phoenix_mcp.mcp_view import _build_context_json, _build_context_plain
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools import discovery
-from custom_components.phoenix_mcp.tools.config_files import _recoverable_file_write
 
 
 def access_key(**changes):
@@ -139,26 +137,6 @@ def test_output_collector_bounds_retention_during_streaming(ratio):
     tail = 64 - head
     assert truncated
     assert value == complete[:head] + _TRUNCATION_MARKER + (complete[-tail:] if tail else "")
-
-
-@pytest.mark.parametrize("changed", [False, True])
-async def test_atomic_write_failure_only_releases_barrier_after_unchanged_readback(hass, changed):
-    from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
-    path = hass.config.path("file.txt")
-    with open(path, "w") as file:
-        file.write("before")
-    recovery = ConfigurationRecovery()
-    data = SimpleNamespace(config_recovery=recovery)
-    def fail(target, content):
-        if changed:
-            with open(target, "w") as file:
-                file.write(content)
-        raise WriteError("failure")
-    with patch("custom_components.phoenix_mcp.tools.config_files._write_text_atomic", fail):
-        response = await _recoverable_file_write(path=path, rel="file.txt", before_exists=True, before_content="before",
-            content="after", access_key=access_key(), data=data, operation="write_file", display_path="file.txt", hass=hass)
-    assert response[1] == "invalid_request"
-    assert recovery.records()[0]["phase"] == ("unknown" if changed else "not_applied")
 
 
 async def test_nonselector_ai_task_schema_uses_active_converter():

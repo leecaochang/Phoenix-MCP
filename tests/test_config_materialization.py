@@ -295,9 +295,9 @@ class TestCreateMaterialization:
 class TestNonEntityWriteVisibility:
     """Writes that produce no entity are visible to the matching read tool at once.
 
-    A blueprint, configuration.yaml and a dashboard have nothing in hass.states
-    to appear, so an agent that writes and reads back to confirm must not get
-    the pre-write answer.
+    A blueprint and a dashboard have nothing in hass.states to appear, so an
+    agent that writes and reads back to confirm must not get the pre-write
+    answer.
     """
 
     async def test_a_new_blueprint_is_listed_the_moment_create_returns(
@@ -347,28 +347,6 @@ class TestNonEntityWriteVisibility:
             f"create_blueprint returned before list_blueprints could see it: {paths}"
         )
 
-    async def test_configuration_yaml_reads_back_what_was_just_written(self, hass: HomeAssistant):
-        # set_yaml_config runs no reload (the reload family is a separate, gated
-        # apply step), so this pins that the file read is not a stale cache.
-        access_key = _access_key(cap_yaml_edit="allow")
-        data = _data()
-        # A superset of the seeded layout: set_yaml_config refuses a write that
-        # drops a top-level key without declaring it.
-        content = (
-            "automation: !include automations.yaml\n"
-            "script: !include scripts.yaml\n"
-            "scene: !include scenes.yaml\n"
-            "# phx probe marker\n"
-        )
-        result, outcome, _res = await _call_tool(
-            "set_yaml_config", {"content": content}, access_key, hass, data,
-        )
-        assert outcome == "allowed", _text(result)
-
-        read, outcome, _res = await _call_tool("get_yaml_config", {}, access_key, hass, data)
-        assert outcome == "allowed"
-        assert "phx probe marker" in _json(read)["content"]
-
     async def test_a_dashboard_layout_reads_back_what_was_just_written(
         self, hass: HomeAssistant,
     ):
@@ -408,23 +386,6 @@ class TestNonEntityWriteVisibility:
         assert [c["content"] for c in cards] == ["one", "two"], (
             f"a card op was not immediately visible, or clobbered the layout: {cards}"
         )
-
-    async def test_a_scoped_file_reads_back_what_was_just_written(
-        self, hass: HomeAssistant, isolated_config_dir,
-    ):
-        (isolated_config_dir / "www").mkdir()
-        access_key = _access_key(cap_filesystem="allow")
-        data = _data()
-        result, outcome, _res = await _call_tool(
-            "write_file", {"path": "www/phx_probe.txt", "content": "probe marker"}, access_key, hass, data,
-        )
-        assert outcome == "allowed", _text(result)
-
-        read, outcome, _res = await _call_tool(
-            "read_file", {"path": "www/phx_probe.txt"}, access_key, hass, data,
-        )
-        assert outcome == "allowed"
-        assert _json(read)["content"] == "probe marker"
 
 
 async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):

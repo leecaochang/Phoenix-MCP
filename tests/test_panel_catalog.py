@@ -30,19 +30,17 @@ from custom_components.phoenix_mcp.const import CATALOGS_DIR
 
 
 @pytest.fixture(autouse=True)
-def _clear_catalog_caches():
-    """Both readers are lru_cached, so a test that swaps the directory must reset."""
-    helpers._catalog_section.cache_clear()
-    helpers.panel_catalog.cache_clear()
+def _reload_shipped_catalogs():
+    """Catalogs are loaded once into memory, so a test that swaps the directory reloads after."""
     yield
-    helpers._catalog_section.cache_clear()
-    helpers.panel_catalog.cache_clear()
+    helpers.load_catalogs()
 
 
 def _fake_catalogs(tmp_path, monkeypatch, **languages: dict) -> None:
     for language, doc in languages.items():
         (tmp_path / f"{language}.json").write_text(json.dumps(doc), encoding="utf-8")
     monkeypatch.setattr(helpers, "CATALOGS_DIR", tmp_path)
+    helpers.load_catalogs()
 
 
 def test_english_is_flattened_to_dotted_keys() -> None:
@@ -215,5 +213,6 @@ async def test_endpoint_is_admin_only() -> None:
 async def test_endpoint_404s_when_the_catalog_cannot_be_read(tmp_path, monkeypatch) -> None:
     """An empty catalog is a broken install, not a language the panel should render."""
     monkeypatch.setattr(helpers, "CATALOGS_DIR", tmp_path)
+    helpers.load_catalogs()
     resp = await _get("en")
     assert resp.status == 404

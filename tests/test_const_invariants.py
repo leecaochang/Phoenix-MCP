@@ -14,10 +14,11 @@ import pathlib
 import homeassistant.components.system_log
 
 from custom_components.phoenix_mcp.const import (
+    CAPABILITY_TIERS,
+    CONFIRM_AVAILABLE_CAPS,
     LOG_LEVELS,
     PHYSICAL_GATE_DOMAINS,
     PHYSICAL_GATE_SERVICES,
-    YAML_PROTECTED_SUBTREES,
 )
 from custom_components.phoenix_mcp.helpers import _LOG_LEVEL_RANK
 
@@ -87,15 +88,26 @@ def test_log_levels_are_a_subset_of_the_record_ranks():
     assert set(LOG_LEVELS) <= set(_LOG_LEVEL_RANK)
 
 
-def test_yaml_protected_subtrees_shape():
-    # set_yaml_config refuses a change to any of these paths, so a malformed entry
-    # (a bare string instead of a tuple, an empty child list) would silently
-    # protect nothing.
-    assert YAML_PROTECTED_SUBTREES, "the deny floor must not be empty"
-    for top, children in YAML_PROTECTED_SUBTREES.items():
-        assert isinstance(top, str) and top, f"bad top-level key: {top!r}"
-        assert isinstance(children, tuple) and children, (
-            f"{top} must map to a non-empty tuple of child keys, got {children!r}"
-        )
-        for child in children:
-            assert isinstance(child, str) and child, f"bad child key under {top}: {child!r}"
+def test_confirm_is_offered_exactly_outside_the_read_and_everyday_tiers():
+    # The Read and Everyday tiers are deny/allow only and every other tier offers
+    # Confirm. The two constants are edited separately, so moving a capability
+    # between tiers without updating CONFIRM_AVAILABLE_CAPS would leave a write
+    # tier without its Confirm choice or offer Confirm where it gates nothing.
+    drifted = {
+        cap: tier for cap, tier in CAPABILITY_TIERS.items()
+        if (tier in ("read", "everyday")) == (cap in CONFIRM_AVAILABLE_CAPS)
+    }
+    assert not drifted, f"Confirm availability disagrees with the tier: {drifted}"
+
+
+def test_configuration_file_capabilities_sit_in_their_tiers():
+    # cap_filesystem only reads, and cap_esphome_yaml reads device YAML and runs
+    # Device Builder work that touches no device, so neither offers Confirm.
+    # cap_yaml_edit keeps Confirm because it also gates the reload services that
+    # apply hand-edited configuration.
+    assert CAPABILITY_TIERS["cap_filesystem"] == "read"
+    assert CAPABILITY_TIERS["cap_esphome_yaml"] == "everyday"
+    assert CAPABILITY_TIERS["cap_yaml_edit"] == "system"
+    assert "cap_filesystem" not in CONFIRM_AVAILABLE_CAPS
+    assert "cap_esphome_yaml" not in CONFIRM_AVAILABLE_CAPS
+    assert "cap_yaml_edit" in CONFIRM_AVAILABLE_CAPS

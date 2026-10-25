@@ -22,7 +22,7 @@ from .agent_recovery import AgentRecovery, STORAGE_KEY as AGENT_RECOVERY_STORAGE
 from .card_catalog import CardCatalogStore
 from .const import APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY, CARD_CATALOG_STORAGE_VERSION, DOMAIN, EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL, VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION
 from .data import PhoenixData
-from .helpers import async_archive_expired_access_key, cancel_expiry_timer, schedule_expiry_timer
+from .helpers import async_archive_expired_access_key, async_load_catalogs, cancel_expiry_timer, schedule_expiry_timer
 from .policy_engine import template_blocklist_vars
 from .rate_limiter import RateLimiter
 from .access_key_store import AccessKeyStore
@@ -311,6 +311,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     Schedules a periodic flush of last_used_at timestamps and wires registry
     change listeners to invalidate the entity tree cache.
     """
+    await async_load_catalogs(hass)
     store = await AccessKeyStore.async_create(hass)
     rate_limiter = RateLimiter()
     audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY)

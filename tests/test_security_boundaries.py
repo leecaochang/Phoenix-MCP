@@ -24,7 +24,7 @@ from custom_components.phoenix_mcp.policy_engine import Permission, canonical_en
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, AccessKeyRecord, AccessKeyStore
 from custom_components.phoenix_mcp.tool_common import redaction_sentinel_path
-from custom_components.phoenix_mcp.yaml_patch import PatchError, parse_value
+from custom_components.phoenix_mcp.yaml_includes import YamlParseError, load_tagged_lenient
 
 
 def _access_key(**kwargs):
@@ -65,9 +65,12 @@ async def test_template_snapshot_uses_read_attribute_redaction(hass, key):
 
 
 @pytest.mark.parametrize("content", ["x: &x [1, 2]\ny: *x", "&x [*x]"])
-def test_yaml_patch_refuses_alias_graph_before_loading(content):
-    with pytest.raises(PatchError, match="anchors and aliases"):
-        parse_value(content)
+def test_supplied_yaml_refuses_alias_graph_before_loading(content):
+    # Caller-supplied YAML refuses anchors outright; a file already on disk keeps
+    # its bounded, acyclic aliases.
+    with pytest.raises(YamlParseError, match="anchors and aliases"):
+        load_tagged_lenient(content, allow_aliases=False)
+    assert load_tagged_lenient("x: &x [1, 2]\ny: *x") == {"x": [1, 2], "y": [1, 2]}
 
 
 def test_sentinel_walk_terminates_shared_and_cyclic_graphs():
