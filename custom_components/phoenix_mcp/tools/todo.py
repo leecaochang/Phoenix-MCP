@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -50,7 +50,10 @@ async def _items(hass: HomeAssistant, entity_id: str, statuses: list[str]) -> li
         "todo", "get_items", {"entity_id": entity_id, "status": statuses}, blocking=True, return_response=True,
         **household_service_kwargs(hass, "todo", "get_items"),
     ), TODO_TIMEOUT_SECONDS)
-    items = ((response or {}).get(entity_id) or {}).get("items") or []
+    # Home Assistant answers {entity_id: {"items": [...]}}; anything else fails
+    # this one list, which the caller reports as unreadable.
+    listed = cast("dict[str, Any] | None", (response or {}).get(entity_id))
+    items = cast("list[Any]", (listed or {}).get("items") or [])
     return [dict(item) for item in items if isinstance(item, dict)]
 
 
@@ -91,8 +94,8 @@ async def _tool_get_todo_items(
     page, envelope = paged
 
     def build(items: list, envelope: dict) -> dict:
-        lists = [{"entity_id": entity_id, "name": hass.states.get(entity_id).name} for entity_id in still
-                 if hass.states.get(entity_id) is not None]
+        lists = [{"entity_id": entity_id, "name": state.name} for entity_id in still
+                 if (state := hass.states.get(entity_id)) is not None]
         body: dict[str, Any] = {"lists": lists, "status": statuses, **envelope, "items": items}
         if failed := [item for item in unreadable if item["list"] in still]:
             body["unreadable"] = failed
@@ -164,6 +167,7 @@ async def _tool_set_todo_item(
     if status is not None and status not in STATUSES:
         return _tool_error("status must be needs_action or completed."), "invalid_request", tool
     target: dict | None = None
+    service_data: dict[str, Any]
     if action == "add":
         if not isinstance(summary, str) or not summary.strip():
             return _tool_error("add needs summary, the item's text."), "invalid_request", tool
@@ -266,8 +270,8 @@ async def _verified(
         body.update(applied=True, verified=verified, item=target if action == "remove" else after)
     else:
         renamed = summary if isinstance(summary, str) and summary.strip() else (target or {}).get("summary")
-        after = named(renamed)
-        body.update(applied=True, verified=len(after) == 1, item=after[0] if len(after) == 1 else None)
+        matches = named(renamed)
+        body.update(applied=True, verified=len(matches) == 1, item=matches[0] if len(matches) == 1 else None)
     # Present is not enough: each requested field must read back as sent.
     if action != "remove" and body["verified"] and expected and (wrong := _unapplied(body["item"], expected)):
         body.update(verified=False, not_applied=wrong,

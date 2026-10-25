@@ -149,7 +149,7 @@ def _adopt_retired(tool: str, args: dict[str, Any], retired: set[str]) -> dict[s
 _SERVICE_OBJECT_SYNTAX = 'service: {"domain":"...","name":"...","data":{...}}'
 _TARGET_SELECTORS = {"entity_id": "entity", "device_id": "device", "area_id": "area"}
 _TARGET_SYNONYMS = {"entity_ids": "entity_id", "entities": "entity_id", "device_ids": "device_id", "area_ids": "area_id"}
-_EMPTY = (None, "", [], {})
+_EMPTY: tuple[Any, ...] = (None, "", [], {})
 
 
 def _target_groups(selectors: dict[str, Any]) -> list[dict[str, Any]]:
@@ -392,7 +392,9 @@ def _implied_kind(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     """
     field = {"get_logbook": "target", "get_esphome_job": "lookup", "get_relationships": "scope"}.get(tool)
     kind: str | None = None
-    value = args.get(field) if field else None
+    if field is None:
+        return args
+    value = args.get(field)
     if not isinstance(value, dict) or "kind" in value:
         return args
     if tool == "get_logbook" and {"entity_ids", "device_ids"} & set(value) and "id" not in value:

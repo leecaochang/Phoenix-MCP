@@ -425,6 +425,7 @@ async def test_post_apply_private_identity_change_has_explicit_status(
     assert body["retry_safe"] is False
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_private_identity_reads_a_child_device_without_core_reports(hass, reconfigure_env):
     # A child device's connections is a compatibility shim that reports each read;
     # the parent's real connections still anchor the identity, unchanged.

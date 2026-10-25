@@ -3010,6 +3010,7 @@ class TestAnnouncementGating:
             assert name in gate_map["unavailable"]
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 def test_the_radio_preview_reads_a_child_device_without_core_reports(hass):
     # manufacturer and model are compatibility shims on a child device.
     from unittest.mock import patch as _patch

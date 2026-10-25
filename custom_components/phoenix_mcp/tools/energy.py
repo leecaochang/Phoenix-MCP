@@ -173,7 +173,7 @@ async def _tool_get_energy_config(
 
 
 # What each meter of a source measures, as the Energy dashboard counts it.
-_SOURCE_METERS = {
+_SOURCE_METERS: dict[Any, dict[str, str]] = {
     "grid": {"stat_energy_from": "imported", "stat_energy_to": "exported"},
     "solar": {"stat_energy_from": "produced"},
     "battery": {"stat_energy_from": "discharged", "stat_energy_to": "charged"},

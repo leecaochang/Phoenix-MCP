@@ -2734,7 +2734,7 @@ async def _tool_get_audit_summary(
 
     items = []
     for e in entries:
-        item = {
+        item: dict[str, Any] = {
             "request_id": e.request_id,
             "timestamp": e.timestamp.isoformat(),
             "method": e.method,
@@ -3073,12 +3073,12 @@ async def _tool_compare_entities(
         # Both sides answer with the same body whether the entity is absent or
         # merely out of scope, and the resource names the tool rather than the
         # id, so a refusal is not an existence oracle.
-        missing = _tool_error(f"Entity not found: {json.dumps(eid[:80])}."), "not_found", "compare_entities"
+        not_found = _tool_error(f"Entity not found: {json.dumps(eid[:80])}."), "not_found", "compare_entities"
         if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
-            return missing
+            return not_found
         state = hass.states.get(eid)
         if state is None:
-            return missing
+            return not_found
         states.append(scrub_sensitive_attributes(state))
 
     # Scrubbing runs before the diff, so an attribute Phoenix strips from a

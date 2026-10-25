@@ -189,7 +189,7 @@ async def _tool_get_notifications(
             "notification_id": row.get("notification_id"),
             "title": row.get("title"),
             "message": row.get("message"),
-            "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
+            "created_at": created.isoformat() if created is not None and hasattr(created, "isoformat") else created,
         }
         item = redact_diagnostics(item)
         for key in ("title", "message"):

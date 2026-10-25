@@ -603,6 +603,10 @@ MESA_SCOPES: tuple[str, ...] = ("entity", "device", "area", "integration", "doma
 
 MESA_STORAGE_KEY = "phoenix_mcp_mesa"
 MESA_STORAGE_VERSION = 1
+# How long a mesa-core worker waits for a registry lookup handed to the event
+# loop. One lookup takes milliseconds; the bound only stops a worker from
+# waiting forever on a loop that has stopped.
+MESA_HOST_CALLBACK_TIMEOUT_SECONDS = 30
 # Global enforcement mode for the vendored MesaEnforcer. "off" disables MESA
 # entirely; "advisory" warns but never blocks (except read_only, which is
 # entity-nature, not policy); "enforced" blocks and routes confirm through the

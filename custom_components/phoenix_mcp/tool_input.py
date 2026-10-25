@@ -6,7 +6,7 @@ from contextvars import ContextVar
 import math
 import json
 import re
-from typing import Any
+from typing import Any, TypeVar
 
 from .const import MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES
 from .tool_defs import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
@@ -38,7 +38,10 @@ def note_argument_adjustment(text: str) -> None:
         notes.append(text)
 
 
-def with_argument_notes(result: tuple[dict, str, str], notes: list[str]) -> tuple[dict, str, str]:
+_Outcome = TypeVar("_Outcome", bound=str)
+
+
+def with_argument_notes(result: tuple[dict, _Outcome, str], notes: list[str]) -> tuple[dict, _Outcome, str]:
     """Attach the call's argument readings to its result, a JSON object's field or a text line."""
     if not notes:
         return result
@@ -369,8 +372,9 @@ def _schema_error(value: Any, schema: dict, path: str) -> str | None:
     """
     choices = schema.get("oneOf")
     if choices and not any(_schema_error(value, choice, path) is None for choice in choices):
-        kinds = [str(choice.get("type")) for choice in choices if isinstance(choice, dict) and choice.get("type")]
-        return f"{path} must be {' or '.join(dict.fromkeys(kinds))}." if kinds else f"{path} has an invalid type or value."
+        choice_kinds = [str(choice.get("type")) for choice in choices if isinstance(choice, dict) and choice.get("type")]
+        return (f"{path} must be {' or '.join(dict.fromkeys(choice_kinds))}." if choice_kinds
+                else f"{path} has an invalid type or value.")
     kinds = schema.get("type")
     if isinstance(kinds, str):
         kinds = [kinds]

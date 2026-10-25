@@ -2054,7 +2054,7 @@ async def _tool_cancel_esphome_job(
     # Confirmed only by the job reading back as finished; an unreadable job is unknown.
     body["status"] = status
     body["verified"] = None if status is None else status in _ESPHOME_JOB_TERMINAL
-    if body["verified"] is False:
+    if status is not None and status not in _ESPHOME_JOB_TERMINAL:
         body["message"] = ("The add-on accepted the cancel, but the job still reports " + status
                            + "; check it with get_esphome_job.")
     return _tool_success(json.dumps(body)), "allowed", f"esphome:{rel}"

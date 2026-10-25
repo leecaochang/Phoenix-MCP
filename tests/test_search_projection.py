@@ -96,8 +96,15 @@ def placed(hass):
     devices, entities = dr.async_get(hass), er.async_get(hass)
     hub = devices.async_get_or_create(config_entry_id="placed", identifiers={("test", "hub")}, name="Hub")
     devices.async_update_device(hub.id, area_id=kitchen.id)
-    part = devices.async_get_or_create_child(config_entry_id="placed", identifiers={("test", "part")}, parent_device_id=hub.id)
-    reached = devices.async_get_or_create(config_entry_id="placed", identifiers={("test", "reached")}, name="Reached", via_device_id=hub.id)
+    # Child devices arrived in Home Assistant 2026.9; earlier releases have no part.
+    part = (devices.async_get_or_create_child(config_entry_id="placed", identifiers={("test", "part")}, parent_device_id=hub.id)
+            if hasattr(devices, "async_get_or_create_child") else None)
+    # via_device_id replaced the identifier tuple in 2026.9. Only parameters
+    # count: 2026.7 also has a local variable of that name.
+    code = dr.DeviceRegistry.async_get_or_create.__code__
+    parameters = code.co_varnames[:code.co_argcount + code.co_kwonlyargcount]
+    via = {"via_device_id": hub.id} if "via_device_id" in parameters else {"via_device": ("test", "hub")}
+    reached = devices.async_get_or_create(config_entry_id="placed", identifiers={("test", "reached")}, name="Reached", **via)
     loose = devices.async_get_or_create(config_entry_id="placed", identifiers={("test", "loose")}, name="Loose")
     rows = {}
     for name, device, area in (("direct", None, kitchen.id), ("by_device", hub, None), ("orphan", loose, None)):
@@ -129,7 +136,7 @@ async def test_list_devices_has_area_counts_a_main_devices_area(hass, placed):
     # A child device is part of its main device and takes its area; a device
     # merely reached through the hub (via_device) is a separate product.
     assert await listed(False) == {placed.loose.id, placed.reached.id}
-    assert await listed(True) == {placed.hub.id, placed.part.id}
+    assert await listed(True) == {placed.hub.id} | ({placed.part.id} if placed.part else set())
 
 
 @pytest.mark.parametrize("tool", ["search_entities", "list_devices"])
@@ -149,7 +156,8 @@ async def test_device_rows_name_their_area(hass, placed):
     assert outcome == "allowed", content
     rows = {row["device_id"]: row for row in json.loads(content["content"][0]["text"])["devices"]}
     assert rows[placed.hub.id]["area"] == "Kitchen" and rows[placed.hub.id]["area_id"]
-    assert rows[placed.part.id]["area"] == "Kitchen"  # a child device takes its main device's area
+    if placed.part:
+        assert rows[placed.part.id]["area"] == "Kitchen"  # a child device takes its main device's area
     assert rows[placed.loose.id]["area"] is None and rows[placed.loose.id]["area_id"] is None
     content, outcome, _ = await _call_tool("get_device", {"device_id": placed.hub.id}, key, hass, _data())
     assert outcome == "allowed" and json.loads(content["content"][0]["text"])["area"] == "Kitchen"

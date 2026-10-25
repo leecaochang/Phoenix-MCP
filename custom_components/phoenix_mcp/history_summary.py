@@ -18,9 +18,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .recorder_queries import ceil_us, from_us
+
+if TYPE_CHECKING:
+    from homeassistant.core import State
 
 Row = tuple[int, str]
 # fetch(after_us, before_us, limit, include_start_state) -> ascending rows.
@@ -63,11 +66,13 @@ def read_attribute_change_page(
     """
     from homeassistant.components.recorder import history
 
-    states = history.get_significant_states(
+    # Without minimal_response every row is a full State; only that mode
+    # returns compressed dict rows.
+    states = cast("list[State]", history.get_significant_states(
         hass, from_us(after_us), from_us(before_us), [entity_id], None,
         include_start_time_state=include_start_state, significant_changes_only=False,
         minimal_response=False, no_attributes=False,
-    ).get(entity_id, [])
+    ).get(entity_id, []))
     rows: list[Row] = []
     # As in Core's change query, the start row comes on top of the limit.
     start = int(bool(states) and include_start_state and ceil_us(states[0].last_updated_timestamp) <= after_us)

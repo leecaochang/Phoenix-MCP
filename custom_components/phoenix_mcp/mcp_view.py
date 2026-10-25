@@ -46,7 +46,7 @@ from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
 from .audit import generate_request_id
-from .const import AGENTCLI_CLIENT_IP, BACKUP_COMPLETION_WAIT_SECONDS, BACKUP_SINGLE_SLOT_AGENT_DOMAINS, LOCAL_BACKUP_AGENT_IDS, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
+from .const import AGENTCLI_CLIENT_IP, BACKUP_COMPLETION_WAIT_SECONDS, BACKUP_SINGLE_SLOT_AGENT_DOMAINS, LOCAL_BACKUP_AGENT_IDS, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
@@ -56,7 +56,7 @@ from .template_render import TemplateRenderError, async_render_template_for_acce
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
-from .tool_common import _create_registry_mesa_approval, _lean_state, _normalize_fields, _project_state, _select_state_fields, fitted_offset_page, longest_fitting, offset_page, unknown_category_message, unknown_label_message
+from .tool_common import _create_registry_mesa_approval, _project_state, fitted_offset_page, longest_fitting, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import _argument_notes, decode_container_strings, note_argument_adjustment, scalar_arguments, tool_arguments_error, with_argument_notes
 from .device_semantics import (

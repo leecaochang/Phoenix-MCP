@@ -8,6 +8,7 @@ not_found for a missing device and an inaccessible one.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 import uuid
 from types import SimpleNamespace
@@ -913,7 +914,7 @@ def radio_env(hass: HomeAssistant):
         entity = ent_reg.async_get_or_create("binary_sensor", domain, name, config_entry=entries[domain],
                                              device_id=device.id, suggested_object_id=name)
         hass.states.async_set(entity.entity_id, "off", {"device_class": "door" if "door" in name else "moisture"})
-        if name == "z2m_door":
+        if name == "z2m_door" and _CHILD_DEVICES:
             # A child device takes its parent's radio.
             child = dev_reg.async_get_or_create_child(config_entry_id=entries["mqtt"].entry_id,
                                                       identifiers={("mqtt", "z2m_door_l2")}, parent_device_id=device.id)
@@ -923,13 +924,18 @@ def radio_env(hass: HomeAssistant):
     return hass
 
 
+# Child devices arrived in Home Assistant 2026.9; on earlier releases radio_env has no z2m_door_l2.
+_CHILD_DEVICES = hasattr(dr.DeviceRegistry, "async_get_or_create_child")
+_PART = ["z2m_door_l2"] if _CHILD_DEVICES else []
+
+
 def _radio_key() -> AccessKeyRecord:
     return _access_key(permissions=PermissionTree(domains={"binary_sensor": PermissionNode(state="GREEN")}))
 
 
 class TestSearchByRadioAndIntegration:
     @pytest.mark.parametrize(("radio", "expected"), [
-        ("zigbee", {"zha_leak", "z2m_door", "z2m_door_l2"}),
+        ("zigbee", {"zha_leak", "z2m_door", *_PART}),
         ("zwave", {"zwave_motion"}),
         ("matter", {"matter_contact"}),
         ("bluetooth", {"ble_plant"}),
@@ -941,6 +947,7 @@ class TestSearchByRadioAndIntegration:
         assert outcome == "allowed"
         assert {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]} == expected
 
+    @pytest.mark.usefixtures("requires_child_devices")
     async def test_a_child_device_is_read_without_core_compatibility_reports(self, hass, radio_env):
         # connections is a deprecated shim on a child device; reading it reports
         # usage and stops working in a later Home Assistant release.
@@ -952,13 +959,13 @@ class TestSearchByRadioAndIntegration:
     async def test_integration_is_the_provider_not_the_radio(self, hass, radio_env):
         content, _, _ = await _call("search_entities", {"integration": "mqtt"}, _radio_key(), hass)
         ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
-        assert ids == {"z2m_door", "z2m_door_l2", "z2m_bridge", "mqtt_strimmer"}
+        assert ids == {"z2m_door", *_PART, "z2m_bridge", "mqtt_strimmer"}
 
     @pytest.mark.parametrize("device_class", [["door", "window"], "door,window", '["door", "window"]'])
     async def test_device_class_accepts_several(self, hass, radio_env, device_class):
         content, _, _ = await _call("search_entities", {"radio": "zigbee", "device_class": device_class}, _radio_key(), hass)
         ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
-        assert ids == {"z2m_door", "z2m_door_l2"}
+        assert ids == {"z2m_door", *_PART}
 
     @pytest.mark.parametrize(("args", "message"), [
         ({"radio": "thread"}, "radio must be one or more of: zigbee, zwave, matter, bluetooth."),
@@ -974,7 +981,9 @@ class TestSearchByRadioAndIntegration:
 def _add_battery(hass, device_name: str, domain: str = "sensor", diagnostic: bool = True) -> str:
     """A battery entity on one radio_env device, as integrations register them."""
     dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
-    device = next(d for d in dev_reg.devices if d.name == device_name)
+    # Before 2026.9 the registry's devices are a mapping of id to entry.
+    entries = dev_reg.devices.values() if isinstance(dev_reg.devices, Mapping) else dev_reg.devices
+    device = next(d for d in entries if d.name == device_name)
     entry = ent_reg.async_get_or_create(domain, "test", f"{device_name}_battery", device_id=device.id,
                                         suggested_object_id=f"{device_name}_battery",
                                         original_device_class="battery",
@@ -1007,7 +1016,7 @@ class TestSearchByPower:
         # A child device counts with its main device; a device whose only battery
         # entity the key cannot read is left out, so the hidden entity stays unrevealed;
         # a battery that is the device's main reading does not make it battery powered.
-        assert outcome == "allowed" and ids == {"zha_leak", "z2m_door", "z2m_door_l2", "z2m_door_battery"}
+        assert outcome == "allowed" and ids == {"zha_leak", "z2m_door", *_PART, "z2m_door_battery"}
 
     async def test_battery_combines_with_radio_and_drops_diagnostics_in_a_summary_select(self, power_env):
         hass, hidden = power_env
@@ -1018,7 +1027,7 @@ class TestSearchByPower:
         data.mesa = None
         chosen, selection = await _resolve_select({"power": "battery", "radio": "zigbee"}, "get_history",
                                                   self._key(hidden), hass, data)
-        assert [eid.split(".")[1] for eid in chosen] == ["z2m_door", "z2m_door_l2", "zha_leak"]
+        assert [eid.split(".")[1] for eid in chosen] == ["z2m_door", *_PART, "zha_leak"]
         assert selection["select"] == {"power": "battery", "radio": "zigbee"}
 
     @pytest.mark.parametrize(("power", "message"), [

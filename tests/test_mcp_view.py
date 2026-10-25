@@ -1279,7 +1279,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
 
 # --- get_state field projection ---
 
-from custom_components.phoenix_mcp.mcp_view import (  # noqa: E402
+from custom_components.phoenix_mcp.tool_common import (  # noqa: E402
     _normalize_fields,
     _select_state_fields,
     _lean_state,

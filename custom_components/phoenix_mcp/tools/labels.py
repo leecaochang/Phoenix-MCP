@@ -19,7 +19,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
@@ -114,7 +114,7 @@ def _snapshot(kind: str, entry: Any) -> dict[str, Any]:
 def _entry(kind: str, hass: HomeAssistant, item_id: str, scope: str | None) -> Any:
     if kind == "label":
         return lr.async_get(hass).async_get_label(item_id)
-    return cr.async_get(hass).async_get_category(scope=scope, category_id=item_id)
+    return cr.async_get(hass).async_get_category(scope=scope or "", category_id=item_id)
 
 
 def _holders(kind: str, hass: HomeAssistant, item_id: str, scope: str | None) -> Holders:
@@ -214,7 +214,7 @@ def _prepare(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, in
             clash = occupied is not None and occupied.label_id != item_id
         else:
             clash = any(c.name.casefold() == changes["name"].casefold() and c.category_id != item_id
-                        for c in cr.async_get(hass).async_list_categories(scope=scope))
+                        for c in cr.async_get(hass).async_list_categories(scope=scope or ""))
         if clash:
             raise LabelRefusal(f"A {kind} with that name already exists.")
     binding = hashlib.sha256(json.dumps(
@@ -275,22 +275,24 @@ async def _execute_set_label_or_category(
         return _tool_error(str(exc)), exc.outcome, _TOOL
     item_id, after = plan.item_id, None
     try:
+        # _prepare gives an update or delete its id, and a category its scope.
         if plan.kind == "label":
-            registry = lr.async_get(hass)
+            labels = lr.async_get(hass)
             if plan.operation == "create":
-                item_id = registry.async_create(**plan.updates).label_id
+                item_id = labels.async_create(**plan.updates).label_id
             elif plan.operation == "update":
-                registry.async_update(item_id, **plan.updates)
+                labels.async_update(cast(str, item_id), **plan.updates)
             else:
-                registry.async_delete(item_id)
+                labels.async_delete(cast(str, item_id))
         else:
-            registry = cr.async_get(hass)
+            categories = cr.async_get(hass)
+            scope = cast(str, plan.scope)
             if plan.operation == "create":
-                item_id = registry.async_create(scope=plan.scope, **plan.updates).category_id
+                item_id = categories.async_create(scope=scope, **plan.updates).category_id
             elif plan.operation == "update":
-                registry.async_update(scope=plan.scope, category_id=item_id, **plan.updates)
+                categories.async_update(scope=scope, category_id=cast(str, item_id), **plan.updates)
             else:
-                registry.async_delete(scope=plan.scope, category_id=item_id)
+                categories.async_delete(scope=scope, category_id=cast(str, item_id))
         assert isinstance(item_id, str)
         readback = _entry(plan.kind, hass, item_id, plan.scope)
         if plan.operation == "delete":

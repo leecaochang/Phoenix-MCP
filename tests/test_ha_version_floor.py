@@ -215,6 +215,11 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # used, far older than any claimed floor.
         "slugify": "0.0.0",
     },
+    "homeassistant.util.async_": {
+        # Core's thread-to-loop helper, used by sync worker-thread code across
+        # core for far longer than any claimed floor.
+        "run_callback_threadsafe": "0.0.0",
+    },
     "homeassistant.util.color": {
         # Named-color catalog verified in 2024.5.0 util/color.py.
         "COLORS": "0.0.0",

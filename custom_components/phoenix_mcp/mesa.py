@@ -26,9 +26,10 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar_mod
@@ -36,6 +37,7 @@ from homeassistant.helpers import device_registry as dr_mod
 from homeassistant.helpers import entity_registry as er_mod
 from homeassistant.helpers import sun as sun_mod
 from homeassistant.helpers.storage import Store
+from homeassistant.util.async_ import run_callback_threadsafe
 from homeassistant.util.yaml import load_yaml as _load_yaml
 
 from homeassistant.util import dt as dt_util
@@ -46,6 +48,7 @@ from .helpers import diff_summary_fields
 from .const import (
     MESA_APPROVED_EXECUTOR,
     MESA_CONFIRM_CAP,
+    MESA_HOST_CALLBACK_TIMEOUT_SECONDS,
     MESA_MODE_ENFORCED,
     MESA_MODE_OFF,
     MESA_STORAGE_KEY,
@@ -179,10 +182,32 @@ class MesaRuntime:
         self.enforcer.mode = "enforced" if mesa_mode == MESA_MODE_ENFORCED else "advisory"
 
 
+_T = TypeVar("_T")
+
+
+def _on_event_loop(hass: HomeAssistant, callback: Callable[..., _T]) -> Callable[..., _T]:
+    """Run a host callback that walks Home Assistant's registries on the event loop.
+
+    mesa-core resolves in its own worker threads (trigger validation and the
+    retrieval tools), but Home Assistant changes its registries on the loop only,
+    and walking one from another thread while it changes fails with "dictionary
+    changed size during iteration". Called on the loop, as enforcement does, the
+    callback runs directly.
+    """
+
+    def _call(*args: Any) -> _T:
+        if threading.get_ident() == hass.loop_thread_id:
+            return callback(*args)
+        return run_callback_threadsafe(hass.loop, callback, *args).result(MESA_HOST_CALLBACK_TIMEOUT_SECONDS)
+
+    return _call
+
+
 def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
     """Return a sync callback mapping entity_id to its effective area_id.
 
-    The entity's own area, else its device's effective area.
+    The entity's own area, else its device's effective area. Reading the device's
+    area walks the device registry, so the lookup runs on the event loop.
     """
 
     def _get_entity_area(entity_id: str) -> str | None:
@@ -190,7 +215,7 @@ def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
         entry = er.async_get(entity_id)
         return effective_entity_area_id(entry, device_registry_snapshot(hass))
 
-    return _get_entity_area
+    return _on_event_loop(hass, _get_entity_area)
 
 
 def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -265,7 +290,8 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     filtering. Disabled registry entries are excluded (they produce no state or
     events). An entity with its own area does not count toward its device's area,
     matching HA's area semantics. Any failure returns [] (a resolution error must
-    never break validation or a reverse-reference read).
+    never break validation or a reverse-reference read). The expansion walks the
+    registries, so it runs on the event loop.
     """
 
     def _device_entities(ent_reg: Any, device_id: str) -> list[str]:
@@ -318,7 +344,15 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
             return []
         return []
 
-    return _expand_target
+    on_loop = _on_event_loop(hass, _expand_target)
+
+    def _expand_target_from_any_thread(kind: str, ref: str) -> list[str]:
+        try:
+            return on_loop(kind, ref)
+        except Exception:  # noqa: BLE001 - fail-quiet per the docstring, including a loop that is stopping
+            return []
+
+    return _expand_target_from_any_thread
 
 
 def _build_get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
