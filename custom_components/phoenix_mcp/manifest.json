@@ -2,7 +2,6 @@
   "domain": "phoenix_mcp",
   "name": "Phoenix MCP",
   "after_dependencies": ["assist_pipeline", "bluetooth", "blueprint", "esphome", "http", "logger", "lovelace", "mqtt", "recorder", "template", "trace", "usb", "zha"],
-  "categories": ["ai_voice.ai_models", "other_ecosystems"],
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["frontend"],
