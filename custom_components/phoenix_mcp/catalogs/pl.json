@@ -816,7 +816,8 @@
         "max_tokens_stop": "Model zatrzymał się, ponieważ osiągnął limit długości danych wyjściowych. Poproś go o kontynuację lub zwiększ limit tokenów wyjściowych modelu (dla Ollama: ustawienia num_predict/context).",
         "output_limit": "Dostawca wygenerował zbyt dużo danych wyjściowych w tej turze; zatrzymano.",
         "provider_rate_limit_exhausted": "Limit szybkości dostawcy pozostał przekroczony po około {seconds} s ponawiania. Szczegóły dostawcy: {detail}",
-        "provider_retry_exhausted": "Nie można było połączyć się z dostawcą po około {seconds} s ponawiania. {detail}",
+        "provider_retry_exhausted": "Dostawca nie odpowiedział po około {seconds} s ponawiania. {detail}",
+        "provider_silent": "Dostawca nie wysłał niczego przez {seconds} s, więc żądanie zostało zatrzymane.",
         "tool_call_cut": "Połączenie z modelem zakończyło się w trakcie wywołania narzędzia, więc akcja nie została wykonana. Nic nie zostało zastosowane, a samo żądanie nie było przyczyną; wyślij je ponownie.",
         "tool_call_truncated": "Model osiągnął limit długości danych wyjściowych w trakcie wywołania narzędzia, więc akcja nie została wykonana. Żądana zmiana była zbyt duża, aby wysłać ją w jednym wywołaniu; spróbuj poprosić o mniejszą zmianę.",
         "unauthorized": "Ten klucz dostępu nie jest już autoryzowany.",
@@ -896,6 +897,20 @@
       "verboseHint": "Pokaż wywołania narzędzi, wyniki narzędzi i myślenie agenta. Wyłączone pokazuje tylko ostateczną odpowiedź.",
       "workingOn": "Praca: {name}",
       "workingSpinner": "Praca…",
+      "status": {
+        "waiting": "Oczekiwanie na: {provider}",
+        "noReply": "Oczekiwanie na: {provider}, brak odpowiedzi ({seconds} s)",
+        "thinking": "{provider} analizuje ({seconds} s)",
+        "retrying": "{provider} zgłasza: {detail} Ponawianie (próba {attempt})",
+        "retryWait": "{provider} zgłasza: {detail} Próba {attempt}: brak odpowiedzi ({seconds} s)",
+        "step": "Krok {step}",
+        "tools": {
+          "one": "uruchomiono {count} narzędzie",
+          "few": "uruchomiono {count} narzędzia",
+          "many": "uruchomiono {count} narzędzi",
+          "other": "uruchomiono {count} narzędzia"
+        }
+      },
       "chatEnded": "Czat zakończony.",
       "providerDetail": "Szczegóły dostawcy: {detail}",
       "attachImage": "Załącz obraz",

@@ -180,6 +180,18 @@
       "verboseHint": "Die Tool-Aufrufe, Tool-Ergebnisse und Denkprozesse des Agenten anzeigen. Aus zeigt nur die endgültige Antwort.",
       "workingOn": "Arbeitet: {name}",
       "workingSpinner": "Arbeitet…",
+      "status": {
+        "waiting": "Warte auf {provider}",
+        "noReply": "Warte auf {provider}: noch keine Antwort ({seconds} s)",
+        "thinking": "{provider} denkt nach ({seconds} s)",
+        "retrying": "{provider} meldete: {detail} Erneuter Versuch (Versuch {attempt})",
+        "retryWait": "{provider} meldete: {detail} Versuch {attempt}: noch keine Antwort ({seconds} s)",
+        "step": "Schritt {step}",
+        "tools": {
+          "one": "{count} Tool ausgeführt",
+          "other": "{count} Tools ausgeführt"
+        }
+      },
       "progress": {
         "waitingApproval": "Wartet auf Genehmigung durch den Bediener: {name}",
         "waitingApprovals": "Wartet auf Genehmigung durch den Bediener: {count} ausstehend",
@@ -194,7 +206,8 @@
         "unauthorized": "Dieser Zugriffsschlüssel ist nicht mehr autorisiert.",
         "output_limit": "Der Anbieter hat in dieser Runde zu viel Ausgabe erzeugt; gestoppt.",
         "provider_rate_limit_exhausted": "Das Ratenlimit des Anbieters blieb nach etwa {seconds}s erneuten Versuchen überschritten. Anbieterdetails: {detail}",
-        "provider_retry_exhausted": "Der Anbieter war nach etwa {seconds}s erneuten Versuchen nicht erreichbar. {detail}",
+        "provider_retry_exhausted": "Der Anbieter hat nach etwa {seconds}s erneuten Versuchen nicht geantwortet. {detail}",
+        "provider_silent": "Der Anbieter hat {seconds}s lang nichts gesendet, daher wurde die Anfrage abgebrochen.",
         "internal": "Interner Fehler.",
         "bad_tool_call": "Das Modell hat einen ungültigen Tool-Aufruf erzeugt.",
         "tool_call_truncated": "Das Modell hat mitten in einem Tool-Aufruf sein Ausgabelängenlimit erreicht, daher wurde die Aktion nicht ausgeführt. Die angeforderte Änderung war zu groß, um sie in einem Aufruf auszugeben; versuchen Sie, eine kleinere Änderung anzufordern.",

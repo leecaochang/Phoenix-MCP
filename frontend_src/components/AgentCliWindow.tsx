@@ -646,6 +646,8 @@ export function AgentCliWindow({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachError, setAttachError] = useState("");
   const [sending, setSending] = useState(false);
+  // The server's account of the current model call, shown in place of "Working…".
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const turnGenerationRef = useRef(0);
   // Non-null when the last turn paused at the round-cap checkpoint (its value is
   // the round count reached); drives the Continue/Stop control.
@@ -1135,6 +1137,7 @@ export function AgentCliWindow({
     usageBaseRef.current = stateless ? { input: 0, output: 0 }
       : { input: usageRef.current.input, output: usageRef.current.output };
     turnSawUsageRef.current = false;
+    setLiveStatus(null);
     updateLive(mode === "continue" ? [] : [{
       kind: "user", text, ts: Date.now(),
       ...(images.length ? { images: images.map((image) => ({ name: image.name, dataUrl: image.dataUrl })) } : {}),
@@ -1200,13 +1203,18 @@ export function AgentCliWindow({
           if (cancelledRef.current || turnGenerationRef.current !== generation) return;
           const p = (payload ?? {}) as Record<string, unknown>;
           switch (name) {
+            case "status":
+              setLiveStatus(modelStatusText(p));
+              break;
             case "assistant_delta":
+              setLiveStatus(null);
               appendAssistant(String(p.text ?? ""), false);
               break;
             case "thinking_delta":
               appendAssistant(String(p.text ?? ""), true);
               break;
             case "tool_call":
+              setLiveStatus(null);
               push({ kind: "tool_call", id: String(p.id ?? ""), name: String(p.name ?? ""), args: p.arguments });
               showActivity(String(p.name ?? ""));
               break;
@@ -1289,6 +1297,7 @@ export function AgentCliWindow({
               setPendingContinue(Number(p.iterations ?? 0) || 0);
               break;
             case "error":
+              setLiveStatus(null);
               {
                 const code = String(p.code ?? "error");
                 const message = String(p.message ?? "");
@@ -2003,7 +2012,7 @@ export function AgentCliWindow({
             {sending && (
               <div className="agentcli-working" role="status" aria-live="polite">
                 <span className="agentcli-spin" aria-hidden="true" />
-                {t("agentchat.workingSpinner")}
+                {liveStatus ?? t("agentchat.workingSpinner")}
               </div>
             )}
           </div>
@@ -2146,6 +2155,34 @@ export function AgentCliWindow({
  *  itself raises have a catalog entry; a provider-relayed message (a model API's
  *  own error text) has none and shows verbatim, as is right for text Phoenix
  *  did not write. */
+// The status line for one model call, from the facts the server sent: the
+// provider, the turn's step and tools run, how long nothing has shown, and a
+// retry with the provider's own sentence. Never the model's words.
+export function modelStatusText(p: Record<string, unknown>): string {
+  const provider = String(p.provider ?? "");
+  const seconds = localeNumber(Number(p.seconds ?? 0));
+  const detail = String(p.detail ?? "");
+  const attempt = localeNumber(Number(p.attempt ?? 0));
+  let status: string;
+  if (p.phase === "retrying") {
+    status = t("agentchat.status.retrying", { provider, detail, attempt });
+  } else if (p.phase === "thinking") {
+    status = t("agentchat.status.thinking", { provider, seconds });
+  } else if (detail && Number(p.attempt ?? 0) > 0) {
+    status = t("agentchat.status.retryWait", { provider, detail, attempt, seconds });
+  } else if (Number(p.seconds ?? 0) > 0) {
+    status = t("agentchat.status.noReply", { provider, seconds });
+  } else {
+    status = t("agentchat.status.waiting", { provider });
+  }
+  const step = Number(p.step ?? 1);
+  const tools = Number(p.tools ?? 0);
+  const turn = step > 1 || tools > 0
+    ? [t("agentchat.status.step", { step: localeNumber(step) }), tn("agentchat.status.tools", tools, { count: localeNumber(tools) })]
+    : [];
+  return [...turn, status].join(" · ");
+}
+
 function serverText(
   code: string | undefined,
   message: string,

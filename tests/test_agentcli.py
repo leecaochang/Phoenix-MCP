@@ -3064,22 +3064,22 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
         {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit",
          "message": "Rate limit exceeded", "retryable": False},
         "provider_rate_limit_exhausted",
-        "The provider's rate limit remained exceeded after retrying for about 12s. "
+        "The provider's rate limit remained exceeded after retrying for about 0s. "
         "Provider detail: Rate limit exceeded",
     ),
     (
         {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream",
          "message": "Temporarily unavailable", "retryable": False},
         "provider_retry_exhausted",
-        "Could not reach the provider after retrying for about 12s. Temporarily unavailable",
+        "The provider did not answer after retrying for about 0s. Temporarily unavailable",
     ),
 ])
 async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
     final_error, expected_code, expected_text,
 ):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "status": 0, "code": "network",
-          "message": "DNS timeout", "retryable": True}],
+        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "message": "Provider request failed (HTTP 503).",
+          "provider_detail": "This model is currently experiencing high demand.", "retryable": True}],
         [final_error],
     ])
 
@@ -3089,11 +3089,41 @@ async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
             options={}, cancel=asyncio.Event(),
         ))
 
-    assert events[0]["code"] == expected_code
-    assert events[0]["message"] == expected_text
-    assert events[0]["message_params"] == {
-        "seconds": 12, "detail": final_error["message"],
-    }
+    # The retry is announced with the provider's own sentence.
+    assert events[0] == {"type": agentcli.EV_RETRYING, "attempt": 2, "status": 503,
+                         "detail": "This model is currently experiencing high demand."}
+    # The final error gives the real time spent and keeps the failure that started the retries.
+    assert events[1]["code"] == expected_code
+    assert events[1]["message"] == expected_text
+    assert events[1]["message_params"] == {"seconds": 0, "detail": final_error["message"]}
+    assert events[1]["provider_detail"] == "This model is currently experiencing high demand."
+
+
+@pytest.mark.asyncio
+async def test_a_retry_that_sends_nothing_stops_at_the_first_reply_bound():
+    """A provider that just failed and then stays silent is stuck, so the retry does not wait the full read bound."""
+    class _Silent:
+        cfg = None
+        calls = 0
+
+        async def stream_turn(self, session, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                       "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}
+                return
+            await asyncio.sleep(3600)
+            yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_RETRY_FIRST_REPLY_SECONDS", 0.05):
+        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+            _Silent(), MagicMock(), system_prompt="sys", messages=[], tools=[],
+            options={}, cancel=asyncio.Event(),
+        )), 5)
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert events[1]["code"] == "provider_retry_exhausted" and events[1]["retryable"] is True
+    assert events[1]["provider_detail"] == "High demand." and "no reply within" in events[1]["message"]
 
 
 @pytest.mark.asyncio
@@ -5395,3 +5425,107 @@ async def test_openai_compatible_cached_prompt_tokens_are_reported(extra, cached
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
     usage = next(e for e in events if e["type"] == agentcli.EV_USAGE)
     assert usage["input_tokens"] == 100 and usage["cache_read_tokens"] == cached
+
+
+class _KindScripted(_ScriptedProvider):
+    kind = "gemini"
+
+
+async def _consume(provider, events, **status):
+    async def emit(name, payload):
+        events.append((name, payload))
+    return await agentcli._consume_model_stream(
+        provider, MagicMock(), system="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
+        emit=emit, usage_done_input=0, usage_done_output=0, context_tokens=0, status=status or None)
+
+
+@pytest.mark.asyncio
+async def test_the_status_line_names_the_provider_step_and_tools_and_ends_once_the_reply_shows():
+    events: list = []
+    provider = _KindScripted([[{"type": agentcli.EV_TEXT, "text": "Hi"},
+                               {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}]])
+    await _consume(provider, events, step=3, tools=2)
+    statuses = [p for n, p in events if n == "status"]
+    assert statuses == [{"provider": "Gemini", "step": 3, "tools": 2, "phase": "waiting", "seconds": 0}]
+
+
+@pytest.mark.asyncio
+async def test_a_silent_model_call_is_reported_until_something_shows():
+    class _Slow(_KindScripted):
+        async def stream_turn(self, session, **kwargs):
+            yield {"type": agentcli.EV_THINKING, "text": "..."}
+            await asyncio.sleep(0.05)
+            yield {"type": agentcli.EV_TEXT, "text": "Done"}
+            await asyncio.sleep(0.05)
+            yield {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}
+
+    events: list = []
+    with patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_STATUS_INTERVAL_SECONDS", 0.02):
+        await _consume(_Slow([]), events, step=1, tools=0)
+    phases = [p["phase"] for n, p in events if n == "status"]
+    # Waiting, then thinking, refreshed while nothing visible, and quiet once the reply shows.
+    assert phases[:2] == ["waiting", "thinking"] and set(phases[2:]) <= {"thinking"} and len(phases) >= 3
+    reply = next(i for i, (n, _p) in enumerate(events) if n == "assistant_delta")
+    assert all(n != "status" for n, _p in events[reply + 1:])
+
+
+@pytest.mark.asyncio
+async def test_a_retry_is_shown_with_the_providers_own_sentence():
+    events: list = []
+    provider = _KindScripted([
+        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+          "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}],
+        [{"type": agentcli.EV_TEXT, "text": "Recovered"},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}],
+    ])
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        await _consume(provider, events, step=1, tools=0)
+    retrying = [p for n, p in events if n == "status" and p["phase"] == "retrying"]
+    assert retrying == [{"provider": "Gemini", "step": 1, "tools": 0, "attempt": 2, "detail": "High demand.",
+                         "phase": "retrying", "seconds": 0}]
+    assert all(n != "error" for n, _p in events)
+
+
+@pytest.mark.asyncio
+async def test_the_turn_counts_steps_and_tools_for_the_status_line(hass):
+    provider = _KindScripted([
+        [{"type": agentcli.EV_TOOL, "id": "t1", "name": "get_state", "input": {"entity_id": "light.x"}},
+         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {"role": "assistant"}}],
+        [{"type": agentcli.EV_TEXT, "text": "On."},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant"}}],
+    ])
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+    batch = MagicMock(results=[{"tool_use_id": "t1", "result_text": "on"}], write_started=False, human_resolved=False,
+                      stop_turn=False, authority_lost=False, outcome_unknown=False)
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agentcli._run_tool_batch", AsyncMock(return_value=batch)):
+        await async_run_agent_turn(
+            hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+    assert [(p["step"], p["tools"]) for n, p in events if n == "status"] == [(1, 0), (2, 1)]
+
+
+class _StalledSession:
+    """A session whose request connects and then hits aiohttp's read timeout."""
+
+    def post(self, *args, **kwargs):
+        from aiohttp import SocketTimeoutError
+        raise SocketTimeoutError("Timeout on reading data from socket")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", [
+    ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k")),
+    OpenAICompatProvider(ProviderConfig(kind="gemini", model="m", base_url="https://x", api_key="k")),
+])
+async def test_a_stream_that_goes_silent_says_so_instead_of_connection_failed(provider):
+    events = await _collect(provider.stream_turn(_StalledSession(), system_prompt="s", messages=[], tools=[], options={}))
+    assert events == [{"type": agentcli.EV_ERROR, "status": 0, "code": "provider_silent", "retryable": True,
+                       "message": "The provider sent nothing for 180s, so the request was stopped.",
+                       "message_params": {"seconds": 180}}]

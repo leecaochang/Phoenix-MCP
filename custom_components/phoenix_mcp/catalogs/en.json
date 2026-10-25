@@ -1606,6 +1606,18 @@
       "verboseHint": "Show the agent's tool calls, tool results, and thinking. Off shows only the final answer.",
       "workingOn": "Working: {name}",
       "workingSpinner": "Working…",
+      "status": {
+        "waiting": "Waiting for {provider}",
+        "noReply": "Waiting for {provider}: no reply yet ({seconds} s)",
+        "thinking": "{provider} is thinking ({seconds} s)",
+        "retrying": "{provider} reported: {detail} Retrying (attempt {attempt})",
+        "retryWait": "{provider} reported: {detail} Retry {attempt}: no reply yet ({seconds} s)",
+        "step": "Step {step}",
+        "tools": {
+          "one": "{count} tool run",
+          "other": "{count} tools run"
+        }
+      },
       "progress": {
         "waitingApproval": "Waiting for operator approval: {name}",
         "waitingApprovals": "Waiting for operator approval: {count} pending",
@@ -1620,7 +1632,8 @@
         "unauthorized": "This access key is no longer authorized.",
         "output_limit": "The provider produced too much output this turn; stopped.",
         "provider_rate_limit_exhausted": "The provider's rate limit remained exceeded after retrying for about {seconds}s. Provider detail: {detail}",
-        "provider_retry_exhausted": "Could not reach the provider after retrying for about {seconds}s. {detail}",
+        "provider_retry_exhausted": "The provider did not answer after retrying for about {seconds}s. {detail}",
+        "provider_silent": "The provider sent nothing for {seconds}s, so the request was stopped.",
         "internal": "Internal error.",
         "bad_tool_call": "The model produced an invalid tool call.",
         "bad_tool_call_retry": "The model sent a tool call whose arguments were not valid JSON. Nothing from that response ran; the error was returned so the model can send the call again.",

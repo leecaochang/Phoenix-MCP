@@ -1270,10 +1270,47 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.change(textarea, { target: { value: "retry" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
 
-    const localized = "Could not reach the provider after retrying for about 12s. raw upstream detail";
+    const localized = "The provider did not answer after retrying for about 12s. raw upstream detail";
     expect(await screen.findByText(localized)).toBeInTheDocument();
     const announcer = document.querySelector(".agentcli-window .sr-only[role='status']");
     expect(announcer?.textContent).toBe(`Error: ${localized}`);
+  });
+
+  it("replaces Working with the server's status line and drops it once the reply shows", async () => {
+    let finish: () => void = () => {};
+    agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("status", { provider: "Gemini", step: 1, tools: 0, phase: "waiting", seconds: 0 });
+      await new Promise<void>((resolve) => { finish = resolve; });
+      onEvent("status", { provider: "Gemini", step: 2, tools: 1, phase: "retrying", seconds: 0,
+                          attempt: 2, detail: "High demand." });
+      await new Promise<void>((resolve) => { finish = resolve; });
+      onEvent("status", { provider: "Gemini", step: 2, tools: 1, phase: "waiting", seconds: 30,
+                          attempt: 2, detail: "High demand." });
+      await new Promise<void>((resolve) => { finish = resolve; });
+      onEvent("assistant_delta", { text: "There are 12 lights." });
+      await new Promise<void>((resolve) => { finish = resolve; });
+      onEvent("messages", { messages: [] });
+      onEvent("done", { stop_reason: "end_turn" });
+    });
+
+    render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} />,
+    );
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByPlaceholderText(/Message Agent Chat/i);
+    fireEvent.change(textarea, { target: { value: "how many lights?" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    const line = () => document.querySelector(".agentcli-working")?.textContent;
+
+    await waitFor(() => expect(line()).toBe("Waiting for Gemini"));
+    await act(async () => finish());
+    await waitFor(() => expect(line()).toBe("Step 2 · 1 tool run · Gemini reported: High demand. Retrying (attempt 2)"));
+    await act(async () => finish());
+    await waitFor(() => expect(line()).toBe("Step 2 · 1 tool run · Gemini reported: High demand. Retry 2: no reply yet (30 s)"));
+    await act(async () => finish());
+    await waitFor(() => expect(line()).toBe("Working…"));
+    await act(async () => finish());
   });
 
   it("localizes an explicitly identified exhausted provider rate limit", async () => {

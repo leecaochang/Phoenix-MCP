@@ -1120,6 +1120,18 @@
       "verboseHint": "エージェントのツール呼び出し、ツール結果、思考を表示します。オフでは最終回答だけを表示します。",
       "workingOn": "処理中: {name}",
       "workingSpinner": "処理中...",
+      "status": {
+        "waiting": "{provider} を待っています",
+        "noReply": "{provider} を待っています: まだ応答がありません ({seconds} 秒)",
+        "thinking": "{provider} が考え中です ({seconds} 秒)",
+        "retrying": "{provider} からの報告: {detail} 再試行しています (試行 {attempt})",
+        "retryWait": "{provider} からの報告: {detail} 試行 {attempt}: まだ応答がありません ({seconds} 秒)",
+        "step": "ステップ {step}",
+        "tools": {
+          "one": "実行したツール {count} 件",
+          "other": "実行したツール {count} 件"
+        }
+      },
       "progress": {
         "waitingApproval": "オペレーターの承認を待っています: {name}",
         "waitingApprovals": "オペレーターの承認を待っています: {count} 件が承認待ち",
@@ -1134,7 +1146,8 @@
         "unauthorized": "このアクセスキーは認証されなくなりました。",
         "output_limit": "このターンでプロバイダーの出力が多すぎたため停止しました。",
         "provider_rate_limit_exhausted": "約 {seconds} 秒間再試行しましたが、プロバイダーのレート制限を引き続き超過しています。プロバイダーの詳細: {detail}",
-        "provider_retry_exhausted": "約 {seconds} 秒間再試行しましたが、プロバイダーに到達できませんでした。{detail}",
+        "provider_retry_exhausted": "約 {seconds} 秒間再試行しましたが、プロバイダーから応答がありませんでした。{detail}",
+        "provider_silent": "プロバイダーから {seconds} 秒間何も送信されなかったため、リクエストを停止しました。",
         "internal": "内部エラー。",
         "bad_tool_call": "モデルが無効なツール呼び出しを生成しました。",
         "tool_call_truncated": "ツール呼び出しの途中でモデルが出力長の上限に達したため、アクションは実行されませんでした。要求された変更は一回の呼び出しで出力するには大きすぎます。より小さな変更を依頼してください。",

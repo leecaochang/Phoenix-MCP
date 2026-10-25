@@ -812,7 +812,8 @@
         "max_tokens_stop": "Het model stopte omdat het zijn uitvoerlimiet had bereikt. Vraag het om verder te gaan, of verhoog de uitvoertokenlimiet van het model (voor Ollama: de instellingen num_predict/context).",
         "output_limit": "De provider produceerde deze beurt te veel uitvoer; gestopt.",
         "provider_rate_limit_exhausted": "De snelheidslimiet van de provider bleef overschreden na ongeveer {seconds} s opnieuw proberen. Providerdetail: {detail}",
-        "provider_retry_exhausted": "Kon de provider niet bereiken na ongeveer {seconds} s opnieuw proberen. {detail}",
+        "provider_retry_exhausted": "De provider antwoordde niet na ongeveer {seconds} s opnieuw proberen. {detail}",
+        "provider_silent": "De provider stuurde {seconds} s lang niets, dus het verzoek is gestopt.",
         "tool_call_cut": "De verbinding met het model werd verbroken midden in een toolaanroep, dus de actie is niet uitgevoerd. Er is niets toegepast en het verzoek zelf was niet de oorzaak; stuur het opnieuw.",
         "tool_call_truncated": "Het model bereikte zijn uitvoerlimiet midden in een toolaanroep, dus de actie is niet uitgevoerd. De gevraagde wijziging was te groot om in één aanroep te verzenden; vraag om een kleinere wijziging.",
         "unauthorized": "Deze toegangssleutel is niet langer geautoriseerd.",
@@ -892,6 +893,18 @@
       "verboseHint": "De toolaanroepen, toolresultaten en het nadenken van de agent weergeven. Uit toont alleen het eindantwoord.",
       "workingOn": "Bezig: {name}",
       "workingSpinner": "Bezig…",
+      "status": {
+        "waiting": "Wachten op {provider}",
+        "noReply": "Wachten op {provider}: nog geen antwoord ({seconds} s)",
+        "thinking": "{provider} denkt na ({seconds} s)",
+        "retrying": "{provider} meldde: {detail} Opnieuw proberen (poging {attempt})",
+        "retryWait": "{provider} meldde: {detail} Poging {attempt}: nog geen antwoord ({seconds} s)",
+        "step": "Stap {step}",
+        "tools": {
+          "one": "{count} tool uitgevoerd",
+          "other": "{count} tools uitgevoerd"
+        }
+      },
       "chatEnded": "Chat beëindigd.",
       "providerDetail": "Providerdetail: {detail}",
       "attachImage": "Afbeelding bijvoegen",

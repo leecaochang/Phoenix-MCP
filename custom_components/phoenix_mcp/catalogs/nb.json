@@ -396,7 +396,8 @@
         "provider_incomplete": "Leverandørens svar ble avsluttet for tidlig. Ingen verktøy fra dette svaret ble kjørt.",
         "provider_malformed": "Leverandøren returnerte et feilformet svar. Ingen verktøy fra dette svaret ble kjørt.",
         "provider_rate_limit_exhausted": "Leverandørens hastighetsgrense var fortsatt overskredet etter å ha prøvd på nytt i omtrent {seconds}s. Leverandørdetalj: {detail}",
-        "provider_retry_exhausted": "Kunne ikke nå leverandøren etter å ha prøvd på nytt i omtrent {seconds}s. {detail}",
+        "provider_retry_exhausted": "Leverandøren svarte ikke etter å ha prøvd på nytt i omtrent {seconds}s. {detail}",
+        "provider_silent": "Leverandøren sendte ingenting på {seconds}s, så forespørselen ble stoppet.",
         "provider_transient": "Leverandøren er midlertidig utilgjengelig.",
         "quota": "Leverandørkontoen er tom for kreditt eller har nådd forbruksgrensen. Den vil ikke bli forsøkt på nytt.",
         "rate_limit": "Leverandøren er midlertidig utilgjengelig.",
@@ -466,6 +467,18 @@
       "verboseHint": "Vis agentens verktøykall, verktøyresultater og tenkning. Av viser bare det endelige svaret.",
       "workingOn": "Arbeider: {name}",
       "workingSpinner": "Arbeider…",
+      "status": {
+        "waiting": "Venter på {provider}",
+        "noReply": "Venter på {provider}: ikke svar ennå ({seconds} s)",
+        "thinking": "{provider} tenker ({seconds} s)",
+        "retrying": "{provider} meldte: {detail} Prøver på nytt (forsøk {attempt})",
+        "retryWait": "{provider} meldte: {detail} Forsøk {attempt}: ikke svar ennå ({seconds} s)",
+        "step": "Trinn {step}",
+        "tools": {
+          "one": "{count} verktøy kjørt",
+          "other": "{count} verktøy kjørt"
+        }
+      },
       "providerDetail": "Leverandørdetalj: {detail}",
       "attachImage": "Legg ved bilde",
       "attachmentAlt": "Vedlagt bilde {name}",

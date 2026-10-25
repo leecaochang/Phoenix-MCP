@@ -396,7 +396,8 @@
         "provider_incomplete": "Leverantörens svar avslutades i förtid. Inget verktyg från det här svaret kördes.",
         "provider_malformed": "Leverantören returnerade ett felformat svar. Inget verktyg från det här svaret kördes.",
         "provider_rate_limit_exhausted": "Leverantörens hastighetsgräns var fortfarande överskriden efter omförsök i ungefär {seconds}s. Leverantörens detalj: {detail}",
-        "provider_retry_exhausted": "Det gick inte att nå leverantören efter omförsök i ungefär {seconds}s. {detail}",
+        "provider_retry_exhausted": "Leverantören svarade inte efter omförsök i ungefär {seconds}s. {detail}",
+        "provider_silent": "Leverantören skickade ingenting på {seconds}s, så begäran stoppades.",
         "provider_transient": "Leverantören är tillfälligt otillgänglig.",
         "quota": "Leverantörskontot saknar kredit eller har nått sin utgiftsgräns. Den kommer inte att göras om.",
         "rate_limit": "Leverantören är tillfälligt otillgänglig.",
@@ -466,6 +467,18 @@
       "verboseHint": "Visa agentens verktygsanrop, verktygsresultat och tänkande. Av visar endast det slutliga svaret.",
       "workingOn": "Arbetar: {name}",
       "workingSpinner": "Arbetar…",
+      "status": {
+        "waiting": "Väntar på {provider}",
+        "noReply": "Väntar på {provider}: inget svar än ({seconds} s)",
+        "thinking": "{provider} tänker ({seconds} s)",
+        "retrying": "{provider} rapporterade: {detail} Försöker igen (försök {attempt})",
+        "retryWait": "{provider} rapporterade: {detail} Försök {attempt}: inget svar än ({seconds} s)",
+        "step": "Steg {step}",
+        "tools": {
+          "one": "{count} verktyg kört",
+          "other": "{count} verktyg körda"
+        }
+      },
       "providerDetail": "Leverantörens detalj: {detail}",
       "attachImage": "Bifoga bild",
       "attachmentAlt": "Bifogad bild {name}",

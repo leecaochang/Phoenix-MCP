@@ -396,7 +396,8 @@
         "provider_incomplete": "Udbyderens svar sluttede for tidligt. Intet værktøj fra dette svar blev kørt.",
         "provider_malformed": "Udbyderen returnerede et fejlbehæftet svar. Intet værktøj fra dette svar blev kørt.",
         "provider_rate_limit_exhausted": "Udbyderens hastighedsgrænse var stadig overskredet efter gentagne forsøg i ca. {seconds}s. Udbyderoplysning: {detail}",
-        "provider_retry_exhausted": "Kunne ikke få forbindelse til udbyderen efter gentagne forsøg i ca. {seconds}s. {detail}",
+        "provider_retry_exhausted": "Udbyderen svarede ikke efter gentagne forsøg i ca. {seconds}s. {detail}",
+        "provider_silent": "Udbyderen sendte intet i {seconds}s, så anmodningen blev stoppet.",
         "provider_transient": "Udbyderen er midlertidigt utilgængelig.",
         "quota": "Udbyderkontoen er løbet tør for kredit eller har nået sin forbrugsgrænse. Den bliver ikke forsøgt igen.",
         "rate_limit": "Udbyderen er midlertidigt utilgængelig.",
@@ -466,6 +467,18 @@
       "verboseHint": "Vis agentens værktøjskald, værktøjsresultater og tænkning. Fra viser kun det endelige svar.",
       "workingOn": "Arbejder: {name}",
       "workingSpinner": "Arbejder…",
+      "status": {
+        "waiting": "Venter på {provider}",
+        "noReply": "Venter på {provider}: intet svar endnu ({seconds} s)",
+        "thinking": "{provider} tænker ({seconds} s)",
+        "retrying": "{provider} meldte: {detail} Prøver igen (forsøg {attempt})",
+        "retryWait": "{provider} meldte: {detail} Forsøg {attempt}: intet svar endnu ({seconds} s)",
+        "step": "Trin {step}",
+        "tools": {
+          "one": "{count} værktøj kørt",
+          "other": "{count} værktøjer kørt"
+        }
+      },
       "providerDetail": "Udbyderoplysning: {detail}",
       "attachImage": "Vedhæft billede",
       "attachmentAlt": "Vedhæftet billede {name}",

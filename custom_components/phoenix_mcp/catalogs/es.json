@@ -647,7 +647,8 @@
         "max_tokens_stop": "El modelo se detuvo porque alcanzó su límite de longitud de salida. Pídale que continúe o aumente el límite de tokens de salida del modelo (en Ollama, sus ajustes num_predict/context).",
         "output_limit": "El proveedor generó demasiada salida en este turno; se detuvo.",
         "provider_rate_limit_exhausted": "El límite de velocidad del proveedor seguía superado tras reintentar durante unos {seconds} s. Detalle del proveedor: {detail}",
-        "provider_retry_exhausted": "No se pudo contactar con el proveedor tras reintentar durante unos {seconds} s. {detail}",
+        "provider_retry_exhausted": "El proveedor no respondió tras reintentar durante unos {seconds} s. {detail}",
+        "provider_silent": "El proveedor no envió nada durante {seconds} s, así que se detuvo la solicitud.",
         "tool_call_cut": "La conexión con el modelo se interrumpió en mitad de una llamada de herramienta, por lo que la acción no se ejecutó. No se aplicó nada y la solicitud no tuvo la culpa; vuelva a enviarla.",
         "tool_call_truncated": "El modelo alcanzó su límite de longitud de salida en mitad de una llamada de herramienta, por lo que la acción no se ejecutó. El cambio solicitado era demasiado grande para emitirlo en una sola llamada; pruebe a solicitar un cambio más pequeño.",
         "unauthorized": "Esta clave de acceso ya no está autorizada.",
@@ -727,6 +728,18 @@
       "verboseHint": "Mostrar las llamadas a herramientas, los resultados de las herramientas y el pensamiento del agente. Desactivado muestra solo la respuesta final.",
       "workingOn": "Trabajando: {name}",
       "workingSpinner": "Trabajando…",
+      "status": {
+        "waiting": "Esperando a {provider}",
+        "noReply": "Esperando a {provider}: aún sin respuesta ({seconds} s)",
+        "thinking": "{provider} está pensando ({seconds} s)",
+        "retrying": "{provider} informó: {detail} Reintentando (intento {attempt})",
+        "retryWait": "{provider} informó: {detail} Intento {attempt}: aún sin respuesta ({seconds} s)",
+        "step": "Paso {step}",
+        "tools": {
+          "one": "{count} herramienta ejecutada",
+          "other": "{count} herramientas ejecutadas"
+        }
+      },
       "chatEnded": "Chat finalizado.",
       "providerDetail": "Detalle del proveedor: {detail}",
       "attachImage": "Adjuntar imagen",

@@ -203,7 +203,8 @@
         "max_tokens_stop": "模型因達到輸出長度上限而停止。可以讓它繼續，或調高模型的輸出 Token 上限（Ollama 請調整 num_predict/context 設定）。",
         "output_limit": "提供者本輪生成的內容過多，已停止。",
         "provider_rate_limit_exhausted": "重試約 {seconds} 秒後，仍然超出提供者的速率限制。提供者詳情：{detail}",
-        "provider_retry_exhausted": "嘗試約 {seconds} 秒後仍無法連線提供者。{detail}",
+        "provider_retry_exhausted": "重試約 {seconds} 秒後提供者仍未回覆。{detail}",
+        "provider_silent": "提供者在 {seconds} 秒內沒有傳送任何內容，因此已停止請求。",
         "tool_call_cut": "與模型的連線在工具呼叫中途中斷，因此該操作未執行。沒有任何改動被套用，問題也不在請求本身；請重新發送。",
         "tool_call_truncated": "模型在工具呼叫中途達到輸出長度上限，因此該操作未執行。所請求的改動過大，無法在一次呼叫中輸出；請嘗試改為更小的改動。",
         "unauthorized": "此存取金鑰已不再獲得授權。",
@@ -283,6 +284,18 @@
       "verboseHint": "顯示智慧體的工具呼叫、工具結果和思考過程。關閉時只顯示最終答案。",
       "workingOn": "處理中：{name}",
       "workingSpinner": "處理中…",
+      "status": {
+        "waiting": "正在等待 {provider}",
+        "noReply": "正在等待 {provider}：尚無回覆（{seconds} 秒）",
+        "thinking": "{provider} 正在思考（{seconds} 秒）",
+        "retrying": "{provider} 回報：{detail} 正在重試（第 {attempt} 次嘗試）",
+        "retryWait": "{provider} 回報：{detail} 第 {attempt} 次嘗試：尚無回覆（{seconds} 秒）",
+        "step": "第 {step} 步",
+        "tools": {
+          "one": "已執行 {count} 個工具",
+          "other": "已執行 {count} 個工具"
+        }
+      },
       "chatEnded": "聊天已結束。",
       "providerDetail": "提供者詳情：{detail}",
       "attachImage": "附加影像",

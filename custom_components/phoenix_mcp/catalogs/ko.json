@@ -590,6 +590,18 @@
       "verboseHint": "에이전트의 도구 호출, 도구 결과, 생각을 표시합니다. 끄면 최종 답변만 표시됩니다.",
       "workingOn": "작업 중: {name}",
       "workingSpinner": "작업 중...",
+      "status": {
+        "waiting": "{provider} 대기 중",
+        "noReply": "{provider} 대기 중: 아직 응답 없음 ({seconds}초)",
+        "thinking": "{provider} 생각 중 ({seconds}초)",
+        "retrying": "{provider} 보고: {detail} 재시도 중 (시도 {attempt})",
+        "retryWait": "{provider} 보고: {detail} 시도 {attempt}: 아직 응답 없음 ({seconds}초)",
+        "step": "단계 {step}",
+        "tools": {
+          "one": "실행한 도구 {count}개",
+          "other": "실행한 도구 {count}개"
+        }
+      },
       "progress": {
         "waitingApproval": "관리자 승인 대기 중: {name}",
         "waitingApprovals": "관리자 승인 대기 중: {count}건 대기",
@@ -604,7 +616,8 @@
         "unauthorized": "이 액세스 키는 더 이상 인증되지 않았습니다.",
         "output_limit": "이번 턴에 공급자가 너무 많은 출력을 생성하여 중지되었습니다.",
         "provider_rate_limit_exhausted": "약 {seconds}초 동안 재시도한 후에도 공급자의 속도 제한 초과가 지속되었습니다. 공급자 세부 정보: {detail}",
-        "provider_retry_exhausted": "약 {seconds}초 동안 재시도한 후에도 공급자에 연결할 수 없었습니다. {detail}",
+        "provider_retry_exhausted": "약 {seconds}초 동안 재시도한 후에도 공급자가 응답하지 않았습니다. {detail}",
+        "provider_silent": "공급자가 {seconds}초 동안 아무것도 보내지 않아 요청을 중지했습니다.",
         "internal": "내부 오류입니다.",
         "bad_tool_call": "모델이 잘못된 도구 호출을 생성했습니다.",
         "tool_call_truncated": "모델이 도구 호출 중간에 출력 길이 한도에 도달하여 작업이 실행되지 않았습니다. 요청한 변경 사항이 한 번의 호출로 출력하기에는 너무 큽니다. 더 작은 변경을 요청해 보세요.",

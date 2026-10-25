@@ -396,7 +396,8 @@
         "provider_incomplete": "Palveluntarjoajan vastaus päättyi ennenaikaisesti. Tästä vastauksesta ei suoritettu yhtään työkalua.",
         "provider_malformed": "Palveluntarjoaja palautti virheellisen vastauksen. Tästä vastauksesta ei suoritettu yhtään työkalua.",
         "provider_rate_limit_exhausted": "Palveluntarjoajan pyyntöraja ylittyi edelleen, kun uudelleenyrityksiä oli tehty noin {seconds}s ajan. Palveluntarjoajan lisätiedot: {detail}",
-        "provider_retry_exhausted": "Palveluntarjoajaan ei saatu yhteyttä, vaikka uudelleenyrityksiä tehtiin noin {seconds}s ajan. {detail}",
+        "provider_retry_exhausted": "Palveluntarjoaja ei vastannut, vaikka uudelleenyrityksiä tehtiin noin {seconds}s ajan. {detail}",
+        "provider_silent": "Palveluntarjoaja ei lähettänyt mitään {seconds}s aikana, joten pyyntö pysäytettiin.",
         "provider_transient": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "quota": "Palveluntarjoajan tililtä on loppunut saldo tai sen kulutusraja on täynnä. Sitä ei yritetä uudelleen.",
         "rate_limit": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
@@ -466,6 +467,18 @@
       "verboseHint": "Näytä agentin työkalukutsut, työkalutulokset ja miettiminen. Pois päältä näytetään vain lopullinen vastaus.",
       "workingOn": "Työn alla: {name}",
       "workingSpinner": "Työskennellään…",
+      "status": {
+        "waiting": "Odotetaan: {provider}",
+        "noReply": "Odotetaan: {provider}, ei vastausta vielä ({seconds} s)",
+        "thinking": "{provider} miettii ({seconds} s)",
+        "retrying": "{provider} ilmoitti: {detail} Yritetään uudelleen (yritys {attempt})",
+        "retryWait": "{provider} ilmoitti: {detail} Yritys {attempt}: ei vastausta vielä ({seconds} s)",
+        "step": "Vaihe {step}",
+        "tools": {
+          "one": "{count} työkalu suoritettu",
+          "other": "{count} työkalua suoritettu"
+        }
+      },
       "providerDetail": "Palveluntarjoajan lisätiedot: {detail}",
       "attachImage": "Liitä kuva",
       "attachmentAlt": "Liitetty kuva {name}",

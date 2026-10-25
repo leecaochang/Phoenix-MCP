@@ -530,6 +530,12 @@ AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # total time is deliberately unbounded (a long agentic turn streams for minutes),
 # but a provider that stops sending data must not hang the turn forever.
 AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
+# A retry after a temporary provider failure waits this long for the first reply
+# rather than the full silent-stream bound: a provider that has just said it is
+# overloaded and then sends nothing is stuck, not thinking.
+AGENTCLI_RETRY_FIRST_REPLY_SECONDS = 60
+# How often Agent Chat's status line reports a model call that has shown nothing yet.
+AGENTCLI_STATUS_INTERVAL_SECONDS = 30
 # Interactive inline-approval wait, tied to the live SSE connection (far longer
 # than the per-access-key confirm_inline_wait cap, which is for unattended agents).
 AGENTCLI_APPROVAL_WAIT_SECONDS = 900

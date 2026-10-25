@@ -1444,6 +1444,18 @@
       "verboseHint": "Afficher les appels d'outils, les résultats d'outils et la réflexion de l'agent. Désactivé affiche uniquement la réponse finale.",
       "workingOn": "Traitement : {name}",
       "workingSpinner": "Traitement…",
+      "status": {
+        "waiting": "En attente de {provider}",
+        "noReply": "En attente de {provider} : pas encore de réponse ({seconds} s)",
+        "thinking": "{provider} réfléchit ({seconds} s)",
+        "retrying": "{provider} a signalé : {detail} Nouvelle tentative (tentative {attempt})",
+        "retryWait": "{provider} a signalé : {detail} Tentative {attempt} : pas encore de réponse ({seconds} s)",
+        "step": "Étape {step}",
+        "tools": {
+          "one": "{count} outil exécuté",
+          "other": "{count} outils exécutés"
+        }
+      },
       "progress": {
         "waitingApproval": "En attente de l'approbation de l'opérateur : {name}",
         "waitingApprovals": "En attente de l'approbation de l'opérateur : {count} en attente",
@@ -1458,7 +1470,8 @@
         "unauthorized": "Cette clé d’accès n’est plus autorisée.",
         "output_limit": "Le fournisseur a produit trop de contenu en sortie ce tour-ci ; arrêté.",
         "provider_rate_limit_exhausted": "La limite de débit du fournisseur est restée dépassée après environ {seconds} s de nouvelles tentatives. Détail du fournisseur : {detail}",
-        "provider_retry_exhausted": "Impossible d'atteindre le fournisseur après environ {seconds} s de nouvelles tentatives. {detail}",
+        "provider_retry_exhausted": "Le fournisseur n'a pas répondu après environ {seconds} s de nouvelles tentatives. {detail}",
+        "provider_silent": "Le fournisseur n'a rien envoyé pendant {seconds} s, la requête a donc été arrêtée.",
         "internal": "Erreur interne.",
         "bad_tool_call": "Le modèle a produit un appel d'outil invalide.",
         "tool_call_truncated": "Le modèle a atteint sa limite de longueur de sortie au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. La modification demandée était trop volumineuse pour être émise en un seul appel ; essayez de demander une modification plus petite.",

@@ -198,7 +198,8 @@
         "max_tokens_stop": "Il modello si è fermato perché ha raggiunto il limite di lunghezza dell'output. Chiedigli di continuare oppure aumenta il limite di token di output del modello (per Ollama, le sue impostazioni num_predict/context).",
         "output_limit": "Il provider ha prodotto troppo output in questo turno; interrotto.",
         "provider_rate_limit_exhausted": "Il limite di frequenza del provider è rimasto superato dopo nuovi tentativi per circa {seconds}s. Dettaglio del provider: {detail}",
-        "provider_retry_exhausted": "Impossibile raggiungere il provider dopo nuovi tentativi per circa {seconds}s. {detail}",
+        "provider_retry_exhausted": "Il provider non ha risposto dopo nuovi tentativi per circa {seconds}s. {detail}",
+        "provider_silent": "Il provider non ha inviato nulla per {seconds}s, quindi la richiesta è stata interrotta.",
         "tool_call_cut": "La connessione al modello è terminata nel mezzo di una chiamata a uno strumento, quindi l'azione non è stata eseguita. Nulla è stato applicato e la richiesta non era difettosa; inviala di nuovo.",
         "tool_call_truncated": "Il modello ha raggiunto il limite di lunghezza dell'output nel mezzo di una chiamata a uno strumento, quindi l'azione non è stata eseguita. La modifica richiesta era troppo grande per essere emessa in una sola chiamata; prova a chiedere una modifica più piccola.",
         "unauthorized": "Questa chiave di accesso non è più autorizzata.",
@@ -278,6 +279,18 @@
       "verboseHint": "Mostra le chiamate agli strumenti dell'agente, i risultati degli strumenti e il pensiero. Disattivato mostra solo la risposta finale.",
       "workingOn": "In corso: {name}",
       "workingSpinner": "In corso…",
+      "status": {
+        "waiting": "In attesa di {provider}",
+        "noReply": "In attesa di {provider}: ancora nessuna risposta ({seconds} s)",
+        "thinking": "{provider} sta ragionando ({seconds} s)",
+        "retrying": "{provider} ha segnalato: {detail} Nuovo tentativo (tentativo {attempt})",
+        "retryWait": "{provider} ha segnalato: {detail} Tentativo {attempt}: ancora nessuna risposta ({seconds} s)",
+        "step": "Passo {step}",
+        "tools": {
+          "one": "{count} tool eseguito",
+          "other": "{count} tool eseguiti"
+        }
+      },
       "chatEnded": "Chat terminata.",
       "providerDetail": "Dettaglio del provider: {detail}",
       "attachImage": "Allega immagine",

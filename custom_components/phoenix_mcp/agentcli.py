@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable, cast
 from urllib.parse import urlparse, urlunparse
 
-from aiohttp import ClientError, ClientSession, ClientTimeout, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, SocketTimeoutError, web
 
 from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
 from .conversation_log import record_rejected_tool, sanitized
@@ -132,6 +132,8 @@ from .const import (
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
     AGENTCLI_PROVIDER_DETAIL_CHARS,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
+    AGENTCLI_RETRY_FIRST_REPLY_SECONDS,
+    AGENTCLI_STATUS_INTERVAL_SECONDS,
     AGENTCLI_SECRETS_STORAGE_KEY,
     AGENTCLI_SECRETS_STORAGE_VERSION,
     AGENTCLI_TOOL_RESULT_MAX_CHARS,
@@ -257,6 +259,9 @@ EV_INVALID_TOOLS = "invalid_tool_calls"
 # consumer keeps the newest event's numbers rather than summing events. Counts
 # are exact from the provider; Phoenix MCP never estimates tokens itself.
 EV_USAGE = "usage_update"
+# A temporary failure before any output is about to be retried: attempt is the
+# next attempt's number and detail the provider's own sentence, when it sent one.
+EV_RETRYING = "retrying"
 
 
 # --------------------------------------------------------------------------- #
@@ -1545,6 +1550,14 @@ def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
     }
 
 
+def _silent_stream_error() -> dict:
+    """The provider connected but sent nothing within the read bound: stalled, not unreachable."""
+    seconds = AGENTCLI_STREAM_READ_TIMEOUT_SECONDS
+    return _norm(EV_ERROR, status=0, code="provider_silent", retryable=True,
+                 message=f"The provider sent nothing for {seconds}s, so the request was stopped.",
+                 message_params={"seconds": seconds})
+
+
 def _invalid_tools_error(message: str = "The model produced an invalid tool call.") -> dict:
     """The terminal form of EV_INVALID_TOOLS, for a loop that cannot hand it back."""
     return _norm(EV_ERROR, status=0, code="bad_tool_call", message=message, retryable=True,
@@ -2023,6 +2036,8 @@ class ClaudeProvider:
                     async for ev in self._parse(resp):
                         yield ev
                     return
+        except SocketTimeoutError:
+            yield _silent_stream_error()
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
@@ -3149,6 +3164,8 @@ class OpenAICompatProvider:
                     async for ev in self._parse(resp, show_thinking):
                         yield ev
                     return
+        except SocketTimeoutError:
+            yield _silent_stream_error()
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
@@ -4409,8 +4426,12 @@ async def _stream_turn_resilient(
     unchanged.
     """
     loop_time = asyncio.get_running_loop().time
-    deadline = loop_time() + _CONNECT_RETRY_WINDOW_SECONDS
+    started = loop_time()
+    deadline = started + _CONNECT_RETRY_WINDOW_SECONDS
     attempt = 0
+    # The provider's own account of the failure that started the retries, which
+    # the final error keeps: the retry's own failure is often a bare timeout.
+    first_detail = ""
     while not cancel.is_set():
         attempt += 1
         produced = False
@@ -4418,49 +4439,117 @@ async def _stream_turn_resilient(
         events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
         ), config=getattr(provider, "cfg", None), messages=messages), cancel)
-        async with aclosing(events):
-            async for ev in events:
-                etype = ev.get("type")
-                if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
-                        and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
-                        and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
-                    retry = True
-                    break
-                if etype == EV_ERROR and dispatch_started:
-                    ev = _after_dispatch_failure(ev, write_started)
-                if etype == EV_ERROR and attempt > 1:
-                    detail = str(ev.get("message") or "").strip()
-                    seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
-                    explicit_rate_limit = (
-                        ev.get("status") == 429 and ev.get("code") == "rate_limit"
-                    )
-                    if explicit_rate_limit:
-                        code = "provider_rate_limit_exhausted"
-                        message = (
-                            f"The provider's rate limit remained exceeded after retrying for about "
-                            f"{seconds}s. Provider detail: {detail}"
-                        )
-                    else:
-                        code = "provider_retry_exhausted"
-                        message = (
-                            f"Could not reach the provider after retrying for about "
-                            f"{seconds}s. {detail}"
-                        )
-                    ev = {
-                        **ev,
-                        "code": code,
-                        "message": message.strip(),
-                        "message_params": {"seconds": seconds, "detail": detail},
-                    }
-                if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
-                    produced = True
-                yield ev
+        # The deadline only covers the wait for a retry's first event, during which
+        # this generator is awaiting the provider, never suspended at a yield.
+        first_reply = asyncio.timeout(None)
+        try:
+            async with first_reply, aclosing(events):
+                if attempt > 1:
+                    first_reply.reschedule(loop_time() + AGENTCLI_RETRY_FIRST_REPLY_SECONDS)
+                async for ev in events:
+                    first_reply.reschedule(None)
+                    etype = ev.get("type")
+                    if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
+                            and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
+                            and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
+                        retry = True
+                        first_detail = first_detail or _failure_detail(ev)
+                        yield {"type": EV_RETRYING, "attempt": attempt + 1, "status": ev.get("status"),
+                               "detail": _failure_detail(ev)}
+                        break
+                    if etype == EV_ERROR and dispatch_started:
+                        ev = _after_dispatch_failure(ev, write_started)
+                    if etype == EV_ERROR and attempt > 1:
+                        ev = _retry_exhausted(ev, int(loop_time() - started), first_detail)
+                    if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
+                        produced = True
+                    yield ev
+        except TimeoutError:
+            if not first_reply.expired():
+                raise
+            stalled = {"type": EV_ERROR, "status": 0, "code": "network", "retryable": True,
+                       "message": f"The provider sent no reply within {AGENTCLI_RETRY_FIRST_REPLY_SECONDS}s."}
+            yield _retry_exhausted(stalled, int(loop_time() - started), first_detail)
+            return
         if not retry or cancel.is_set():
             return
         try:
             await asyncio.wait_for(cancel.wait(), timeout=_CONNECT_RETRY_BACKOFF_SECONDS)
         except asyncio.TimeoutError:
             pass
+
+
+def _failure_detail(ev: dict) -> str:
+    """The provider's own sentence about a failure, or Phoenix's description of it."""
+    return str(ev.get("provider_detail") or ev.get("message") or "").strip()
+
+
+def _retry_exhausted(ev: dict, seconds: int, first_detail: str) -> dict:
+    """The final error after retrying: the real time spent and, kept, the failure that started it."""
+    detail = str(ev.get("message") or "").strip()
+    if ev.get("status") == 429 and ev.get("code") == "rate_limit":
+        code = "provider_rate_limit_exhausted"
+        message = f"The provider's rate limit remained exceeded after retrying for about {seconds}s. Provider detail: {detail}"
+    else:
+        code = "provider_retry_exhausted"
+        message = f"The provider did not answer after retrying for about {seconds}s. {detail}"
+    extra = {"provider_detail": first_detail} if first_detail and not ev.get("provider_detail") else {}
+    return {**ev, **extra, "code": code, "message": message.strip(),
+            "message_params": {"seconds": seconds, "detail": detail}}
+
+
+class _CallStatus:
+    """Agent Chat's status line for one model call, in place of a bare spinner.
+
+    Built only from facts the loop observes: the provider, the turn's step and
+    tools run so far, how long nothing has been shown, a model that is thinking,
+    and a retry with the provider's own sentence. While nothing is visible it is
+    refreshed every AGENTCLI_STATUS_INTERVAL_SECONDS.
+    """
+
+    def __init__(self, emit: Callable[[str, dict], Awaitable[None]], provider: Any, *, step: int, tools: int) -> None:
+        definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
+        self._emit = emit
+        self._fields: dict[str, Any] = {
+            "provider": definition.label if definition is not None else str(getattr(provider, "kind", "")),
+            "step": step, "tools": tools,
+        }
+        self._time = asyncio.get_running_loop().time
+        self._since = self._time()
+        self._phase = "waiting"
+        self._shown = False
+        self._ticker: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        await self._send()
+        self._ticker = asyncio.create_task(self._tick())
+
+    def stop(self) -> None:
+        if self._ticker is not None:
+            self._ticker.cancel()
+
+    async def observe(self, ev: dict) -> None:
+        etype = ev.get("type")
+        if etype in (EV_TEXT, EV_TOOL, EV_DONE):
+            # The reply or a tool line now speaks for itself.
+            self._shown = True
+        elif etype == EV_THINKING and self._phase != "thinking":
+            self._phase = "thinking"
+            await self._send()
+        elif etype == EV_RETRYING:
+            self._since, self._phase = self._time(), "waiting"
+            self._fields.update(attempt=ev.get("attempt"), detail=ev.get("detail") or "")
+            await self._send(retrying=True)
+
+    async def _send(self, retrying: bool = False) -> None:
+        await self._emit("status", {**self._fields, "phase": "retrying" if retrying else self._phase,
+                                    "seconds": int(self._time() - self._since)})
+
+    async def _tick(self) -> None:
+        while True:
+            await asyncio.sleep(AGENTCLI_STATUS_INTERVAL_SECONDS)
+            if not self._shown:
+                await self._send()
 
 
 @dataclasses.dataclass
@@ -4574,6 +4663,7 @@ async def _consume_model_stream(
     detect_focus_refusal: bool = False,
     dispatch_started: bool = False,
     write_started: bool = False,
+    status: dict | None = None,
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
@@ -4593,78 +4683,86 @@ async def _consume_model_stream(
     usage_cur_cache = (0, 0)
     focus = _FocusPrefixBuffer(enabled=detect_focus_refusal)
     focus_event_emitted = False
-
-    async for ev in _stream_turn_resilient(
-        provider, session, system_prompt=system, messages=messages,
-        tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
-        write_started=write_started,
-    ):
-        etype = ev["type"]
-        if etype == EV_TEXT:
-            visible = focus.feed(ev["text"])
-            if focus.declined and not focus_event_emitted:
-                await emit("focus_declined", {})
-                focus_event_emitted = True
-            if visible:
-                saw_text = True
-                await emit("assistant_delta", {"text": visible})
-        elif etype == EV_THINKING:
-            await emit("thinking_delta", {"text": ev["text"]})
-        elif etype == EV_TOOL:
-            tool_calls.append(ev)
-        elif etype == EV_INVALID_TOOLS:
-            invalid_tools = ev
-        elif etype == EV_USAGE:
-            usage_cur_input = _usage_int(ev.get("input_tokens"))
-            usage_cur_output = _usage_int(ev.get("output_tokens"))
-            usage_cur_cache = (_usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
-            if usage_cur_input:
-                context_tokens = usage_cur_input
-            await emit("usage", {
-                "input_tokens": usage_done_input + usage_cur_input,
-                "output_tokens": usage_done_output + usage_cur_output,
-                "context_tokens": context_tokens,
-                # Parts of input_tokens: read from and written to the provider's prompt cache.
-                "cache_read_tokens": usage_done_cache[0] + usage_cur_cache[0],
-                "cache_write_tokens": usage_done_cache[1] + usage_cur_cache[1],
-            })
-        elif etype == EV_DONE:
-            stop_reason = ev["stop_reason"]
-            assistant_msg = ev["assistant_msg"]
-            if detect_focus_refusal and assistant_msg is not None:
-                assistant_msg, message_declined = _strip_focus_marker_message(assistant_msg)
-                focus.declined = focus.declined or message_declined
-                if message_declined and not focus.decided:
-                    focus.pending = ""
-                    focus.decided = True
+    line = _CallStatus(emit, provider, **status) if status is not None else None
+    if line is not None:
+        await line.start()
+    try:
+        async for ev in _stream_turn_resilient(
+            provider, session, system_prompt=system, messages=messages,
+            tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
+            write_started=write_started,
+        ):
+            if line is not None:
+                await line.observe(ev)
+            etype = ev["type"]
+            if etype == EV_TEXT:
+                visible = focus.feed(ev["text"])
                 if focus.declined and not focus_event_emitted:
                     await emit("focus_declined", {})
                     focus_event_emitted = True
-        elif etype == EV_ERROR:
-            await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
-                                 "retryable": ev.get("retryable", False),
-                                 **({"outcome": "outcome_unknown"} if ev.get("outcome") == "outcome_unknown" else {}),
-                                 **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
-                                 **({"message_params": ev["message_params"]}
-                                    if ev.get("message_params") else {}),
-                                 # The provider's own error sentence, already
-                                 # clipped and scrubbed by the adapter. The
-                                 # admin panel and conversation log show it.
-                                 **({"provider_detail": ev["provider_detail"]}
-                                    if ev.get("provider_detail") else {}),
-                                 **({"provider_code": ev["provider_code"]}
-                                    if ev.get("provider_code") else {}),
-                                 # The adapter has already reduced response headers
-                                 # to a strict allowlist of safe numeric quota
-                                 # fields. Preserve that structured snapshot
-                                 # through the provider-to-SSE translation.
-                                 **({"rate_limit": ev["rate_limit"]}
-                                    if ev.get("rate_limit") else {}),
-                                 # Which of Phoenix's own request keys the provider
-                                 # refused, when it named one. The layer holding the
-                                 # store records it; nothing down here can.
-                                 **({"refused": ev["refused"]} if ev.get("refused") else {})})
-            errored = True
+                if visible:
+                    saw_text = True
+                    await emit("assistant_delta", {"text": visible})
+            elif etype == EV_THINKING:
+                await emit("thinking_delta", {"text": ev["text"]})
+            elif etype == EV_TOOL:
+                tool_calls.append(ev)
+            elif etype == EV_INVALID_TOOLS:
+                invalid_tools = ev
+            elif etype == EV_USAGE:
+                usage_cur_input = _usage_int(ev.get("input_tokens"))
+                usage_cur_output = _usage_int(ev.get("output_tokens"))
+                usage_cur_cache = (_usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
+                if usage_cur_input:
+                    context_tokens = usage_cur_input
+                await emit("usage", {
+                    "input_tokens": usage_done_input + usage_cur_input,
+                    "output_tokens": usage_done_output + usage_cur_output,
+                    "context_tokens": context_tokens,
+                    # Parts of input_tokens: read from and written to the provider's prompt cache.
+                    "cache_read_tokens": usage_done_cache[0] + usage_cur_cache[0],
+                    "cache_write_tokens": usage_done_cache[1] + usage_cur_cache[1],
+                })
+            elif etype == EV_DONE:
+                stop_reason = ev["stop_reason"]
+                assistant_msg = ev["assistant_msg"]
+                if detect_focus_refusal and assistant_msg is not None:
+                    assistant_msg, message_declined = _strip_focus_marker_message(assistant_msg)
+                    focus.declined = focus.declined or message_declined
+                    if message_declined and not focus.decided:
+                        focus.pending = ""
+                        focus.decided = True
+                    if focus.declined and not focus_event_emitted:
+                        await emit("focus_declined", {})
+                        focus_event_emitted = True
+            elif etype == EV_ERROR:
+                await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
+                                     "retryable": ev.get("retryable", False),
+                                     **({"outcome": "outcome_unknown"} if ev.get("outcome") == "outcome_unknown" else {}),
+                                     **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
+                                     **({"message_params": ev["message_params"]}
+                                        if ev.get("message_params") else {}),
+                                     # The provider's own error sentence, already
+                                     # clipped and scrubbed by the adapter. The
+                                     # admin panel and conversation log show it.
+                                     **({"provider_detail": ev["provider_detail"]}
+                                        if ev.get("provider_detail") else {}),
+                                     **({"provider_code": ev["provider_code"]}
+                                        if ev.get("provider_code") else {}),
+                                     # The adapter has already reduced response headers
+                                     # to a strict allowlist of safe numeric quota
+                                     # fields. Preserve that structured snapshot
+                                     # through the provider-to-SSE translation.
+                                     **({"rate_limit": ev["rate_limit"]}
+                                        if ev.get("rate_limit") else {}),
+                                     # Which of Phoenix's own request keys the provider
+                                     # refused, when it named one. The layer holding the
+                                     # store records it; nothing down here can.
+                                     **({"refused": ev["refused"]} if ev.get("refused") else {})})
+                errored = True
+    finally:
+        if line is not None:
+            line.stop()
 
     trailing = focus.finish()
     if focus.declined and not focus_event_emitted:
@@ -5047,6 +5145,9 @@ async def async_run_agent_turn(
     context_tokens = 0
     # Rounds spent handing malformed tool-call JSON back to the model.
     corrections = 0
+    # Model calls and tools run this turn, for the status line; unlike iterations,
+    # never reset by an approval.
+    step = tools_run = 0
     while True:
         if iterations >= max_iterations:
             # Pause at the checkpoint rather than stopping dead: the loop has
@@ -5060,13 +5161,14 @@ async def async_run_agent_turn(
         if cancel.is_set():
             await emit("error", {"code": "cancelled", "message": "Cancelled."})
             break
+        step += 1
         call = await _consume_model_stream(
             provider, session, system=system, messages=messages, tools=tools,
             options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
             context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
-            write_started=write_started,
+            write_started=write_started, status={"step": step, "tools": tools_run},
         )
         flush_assistant()
         tool_calls = call.tool_calls
@@ -5147,6 +5249,7 @@ async def async_run_agent_turn(
             client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
         )
         results = batch.results
+        tools_run += len(tool_calls)
         write_started = write_started or batch.write_started
         human_resolved = batch.human_resolved
         stop_turn = batch.stop_turn
