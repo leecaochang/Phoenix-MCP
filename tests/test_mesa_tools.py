@@ -826,6 +826,26 @@ def test_scoped_store_exposes_no_scope_enumeration():
         )
 
 
+def test_scoped_store_forwards_every_host_callback_the_resolver_reads():
+    """Every scoped MESA read resolves through mesa-core's InheritanceResolver.
+
+    The resolver reads its host callbacks as store attributes, so a callback the
+    scoped view does not forward fails every scoped query at the first entity
+    that reaches it, while unscoped paths keep working. The list is derived from
+    the resolver itself, so a callback added by a mesa-core upgrade is covered.
+    """
+    from custom_components.phoenix_mcp.mesa_core.inheritance import InheritanceResolver
+    from custom_components.phoenix_mcp.mesa_tools import ScopedProfileStore
+
+    callbacks = [
+        name for name, member in vars(InheritanceResolver).items()
+        if isinstance(member, property) and name.startswith("get_")
+    ]
+    assert "get_device_parent" in callbacks, callbacks
+    missing = [name for name in callbacks if not isinstance(vars(ScopedProfileStore).get(name), property)]
+    assert missing == []
+
+
 # --- profile freshness ------------------------------------------------------
 
 

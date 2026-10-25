@@ -45,8 +45,9 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": (
-                    "Filter by HA device registry ID; requires the host's "
-                    "entity-to-device mapping (Spec 5.6)."
+                    "Filter by HA device registry ID; an entity matches when its "
+                    "device, or that device's parent device, is listed. Requires the "
+                    "host's entity-to-device mapping (Spec 5.6)."
                 ),
             },
             "integrations": {

@@ -223,12 +223,14 @@ class ProfileStore:
         get_entity_area: Callable[[str], str | None] | None = None,
         get_entity_integration: Callable[[str], str | None] | None = None,
         get_entity_device: Callable[[str], str | None] | None = None,
+        get_device_parent: Callable[[str], str | None] | None = None,
         get_entity_domain: Callable[[str], str] | None = None,
     ) -> None:
         self.backend = backend
         self.get_entity_area = get_entity_area
         self.get_entity_integration = get_entity_integration
         self.get_entity_device = get_entity_device
+        self.get_device_parent = get_device_parent
         self.get_entity_domain = get_entity_domain
         self._resolver: InheritanceResolver | None = None
 
@@ -535,8 +537,13 @@ class ProfileStore:
             try:
                 if areas is not None and resolver.lookup("area", key) not in areas:
                     continue
-                if devices is not None and resolver.lookup("device", key) not in devices:
-                    continue
+                if devices is not None:
+                    device_id = resolver.lookup("device", key)
+                    # An entity on an HA child device also matches its main device.
+                    if device_id not in devices and (
+                        device_id is None or resolver.parent_device(device_id) not in devices
+                    ):
+                        continue
                 if (
                     integrations is not None
                     and resolver.lookup("integration", key) not in integrations
