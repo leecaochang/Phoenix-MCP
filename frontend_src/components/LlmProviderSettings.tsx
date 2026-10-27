@@ -386,10 +386,10 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
     ? (inst.model ? t("settings.agentcliDefaultModelAuto", { model: inst.model }) : t("settings.agentcliDefaultModelAutoPending"))
     : t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") });
   const columns: Column<AgentCliInstance>[] = [
-    { id: "name", label: t("settings.colAccount"), cell: (inst) => inst.name, sortValue: (inst) => inst.name },
+    { id: "name", label: t("settings.colAccount"), maxWidth: 300, cell: (inst) => inst.name, title: (inst) => inst.name, sortValue: (inst) => inst.name },
     { id: "provider", label: t("settings.colProvider"), cell: (inst) => typeLabel(inst.kind), sortValue: (inst) => typeLabel(inst.kind) },
     {
-      id: "model", label: t("settings.colModel"), sortValue: (inst) => inst.model ?? "",
+      id: "model", label: t("settings.colModel"), maxWidth: 320, sortValue: (inst) => inst.model ?? "",
       cell: (inst) => inst.model_mode === "auto" ? `${inst.model || t("settings.agentcliNotSet")} (${t("settings.modelAutomatic")})` : (inst.model || t("settings.agentcliNotSet")),
     },
   ];

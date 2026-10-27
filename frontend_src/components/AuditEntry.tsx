@@ -50,16 +50,26 @@ export function outcomeLabel(entry: AuditEntry): string {
   return key ? t(key) : entry.outcome;
 }
 
-/** The outcome as an icon and its words, with the MESA advisory marker when MESA only warned. */
+/** "Advisory" when MESA only warned about the request; empty otherwise. */
+export function mesaLabel(entry: AuditEntry): string {
+  return entry.mesa_advisory ? t("mesa.modeAdvisory") : "";
+}
+
+/**
+ * How the request's authority was decided: by the access key's permissions, or
+ * not at all because the key is pass-through (MESA and approvals still apply).
+ */
+export function accessLabel(entry: AuditEntry): string {
+  return t(entry.pass_through ? "audit.accessPassThrough" : "audit.accessPermissions");
+}
+
+/** The outcome as an icon and its words. */
 export function AuditOutcome({ entry }: { entry: AuditEntry }) {
   const signal = outcomeSignal(entry.outcome);
   return (
     <span className={`phx-outcome conversation-signal-${signal}`}>
       <SignalIcon name={outcomeIcon(entry.outcome)} signal={signal} />
       <span>{outcomeLabel(entry)}</span>
-      {entry.mesa_advisory && (
-        <span className="outcome-badge mesa-advisory-badge" title={t("audit.mesaAdvisory")} aria-label={t("audit.mesaAdvisory")}>MESA</span>
-      )}
     </span>
   );
 }
@@ -94,7 +104,7 @@ export function AuditEntryDetail({ entry, accessKeyName }: { entry: AuditEntry; 
             ? `${formatAccessKeyName(accessKeyName)} (${formatAccessKeyName(entry.access_key_name)})`
             : formatAccessKeyName(accessKeyName)}
         />
-        <Field label={t("audit.rowMode")} value={entry.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")} />
+        <Field label={t("audit.rowAccess")} value={accessLabel(entry)} />
         <Field label={t("audit.rowMethod")} value={entry.method} mono />
         <Field label={t("audit.rowResource")} value={friendlyResource(entry.resource)} mono />
         <Field label={t("audit.rowOutcome")} value={outcomeLabel(entry)} />

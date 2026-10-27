@@ -702,14 +702,16 @@
       "resourcePlaceholder": "资源…",
       "rowIp": "来源",
       "rowMethod": "方法",
-      "rowMode": "模式",
       "rowOutcome": "结果",
       "rowPayload": "负载",
       "rowRequestId": "请求 ID",
       "rowResource": "资源",
       "rowTime": "时间",
       "rowAccessKey": "访问密钥",
-      "loadFailed": "无法加载审计日志。请刷新重试。"
+      "loadFailed": "无法加载审计日志。请刷新重试。",
+      "rowAccess": "访问",
+      "accessPermissions": "权限",
+      "accessPassThrough": "直通"
     },
     "changes": {
       "added": "已添加",
@@ -2305,7 +2307,7 @@
         "requestCompleted": "模型请求已完成"
       },
       "attachmentPrompt": "图片或文件提示内容",
-      "clearShort": "清除历史",
+      "clearShort": "清除对话",
       "retention": "保留"
     },
     "attention": {
@@ -2342,7 +2344,7 @@
       "fold": "折叠",
       "unfold": "取消折叠",
       "options": "工作区选项",
-      "restoreOriginal": "还原原始布局",
+      "restoreOriginal": "重置此工作区",
       "reopen": "重新打开{window}",
       "empty": "此工作区中没有打开的窗口。",
       "moveToolbar": "移动工具栏",
@@ -2375,12 +2377,10 @@
       "unpin": "取消固定",
       "saveMyDefault": "保存为我的默认布局",
       "restoreMyDefault": "还原我的默认布局",
-      "restorePanelDefaults": "还原面板默认设置",
-      "restorePanelDefaultsConfirm": "将工具栏和所有工作区的布局还原为默认值？已保存的我的默认布局和所有 Phoenix 设置都会保留。",
-      "restoreDefaultsAction": "还原默认值",
+      "restorePanelDefaults": "重置所有工作区",
       "myDefaultSaved": "已将此布局保存为 {workspace} 的默认布局。",
       "myDefaultRestored": "已还原你的默认布局。",
-      "panelDefaultsRestored": "已还原面板默认设置。",
+      "panelDefaultsRestored": "已将所有工作区、工具栏和帮助栏恢复为默认设置。",
       "review": "审核",
       "reviewEmpty": "选择一个请求进行审核。",
       "requestDetails": "请求详情",
@@ -2408,14 +2408,16 @@
       "myWorkspace": "我的工作区",
       "removeFromMy": "从我的工作区移除",
       "removedFromMy": "已将{window}从我的工作区移除",
-      "safety": "安全"
+      "safety": "安全",
+      "resetWorkspaceHint": "将此工作区的窗口放回 Phoenix 的默认位置。其他工作区和我的默认布局保持不变。",
+      "resetAllHint": "重置所有工作区、工具栏、帮助栏和指南。我的默认布局和 Phoenix 设置保持不变。"
     },
     "notifications": {
       "title": "通知",
       "empty": "本次会话中没有通知。",
       "clear": "清除通知",
-      "clearAll": "全部清除",
-      "dismiss": "关闭"
+      "dismiss": "关闭",
+      "showHistory": "显示通知历史"
     },
     "help": {
       "title": "帮助",
@@ -2463,11 +2465,10 @@
       "filtersCount": "筛选（{count}）",
       "activeFilters": "已启用的筛选：{count}",
       "clearFilters": "清除筛选",
-      "latest": "最新",
       "turns": "轮次",
       "toolCalls": "工具调用",
       "pauseUpdates": "暂停更新",
-      "recordingSettings": "记录设置"
+      "logSettings": "日志设置"
     },
     "table": {
       "sortAscending": "升序排序",
@@ -2478,7 +2479,6 @@
       "resetColumns": "重置列",
       "columnMenu": "{column}列选项",
       "resizeColumn": "调整{column}列宽",
-      "filterColumn": "筛选此列",
       "sortedLoaded": "仅在已加载的条目中排序。加载更多以包含其余条目。"
     }
   },

@@ -100,7 +100,7 @@ describe("a window the shell keeps open or closed", () => {
     return controller;
   }
 
-  it("closes Help when it is not wanted, even after Restore Original Layout, and offers it to reopen", () => {
+  it("closes Help when it is not wanted, even after Reset This Workspace, and offers it to reopen", () => {
     const c = mount(false);
     expect(c.hostOf(HELP_WINDOW)).toBeNull();
     c.restoreOriginal();

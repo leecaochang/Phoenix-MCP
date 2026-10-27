@@ -905,12 +905,14 @@
       "rowAccessKey": "Åtkomstnyckel",
       "rowIp": "Källa",
       "rowMethod": "Metod",
-      "rowMode": "Läge",
       "rowOutcome": "Utfall",
       "rowPayload": "Nyttolast",
       "rowRequestId": "ID för begäran",
       "rowResource": "Resurs",
-      "rowTime": "Tid"
+      "rowTime": "Tid",
+      "rowAccess": "Åtkomst",
+      "accessPermissions": "Behörigheter",
+      "accessPassThrough": "Pass-through"
     },
     "caps": {
       "cap_automation_write": {
@@ -1339,7 +1341,7 @@
       "turns": "Turer: {count}",
       "unknown": "Okänd",
       "week": "Senaste veckan",
-      "clearShort": "Rensa historik",
+      "clearShort": "Rensa konversationer",
       "retention": "Bevarande"
     },
     "diff": {
@@ -2347,7 +2349,7 @@
       "fold": "Vik ihop",
       "unfold": "Vik ut",
       "options": "Alternativ för arbetsytan",
-      "restoreOriginal": "Återställ ursprunglig layout",
+      "restoreOriginal": "Återställ den här arbetsytan",
       "reopen": "Öppna {window} igen",
       "empty": "Inga fönster är öppna på den här arbetsytan.",
       "moveToolbar": "Flytta verktygsfältet",
@@ -2380,12 +2382,10 @@
       "unpin": "Lossa",
       "saveMyDefault": "Spara som Min standard",
       "restoreMyDefault": "Återställ Min standard",
-      "restorePanelDefaults": "Återställ panelens standardinställningar",
-      "restorePanelDefaultsConfirm": "Återställa verktygsfältet och layouten för alla arbetsytor till standard? Dina sparade standarder och alla Phoenix-inställningar behålls.",
-      "restoreDefaultsAction": "Återställ standard",
+      "restorePanelDefaults": "Återställ alla arbetsytor",
       "myDefaultSaved": "Den här layouten sparades som din standard för {workspace}.",
       "myDefaultRestored": "Din standardlayout har återställts.",
-      "panelDefaultsRestored": "Panelens standardinställningar har återställts.",
+      "panelDefaultsRestored": "Alla arbetsytor, verktygsfältet och hjälpfältet har återställts till standard.",
       "review": "Granskning",
       "reviewEmpty": "Välj en begäran för att granska den.",
       "requestDetails": "Begäransdetaljer",
@@ -2413,14 +2413,16 @@
       "myWorkspace": "Min arbetsyta",
       "removeFromMy": "Ta bort från Min arbetsyta",
       "removedFromMy": "{window} har tagits bort från Min arbetsyta",
-      "safety": "Säkerhet"
+      "safety": "Säkerhet",
+      "resetWorkspaceHint": "Flyttar tillbaka den här arbetsytans fönster dit Phoenix placerar dem. Andra arbetsytor och Min standard förblir oförändrade.",
+      "resetAllHint": "Återställer alla arbetsytor, verktygsfältet, hjälpfältet och guiden. Min standard och Phoenix-inställningarna förblir oförändrade."
     },
     "notifications": {
       "title": "Aviseringar",
       "empty": "Inga aviseringar under den här sessionen.",
       "clear": "Rensa avisering",
-      "clearAll": "Rensa alla",
-      "dismiss": "Stäng"
+      "dismiss": "Stäng",
+      "showHistory": "Visa aviseringshistorik"
     },
     "help": {
       "title": "Hjälp",
@@ -2468,11 +2470,10 @@
       "filtersCount": "Filter ({count})",
       "activeFilters": "Aktiva filter: {count}",
       "clearFilters": "Rensa filter",
-      "latest": "Senaste",
       "turns": "Turer",
       "toolCalls": "Verktygsanrop",
       "pauseUpdates": "Pausa uppdateringar",
-      "recordingSettings": "Inspelningsinställningar"
+      "logSettings": "Logginställningar"
     },
     "table": {
       "sortAscending": "Sortera stigande",
@@ -2483,7 +2484,6 @@
       "resetColumns": "Återställ kolumner",
       "columnMenu": "Alternativ för kolumnen {column}",
       "resizeColumn": "Ändra bredd på kolumnen {column}",
-      "filterColumn": "Filtrera den här kolumnen",
       "sortedLoaded": "Sorterat bara bland de inlästa posterna. Läs in fler för att ta med resten."
     }
   },

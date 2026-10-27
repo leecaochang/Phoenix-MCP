@@ -47,9 +47,9 @@ describe("canvas geometry", () => {
 type Arrange = (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void;
 
 /** A workspace with a stubbed visible height, the way WorkspaceDock wires it. */
-function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[] } = {}) {
+function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean } = {}) {
   let visible = opts.visible ?? 600;
-  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded });
+  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit });
   const components = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
   let hostEl: HTMLElement | null = null;
   render(
@@ -59,7 +59,7 @@ function mount(windows: string[], arrange: Arrange, opts: { visible?: number; he
         Object.defineProperty(host, "clientHeight", { configurable: true, get: () => visible });
         Object.defineProperty(host.firstElementChild!, "clientWidth", { configurable: true, get: () => 1000 });
         controller.api = e.api;
-        controller.canvas = new WorkspaceCanvas(e.api, host, (id) => controller.folds.collapsedHeight(id) !== undefined);
+        controller.canvas = new WorkspaceCanvas(e.api, host, (id) => controller.folds.collapsedHeight(id) !== undefined, undefined, !!opts.fit);
         controller.load(undefined);
       }} />
     </div>,
@@ -202,5 +202,50 @@ describe("scrolling workspace", () => {
     second.controller.load(saved);
     expect(second.canvas.intended).toEqual({});
     expect(second.canvas.height).toBe(0);
+  });
+});
+
+describe("a fitted workspace (Logs)", () => {
+  it("never scrolls: windows taller than the screen shrink to share it", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 400, b: 500 }, fit: true });
+    const h = w.heights();
+    expect(w.host).not.toHaveClass("phx-scrolls");
+    expect(h.a + h.b).toBeLessThanOrEqual(600);
+    expect(h.a + h.b).toBeGreaterThan(590);
+    // In proportion: the taller window stays taller.
+    expect(h.b).toBeGreaterThan(h.a);
+  });
+
+  it("sizes a window to its content and gives the space left to the other window", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 400, b: 200 }, fit: true });
+    w.controller.sizeToContent("b", 120);
+    expect(w.heights()).toEqual({ a: 480, b: 120 });
+    w.controller.sizeToContent("b", 260);
+    expect(w.heights()).toEqual({ a: 340, b: 260 });
+  });
+
+  it("only ever makes a window the user resized or moved smaller", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 400, b: 200 }, fit: true });
+    w.controller.markUserSized(["b"]);
+    w.controller.sizeToContent("b", 320);
+    expect(w.heights().b).toBe(200);
+    w.controller.sizeToContent("b", 150);
+    expect(w.heights()).toEqual({ a: 450, b: 150 });
+  });
+
+  it("gives height freed below the workspace to its lowest window, as when Help closes", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 400, b: 200 }, fit: true });
+    expect(w.heights()).toEqual({ a: 400, b: 200 });
+    w.setVisible(700);
+    w.canvas.refit();
+    expect(w.heights()).toEqual({ a: 400, b: 300 });
+    expect(w.host).toHaveClass("phx-fits");
+  });
+
+  it("keeps a window just sized and shrinks the others when the content would not fit", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 500, b: 100 }, fit: true });
+    w.controller.sizeToContent("b", 360);
+    expect(w.heights()).toEqual({ a: 240, b: 360 });
+    expect(w.host).not.toHaveClass("phx-scrolls");
   });
 });

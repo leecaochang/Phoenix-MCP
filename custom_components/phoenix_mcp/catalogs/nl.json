@@ -356,14 +356,16 @@
       "resourcePlaceholder": "Resource...",
       "rowIp": "Bron",
       "rowMethod": "Methode",
-      "rowMode": "Modus",
       "rowOutcome": "Uitkomst",
       "rowPayload": "Payload",
       "rowRequestId": "Verzoek-ID",
       "rowResource": "Resource",
       "rowTime": "Tijd",
       "rowAccessKey": "Toegangssleutel",
-      "loadFailed": "Het auditlogboek kon niet worden geladen. Vernieuw om het opnieuw te proberen."
+      "loadFailed": "Het auditlogboek kon niet worden geladen. Vernieuw om het opnieuw te proberen.",
+      "rowAccess": "Toegang",
+      "accessPermissions": "Machtigingen",
+      "accessPassThrough": "Pass-through"
     },
     "caps": {
       "cap_automation_write": {
@@ -2383,7 +2385,7 @@
         "requestCompleted": "Modelverzoek voltooid"
       },
       "attachmentPrompt": "Bericht met afbeelding of bestand",
-      "clearShort": "Geschiedenis wissen",
+      "clearShort": "Gesprekken wissen",
       "retention": "Bewaarlimieten"
     },
     "attention": {
@@ -2420,7 +2422,7 @@
       "fold": "Opvouwen",
       "unfold": "Openvouwen",
       "options": "Werkruimte-opties",
-      "restoreOriginal": "Oorspronkelijke indeling herstellen",
+      "restoreOriginal": "Deze werkruimte resetten",
       "reopen": "{window} opnieuw openen",
       "empty": "Er zijn geen vensters geopend in deze werkruimte.",
       "moveToolbar": "Werkbalk verplaatsen",
@@ -2453,12 +2455,10 @@
       "unpin": "Losmaken",
       "saveMyDefault": "Opslaan als Mijn standaard",
       "restoreMyDefault": "Mijn standaard herstellen",
-      "restorePanelDefaults": "Standaardinstellingen van het paneel herstellen",
-      "restorePanelDefaultsConfirm": "De werkbalk en de indeling van alle werkruimten terugzetten naar de standaard? Uw opgeslagen standaarden en alle Phoenix-instellingen blijven behouden.",
-      "restoreDefaultsAction": "Standaard herstellen",
+      "restorePanelDefaults": "Alle werkruimten resetten",
       "myDefaultSaved": "Deze indeling is opgeslagen als uw standaard voor {workspace}.",
       "myDefaultRestored": "Uw standaardindeling is hersteld.",
-      "panelDefaultsRestored": "De standaardinstellingen van het paneel zijn hersteld.",
+      "panelDefaultsRestored": "Alle werkruimten, de werkbalk en de helpbalk zijn teruggezet naar de standaard.",
       "review": "Beoordeling",
       "reviewEmpty": "Selecteer een aanvraag om deze te beoordelen.",
       "requestDetails": "Aanvraagdetails",
@@ -2486,14 +2486,16 @@
       "myWorkspace": "Mijn werkruimte",
       "removeFromMy": "Verwijderen uit Mijn werkruimte",
       "removedFromMy": "{window} verwijderd uit Mijn werkruimte",
-      "safety": "Veiligheid"
+      "safety": "Veiligheid",
+      "resetWorkspaceHint": "Zet de vensters van deze werkruimte terug waar Phoenix ze plaatst. Andere werkruimten en Mijn standaard blijven ongewijzigd.",
+      "resetAllHint": "Reset alle werkruimten, de werkbalk, de helpbalk en de gids. Mijn standaard en de instellingen van Phoenix blijven ongewijzigd."
     },
     "notifications": {
       "title": "Meldingen",
       "empty": "Geen meldingen in deze sessie.",
       "clear": "Melding wissen",
-      "clearAll": "Alles wissen",
-      "dismiss": "Sluiten"
+      "dismiss": "Sluiten",
+      "showHistory": "Meldingsgeschiedenis weergeven"
     },
     "help": {
       "title": "Help",
@@ -2541,11 +2543,10 @@
       "filtersCount": "Filters ({count})",
       "activeFilters": "Actieve filters: {count}",
       "clearFilters": "Filters wissen",
-      "latest": "Laatste",
       "turns": "Beurten",
       "toolCalls": "Hulpmiddelaanroepen",
       "pauseUpdates": "Bijwerken pauzeren",
-      "recordingSettings": "Opname-instellingen"
+      "logSettings": "Logboekinstellingen"
     },
     "table": {
       "sortAscending": "Oplopend sorteren",
@@ -2556,7 +2557,6 @@
       "resetColumns": "Kolommen herstellen",
       "columnMenu": "Opties voor kolom {column}",
       "resizeColumn": "Breedte van kolom {column} wijzigen",
-      "filterColumn": "Op deze kolom filteren",
       "sortedLoaded": "Alleen gesorteerd binnen de geladen items. Laad meer om de rest mee te nemen."
     }
   }

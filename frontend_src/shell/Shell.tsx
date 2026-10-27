@@ -31,17 +31,23 @@ import { SettingsProvider } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
 import { DOCS_BASE_URL } from "../components/common";
 import {
-  ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, MY_EXTRAS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, arrangeMy, canAddToMy, myWorkspaceWindows,
+  ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, MY_EXTRAS, SHARED_PAIRS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, arrangeMy, canAddToMy, myWorkspaceWindows,
   renderWindow, windowAvailable, windowTitle, type WindowId,
 } from "./workspaces";
 import { CHAT_WINDOW, ChatDockContext, type ChatDock } from "./chatDock";
 import { WindowMenuExtrasContext, type WindowMenuExtras } from "./dock/TitleBar";
 import { visibleWindowEl } from "./visibility";
+import { TITLE_BAR_HEIGHT } from "./dock/fold";
 import { AccessKeyDetailProvider } from "../views/AccessKeyDetail";
 
 /** Below this panel width the phone stack is used; the gap between the two bounds stops flicker. */
 const PHONE_BELOW = 680;
 const DESKTOP_ABOVE = 720;
+/** The most of the visible height Log Details takes for an audit entry and for a conversation. */
+const AUDIT_SHARE = 0.6;
+const CONVERSATION_SHARE = 0.4;
+/** How long Log Details keeps following its content's size after a record is chosen. */
+const SIZE_FOLLOW_MS = 2000;
 /** Arrangements are written this long after the last change. */
 const SAVE_DELAY_MS = 1000;
 const TRANSIENT = new Set([ATTENTION_WINDOW]);
@@ -123,6 +129,11 @@ export function Shell() {
   /** Close Agent Chat, whichever window shows it; set once the chat state below is known. */
   const closeChatRef = useRef<() => void>(() => {});
 
+  // The height the user gave Log Details for each kind of record, per workspace, and the kind it shows now:
+  // an audit entry and a conversation each come back at their own size.
+  const detailsHeights = useRef(new Map<string, number>());
+  const detailsKind = useRef(new Map<string, string>());
+
   // A different user or environment, or an adopted record, starts from fresh controllers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const controllers = useMemo(() => new Map<WorkspaceId, WorkspaceController>(), [store.generation]);
@@ -130,7 +141,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion };
+      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, pairs: { ...SHARED_PAIRS, ...def.pairs } };
       // My Workspace holds the windows the user added, laid out in the order added.
       controller = id === "my"
         ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), arrangeMy(() => myWindowsRef.current), windowTitle,
@@ -139,6 +150,12 @@ export function Shell() {
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
       // Closing or reopening Help in one workspace overrides Show Help Bar there only.
       // Closing Agent Chat's window in My Workspace closes Chat.
+      controller.onUserSized = (windowId) => {
+        const kind = detailsKind.current.get(id);
+        // Only a height under or over a log is a choice; beside the logs Log Details just fills its column.
+        const group = windowId === "logDetails" && kind && controller!.isStacked(windowId) ? controller!.groupOf(windowId) : null;
+        if (group) detailsHeights.current.set(`${id}:${kind}`, Math.round(group.height));
+      };
       controller.onWindowToggle = (windowId, open) => {
         if (windowId === HELP_WINDOW) setHelp((prev) => withHelpIn(prev, id, open));
         if (windowId === CHAT_WINDOW && !open) closeChatRef.current();
@@ -153,16 +170,64 @@ export function Shell() {
   // otherwise in the workspace it belongs to.
   const workspaceRef = useRef(d.workspace);
   workspaceRef.current = d.workspace;
-  const revealIn = useCallback((source: WorkspaceId, windowId: string) => {
-    if (env === "desktop") {
-      const here = workspaceRef.current === "my" && myWindowsRef.current.includes(windowId) ? "my" : source;
-      controllerFor(here).ensureOpen(windowId);
-    }
+  const revealIn = useCallback((source: WorkspaceId, windowId: string): WorkspaceId => {
+    const here = workspaceRef.current === "my" && myWindowsRef.current.includes(windowId) ? "my" : source;
+    if (env === "desktop") controllerFor(here).ensureOpen(windowId);
     requestAnimationFrame(() => visibleWindowEl(root.current, windowId)?.scrollIntoView?.({ block: "nearest" }));
+    return here;
   }, [env, controllerFor]);
-  // Selecting a log record shows it in Log Details, opening or unfolding that window first.
+  // Selecting a log record shows it in Log Details, opening or unfolding that window first,
+  // sized to the record (user, 2026-10-26): an audit entry gets the few rows it needs, a
+  // conversation at most CONVERSATION_SHARE of the height. A window the user resized or moved
+  // only ever gets smaller. Conversations load their detail after opening, so the size
+  // follows the content for a moment.
   const logSelection = useMemo(() => new LogSelection(), []);
-  logSelection.onSelect = () => revealIn("logs", "logDetails");
+  const stopSizing = useRef<() => void>(() => {});
+  const sizeLogDetails = useCallback((here: WorkspaceId) => {
+    stopSizing.current();
+    if (env !== "desktop") return;
+    const controller = controllerFor(here);
+    const kind = logSelection.get()?.kind;
+    if (kind) detailsKind.current.set(here, kind);
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const body = visibleWindowEl(root.current, "logDetails");
+      const content = body?.querySelector<HTMLElement>(".phx-log-details");
+      // A record still loading is one short line: keep the size until it arrives, rather than shrink and grow back.
+      if (!body || body.hidden || !content || content.querySelector("[data-loading]")) return;
+      // Beside the logs, with no window above or below it, Log Details keeps the height of its column.
+      if (!controller.isStacked("logDetails")) return;
+      const natural = TITLE_BAR_HEIGHT + content.offsetHeight + (parseFloat(getComputedStyle(body).paddingBottom) || 0) + 2;
+      const visible = controller.visibleHeight();
+      const cap = visible > 0 ? Math.round(visible * (kind === "conversation" ? CONVERSATION_SHARE : AUDIT_SHARE)) : natural;
+      // The cap is for the size Phoenix chooses. Once the user sized Log Details for this kind of record,
+      // it returns to that size, shrinking only to fit shorter content.
+      const chosen = kind ? detailsHeights.current.get(`${here}:${kind}`) : undefined;
+      controller.sizeToContent("logDetails", Math.min(natural, chosen ?? cap), true);
+    };
+    const later = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    let observer: ResizeObserver | null = null;
+    const start = requestAnimationFrame(() => requestAnimationFrame(() => {
+      measure();
+      const content = visibleWindowEl(root.current, "logDetails")?.querySelector(".phx-log-details");
+      if (content && typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(later);
+        observer.observe(content);
+      }
+    }));
+    const timer = window.setTimeout(() => stopSizing.current(), SIZE_FOLLOW_MS);
+    stopSizing.current = () => {
+      cancelAnimationFrame(start);
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      observer?.disconnect();
+      stopSizing.current = () => {};
+    };
+  }, [env, controllerFor, logSelection]);
+  useEffect(() => () => stopSizing.current(), []);
+  logSelection.onSelect = () => sizeLogDetails(revealIn("logs", "logDetails"));
+  logSelection.onStep = () => sizeLogDetails(workspaceRef.current === "my" && myWindowsRef.current.includes("logDetails") ? "my" : "logs");
 
   // A request opened from a link brings Review into view.
   const revealReview = useCallback(() => revealIn("approvals", "review"), [revealIn]);
@@ -356,7 +421,9 @@ export function Shell() {
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
-      items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: helpRef.current.show, onSelect: () => setHelp((prev) => ({ show: !prev.show, workspaces: {} })) });
+      // Checked while Help is shown in this workspace; choosing it shows or hides Help everywhere.
+      const shown = helpOpen(helpRef.current, workspaceRef.current);
+      items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
     }
     const here = workspaceRef.current;
     const guideOpen = !!guideRef.current[here]?.open;
@@ -365,10 +432,8 @@ export function Shell() {
     return items;
   }, [env, userSetGuide]);
 
-  // Restore Panel Default Settings asks first, inside the workspace area.
-  const [confirmDefaults, setConfirmDefaults] = useState(false);
+  // Reset All Workspaces applies at once (user, 2026-10-26): it changes presentation only, and says so in a toast.
   const restorePanelDefaults = useCallback(() => {
-    setConfirmDefaults(false);
     const rec = recordRef.current;
     setToolbar(DEFAULT_TOOLBAR);
     setHelp(DEFAULT_HELP);
@@ -413,8 +478,8 @@ export function Shell() {
       controller.restoreOriginal();
       markChanged([`ws:${controller.id as WorkspaceId}`], true);
     },
-    restorePanelDefaults: () => setConfirmDefaults(true),
-  }), [commit, markChanged, notify]);
+    restorePanelDefaults,
+  }), [commit, markChanged, notify, restorePanelDefaults]);
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
@@ -540,15 +605,6 @@ export function Shell() {
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
           state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat} />
         <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
-          {confirmDefaults && (
-            <div className="banner banner-warning phx-shell-confirm" role="alertdialog" aria-labelledby="phx-defaults-question">
-              <p id="phx-defaults-question">{t("workspace.restorePanelDefaultsConfirm")}</p>
-              <div className="phx-shell-confirm-actions">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => setConfirmDefaults(false)}>{t("common.cancel")}</button>
-                <button type="button" className="btn btn-primary btn-sm" autoFocus onClick={restorePanelDefaults}>{t("workspace.restoreDefaultsAction")}</button>
-              </div>
-            </div>
-          )}
           {env === "desktop"
             ? WORKSPACE_IDS.filter((id) => visited.has(id)).map((id) => (
               <WorkspaceVisibleContext.Provider key={`${userId}:${store.generation}:${id}`} value={id === active}>

@@ -12,7 +12,7 @@
  * change's answer and `saving` always clears.
  */
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api";
 import type { GlobalSettings } from "../types";
@@ -23,6 +23,7 @@ import { matchesListSearch } from "../utils/list_search";
 import { MenuRootContext } from "../ui/Menu";
 import { Icon } from "../ui/Icon";
 import type { Tool } from "./tools";
+import { ControllerContext } from "./dock/TitleBar";
 import { visibleWindowEl } from "./visibility";
 import { HOME_TAB_LABEL_KEYS, SETTING_INDEX, SETTINGS_WINDOW_TITLE_KEYS, type AriaName, type HomeTab, type SettingEntry, type SettingsWindowId } from "./settingsIndex";
 
@@ -284,13 +285,23 @@ export function useFindSettingTool(): Tool | null {
   };
 }
 
-/** Recording Settings on the Logs toolbar: opens Logs and Notifications in Settings. */
-export function useRecordingSettingsTool(): Tool[] {
-  const s = useSettings();
-  if (!s) return [];
-  const label = t("logs.recordingSettings");
-  return [{ id: "recordingSettings", label, icon: "recordingSettings", shared: { id: "recordingSettings", label }, onSelect: () => s.showWindow("settingsLogs") }];
+/** Log Settings on the Logs toolbar: the Logs and Notifications settings, floating over the logs; again closes them. */
+export function useLogSettingsTool(): Tool[] {
+  const controller = useContext(ControllerContext);
+  useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
+  if (!controller || !controller.windows.includes(LOG_SETTINGS_WINDOW)) return [];
+  const label = t("logs.logSettings");
+  const open = !!controller.hostOf(LOG_SETTINGS_WINDOW);
+  const toggle = () => controller.toggleFloating(LOG_SETTINGS_WINDOW, LOG_SETTINGS_SIZE.width, LOG_SETTINGS_SIZE.height);
+  // Both logs share this tool and each receives the same request, so compare with the window as it is now, not as rendered.
+  const set = (on: boolean) => { if (on !== !!controller.hostOf(LOG_SETTINGS_WINDOW)) toggle(); };
+  return [{ id: "logSettings", label, icon: "recordingSettings", pressed: open, shared: { id: "logSettings", label }, onSelect: toggle, onSet: set }];
 }
+const LOG_SETTINGS_WINDOW = "settingsLogs";
+// Wide enough for both logs' columns side by side, as in the Settings workspace.
+const LOG_SETTINGS_SIZE = { width: 940, height: 640 };
+const noSubscribe = () => () => {};
+const noVersion = () => 0;
 
 /** Pause Updates on the Logs toolbar: a log stops updating itself while it is on; Refresh still works. */
 export function pauseUpdatesTool(paused: boolean, setPaused: (paused: boolean) => void): Tool {

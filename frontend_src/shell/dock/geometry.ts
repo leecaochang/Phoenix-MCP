@@ -70,18 +70,59 @@ export interface Slot {
   side: Side;
   /** The window's height when it was docked, so it can come back at that height. */
   height?: number;
+  /** The window's width when it was docked, for a window that comes back along an edge of the grid. */
+  width?: number;
   /** A pinned band or the floating layer, when the window was not in the scrolling grid. */
   host?: "top" | "bottom" | "float";
+  /** For a window closed while floating: where it had floated from, so Dock still returns it there. */
+  from?: Slot | null;
 }
 
 /** Remember a window's place before it is closed or floated, by its first neighbour found. */
 export function slotOf(api: DockviewApi, group: DockviewGroupPanel): Slot | null {
+  const id = group.activePanel?.id;
+  const sibling = id ? siblingSlot(api, id) : null;
+  if (sibling) return sibling;
   for (const dir of ["left", "right", "up", "down"] as const) {
     const n = neighbor(api, group, dir);
     const id = n?.activePanel?.id;
     if (id) return { neighbor: id, side: RETURN_SIDE[dir] };
   }
   return null;
+}
+
+interface TreeNode { type: "leaf" | "branch"; data: unknown }
+const treeChildren = (node: TreeNode): TreeNode[] => (Array.isArray(node.data) ? (node.data as TreeNode[]) : []);
+const treeLeafId = (node: TreeNode): string | undefined => (node.type === "leaf" ? ((node.data as { views?: string[] })?.views ?? [])[0] : undefined);
+
+/**
+ * The window a window was split from: its neighbour in the same column (or
+ * row) of the layout, so it returns into that column rather than beside a
+ * window that merely touches it. A window beside a whole column at the top
+ * level returns along that edge of the grid (no neighbour). Null when the
+ * neighbour is a group of windows further in; then the nearest window decides.
+ */
+function siblingSlot(api: DockviewApi, id: string): Slot | null {
+  let grid: { root: unknown; orientation: string };
+  try { grid = api.toJSON().grid as typeof grid; } catch { return null; }
+  const find = (node: TreeNode, vertical: boolean, top: boolean): Slot | null | undefined => {
+    const children = treeChildren(node);
+    const at = children.findIndex((c) => treeLeafId(c) === id);
+    if (at >= 0) {
+      const before = children[at - 1], after = children[at + 1];
+      const beforeId = before && treeLeafId(before), afterId = after && treeLeafId(after);
+      if (beforeId) return { neighbor: beforeId, side: vertical ? "bottom" : "right" };
+      if (afterId) return { neighbor: afterId, side: vertical ? "top" : "left" };
+      if (top && (before || after)) return { neighbor: "", side: vertical ? (before ? "bottom" : "top") : (before ? "right" : "left") };
+      return null;
+    }
+    for (const c of children) {
+      const found = find(c, !vertical, false);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  return find(grid.root as TreeNode, grid.orientation === "VERTICAL", true) ?? null;
 }
 
 /** The largest grid window, the fallback anchor when a remembered neighbour is gone. */

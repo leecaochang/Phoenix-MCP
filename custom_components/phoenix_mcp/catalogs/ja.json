@@ -482,7 +482,6 @@
       "detailTitle": "監査エントリ",
       "rowTime": "時刻",
       "rowAccessKey": "アクセスキー",
-      "rowMode": "モード",
       "rowMethod": "メソッド",
       "rowResource": "リソース",
       "rowOutcome": "結果",
@@ -509,7 +508,10 @@
       "filterIpAria": "送信元で絞り込む",
       "ipPlaceholder": "送信元...",
       "refreshAria": "監査ログを更新",
-      "loadFailed": "監査ログを読み込めませんでした。更新して再試行してください。"
+      "loadFailed": "監査ログを読み込めませんでした。更新して再試行してください。",
+      "rowAccess": "アクセス",
+      "accessPermissions": "権限",
+      "accessPassThrough": "パススルー"
     },
     "inject": {
       "profileSet": "{key} に MESA プロファイルが設定されています。クリックして編集",
@@ -2305,7 +2307,7 @@
         "requestCompleted": "モデルへのリクエスト完了"
       },
       "attachmentPrompt": "画像またはファイルのメッセージ",
-      "clearShort": "履歴を消去",
+      "clearShort": "会話を消去",
       "retention": "保持"
     },
     "attention": {
@@ -2342,7 +2344,7 @@
       "fold": "ウィンドウをたたむ",
       "unfold": "ウィンドウを広げる",
       "options": "ワークスペースのオプション",
-      "restoreOriginal": "元のレイアウトを復元",
+      "restoreOriginal": "このワークスペースをリセット",
       "reopen": "{window} を再び開く",
       "empty": "このワークスペースで開いているウィンドウはありません。",
       "moveToolbar": "ツールバーを移動",
@@ -2375,12 +2377,10 @@
       "unpin": "固定を解除",
       "saveMyDefault": "マイ既定として保存",
       "restoreMyDefault": "マイ既定を復元",
-      "restorePanelDefaults": "パネルの既定の設定を復元",
-      "restorePanelDefaultsConfirm": "ツールバーとすべてのワークスペースの配置を既定に戻しますか？保存したマイ既定と Phoenix のすべての設定は保持されます。",
-      "restoreDefaultsAction": "既定に戻す",
+      "restorePanelDefaults": "すべてのワークスペースをリセット",
       "myDefaultSaved": "この配置を {workspace} のマイ既定として保存しました。",
       "myDefaultRestored": "既定の配置を復元しました。",
-      "panelDefaultsRestored": "パネルの既定の設定を復元しました。",
+      "panelDefaultsRestored": "すべてのワークスペース、ツールバー、ヘルプバーを既定に戻しました。",
       "review": "確認",
       "reviewEmpty": "確認するリクエストを選択してください。",
       "requestDetails": "リクエストの詳細",
@@ -2408,14 +2408,16 @@
       "myWorkspace": "マイワークスペース",
       "removeFromMy": "マイワークスペースから削除",
       "removedFromMy": "{window} をマイワークスペースから削除しました",
-      "safety": "安全性"
+      "safety": "安全性",
+      "resetWorkspaceHint": "このワークスペースのウィンドウを Phoenix の既定の配置に戻します。ほかのワークスペースとマイ既定はそのままです。",
+      "resetAllHint": "すべてのワークスペース、ツールバー、ヘルプバー、ガイドをリセットします。マイ既定と Phoenix の設定はそのままです。"
     },
     "notifications": {
       "title": "通知",
       "empty": "このセッションの通知はありません。",
       "clear": "通知をクリア",
-      "clearAll": "すべてクリア",
-      "dismiss": "閉じる"
+      "dismiss": "閉じる",
+      "showHistory": "通知履歴を表示"
     },
     "help": {
       "title": "ヘルプ",
@@ -2463,11 +2465,10 @@
       "filtersCount": "フィルター（{count}）",
       "activeFilters": "有効なフィルター：{count}",
       "clearFilters": "フィルターをクリア",
-      "latest": "最新",
       "turns": "ターン",
       "toolCalls": "ツール呼び出し",
       "pauseUpdates": "更新を一時停止",
-      "recordingSettings": "記録の設定"
+      "logSettings": "ログの設定"
     },
     "table": {
       "sortAscending": "昇順で並べ替え",
@@ -2478,7 +2479,6 @@
       "resetColumns": "列をリセット",
       "columnMenu": "{column} 列のオプション",
       "resizeColumn": "{column} 列の幅を変更",
-      "filterColumn": "この列で絞り込む",
       "sortedLoaded": "読み込み済みの項目内でのみ並べ替えています。残りも含めるにはさらに読み込んでください。"
     }
   },

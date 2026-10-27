@@ -15,11 +15,11 @@ import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
-import { pauseUpdatesTool, useRecordingSettingsTool } from "../shell/settings";
+import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { ActionButton } from "../ui/ActionButton";
+import { InlineConfirm } from "../ui/InlineConfirm";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
-import type { MenuEntry } from "../ui/Menu";
 
 /** The server's own order, newest first; any other sort covers only the loaded conversations. */
 const SERVER_SORT = { column: "latest", dir: "desc" } as const;
@@ -49,7 +49,6 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const root = useRef<HTMLDivElement | null>(null);
   const generation = useRef(0);
   const clearingRef = useRef(false);
   const logSelection = useLogSelection();
@@ -92,31 +91,36 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     const invalidate = () => { generation.current++; };
     return () => { clearInterval(timer); invalidate(); };
   }, [load]);
-  const recordingSettings = useRecordingSettingsTool();
+  const logSettings = useLogSettingsTool();
   const resetPage = () => setLimit(25);
-  const activeFilters = [source, outcome, days].filter(Boolean).length;
-  const clearFilters = () => { setSource(""); setOutcome(""); setDays(""); resetPage(); };
-  // In the workspace shell, Refresh, Filters and Clear Conversation History move to the toolbar.
+  // The search is one of the filters: it shows and hides with them, and counts while hidden.
+  const activeFilters = [source, outcome, days, search.trim()].filter(Boolean).length;
+  const clearFilters = () => { setSource(""); setOutcome(""); setDays(""); setSearch(""); resetPage(); };
+  // In the workspace shell, Filters and Clear Conversation History move to the toolbar; the log
+  // updates itself, so Refresh is offered only while updates are paused.
   const onToolbar = useToolbarTools([{
     id: "conversationLog",
     label: t("conversations.title"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh",
-        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } },
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
       pauseUpdatesTool(paused, setPaused),
-      ...recordingSettings,
+      // Refresh sits to the right of Pause Updates, and only while paused.
+      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh" as const,
+        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } }] : []),
+      ...logSettings,
       { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
-  const confirmBanner = confirmClear && <div className="banner banner-warning conversation-clear-confirm" role="alert">
-    <p>{t("conversations.clearConfirm")}</p>
-    <BusyButton className="btn btn-danger" busy={clearing} onClick={() => void clear()}>{t("conversations.clear")}</BusyButton>{" "}
-    <BusyButton className="btn btn-ghost" busy={clearing} onClick={() => setConfirmClear(false)}>{t("common.cancel")}</BusyButton>
-  </div>;
+  const confirmBanner = confirmClear && (
+    <InlineConfirm label={t("conversations.clear")} tone="danger" confirmLabel={t("conversations.clear")} confirmIcon="delete"
+      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={clearing}
+      onConfirm={() => void clear()} onCancel={() => setConfirmClear(false)}>
+      <p>{t("conversations.clearConfirm")}</p>
+    </InlineConfirm>
+  );
   async function clear() {
     clearingRef.current = true; ++generation.current; setClearing(true);
     try {
@@ -127,26 +131,21 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     finally { clearingRef.current = false; setClearing(false); setLoading(false); }
   }
 
-  // A column's menu opens the filter for that column.
-  const openFilter = (name: string) => {
-    setFiltersOpen(true);
-    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-filter="${name}"]`)?.focus());
-  };
-  const filterItem = (name: string) => (): MenuEntry[] => [{ id: "filter", label: t("table.filterColumn"), onSelect: () => openFilter(name) }];
   const columns = useMemo((): Column<ConversationSummary>[] => [
-    { id: "prompt", label: t("conversations.prompt"), width: 300, sortValue: conversationTitle, cell: (e) => conversationTitle(e), title: conversationTitle, className: "conversation-summary-title" },
-    { id: "latest", label: t("logs.latest"), width: 150, sortValue: (e) => e.latest_at ?? e.started_at, cell: (e) => localeDateTimeShort(e.latest_at ?? e.started_at), title: (e) => localeDateTime(e.latest_at ?? e.started_at), menu: filterItem("days") },
-    { id: "outcome", label: t("audit.rowOutcome"), width: 170, sortValue: (e) => label("outcome", rowStatus(e)), menu: filterItem("outcome"),
+    // Time leads, as in the Audit Log (user, 2026-10-27); the id stays "latest" so saved sorts still apply.
+    { id: "latest", label: t("audit.rowTime"), width: 150, sortValue: (e) => e.latest_at ?? e.started_at, cell: (e) => localeDateTimeShort(e.latest_at ?? e.started_at), title: (e) => localeDateTime(e.latest_at ?? e.started_at) },
+    { id: "prompt", label: t("conversations.prompt"), width: 300, maxWidth: 360, sortValue: conversationTitle, cell: (e) => conversationTitle(e), title: conversationTitle, className: "conversation-summary-title" },
+    { id: "outcome", label: t("audit.rowOutcome"), width: 170, sortValue: (e) => label("outcome", rowStatus(e)),
       cell: (e) => { const status = rowStatus(e); const signal = outcomeSignal(status); return <span className={`phx-outcome conversation-status conversation-signal-${signal}`}><SignalIcon name={outcomeIcon(status)} signal={signal} />{label("outcome", status)}</span>; } },
-    { id: "source", label: t("conversations.sourceLabel"), width: 140, sortValue: (e) => label("source", e.source), cell: (e) => label("source", e.source), menu: filterItem("source") },
+    { id: "source", label: t("conversations.sourceLabel"), width: 140, sortValue: (e) => label("source", e.source), cell: (e) => label("source", e.source) },
     { id: "turns", label: t("logs.turns"), width: 80, sortValue: (e) => e.turns?.length ?? 1, cell: (e) => localeNumber(e.turns?.length ?? 1) },
-    { id: "tools", label: t("logs.toolCalls"), width: 100, hidden: true, sortValue: (e) => e.tool_count, cell: (e) => localeNumber(e.tool_count) },
-    { id: "changes", label: t("shell.tabChanges"), width: 100, hidden: true, sortValue: (e) => e.change_count, cell: (e) => localeNumber(e.change_count) },
+    { id: "tools", label: t("logs.toolCalls"), width: 100, sortValue: (e) => e.tool_count, cell: (e) => localeNumber(e.tool_count) },
+    { id: "changes", label: t("shell.tabChanges"), width: 100, sortValue: (e) => e.change_count, cell: (e) => localeNumber(e.change_count) },
   ], []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tableSettings] = useTableSettings("conversationLog");
   const partialSort = entries.length < total && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
 
-  return <div className="view-root conversations-view phx-log-view" ref={root}>
+  return <div className="view-root conversations-view phx-log-view">
     {!enabled && <p className="banner">{t("conversations.disabledHelp")}</p>}
     {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
@@ -174,11 +173,11 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       </p>
     )}
     {/* The search sits below the filters, as the text filters do in the Audit Log. */}
-    <div className="filter-row conversation-toolbar">
+    {showFilters && <div className="filter-row conversation-toolbar">
       <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
         onChange={e => { setSearch(e.target.value); resetPage(); }} />
       {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
-    </div>
+    </div>}
     <div className="conversation-list" aria-busy={loading}>
       <ConfigTable
         id="conversationLog"

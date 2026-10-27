@@ -92,7 +92,7 @@ describe("ConversationsView", () => {
     await view.findByRole("region", { name: "Prompt" });
     fireEvent.click(view.getByText("Clear Conversation History"));
     expect(api.clearConversations).not.toHaveBeenCalled();
-    fireEvent.click(within(view.container.querySelector<HTMLElement>(".conversation-clear-confirm")!).getByText("Clear Conversation History"));
+    fireEvent.click(within(view.getByRole("group", { name: "Clear Conversation History" })).getByRole("button", { name: "Clear Conversation History" }));
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
     await view.findByText("No conversations to show");
     expect(view.queryByRole("region", { name: "Prompt" })).toBeNull();
@@ -113,11 +113,35 @@ describe("ConversationsView", () => {
     expect(clear).toMatchObject({ label: "Clear Conversation History", tone: "danger", disabled: false });
     act(() => clear!.onSelect!());
     expect(api.clearConversations).not.toHaveBeenCalled();
-    const banner = view.container.querySelector(".conversation-clear-confirm")!;
-    expect(banner.compareDocumentPosition(view.container.querySelector(".phx-table")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(view.getByText("Clear Conversation History"));
+    const confirm = view.getByRole("group", { name: "Clear Conversation History" });
+    expect(confirm.compareDocumentPosition(view.container.querySelector(".phx-table")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Icon and text, like every in-window action, and a Cancel beside it.
+    const go = within(confirm).getByRole("button", { name: "Clear Conversation History" });
+    expect(go.querySelector("svg")).not.toBeNull();
+    expect(within(confirm).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    fireEvent.click(go);
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce(), { timeout: 3000 });
     await waitFor(() => expect(registry.latest("logs", "conversationLog", "clear")?.disabled).toBe(true), { timeout: 3000 });
+  });
+
+  it("hides the text search with the other filters on the toolbar's Filters", async () => {
+    const registry = new ToolRegistry();
+    const view = render(
+      <ToolRegistryContext.Provider value={registry}>
+        <WindowPlaceContext.Provider value={{ workspace: "logs", window: "conversationLog" }}>
+          <ConversationsView />
+        </WindowPlaceContext.Provider>
+      </ToolRegistryContext.Provider>,
+    );
+    await view.findByText("Tool exchange; prompt unavailable", undefined, { timeout: 3000 });
+    expect(view.queryByRole("searchbox")).toBeNull();
+    act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());
+    const search = view.getByRole("searchbox");
+    // A search counts as an active filter, so hidden filters still say one is applied.
+    fireEvent.change(search, { target: { value: "lamp" } });
+    act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());
+    expect(view.queryByRole("searchbox")).toBeNull();
+    expect(registry.latest("logs", "conversationLog", "filters")!.badge).toBe(1);
   });
 
   it("keeps expanded entries through a refresh and reports recoverable errors", async () => {

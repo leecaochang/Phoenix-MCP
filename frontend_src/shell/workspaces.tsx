@@ -96,6 +96,12 @@ export interface WorkspaceDef {
   closedAt?: Partial<Record<WindowId, Slot>>;
   /** Raised when the default arrangement changes so much that saved ones should not load. */
   layoutVersion?: number;
+  /** Windows a toolbar tool opens and closes here; Workspace Options does not offer to reopen them. */
+  toolWindows?: readonly WindowId[];
+  /** The windows always share the visible height; the workspace never scrolls. */
+  fit?: boolean;
+  /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
+  pairs?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -200,14 +206,22 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     labelKey: "workspace.logs",
     helpKey: "help.wsLogs",
     icon: "logs",
-    windows: ["auditLog", "conversationLog", "logDetails", "attention"],
-    // The two logs side by side with equal space, Log Details across the bottom, as accepted for Logs.
-    arrange: (api, add) => {
+    // Log Settings opens the Logs and Notifications settings floating over the logs.
+    windows: ["auditLog", "conversationLog", "logDetails", "settingsLogs", "attention"],
+    // Two equal columns (user, 2026-10-27): the Audit Log over the Conversation Log on the left, Log Details on
+    // the right; Help pinned below them across the full width, and Notifications beside it splitting at the
+    // same border. They always fit the screen (user, 2026-10-26): Logs never scrolls. Beside the logs Log Details
+    // keeps its column's height; arranged under a log instead, it sizes itself to the record chosen.
+    arrange: (_, add) => {
       add("auditLog");
-      add("conversationLog", { referencePanel: "auditLog", direction: "right" });
-      add("logDetails", { direction: "below" });
-      api.getPanel("logDetails")?.group.api.setSize({ height: Math.round(api.height * 0.4) });
+      add("logDetails", { referencePanel: "auditLog", direction: "right" });
+      add("conversationLog", { referencePanel: "auditLog", direction: "below" });
     },
+    heights: { auditLog: 500, conversationLog: 500 },
+    closedAt: { settingsLogs: { neighbor: "", side: "bottom", host: "float" } },
+    toolWindows: ["settingsLogs"],
+    // Notifications opens to the right of Help, at its height (user, 2026-10-26).
+    fit: true,
   },
   my: {
     labelKey: "workspace.myWorkspace",
@@ -247,6 +261,8 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
  * starts closed until reopened from Workspace Options.
  */
 export const SHARED_WINDOWS: readonly WindowId[] = [HELP_WINDOW, "notifications"];
+/** In every workspace Notifications opens to the right of Help, sharing its row. */
+export const SHARED_PAIRS: Readonly<Record<string, string>> = { notifications: "help" };
 const SHARED_HEIGHTS: Partial<Record<WindowId, number>> = { help: MIN_WINDOW_HEIGHT, notifications: 240 };
 
 export const WORKSPACES: Record<WorkspaceId, WorkspaceDef> = Object.fromEntries(
@@ -442,7 +458,8 @@ export function EmptyWorkspace(_props: IWatermarkPanelProps) {
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
   if (!controller) return null;
   const mine = controller.id === "my";
-  const closed = controller.closedWindows();
+  const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
+  const closed = controller.closedWindows().filter((id) => !toolWindows.includes(id));
   return (
     <div className="phx-workspace-empty">
       {/* My Workspace without any added window explains how to add one. */}

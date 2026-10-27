@@ -905,12 +905,14 @@
       "rowAccessKey": "Käyttöavain",
       "rowIp": "Lähde",
       "rowMethod": "Menetelmä",
-      "rowMode": "Tila",
       "rowOutcome": "Tulos",
       "rowPayload": "Sisältö",
       "rowRequestId": "Pyynnön tunnus",
       "rowResource": "Resurssi",
-      "rowTime": "Aika"
+      "rowTime": "Aika",
+      "rowAccess": "Pääsy",
+      "accessPermissions": "Käyttöoikeudet",
+      "accessPassThrough": "Läpivienti"
     },
     "caps": {
       "cap_automation_write": {
@@ -1339,7 +1341,7 @@
       "turns": "Vuoroja: {count}",
       "unknown": "Tuntematon",
       "week": "Viimeinen viikko",
-      "clearShort": "Tyhjennä historia",
+      "clearShort": "Tyhjennä keskustelut",
       "retention": "Säilytys"
     },
     "diff": {
@@ -2347,7 +2349,7 @@
       "fold": "Taita",
       "unfold": "Levitä",
       "options": "Työtilan asetukset",
-      "restoreOriginal": "Palauta alkuperäinen asettelu",
+      "restoreOriginal": "Nollaa tämä työtila",
       "reopen": "Avaa {window} uudelleen",
       "empty": "Tässä työtilassa ei ole avoimia ikkunoita.",
       "moveToolbar": "Siirrä työkaluriviä",
@@ -2380,12 +2382,10 @@
       "unpin": "Irrota",
       "saveMyDefault": "Tallenna Omaksi oletukseksi",
       "restoreMyDefault": "Palauta Oma oletus",
-      "restorePanelDefaults": "Palauta paneelin oletusasetukset",
-      "restorePanelDefaultsConfirm": "Palautetaanko työkalurivi ja kaikkien työtilojen asettelu oletuksiin? Tallentamasi oletukset ja kaikki Phoenixin asetukset säilyvät.",
-      "restoreDefaultsAction": "Palauta oletukset",
+      "restorePanelDefaults": "Nollaa kaikki työtilat",
       "myDefaultSaved": "Tämä asettelu tallennettiin omaksi oletukseksesi työtilassa {workspace}.",
       "myDefaultRestored": "Oletusasettelusi palautettiin.",
-      "panelDefaultsRestored": "Paneelin oletusasetukset palautettiin.",
+      "panelDefaultsRestored": "Kaikki työtilat, työkalurivi ja ohjepalkki on palautettu oletuksiin.",
       "review": "Tarkistus",
       "reviewEmpty": "Valitse pyyntö tarkistettavaksi.",
       "requestDetails": "Pyynnön tiedot",
@@ -2413,14 +2413,16 @@
       "myWorkspace": "Oma työtila",
       "removeFromMy": "Poista Omasta työtilasta",
       "removedFromMy": "{window} poistettu Omasta työtilasta",
-      "safety": "Turvallisuus"
+      "safety": "Turvallisuus",
+      "resetWorkspaceHint": "Palauttaa tämän työtilan ikkunat paikkoihin, joihin Phoenix ne sijoittaa. Muut työtilat ja Oma oletus pysyvät ennallaan.",
+      "resetAllHint": "Nollaa kaikki työtilat, työkalurivin, ohjepalkin ja oppaan. Oma oletus ja Phoenixin asetukset pysyvät ennallaan."
     },
     "notifications": {
       "title": "Ilmoitukset",
       "empty": "Tässä istunnossa ei ole ilmoituksia.",
       "clear": "Tyhjennä ilmoitus",
-      "clearAll": "Tyhjennä kaikki",
-      "dismiss": "Sulje"
+      "dismiss": "Sulje",
+      "showHistory": "Näytä ilmoitushistoria"
     },
     "help": {
       "title": "Ohje",
@@ -2468,11 +2470,10 @@
       "filtersCount": "Suodattimet ({count})",
       "activeFilters": "Aktiivisia suodattimia: {count}",
       "clearFilters": "Tyhjennä suodattimet",
-      "latest": "Viimeisin",
       "turns": "Vuorot",
       "toolCalls": "Työkalukutsut",
       "pauseUpdates": "Keskeytä päivitykset",
-      "recordingSettings": "Tallennusasetukset"
+      "logSettings": "Lokiasetukset"
     },
     "table": {
       "sortAscending": "Lajittele nousevasti",
@@ -2483,7 +2484,6 @@
       "resetColumns": "Palauta sarakkeet",
       "columnMenu": "Sarakkeen {column} asetukset",
       "resizeColumn": "Muuta sarakkeen {column} leveyttä",
-      "filterColumn": "Suodata tätä saraketta",
       "sortedLoaded": "Lajiteltu vain ladattujen merkintöjen kesken. Lataa lisää, jotta loputkin otetaan mukaan."
     }
   },

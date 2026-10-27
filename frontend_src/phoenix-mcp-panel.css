@@ -335,6 +335,8 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Agent Chat: a 2 px outline drawn inside the border, so the button keeps its size. */
+.phx-toolbar-chat { border-color: var(--phx-text); box-shadow: inset 0 0 0 1px var(--phx-text); }
 .phx-toolbar-warning { border-color: var(--phx-error); background: var(--phx-error-bg); color: var(--phx-error); }
 .phx-toolbar-warning:hover { background: var(--phx-error-bg); }
 
@@ -455,10 +457,6 @@
   text-align: center;
 }
 .phx-workspace-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-/* Restore Panel Default Settings asks first, above the workspace. */
-.phx-shell-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; flex: none; }
-.phx-shell-confirm p { flex: 1 1 280px; margin: 0; }
-.phx-shell-confirm-actions { display: flex; gap: 8px; }
 /* Toasts near the bottom of the panel, above every window; the empty live region stays for screen readers. */
 .phx-toasts {
   position: absolute;
@@ -785,9 +783,11 @@
 }
 .phx-table tbody tr[tabindex] { cursor: pointer; }
 .phx-table tbody tr[tabindex]:hover > td { background: var(--phx-hover); }
-.phx-table tbody tr.pass-through-row > td { background: var(--phx-accent-lt); }
-.phx-table tbody tr.is-selected > td { background: var(--phx-accent-lt); box-shadow: inset 0 -1px 0 var(--phx-border); }
-.phx-table tbody tr:focus-visible { outline: 2px solid var(--phx-focus, var(--phx-accent)); outline-offset: -2px; }
+/* The chosen row is marked by its grey alone (user, 2026-10-26): no border, and while the user
+   moves with the keys a row under a still pointer is not highlighted as well. */
+.phx-table tbody tr.is-selected > td { background: var(--phx-accent-lt); }
+.phx-table tbody tr:focus-visible { outline: none; }
+.phx-table-wrap[data-keyboard] tbody tr[tabindex]:not(.is-selected):hover > td { background: transparent; }
 .phx-cell-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
 .phx-table-empty { padding: 16px 10px; color: var(--phx-text-2); }
 .phx-table-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 2px 0; }
@@ -996,7 +996,6 @@
 .mesa-effective-note { margin-top: 6px; color: var(--phx-warning, var(--phx-text)); }
 
 /* Small "MESA" tag on an audit row whose action was waved through under advisory. */
-.mesa-advisory-badge { margin-left: 6px; background: var(--phx-surface-2, var(--phx-surface)); color: var(--phx-text-2); border: 1px solid var(--phx-border); }
 
 /* ============================================================
    Buttons
@@ -1128,8 +1127,6 @@
 .data-table tbody tr { transition: background 0.12s; }
 .data-table tbody tr.clickable { cursor: pointer; }
 .data-table tbody tr.clickable:hover { background: var(--phx-hover); }
-.data-table tbody tr.pass-through-row { background: var(--phx-accent-lt); }
-.data-table tbody tr.pass-through-row.clickable:hover { background: var(--phx-accent-lt); }
 
 /* ============================================================
    Inputs and selects
@@ -1667,14 +1664,6 @@ select.input {
 .outcome-invalid_request { color: var(--phx-text-2); font-weight: 500; }
 .outcome-pending_approval { color: var(--phx-warning); font-weight: 600; }
 
-.outcome-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-.outcome-badge.outcome-allowed       { background: var(--phx-success-bg); }
-.outcome-badge.outcome-denied        { background: var(--phx-error-bg); }
-.outcome-badge.outcome-not_found     { background: var(--phx-grey-tint); }
-.outcome-badge.outcome-rate_limited  { background: var(--phx-warning-bg); }
-.outcome-badge.outcome-not_implemented { background: var(--phx-info-bg); }
-.outcome-badge.outcome-invalid_request { background: var(--phx-grey-tint); }
-.outcome-badge.outcome-pending_approval { background: var(--phx-warning-bg); }
 
 /* ============================================================
    Permission summary

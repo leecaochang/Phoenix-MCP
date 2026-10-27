@@ -328,14 +328,16 @@
       "resourcePlaceholder": "리소스...",
       "rowIp": "출처",
       "rowMethod": "메서드",
-      "rowMode": "모드",
       "rowOutcome": "결과",
       "rowPayload": "페이로드",
       "rowRequestId": "요청 ID",
       "rowResource": "리소스",
       "rowTime": "시각",
       "rowAccessKey": "액세스 키",
-      "loadFailed": "감사 로그를 불러오지 못했습니다. 새로고침하여 다시 시도하세요."
+      "loadFailed": "감사 로그를 불러오지 못했습니다. 새로고침하여 다시 시도하세요.",
+      "rowAccess": "접근",
+      "accessPermissions": "권한",
+      "accessPassThrough": "패스스루"
     },
     "changes": {
       "added": "추가됨",
@@ -2310,7 +2312,7 @@
         "requestCompleted": "모델 요청 완료"
       },
       "attachmentPrompt": "이미지 또는 파일 메시지",
-      "clearShort": "기록 지우기",
+      "clearShort": "대화 지우기",
       "retention": "보관"
     },
     "attention": {
@@ -2347,7 +2349,7 @@
       "fold": "창 접기",
       "unfold": "창 펼치기",
       "options": "작업 공간 옵션",
-      "restoreOriginal": "원래 레이아웃 복원",
+      "restoreOriginal": "이 작업 공간 재설정",
       "reopen": "{window} 다시 열기",
       "empty": "이 작업 공간에 열려 있는 창이 없습니다.",
       "moveToolbar": "도구 모음 이동",
@@ -2380,12 +2382,10 @@
       "unpin": "고정 해제",
       "saveMyDefault": "내 기본값으로 저장",
       "restoreMyDefault": "내 기본값 복원",
-      "restorePanelDefaults": "패널 기본 설정 복원",
-      "restorePanelDefaultsConfirm": "도구 모음과 모든 작업 공간의 배치를 기본값으로 되돌리시겠습니까? 저장된 내 기본값과 모든 Phoenix 설정은 유지됩니다.",
-      "restoreDefaultsAction": "기본값 복원",
+      "restorePanelDefaults": "모든 작업 공간 재설정",
       "myDefaultSaved": "이 배치를 {workspace}의 내 기본값으로 저장했습니다.",
       "myDefaultRestored": "기본 배치를 복원했습니다.",
-      "panelDefaultsRestored": "패널 기본 설정을 복원했습니다.",
+      "panelDefaultsRestored": "모든 작업 공간, 도구 모음, 도움말 막대를 기본값으로 되돌렸습니다.",
       "review": "검토",
       "reviewEmpty": "검토할 요청을 선택하세요.",
       "requestDetails": "요청 세부 정보",
@@ -2413,14 +2413,16 @@
       "myWorkspace": "내 작업 공간",
       "removeFromMy": "내 작업 공간에서 제거",
       "removedFromMy": "{window}이(가) 내 작업 공간에서 제거되었습니다",
-      "safety": "안전"
+      "safety": "안전",
+      "resetWorkspaceHint": "이 작업 공간의 창을 Phoenix가 배치하는 위치로 되돌립니다. 다른 작업 공간과 내 기본값은 그대로 유지됩니다.",
+      "resetAllHint": "모든 작업 공간, 도구 모음, 도움말 막대, 가이드를 재설정합니다. 내 기본값과 Phoenix 설정은 그대로 유지됩니다."
     },
     "notifications": {
       "title": "알림",
       "empty": "이 세션에 알림이 없습니다.",
       "clear": "알림 지우기",
-      "clearAll": "모두 지우기",
-      "dismiss": "닫기"
+      "dismiss": "닫기",
+      "showHistory": "알림 기록 표시"
     },
     "help": {
       "title": "도움말",
@@ -2468,11 +2470,10 @@
       "filtersCount": "필터({count})",
       "activeFilters": "적용된 필터: {count}",
       "clearFilters": "필터 지우기",
-      "latest": "최근",
       "turns": "턴",
       "toolCalls": "도구 호출",
       "pauseUpdates": "업데이트 일시 중지",
-      "recordingSettings": "기록 설정"
+      "logSettings": "로그 설정"
     },
     "table": {
       "sortAscending": "오름차순 정렬",
@@ -2483,7 +2484,6 @@
       "resetColumns": "열 초기화",
       "columnMenu": "{column} 열 옵션",
       "resizeColumn": "{column} 열 너비 조정",
-      "filterColumn": "이 열 필터링",
       "sortedLoaded": "불러온 항목 안에서만 정렬되었습니다. 나머지를 포함하려면 더 불러오세요."
     }
   },

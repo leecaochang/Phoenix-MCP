@@ -132,10 +132,8 @@ describe("AuditView", () => {
     const { findByRole, getByRole, getByText } = render(
       <LogSelectionContext.Provider value={selection}><AuditView accessKeys={[]} /><LogDetailsContent /></LogSelectionContext.Provider>,
     );
-    // Source starts hidden; any column's menu shows it again.
-    fireEvent.click(await findByRole("button", { name: "Time Column Options" }));
-    fireEvent.click(getByRole("menuitem", { name: "Show Source" }));
-
+    // Every column shows by default (user, 2026-10-27), Source included.
+    await findByRole("button", { name: "Time Column Options" });
     expect(getByRole("columnheader", { name: /Source/ })).toBeTruthy();
     expect(getByText("Agent Chat")).toBeTruthy();
     expect(getByText("Assist Tool Provider")).toBeTruthy();

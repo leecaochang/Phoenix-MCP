@@ -8,7 +8,7 @@
  * where it was made.
  */
 
-import { useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { AgentCliSettings } from "../components/AgentCliSettings";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
@@ -27,7 +27,7 @@ import { tRich } from "../i18n/rich";
 import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/compatibility";
 import { useFindSettingTool, useSettings, useSettingsChange, type Theme } from "../shell/settings";
 import { HOME_TAB_LABEL_KEYS, HOME_TABS, SETTINGS_WINDOW_TITLE_KEYS, type HomeTab, type SettingsWindowId } from "../shell/settingsIndex";
-import { useToolbarTools, type Tool } from "../shell/tools";
+import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
 import { ActionButton } from "../ui/ActionButton";
 import { JS_BUILD } from "../version";
 
@@ -41,8 +41,10 @@ const THEME_LABEL_KEYS: Record<Theme, string> = {
 
 /** Offer Find Setting, and any tools of the window's own, on the toolbar. */
 function useSettingsTools(window: SettingsWindowId, own: Tool[] = []): void {
+  // Find Setting belongs to Settings; a Settings window floating in Logs offers no tools of its own.
+  const inSettings = (useContext(WindowPlaceContext)?.workspace ?? "settings") === "settings";
   const find = useFindSettingTool();
-  useToolbarTools([{ id: window, label: t(SETTINGS_WINDOW_TITLE_KEYS[window]), tools: [...(find ? [find] : []), ...own] }]);
+  useToolbarTools(inSettings ? [{ id: window, label: t(SETTINGS_WINDOW_TITLE_KEYS[window]), tools: [...(find ? [find] : []), ...own] }] : []);
 }
 
 /** A window's frame: the settings once loaded, and the error of a change made here. */

@@ -7,7 +7,7 @@
  * the MESA Actions menu) come with Profiles.
  */
 
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { MesaProfileScope, MesaSuggestion, MesaValidationIssue } from "../types";
 import { ErrorMsg, Loading } from "../components/common";
 import { MesaIdentity } from "../components/MesaIdentity";
@@ -45,7 +45,6 @@ function ControlMode({ row }: { row: ProfileRow }) {
 
 export function MesaProfilesWindow() {
   const m = useMesa();
-  const root = useRef<HTMLDivElement | null>(null);
   const ensureOpen = useEnsureOpen();
   const suggestions = useWindowToggle("mesaSuggestions");
   const [search, setSearch] = useState("");
@@ -80,12 +79,6 @@ export function MesaProfilesWindow() {
 
   const showFilters = !onToolbar || filtersOpen;
   const clearFilters = () => { setScope(""); setControl(""); setEnforcement(""); };
-  // A column's menu opens the filter for that column.
-  const openFilter = (name: string) => {
-    setFiltersOpen(true);
-    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-filter="${name}"]`)?.focus());
-  };
-  const filterItem = (name: string) => (): MenuEntry[] => [{ id: "filter", label: t("table.filterColumn"), onSelect: () => openFilter(name) }];
   // The control-mode filter keeps the old summary's counts.
   const count = (mode: string) => m.rows.filter((r) => (mode === "enforced" ? isEnforced(r.document) : rawControlMode(r.document) === mode)).length;
 
@@ -95,7 +88,7 @@ export function MesaProfilesWindow() {
     && matchesListSearch(`${r.name} ${r.key} ${scopeLabel(r.scope)} ${tagsOf(r.document).join(" ")}`, search));
   const columns: Column<ProfileRow>[] = [
     {
-      id: "name", label: t("mesa.colName"), width: 260, sortValue: (r) => r.name || r.key, title: (r) => r.key,
+      id: "name", label: t("mesa.colName"), width: 260, maxWidth: 360, sortValue: (r) => r.name || r.key, title: (r) => r.key,
       // The compact default: the familiar name, with the configured control and the exact ID under it.
       cell: (r) => (
         <span className="mesa-profile-cell">
@@ -104,19 +97,19 @@ export function MesaProfilesWindow() {
         </span>
       ),
     },
-    { id: "scope", label: t("mesa.colAppliesTo"), width: 120, sortValue: (r) => scopeLabel(r.scope), cell: (r) => scopeLabel(r.scope), menu: filterItem("scope") },
-    { id: "control", label: t("mesa.colControl"), width: 130, hidden: true, sortValue: (r) => controlLabel(rawControlMode(r.document)), cell: (r) => controlLabel(rawControlMode(r.document)), menu: filterItem("control") },
+    { id: "scope", label: t("mesa.colAppliesTo"), width: 120, sortValue: (r) => scopeLabel(r.scope), cell: (r) => scopeLabel(r.scope) },
+    { id: "control", label: t("mesa.colControl"), width: 130, hidden: true, sortValue: (r) => controlLabel(rawControlMode(r.document)), cell: (r) => controlLabel(rawControlMode(r.document)) },
     { id: "enforcement", label: t("mesa.fieldEnforcement"), width: 120, hidden: true, sortValue: (r) => (isEnforced(r.document) ? 1 : 0),
-      cell: (r) => t(isEnforced(r.document) ? "mesa.modeEnforced" : "mesa.modeAdvisory"), menu: filterItem("enforcement") },
-    { id: "tags", label: t("mesa.colTags"), width: 180, hidden: true, sortValue: (r) => tagsOf(r.document).join(" "), cell: (r) => tagsOf(r.document).join(t("common.listSeparator")) },
+      cell: (r) => t(isEnforced(r.document) ? "mesa.modeEnforced" : "mesa.modeAdvisory") },
+    { id: "tags", label: t("mesa.colTags"), width: 180, maxWidth: 300, hidden: true, sortValue: (r) => tagsOf(r.document).join(" "), cell: (r) => tagsOf(r.document).join(t("common.listSeparator")) },
     { id: "source", label: t("mesa.colSource"), width: 100, hidden: true, sortValue: (r) => profileSource(r.document),
       cell: (r) => (profileSource(r.document) === "developer" ? <span title={t("mesa.vendorTitle")}>{t("mesa.vendorBadge")}</span> : null) },
-    { id: "id", label: t("mesa.colId"), width: 200, hidden: true, sortValue: (r) => r.key, cell: (r) => <code>{r.key}</code> },
+    { id: "id", label: t("mesa.colId"), width: 200, maxWidth: 300, hidden: true, sortValue: (r) => r.key, cell: (r) => <code>{r.key}</code> },
   ];
   const editing = m.editing && !m.editing.isNew ? `${m.editing.scope}:${m.editing.key}` : null;
 
   return (
-    <div className="phx-list-view mesa-profiles-view" ref={root}>
+    <div className="phx-list-view mesa-profiles-view">
       {!onToolbar && <InlineTools groups={groups} />}
       {m.exporting && (
         <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("mesa.cancel")}
@@ -236,7 +229,7 @@ export function SuggestedProfilesWindow() {
     ensureOpen("mesaEditor");
   };
   const columns: Column<MesaSuggestion>[] = [
-    { id: "subject", label: t("mesa.colTarget"), width: 240, sortValue: (s) => m.friendly(s.subject_id) || s.subject_id, cell: (s) => <SuggestionSubject s={s} m={m} /> },
+    { id: "subject", label: t("mesa.colTarget"), width: 240, maxWidth: 360, sortValue: (s) => m.friendly(s.subject_id) || s.subject_id, cell: (s) => <SuggestionSubject s={s} m={m} /> },
     { id: "mode", label: t("mesa.colSuggested"), width: 160, sortValue: (s) => s.suggested_mode, cell: (s) => (MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode) },
     { id: "signal", label: t("mesa.colSignal"), width: 130, sortValue: (s) => s.signal, cell: (s) => (SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal) },
   ];

@@ -2,19 +2,21 @@
  * The logs update themselves: Audit Log reads its newest page every five
  * seconds while visible (adding only unseen entries above further loaded
  * pages), both logs stop while Pause Updates is on and their window is hidden,
- * Refresh still works while paused, and one shared Pause Updates and
- * Recording Settings serve both logs. Recording Settings opens Logs and
- * Notifications in Settings.
+ * Refresh is offered only while paused, and one shared Pause Updates and
+ * Log Settings serve both logs. Log Settings floats the workspace's Logs and
+ * Notifications window and closes it again.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { api } from "../api";
-import { SettingsProvider } from "../shell/settings";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext } from "../shell/tools";
+import { ControllerContext } from "../shell/dock/TitleBar";
+import type { WorkspaceController } from "../shell/dock/controller";
 import { WindowVisibleContext } from "../shell/visibility";
-import type { AuditEntry, ConversationListResponse, GlobalSettings } from "../types";
+import type { AuditEntry, ConversationListResponse } from "../types";
 import { AuditView } from "../views/AuditView";
+import { AuditEntryDetail } from "../components/AuditEntry";
 import { ConversationsView } from "../views/ConversationsView";
 
 vi.mock("../api", () => ({ api: { getAudit: vi.fn(), getConversations: vi.fn() } }));
@@ -63,6 +65,8 @@ describe("Audit Log updates", () => {
 
     const pause = () => registry.latest("logs", "auditLog", "pause")!;
     expect(pause()).toMatchObject({ label: "Pause Updates", pressed: false });
+    // Updating by itself, the log has no Refresh to offer.
+    expect(registry.groupsFor("logs", ["auditLog"]).flatMap((g) => g.tools).some((t) => t.id === "refresh")).toBe(false);
     act(() => pause().onSelect!());
     expect(pause().pressed).toBe(true);
     await wait(20000);
@@ -75,6 +79,22 @@ describe("Audit Log updates", () => {
     act(() => pause().onSelect!());
     await wait(5000);
     expect(api.getAudit).toHaveBeenCalledTimes(4);
+  });
+
+  it("says in an Access column, not a badge, whether a request was checked against permissions", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [{ ...entry(1), pass_through: true }, entry(2)], total: 2 });
+    const { container } = render(inLogs(<AuditView accessKeys={[]} />, new ToolRegistry(), "auditLog"));
+    await waitFor(() => expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(2));
+    const header = [...container.querySelectorAll("thead th")].map((th) => th.textContent);
+    const at = header.findIndex((h) => h?.startsWith("Access") && !h.startsWith("Access key"));
+    expect(at).toBeGreaterThan(-1);
+    const access = [...container.querySelectorAll("tbody tr[data-row]")].map((r) => r.querySelectorAll("td")[at]?.textContent);
+    // Newest first: entry 2 uses permissions, entry 1 is pass-through.
+    expect(access).toEqual(["Permissions", "Pass-Through"]);
+    expect(container.querySelector(".outcome-badge")).toBeNull();
+    const detail = render(<AuditEntryDetail entry={{ ...entry(1), pass_through: true }} accessKeyName="key" />);
+    const field = [...detail.container.querySelectorAll(".phx-log-field")].find((f) => f.querySelector("dt")?.textContent === "Access");
+    expect(field?.querySelector("dd")?.textContent).toBe("Pass-Through");
   });
 
   it("does not update while its window is hidden", async () => {
@@ -95,7 +115,8 @@ describe("Audit Log updates", () => {
     await flush();
     act(() => screen.getByRole("button", { name: "Load More" }).click());
     await flush();
-    const rows = () => [...container.querySelectorAll("tbody tr[data-row]")].map((r) => r.querySelector("td:nth-child(3)")?.textContent);
+    const resource = () => [...container.querySelectorAll("thead th")].findIndex((th) => th.textContent?.startsWith("Resource"));
+    const rows = () => [...container.querySelectorAll("tbody tr[data-row]")].map((r) => r.querySelectorAll("td")[resource()]?.textContent);
     expect(rows()).toHaveLength(150);
 
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry(201), ...first.slice(0, 99)], total: 151 });
@@ -124,7 +145,7 @@ describe("Conversation Log updates", () => {
 });
 
 describe("tools shared by both logs", () => {
-  function both(registry: ToolRegistry, settings?: { revealWindow: (id: string) => void; onNavigate: () => void }) {
+  function both(registry: ToolRegistry, controller: WorkspaceController | null = null) {
     const logs = (
       <>
         <WindowPlaceContext.Provider value={{ workspace: "logs", window: "auditLog" }}><AuditView accessKeys={[]} /></WindowPlaceContext.Provider>
@@ -133,10 +154,7 @@ describe("tools shared by both logs", () => {
     );
     return render(
       <ToolRegistryContext.Provider value={registry}>
-        {settings ? (
-          <SettingsProvider settings={{} as GlobalSettings} onSettingsChange={() => {}} theme="auto" onThemeChange={() => {}} language="auto" active={false}
-            onLanguageChange={() => {}} revealWindow={settings.revealWindow} onNavigate={settings.onNavigate}>{logs}</SettingsProvider>
-        ) : logs}
+        <ControllerContext.Provider value={controller}>{logs}</ControllerContext.Provider>
       </ToolRegistryContext.Provider>,
     );
   }
@@ -151,19 +169,33 @@ describe("tools shared by both logs", () => {
     act(() => registry.runShared("logs", order, "pause"));
     await waitFor(() => expect(registry.latest("logs", "auditLog", "pause")!.pressed).toBe(true));
     expect(registry.latest("logs", "conversationLog", "pause")!.pressed).toBe(true);
-    // Recording Settings needs Settings; without it the logs do not offer it.
-    expect(registry.groupsFor("logs", order).flatMap((g) => g.tools).some((t) => t.id === "recordingSettings")).toBe(false);
+    // Log Settings needs a workspace holding the settings window; without one the logs do not offer it.
+    expect(registry.groupsFor("logs", order).flatMap((g) => g.tools).some((t) => t.id === "logSettings")).toBe(false);
   });
 
-  it("opens Logs and Notifications in Settings from Recording Settings", async () => {
+  it("floats Logs and Notifications from Log Settings, and closes it again", async () => {
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
     const registry = new ToolRegistry();
-    const revealWindow = vi.fn();
-    const onNavigate = vi.fn();
-    both(registry, { revealWindow, onNavigate });
-    await waitFor(() => expect(registry.groupsFor("logs", order).flatMap((g) => g.tools).filter((t) => t.id === "recordingSettings")).toHaveLength(1));
-    act(() => registry.runShared("logs", order, "recordingSettings"));
-    expect(onNavigate).toHaveBeenCalled();
-    await waitFor(() => expect(revealWindow).toHaveBeenCalledWith("settingsLogs"));
+    let open = false;
+    let version = 0;
+    const listeners = new Set<() => void>();
+    const controller = {
+      windows: ["auditLog", "conversationLog", "logDetails", "settingsLogs"],
+      subscribe: (l: () => void) => { listeners.add(l); return () => listeners.delete(l); },
+      getVersion: () => version,
+      hostOf: (id: string) => (id === "settingsLogs" && open ? "float" : null),
+      toggleFloating: vi.fn(() => { open = !open; version++; listeners.forEach((l) => l()); }),
+    } as unknown as WorkspaceController;
+    both(registry, controller);
+    const logSettings = () => registry.groupsFor("logs", order).flatMap((g) => g.tools).filter((t) => t.id === "logSettings");
+    await waitFor(() => expect(logSettings()).toHaveLength(1));
+    expect(logSettings()[0]).toMatchObject({ label: "Log Settings", pressed: false });
+    act(() => registry.runShared("logs", order, "logSettings"));
+    // Both logs offer the tool; one press opens the window once.
+    expect(controller.toggleFloating).toHaveBeenCalledOnce();
+    expect(controller.toggleFloating).toHaveBeenCalledWith("settingsLogs", expect.any(Number), expect.any(Number));
+    await waitFor(() => expect(logSettings()[0].pressed).toBe(true));
+    act(() => registry.runShared("logs", order, "logSettings"));
+    await waitFor(() => expect(logSettings()[0].pressed).toBe(false));
   });
 });

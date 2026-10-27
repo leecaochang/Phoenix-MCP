@@ -41,6 +41,8 @@ export class LogSelection {
   private version = 0;
   /** Called after a selection, so the shell can bring Log Details into view. */
   onSelect: (() => void) | null = null;
+  /** Called after Previous or Next, so the shell can size Log Details to the new record. */
+  onStep: (() => void) | null = null;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -79,7 +81,9 @@ export class LogSelection {
     if (!v) return;
     const at = v.ordered.findIndex((e) => keyOf(v, e) === keyOf(v));
     const next = v.ordered[at + offset];
-    if (next) this.set({ ...v, entry: next } as LogRecord, false);
+    if (!next) return;
+    this.set({ ...v, entry: next } as LogRecord, false);
+    this.onStep?.();
   }
 }
 

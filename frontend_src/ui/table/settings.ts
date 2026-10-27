@@ -2,7 +2,7 @@
  * What a user changed about a configurable table: column order, widths,
  * hidden columns and sort. Settings are kept per table id. Inside a
  * workspace they belong to its arrangement (saved, synced, part of My
- * Default, cleared by Restore Original Layout); elsewhere a table keeps them
+ * Default, cleared by Reset This Workspace); elsewhere a table keeps them
  * for as long as it is shown.
  */
 

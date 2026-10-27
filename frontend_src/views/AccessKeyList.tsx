@@ -273,7 +273,7 @@ export function AccessKeyListView({
                 return (
                   <tr
                     key={tok.id}
-                    className={`clickable${tok.pass_through ? " pass-through-row" : ""}${selected ? " is-selected" : ""}`}
+                    className={`clickable${selected ? " is-selected" : ""}`}
                     aria-selected={onToolbar ? selected : undefined}
                     onClick={() => onOpenDetail(tok.id)}
                   >

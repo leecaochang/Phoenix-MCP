@@ -3,14 +3,14 @@
  * first, loaded a page at a time with server-side filters, and updated every
  * five seconds while visible unless updates are paused. Choosing an entry
  * shows it in Log Details. In the workspace shell, Refresh, Filters, Pause
- * Updates and Recording Settings sit on the toolbar; the filters open in a
+ * Updates and Log Settings sit on the toolbar; the filters open in a
  * panel above the table, and a column's menu can open its filter.
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
-import { AuditOutcome, auditEntryKey, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
+import { AuditOutcome, accessLabel, auditEntryKey, mesaLabel, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
 import { RefreshIcon } from "../components/common";
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { friendlyResource } from "../utils";
@@ -18,12 +18,11 @@ import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "..
 import { useLatestRequest } from "../utils/latest_request";
 import { useLogSelection } from "../shell/logDetails";
 import { useToolbarTools } from "../shell/tools";
-import { pauseUpdatesTool, useRecordingSettingsTool } from "../shell/settings";
+import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { useWindowVisible } from "../shell/visibility";
 import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { useTableSettings } from "../ui/table/settings";
-import type { MenuEntry } from "../ui/Menu";
 
 interface Props {
   accessKeys: AccessKeyRecord[];
@@ -60,7 +59,6 @@ export function AuditView({ accessKeys }: Props) {
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const root = useRef<HTMLDivElement | null>(null);
 
   // Method/resource/ip are server-side filters; debounce them so typing does
   // not fire a request per keystroke.
@@ -160,7 +158,7 @@ export function AuditView({ accessKeys }: Props) {
     const timer = window.setInterval(() => { if (!document.hidden) void updateQuietly(); }, UPDATE_MS);
     return () => clearInterval(timer);
   }, [paused, windowVisible, updateQuietly]);
-  const recordingSettings = useRecordingSettingsTool();
+  const logSettings = useLogSettingsTool();
 
   const activeFilters = [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter].filter(Boolean).length;
   const clearFilters = () => {
@@ -179,38 +177,36 @@ export function AuditView({ accessKeys }: Props) {
     id: "auditLog",
     label: t("shell.tabAudit"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh",
-        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(0); } },
+      // The log updates itself; Refresh is offered only while updates are paused.
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
       pauseUpdatesTool(paused, setPaused),
-      ...recordingSettings,
+      // Refresh sits to the right of Pause Updates, and only while paused.
+      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh" as const,
+        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(0); } }] : []),
+      ...logSettings,
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
 
-  // A column's menu opens the filter for that column.
-  const openFilter = (name: string) => {
-    setFiltersOpen(true);
-    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-filter="${name}"]`)?.focus());
-  };
-  const filterItem = (name: string) => (): MenuEntry[] => [{ id: "filter", label: t("table.filterColumn"), onSelect: () => openFilter(name) }];
 
   const columns = useMemo((): Column<AuditEntry>[] => [
-    { id: "time", label: t("audit.rowTime"), width: 170, sortValue: (e) => e.timestamp, cell: (e) => localeDateTimeShort(e.timestamp), title: (e) => localeDateTime(e.timestamp), menu: filterItem("time") },
-    { id: "outcome", label: t("audit.rowOutcome"), width: 170, sortValue: (e) => outcomeLabel(e), cell: (e) => <AuditOutcome entry={e} />, menu: filterItem("outcome") },
-    { id: "resource", label: t("audit.rowResource"), width: 260, sortValue: (e) => friendlyResource(e.resource), cell: (e) => friendlyResource(e.resource), title: (e) => friendlyResource(e.resource), className: "phx-cell-mono", menu: filterItem("resource") },
-    { id: "accessKey", label: t("audit.rowAccessKey"), width: 170, hidden: true, sortValue: displayName, cell: (e) => formatAccessKeyNameShort(displayName(e)), title: (e) => formatAccessKeyName(displayName(e)), menu: filterItem("accessKey") },
-    { id: "method", label: t("audit.rowMethod"), width: 130, hidden: true, sortValue: (e) => e.method, cell: (e) => e.method, className: "phx-cell-mono", menu: filterItem("method") },
-    { id: "source", label: t("audit.rowIp"), width: 150, hidden: true, sortValue: (e) => auditSourceLabel(e.client_ip), cell: (e) => <span className={isNamedAuditSource(e.client_ip) ? "audit-source-name" : undefined}>{auditSourceLabel(e.client_ip)}</span>, title: (e) => auditSourceLabel(e.client_ip), className: "audit-cell-source", menu: filterItem("source") },
+    { id: "time", label: t("audit.rowTime"), width: 170, sortValue: (e) => e.timestamp, cell: (e) => localeDateTimeShort(e.timestamp), title: (e) => localeDateTime(e.timestamp) },
+    { id: "outcome", label: t("audit.rowOutcome"), width: 140, sortValue: (e) => outcomeLabel(e), cell: (e) => <AuditOutcome entry={e} /> },
+    { id: "access", label: t("audit.rowAccess"), width: 120, sortValue: accessLabel, cell: accessLabel },
+    { id: "resource", label: t("audit.rowResource"), width: 260, maxWidth: 360, sortValue: (e) => friendlyResource(e.resource), cell: (e) => friendlyResource(e.resource), title: (e) => friendlyResource(e.resource), className: "phx-cell-mono" },
+    { id: "mesa", label: t("audit.rowMesa"), width: 100, sortValue: mesaLabel, cell: mesaLabel, title: (e) => (e.mesa_advisory ? t("audit.mesaAdvisory") : undefined) },
+    { id: "accessKey", label: t("audit.rowAccessKey"), width: 170, maxWidth: 240, sortValue: displayName, cell: (e) => formatAccessKeyNameShort(displayName(e)), title: (e) => formatAccessKeyName(displayName(e)) },
+    { id: "method", label: t("audit.rowMethod"), width: 130, maxWidth: 200, sortValue: (e) => e.method, cell: (e) => e.method, className: "phx-cell-mono" },
+    { id: "source", label: t("audit.rowIp"), width: 150, maxWidth: 220, sortValue: (e) => auditSourceLabel(e.client_ip), cell: (e) => <span className={isNamedAuditSource(e.client_ip) ? "audit-source-name" : undefined}>{auditSourceLabel(e.client_ip)}</span>, title: (e) => auditSourceLabel(e.client_ip), className: "audit-cell-source" },
   ], [displayName]); // eslint-disable-line react-hooks/exhaustive-deps
   // Sorting by anything but the server's order covers only the entries loaded so far.
   const [tableSettings] = useTableSettings("auditLog");
   const partialSort = hasMore && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
 
   return (
-    <div className="view-root phx-log-view" ref={root}>
+    <div className="view-root phx-log-view">
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
           <select
@@ -314,7 +310,6 @@ export function AuditView({ accessKeys }: Props) {
           selectedKey={logSelection?.selectedKey("audit")}
           onSelect={(entry, ordered) => logSelection?.set({ kind: "audit", entry, ordered, nameOf: displayName })}
           rowLabel={(e) => t("audit.openEntryAria", { outcome: outcomeLabel(e), name: displayName(e) })}
-          rowClass={(e) => (e.pass_through ? "pass-through-row" : "")}
           empty={<p className="audit-empty">{t("audit.empty")}</p>}
         />
       )}

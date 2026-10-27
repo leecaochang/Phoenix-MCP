@@ -38,6 +38,8 @@ export const DOCK_OPTIONS = {
   dndStrategy: "pointer",
   // The workspace sizes Dockview itself, on a canvas that may be taller than the screen.
   disableAutoResizing: true,
+  // A floating window stays wholly on screen when dragged, as Agent Chat does.
+  floatingGroupBounds: "boundedWithinViewport",
   dropOverlayModel: () => ({ size: { type: "pixels", value: DROP_LINE } }),
   dndEdges: { activationSize: { type: "pixels", value: 10 }, size: { type: "pixels", value: DROP_LINE } },
   theme: { name: "phoenix", className: "phx-dock", dndPanelOverlay: "group", dndOverlayMounting: "absolute" },
@@ -91,7 +93,7 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     const collapsed = (id: string) => controller.folds.collapsedHeight(id) !== undefined;
     const bandMax = () => Math.round((frame.current?.clientHeight ?? 0) * BAND_SHARE);
     // The grid scrolls: windows keep their heights and the canvas grows to hold them.
-    const mainCanvas = new WorkspaceCanvas(main, mainEl, collapsed);
+    const mainCanvas = new WorkspaceCanvas(main, mainEl, collapsed, undefined, controller.fits);
     controller.attach("main", main, mainCanvas);
     const bandCanvases: WorkspaceCanvas[] = [];
     for (const band of ["top", "bottom"] as const) {
@@ -122,8 +124,9 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
         api.onDidLayoutChange(() => onChange.current()),
         api.onDidAddPanel(() => controller.changed()),
         api.onDidRemovePanel(() => controller.changed()),
-        api.onWillDragGroup(settleAfterDrop),
-        api.onWillDragPanel(settleAfterDrop),
+        // A window the user moves keeps the size they chose for it.
+        api.onWillDragGroup((e) => { if (e.group.activePanel) controller.markUserSized([e.group.activePanel.id]); settleAfterDrop(); }),
+        api.onWillDragPanel((e) => { controller.markUserSized([e.panel.id]); settleAfterDrop(); }),
         dimWhileDragging(api),
         refuseTabDrops(api),
       ];
@@ -138,12 +141,13 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     controller.load(saved);
     controller.setActiveWindow(main.activeGroup?.activePanel?.id ?? null);
 
-    out.push(pushDownResizing(main, mainCanvas, () => onChange.current()));
+    const resized = (ids: string[]) => controller.markUserSized(ids);
+    out.push(pushDownResizing(main, mainCanvas, () => onChange.current(), resized));
     for (const band of ["top", "bottom"] as const) {
       const el = elements.current[band];
       const canvas = controller.canvasOf(band);
       if (!el || !canvas) continue;
-      out.push(pushDownResizing(apis.current[band]!, canvas, () => onChange.current()));
+      out.push(pushDownResizing(apis.current[band]!, canvas, () => onChange.current(), resized));
       const edge = frame.current.querySelector<HTMLElement>(`.phx-band-edge-${band}`);
       if (edge) out.push(bandEdgeResizing(apis.current[band]!, canvas, edge, band, () => onChange.current()));
     }

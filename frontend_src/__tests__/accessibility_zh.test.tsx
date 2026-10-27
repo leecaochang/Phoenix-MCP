@@ -57,12 +57,12 @@ describe("accessible names are localized, not just present", () => {
     expect(row).toBeInTheDocument();
   });
 
-  it("localizes the MESA advisory badge's name and tooltip", async () => {
+  it("localizes the MESA column's word and its tooltip", async () => {
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry({ mesa_advisory: true })], total: 1 });
     render(<AuditView accessKeys={[]} />);
     await screen.findAllByRole("row");
-    const badge = screen.getByLabelText(/建议模式/);
-    expect(badge).toHaveAttribute("title", expect.stringContaining("建议模式"));
+    const cell = screen.getByText("建议", { selector: "td" });
+    expect(cell).toHaveAttribute("title", expect.stringContaining("建议模式"));
   });
 
   it("leaves no raw catalog keys in any accessible name", async () => {

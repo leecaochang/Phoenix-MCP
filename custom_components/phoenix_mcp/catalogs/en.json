@@ -525,7 +525,7 @@
       "fold": "Fold",
       "unfold": "Unfold",
       "options": "Workspace Options",
-      "restoreOriginal": "Restore Original Layout",
+      "restoreOriginal": "Reset This Workspace",
       "reopen": "Reopen {window}",
       "empty": "No windows are open in this workspace.",
       "moveToolbar": "Move toolbar",
@@ -566,12 +566,12 @@
       "unpin": "Unpin",
       "saveMyDefault": "Save as My Default",
       "restoreMyDefault": "Restore My Default",
-      "restorePanelDefaults": "Restore Panel Default Settings",
-      "restorePanelDefaultsConfirm": "Restore the toolbar and every workspace's arrangement to their defaults? Your saved My Defaults and all Phoenix settings are kept.",
-      "restoreDefaultsAction": "Restore Defaults",
+      "restorePanelDefaults": "Reset All Workspaces",
+      "resetWorkspaceHint": "Puts this workspace's windows back where Phoenix places them. Other workspaces and My Default stay as they are.",
+      "resetAllHint": "Resets every workspace, the toolbar, the Help Bar and the Guide. My Defaults and Phoenix settings stay as they are.",
       "myDefaultSaved": "Saved this arrangement as your default for {workspace}.",
       "myDefaultRestored": "Restored your default arrangement.",
-      "panelDefaultsRestored": "Restored the panel's default settings.",
+      "panelDefaultsRestored": "Every workspace, the toolbar and the Help Bar are back to their defaults.",
       "mesaProfiles": "Profiles",
       "profileEditor": "Profile Editor",
       "orphanedProfiles": "Orphaned Profiles",
@@ -598,8 +598,8 @@
       "title": "Notifications",
       "empty": "No notifications in this session.",
       "clear": "Clear Notification",
-      "clearAll": "Clear All",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "showHistory": "Show Notification History"
     },
     "help": {
       "title": "Help",
@@ -647,11 +647,10 @@
       "filtersCount": "Filters ({count})",
       "activeFilters": "Active filters: {count}",
       "clearFilters": "Clear Filters",
-      "latest": "Latest",
       "turns": "Turns",
       "toolCalls": "Tool Calls",
       "pauseUpdates": "Pause Updates",
-      "recordingSettings": "Recording Settings"
+      "logSettings": "Log Settings"
     },
     "table": {
       "sortAscending": "Sort Ascending",
@@ -662,7 +661,6 @@
       "resetColumns": "Reset Columns",
       "columnMenu": "{column} Column Options",
       "resizeColumn": "Resize {column} Column",
-      "filterColumn": "Filter This Column",
       "sortedLoaded": "Sorted within the loaded entries. Load more to include the rest."
     },
     "perms": {
@@ -821,7 +819,9 @@
       "detailTitle": "Audit Entry",
       "rowTime": "Time",
       "rowAccessKey": "Access key",
-      "rowMode": "Mode",
+      "rowAccess": "Access",
+      "accessPermissions": "Permissions",
+      "accessPassThrough": "Pass-Through",
       "rowMethod": "Method",
       "rowResource": "Resource",
       "rowOutcome": "Outcome",
@@ -2329,7 +2329,7 @@
       "execution": "Tools: {outcome}",
       "showing": "Showing {shown} of {total}",
       "clear": "Clear Conversation History",
-      "clearShort": "Clear History",
+      "clearShort": "Clear Conversation",
       "clearConfirm": "Delete all conversation history? This cannot be undone. Conversations in progress stop recording. Copies in existing backups are not affected.",
       "enable": "Record conversations",
       "enableHelp": "Keep sanitized prompts, tool activity, changes, and replies that Phoenix can observe.",

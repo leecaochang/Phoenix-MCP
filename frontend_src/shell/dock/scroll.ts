@@ -6,6 +6,10 @@
  * arrangement) changes; the page is as tall as those heights need, so making
  * one window taller pushes the windows below it down instead of squeezing a
  * neighbour. Width never scrolls.
+ *
+ * A fitted workspace (Logs) never scrolls: its windows always share the
+ * visible height, a border dragged between two windows trades height between
+ * them, and windows too tall for the screen are shrunk to fit.
  */
 
 import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
@@ -85,7 +89,15 @@ export class WorkspaceCanvas {
      * and scrolls only beyond it. Without it, the host keeps its own height.
      */
     private readonly maxHeight?: () => number,
-  ) {}
+    /** The windows always fit the visible height; the canvas never scrolls. */
+    readonly fit = false,
+  ) {
+    // Never a scrollbar, not even while an arrangement is being built: one would leave the windows narrower once it goes.
+    if (fit) host.classList.add("phx-fits");
+  }
+
+  /** The edge whose band last grew or shrank; the window nearest it takes the space left. */
+  growEdge: "top" | "bottom" = "bottom";
 
   visibleHeight(): number {
     return this.host.clientHeight;
@@ -101,6 +113,12 @@ export class WorkspaceCanvas {
     const element = this.host.firstElementChild as HTMLElement | null;
     const width = element?.clientWidth || this.api.width;
     if (visible > 0 && width > 0) this.api.layout(width, this.height || visible, true);
+  }
+
+  /** Lay the windows out again when the canvas's width changed without a resize, as when a scrollbar comes and goes. */
+  fitWidth(): void {
+    const width = (this.host.firstElementChild as HTMLElement | null)?.clientWidth ?? 0;
+    if (width > 0 && this.visibleHeight() > 0 && Math.abs(width - this.api.width) >= 1) this.api.layout(width, this.api.height, true);
   }
 
   /** Record the current height of every docked window that has no intended height yet; call it while the layout is settled. */
@@ -125,6 +143,7 @@ export class WorkspaceCanvas {
     const grid = api.toJSON().grid;
     const rootStacks = grid.orientation === "VERTICAL";
     const heightOf = (id: string): number => (this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT);
+    if (this.fit && !this.maxHeight && api.panels.length) this.shrinkToFit(grid.root, rootStacks, new Set(Object.keys(targets)));
     const required = api.panels.length ? requiredHeight(grid.root, rootStacks, heightOf) : 0;
     if (this.maxHeight) {
       const height = Math.min(required, Math.max(0, this.maxHeight()));
@@ -158,12 +177,93 @@ export class WorkspaceCanvas {
       const children = childrenOf(node);
       if (stacks) {
         const flexible = children.filter((c) => !fixed(c));
-        const absorber = flexible[flexible.length - 1];
+        // The space left goes to the window beside the band that last changed (the lowest by default),
+        // so space a closed Help frees goes to its neighbour; a fitted workspace skips the window just sized.
+        const untargeted = flexible.filter((c) => !leafOrder(c).some((id) => id in targets));
+        const pool = this.fit && untargeted.length ? untargeted : flexible;
+        const absorber = this.growEdge === "top" ? pool[0] : pool[pool.length - 1];
         for (const child of children) if (child !== absorber && !fixed(child) && sized(child)) setHeight(child, needs(child, false));
       }
       for (const child of children) walk(child, !stacks);
     };
     walk(grid.root as GridNode, rootStacks);
+  }
+
+  /**
+   * In a fitted workspace, make the intended heights fit the visible height:
+   * windows not just given a height shrink in proportion first, and the ones
+   * just sized only if that is not enough.
+   */
+  private shrinkToFit(root: unknown, rootStacks: boolean, keep: ReadonlySet<string>): void {
+    // Side-by-side columns each fit the screen on their own: one that already fits keeps its heights.
+    if (!rootStacks) {
+      for (const column of childrenOf(root as GridNode)) this.shrinkToFit(column, true, keep);
+      return;
+    }
+    const visible = this.visibleHeight();
+    if (visible <= 0) return;
+    const mine = new Set(leafOrder(root));
+    const base = Object.fromEntries(Object.entries(this.intended).filter(([id]) => mine.has(id)));
+    const scaled = (f: number, all: boolean) => (id: string): number => {
+      if (this.collapsed(id)) return TITLE_BAR_HEIGHT;
+      const h = base[id] ?? MIN_WINDOW_HEIGHT;
+      return all || !keep.has(id) ? Math.max(MIN_WINDOW_HEIGHT, Math.floor(h * f)) : h;
+    };
+    if (requiredHeight(root, rootStacks, scaled(1, false)) <= visible) return;
+    for (const all of [false, true]) {
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (requiredHeight(root, rootStacks, scaled(mid, all)) <= visible) lo = mid; else hi = mid;
+      }
+      if (requiredHeight(root, rootStacks, scaled(lo, all)) <= visible || all) {
+        const size = scaled(lo, all);
+        for (const id of Object.keys(base)) if (!this.collapsed(id)) this.intended[id] = size(id);
+        return;
+      }
+    }
+  }
+
+  /**
+   * After the pinned bands changed, keep every window's height (`before`)
+   * except along each edge: the windows nearest a band that grew by `top` or
+   * `bottom` pixels give that much up, and those nearest one that shrank
+   * (a negative change) take the space it left.
+   */
+  shiftEdges(before: Heights, top: number, bottom: number): void {
+    const grid = this.api.toJSON().grid;
+    // The windows along an edge: in a stack, its first (or last) child's; side by side, every column's.
+    const edge = (node: GridNode, stacks: boolean, first: boolean): string[] => {
+      if (node.type === "leaf") return leafOrder(node);
+      const children = childrenOf(node);
+      if (!children.length) return [];
+      return stacks ? edge(children[first ? 0 : children.length - 1], false, first) : children.flatMap((c) => edge(c, true, first));
+    };
+    const targets: Heights = {};
+    const shift = (ids: string[], change: number): void => {
+      for (const id of ids) {
+        if (this.collapsed(id) || before[id] === undefined) continue;
+        targets[id] = Math.max(MIN_WINDOW_HEIGHT, (targets[id] ?? before[id]) - change);
+      }
+    };
+    const root = grid.root as GridNode;
+    const stacks = grid.orientation === "VERTICAL";
+    // A window spanning the full height lies on both edges, and the two changes cancel out.
+    if (top) shift(edge(root, stacks, true), top);
+    if (bottom) shift(edge(root, stacks, false), bottom);
+    for (const [id, h] of Object.entries(before)) if (!this.collapsed(id)) this.intended[id] = h;
+    this.apply(targets);
+  }
+
+  /** Record every docked window's current height as intended, after the user dragged a border; returns the windows that changed. */
+  adopt(): string[] {
+    const changed: string[] = [];
+    for (const [id, h] of Object.entries(gridHeights(this.api))) {
+      if (this.collapsed(id)) continue;
+      if (Math.abs((this.intended[id] ?? 0) - h) > 1) changed.push(id);
+      this.intended[id] = h;
+    }
+    return changed;
   }
 
   /** Forget the windows that are no longer docked. */
@@ -219,12 +319,33 @@ export function edgeScrollStep(clientY: number, top: number, bottom: number): nu
  * side-by-side windows keep Dockview's own behaviour, since width never
  * scrolls. Near the top or bottom of the visible area the workspace scrolls.
  */
-export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEnd: () => void): () => void {
+export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEnd: () => void, onResized?: (ids: string[]) => void): () => void {
   const host = canvas.host;
   const onPointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const sash = (e.target as HTMLElement).closest<HTMLElement>(".dv-sash");
     if (!sash || sash.closest(".dv-resize-container") || sash.classList.contains("dv-disabled")) return;
+    if (canvas.fit) {
+      // A fitted workspace keeps Dockview's own border: the windows on both sides trade height.
+      // While it is dragged nothing else sizes the windows, and the ones it changed are the user's.
+      const before = gridHeights(api);
+      host.classList.add("phx-resizing");
+      const done = () => {
+        window.removeEventListener("pointerup", done, true);
+        window.removeEventListener("pointercancel", done, true);
+        requestAnimationFrame(() => {
+          host.classList.remove("phx-resizing");
+          canvas.adopt();
+          const after = gridHeights(api);
+          const ids = Object.keys(after).filter((id) => Math.abs((before[id] ?? after[id]) - after[id]) > 1);
+          if (ids.length) onResized?.(ids);
+          onEnd();
+        });
+      };
+      window.addEventListener("pointerup", done, true);
+      window.addEventListener("pointercancel", done, true);
+      return;
+    }
     const line = sash.getBoundingClientRect();
     if (line.width <= line.height) return;
     const y = line.top + line.height / 2;
@@ -271,6 +392,7 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", end, true);
       window.removeEventListener("pointercancel", end, true);
+      onResized?.(ids);
       onEnd();
     };
     window.addEventListener("pointermove", move, true);

@@ -1,7 +1,7 @@
 /**
  * Toasts and the Notifications window: a notice shows briefly and stays in the
  * session's history, the pointer or focus holds a toast on screen, and the
- * window clears one notice or all of them.
+ * window clears one notice at a time.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -75,7 +75,7 @@ describe("toasts", () => {
 });
 
 describe("the Notifications window", () => {
-  it("lists notices with their time, clears one, and offers Clear All on the toolbar", () => {
+  it("lists notices with their time, clears one, and adds nothing to the toolbar", () => {
     const center = new Notifications();
     center.notify("First.");
     center.notify("Second.");
@@ -93,10 +93,9 @@ describe("the Notifications window", () => {
     expect(screen.getAllByRole("listitem")[0].querySelector("time")).not.toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Clear Notification" })[0]);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
-    const [group] = registry.groupsFor("logs", ["notifications"]);
-    expect(group.tools[0]).toMatchObject({ id: "clear-all", disabled: false });
-    act(() => registry.latest("logs", group.id, "clear-all")!.onSelect!());
+    // Clear All was removed: one notice at a time only.
+    expect(registry.groupsFor("logs", ["notifications"]).flatMap((g) => g.tools)).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear Notification" }));
     expect(screen.getByText("No notifications in this session.")).toBeTruthy();
-    expect(registry.groupsFor("logs", ["notifications"])[0].tools[0].disabled).toBe(true);
   });
 });

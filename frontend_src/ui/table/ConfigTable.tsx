@@ -9,7 +9,7 @@
  * on a row ticks it, and ticking never changes the chosen row.
  */
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { compareStrings, t } from "../../i18n";
 import { Icon } from "../Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../Menu";
@@ -25,6 +25,8 @@ export interface Column<Row> {
   width?: number;
   /** Hidden until the user shows it. */
   hidden?: boolean;
+  /** In a table that fits its columns, the widest this column grows to fit its contents; longer text is cut off. */
+  maxWidth?: number;
   /** Full text for a cell that may be cut short. */
   title?: (row: Row) => string | undefined;
   className?: string;
@@ -47,6 +49,14 @@ export interface TableSelection<Row> {
 }
 
 const DEFAULT_WIDTH = 140;
+/** A fitted column grows to its contents up to this width unless it says otherwise. */
+const FIT_MAX = 240;
+/** Room beside a header's text: its padding, the sort arrow and the column menu button. */
+const HEADER_EXTRA = 62;
+/** A cell's padding on both sides. */
+const CELL_EXTRA = 22;
+/** Rows measured when fitting; enough to see the longest values without slowing large logs. */
+const FIT_ROWS = 200;
 const PICK_WIDTH = 36;
 const RESIZE_STEP = 16;
 const MAX_WIDTH = 2000;
@@ -74,7 +84,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection, fitColumns = true }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -93,6 +103,12 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   empty?: ReactNode;
   /** Tick boxes in a fixed first column, while picking several rows. */
   selection?: TableSelection<Row>;
+  /**
+   * Size each column to its header and contents (up to its maxWidth), unless the user set its width;
+   * spare width goes to an empty column at the end instead of stretching the others. On by default
+   * (user, 2026-10-27).
+   */
+  fitColumns?: boolean;
 }) {
   const [settings, saveSettings] = useTableSettings(id);
   const showMenu = useContextMenu();
@@ -109,7 +125,9 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   let visible = order.filter((cid) => !hidden.includes(cid)).map((cid) => byId.get(cid)!);
   if (!visible.length) visible = [byId.get(order[0])!];
   const sort = settings.sort && byId.get(settings.sort.column)?.sortValue ? settings.sort : defaultSort;
-  const widthOf = (c: Column<Row>) => (liveWidth?.id === c.id ? liveWidth.width : settings.widths?.[c.id] ?? c.width ?? DEFAULT_WIDTH);
+  // Fitted widths only grow while the table is shown, so rows arriving never make a column jump narrower.
+  const [fitted, setFitted] = useState<Record<string, number>>({});
+  const widthOf = (c: Column<Row>) => (liveWidth?.id === c.id ? liveWidth.width : settings.widths?.[c.id] ?? (fitColumns ? fitted[c.id] : undefined) ?? c.width ?? DEFAULT_WIDTH);
   const total = visible.reduce((sum, c) => sum + widthOf(c), 0) + (selection ? PICK_WIDTH : 0);
 
   const sorted = useMemo(() => {
@@ -249,21 +267,66 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     move(col.id, e.key === "ArrowLeft" ? -1 : 1);
   };
 
-  // When the choice changes from outside (Previous or Next in Log Details), keep the chosen row in view.
+  // A row chosen with the keyboard, or from outside (Previous or Next in Log Details), stays in the
+  // middle of a table that scrolls, until the list reaches its top or bottom (user, 2026-10-26).
+  // A row chosen with the pointer is already where the user is looking, so it only comes into view.
+  const pointerChoice = useRef(false);
+  /** The row kept in the middle of the table, if any. */
+  const centred = useRef<string | null>(null);
+  // Where the mouse last was: the browser reports a "move" when rows scroll under a still pointer.
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  const centre = (tr: HTMLElement) => {
+    const scroller = wrap.current;
+    if (!scroller) return;
+    const head = scroller.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+    const r = tr.getBoundingClientRect();
+    const box = scroller.getBoundingClientRect();
+    const middle = box.top + head + (scroller.clientHeight - head) / 2;
+    scroller.scrollTop += r.top + r.height / 2 - middle;
+  };
   useEffect(() => {
     if (!selectedKey) return;
     const tr = [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === selectedKey);
-    tr?.scrollIntoView?.({ block: "nearest" });
-  }, [selectedKey]);
+    const scroller = wrap.current;
+    const byPointer = pointerChoice.current;
+    pointerChoice.current = false;
+    if (!tr) return;
+    centred.current = !byPointer && !!scroller && scroller.scrollHeight > scroller.clientHeight ? selectedKey : null;
+    if (centred.current) centre(tr);
+    else tr.scrollIntoView?.({ block: "nearest" });
+  }, [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The table can change height right after a choice (Log Details sizes itself to the record):
+  // a centred row is centred again, until the user scrolls the list themselves.
+  useEffect(() => {
+    const scroller = wrap.current;
+    if (!scroller || typeof ResizeObserver === "undefined") return;
+    const again = () => {
+      const tr = centred.current ? [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === centred.current) : null;
+      if (tr) centre(tr);
+    };
+    const observer = new ResizeObserver(again);
+    observer.observe(scroller);
+    const stop = () => { centred.current = null; };
+    scroller.addEventListener("wheel", stop, { passive: true });
+    scroller.addEventListener("touchstart", stop, { passive: true });
+    return () => {
+      observer.disconnect();
+      scroller.removeEventListener("wheel", stop);
+      scroller.removeEventListener("touchstart", stop);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rows: one tab stop (the chosen row, or the first); arrow keys move the choice.
   const focusKey = selectedKey && sorted.some((r) => rowKey(r) === selectedKey) ? selectedKey : sorted[0] ? rowKey(sorted[0]) : null;
   const choose = (row: Row, focus: boolean) => {
     onSelect?.(row, sorted);
-    if (focus) [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((tr) => tr.dataset.row === rowKey(row))?.focus();
+    if (focus) [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((tr) => tr.dataset.row === rowKey(row))?.focus({ preventScroll: true });
   };
   const rowKeys = (index: number) => (e: KeyboardEvent<HTMLTableRowElement>) => {
     if (e.target !== e.currentTarget) return;
+    pointerChoice.current = false;
+    // Moving with the keys: a row under a pointer that has not moved is not the user's choice.
+    wrap.current?.setAttribute("data-keyboard", "");
     const next = e.key === "ArrowDown" ? index + 1 : e.key === "ArrowUp" ? index - 1 : e.key === "Home" ? 0 : e.key === "End" ? sorted.length - 1 : -2;
     if (next >= 0 && next < sorted.length) {
       e.preventDefault();
@@ -277,12 +340,45 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     }
   };
 
+  const visibleIds = visible.map((c) => c.id).join(" ");
+  useLayoutEffect(() => {
+    if (!fitColumns || !head.current || !body.current) return;
+    const next: Record<string, number> = {};
+    const offset = selection ? 1 : 0;
+    const rowEls = [...body.current.querySelectorAll<HTMLTableRowElement>("tr[data-row]")].slice(0, FIT_ROWS);
+    const range = document.createRange();
+    visible.forEach((col, i) => {
+      if (settings.widths?.[col.id] !== undefined) return;
+      const text = head.current!.querySelector<HTMLElement>(`th[data-column="${col.id}"] .phx-th-text`);
+      // No layout (hidden window, or a test without one): leave the column at its starting width.
+      if (!text || text.scrollWidth <= 0) return;
+      let need = text.scrollWidth + HEADER_EXTRA;
+      for (const tr of rowEls) {
+        const td = tr.children[i + offset];
+        if (!td) continue;
+        range.selectNodeContents(td);
+        need = Math.max(need, Math.ceil(range.getBoundingClientRect().width) + CELL_EXTRA);
+      }
+      const width = Math.max(MIN_COLUMN_WIDTH, Math.min(col.maxWidth ?? FIT_MAX, need));
+      if (width > (fitted[col.id] ?? 0)) next[col.id] = width;
+    });
+    if (Object.keys(next).length) setFitted((prev) => ({ ...prev, ...next }));
+  }, [fitColumns, rows, visibleIds, settings.widths, columns]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div ref={wrap} className={`phx-table-wrap${drag ? " is-dragging" : ""}`}>
+    <div ref={wrap} className={`phx-table-wrap${drag ? " is-dragging" : ""}`}
+      onPointerMove={(e) => {
+        if (e.pointerType !== "mouse") return;
+        const last = lastPointer.current;
+        lastPointer.current = { x: e.clientX, y: e.clientY };
+        if (last && last.x === e.clientX && last.y === e.clientY) return;
+        e.currentTarget.removeAttribute("data-keyboard");
+      }}>
       <table className="phx-table" role="grid" aria-label={label} style={{ minWidth: total }}>
         <colgroup>
           {selection && <col style={{ width: PICK_WIDTH }} />}
-          {visible.map((c, i) => <col key={c.id} style={i < visible.length - 1 ? { width: widthOf(c) } : undefined} />)}
+          {visible.map((c, i) => <col key={c.id} style={fitColumns || i < visible.length - 1 ? { width: widthOf(c) } : undefined} />)}
+          {fitColumns && <col />}
         </colgroup>
         <thead>
           <tr ref={head}>
@@ -316,6 +412,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                 </th>
               );
             })}
+            {fitColumns && <th className="phx-th-fill" aria-hidden="true" />}
           </tr>
         </thead>
         <tbody ref={body}>
@@ -328,7 +425,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                 aria-selected={onSelect ? selected : undefined}
                 aria-label={rowLabel?.(row)}
                 tabIndex={onSelect ? (key === focusKey ? 0 : -1) : undefined}
-                onClick={onSelect ? () => choose(row, false) : undefined}
+                onClick={onSelect ? () => { pointerChoice.current = true; choose(row, false); } : undefined}
                 onKeyDown={onSelect ? rowKeys(index) : undefined}>
                 {selection && (
                   // Ticking stays apart from choosing: a click on the box never picks the row for review.
@@ -338,6 +435,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                   </td>
                 )}
                 {visible.map((col) => <td key={col.id} className={col.className} title={col.title?.(row)}>{col.cell(row)}</td>)}
+                {fitColumns && <td className="phx-td-fill" aria-hidden="true" />}
               </tr>
             );
           })}

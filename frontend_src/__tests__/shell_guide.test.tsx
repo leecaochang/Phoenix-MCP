@@ -71,7 +71,7 @@ describe("rendering a topic", () => {
     expect(html).not.toContain("javascript:");
     expect(html).toContain('<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">site</a>');
     expect(html).toContain('<a href="#" class="phx-guide-link" data-guide-topic="workspace.mesa">next</a>');
-    expect(html).toContain("<strong>Restore Original Layout</strong>");
+    expect(html).toContain("<strong>Reset This Workspace</strong>");
     expect(html).toContain('<code class="phx-guide-missing">workspace.noSuchLabel</code>');
   });
 

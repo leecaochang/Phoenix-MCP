@@ -51,7 +51,8 @@ const { apiMock } = vi.hoisted(() => {
     listApprovals: async () => ({ approvals: [], total: 3 }),
     getApproval: async () => approval,
     getEntityHints: async () => ({ entity_hints: {} }),
-    getAgentCliProviders: async () => ({ instances: [], default_instance_id: null }),
+    // Agent Chat is on the toolbar only with a provider to talk to.
+    getAgentCliProviders: async () => ({ instances: [{ id: "p1", kind: "anthropic", name: "Claude", model: "model-1" }], default_instance_id: "p1" }),
     listArchivedAccessKeys: async () => [],
   };
   return { apiMock };

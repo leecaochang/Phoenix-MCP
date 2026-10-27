@@ -48,6 +48,7 @@
 .phx-canvas-host > div { position: absolute; top: 0; left: 0; right: 0; height: var(--phx-canvas-height, 100%) !important; }
 /* A scrolling canvas leaves room for the scrollbar beside the windows. */
 .phx-canvas-host.phx-scrolls { scrollbar-gutter: stable; }
+.phx-canvas-host.phx-fits { overflow: hidden; }
 .phx-canvas-host.phx-resizing, .phx-canvas-host.phx-resizing * { cursor: ns-resize !important; user-select: none; }
 
 /* Pinned bands are as tall as their windows (up to a share of the workspace) and do not scroll with the grid. */
@@ -59,6 +60,8 @@
   overscroll-behavior: contain;
 }
 .phx-band.phx-band-empty, .phx-band.phx-band-clipped { overflow: hidden; }
+/* A clipped band never scrolls, so it keeps no scrollbar gutter beside its windows. */
+.phx-band.phx-band-clipped.phx-canvas-host { scrollbar-gutter: auto; }
 /* The edge between a band and the grid resizes the band's windows along it. */
 .phx-band-edge {
   flex: none;
@@ -78,12 +81,42 @@
   inset: 0;
   z-index: 30;
   pointer-events: none;
+  /* Windows are kept inside it; nothing, not even focus, may make it or the panel scroll. */
+  overflow: clip;
 }
 .phx-float-layer .phx-dock,
 .phx-float-layer .dv-dockview,
 .phx-float-layer .dv-grid-view { background: transparent; }
 .phx-float-layer .dv-resize-container,
 .phx-float-layer .dv-render-overlay { pointer-events: auto; }
+/* The grid and the bands keep their own stacking, so nothing in them (window content, Dockview's
+   borders between windows) can rise above a floating window and take the pointer. */
+.phx-workspace, .phx-band { isolation: isolate; }
+
+/* A floating window moves by its title bar and resizes from every edge and corner, as Agent Chat does:
+   each grabber straddles the border, half outside and half inside. The content gives up its outer
+   3 px to them; clip-path also stops it taking the pointer there. */
+.phx-float-layer .phx-dock :is(.dv-tab, .dv-void-container) { cursor: move; }
+.phx-float-layer .dv-render-overlay { clip-path: inset(0 3px 3px 3px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-top { top: -3px; height: 6px; left: 8px; width: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottom { bottom: -3px; height: 6px; left: 8px; width: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-left { left: -3px; width: 6px; top: 8px; height: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-right { right: -3px; width: 6px; top: 8px; height: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { width: 12px; height: 12px; }
+/* Dockview's own z-index for these reads a custom property that refers to itself, which is invalid,
+   so the window's frame drew over their inner half; above it, the corners above the edges. */
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-top, .dv-resize-handle-bottom, .dv-resize-handle-left, .dv-resize-handle-right) { z-index: 5; }
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { z-index: 6; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-topleft { top: -4px; left: -4px; cursor: nwse-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-topright { top: -4px; right: -4px; cursor: nesw-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottomleft { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottomright { bottom: -4px; right: -4px; cursor: nwse-resize; }
+
+/* A folded floating window shows only its title bar and resizes only in width. */
+.phx-float-layer .dv-resize-container.phx-float-folded { height: calc(var(--dv-tabs-and-actions-container-height, 34px) + 2px) !important; }
+.phx-float-layer .dv-resize-container.phx-float-folded > .dv-grid-view { overflow: hidden; height: 100% !important; }
+.phx-float-layer .dv-resize-container.phx-float-folded :is(.dv-resize-handle-top, .dv-resize-handle-bottom, .dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { display: none; }
+.phx-float-layer .dv-render-overlay:has(.phx-window-body[hidden]) { display: none; }
 
 /* A window's content element, moved between hosts with the window. */
 .phx-window-slot, .phx-window-content { height: 100%; }

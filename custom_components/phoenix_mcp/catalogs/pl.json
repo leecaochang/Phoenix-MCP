@@ -360,14 +360,16 @@
       "resourcePlaceholder": "Zasób...",
       "rowIp": "Źródło",
       "rowMethod": "Metoda",
-      "rowMode": "Tryb",
       "rowOutcome": "Wynik",
       "rowPayload": "Zawartość",
       "rowRequestId": "ID żądania",
       "rowResource": "Zasób",
       "rowTime": "Czas",
       "rowAccessKey": "Klucz dostępu",
-      "loadFailed": "Nie udało się wczytać dziennika audytu. Odśwież, aby spróbować ponownie."
+      "loadFailed": "Nie udało się wczytać dziennika audytu. Odśwież, aby spróbować ponownie.",
+      "rowAccess": "Dostęp",
+      "accessPermissions": "Uprawnienia",
+      "accessPassThrough": "Pass-through"
     },
     "caps": {
       "cap_automation_write": {
@@ -2411,7 +2413,7 @@
         "requestCompleted": "Żądanie do modelu zakończone"
       },
       "attachmentPrompt": "Wiadomość z obrazem lub plikiem",
-      "clearShort": "Wyczyść historię",
+      "clearShort": "Wyczyść rozmowy",
       "retention": "Przechowywanie"
     },
     "attention": {
@@ -2448,7 +2450,7 @@
       "fold": "Złóż",
       "unfold": "Rozłóż",
       "options": "Opcje obszaru roboczego",
-      "restoreOriginal": "Przywróć pierwotny układ",
+      "restoreOriginal": "Zresetuj ten obszar roboczy",
       "reopen": "Otwórz ponownie: {window}",
       "empty": "W tym obszarze roboczym nie ma otwartych okien.",
       "moveToolbar": "Przenieś pasek narzędzi",
@@ -2481,12 +2483,10 @@
       "unpin": "Odepnij",
       "saveMyDefault": "Zapisz jako Mój domyślny",
       "restoreMyDefault": "Przywróć Mój domyślny",
-      "restorePanelDefaults": "Przywróć domyślne ustawienia panelu",
-      "restorePanelDefaultsConfirm": "Przywrócić domyślny pasek narzędzi i układ wszystkich obszarów roboczych? Zapisane układy domyślne i wszystkie ustawienia Phoenix zostaną zachowane.",
-      "restoreDefaultsAction": "Przywróć domyślne",
+      "restorePanelDefaults": "Zresetuj wszystkie obszary robocze",
       "myDefaultSaved": "Zapisano ten układ jako domyślny dla obszaru {workspace}.",
       "myDefaultRestored": "Przywrócono Twój układ domyślny.",
-      "panelDefaultsRestored": "Przywrócono domyślne ustawienia panelu.",
+      "panelDefaultsRestored": "Wszystkie obszary robocze, pasek narzędzi i pasek pomocy przywrócono do ustawień domyślnych.",
       "review": "Przegląd",
       "reviewEmpty": "Wybierz żądanie, aby je przejrzeć.",
       "requestDetails": "Szczegóły żądania",
@@ -2514,14 +2514,16 @@
       "myWorkspace": "Mój obszar roboczy",
       "removeFromMy": "Usuń z Mojego obszaru roboczego",
       "removedFromMy": "Usunięto z Mojego obszaru roboczego: {window}",
-      "safety": "Bezpieczeństwo"
+      "safety": "Bezpieczeństwo",
+      "resetWorkspaceHint": "Przywraca okna tego obszaru roboczego tam, gdzie umieszcza je Phoenix. Inne obszary robocze i Mój domyślny pozostają bez zmian.",
+      "resetAllHint": "Resetuje wszystkie obszary robocze, pasek narzędzi, pasek pomocy i przewodnik. Mój domyślny i ustawienia Phoenix pozostają bez zmian."
     },
     "notifications": {
       "title": "Powiadomienia",
       "empty": "Brak powiadomień w tej sesji.",
       "clear": "Wyczyść powiadomienie",
-      "clearAll": "Wyczyść wszystko",
-      "dismiss": "Zamknij"
+      "dismiss": "Zamknij",
+      "showHistory": "Pokaż historię powiadomień"
     },
     "help": {
       "title": "Pomoc",
@@ -2569,11 +2571,10 @@
       "filtersCount": "Filtry ({count})",
       "activeFilters": "Aktywne filtry: {count}",
       "clearFilters": "Wyczyść filtry",
-      "latest": "Ostatnio",
       "turns": "Tury",
       "toolCalls": "Wywołania narzędzi",
       "pauseUpdates": "Wstrzymaj aktualizacje",
-      "recordingSettings": "Ustawienia rejestrowania"
+      "logSettings": "Ustawienia dzienników"
     },
     "table": {
       "sortAscending": "Sortuj rosnąco",
@@ -2584,7 +2585,6 @@
       "resetColumns": "Przywróć kolumny",
       "columnMenu": "Opcje kolumny {column}",
       "resizeColumn": "Zmień szerokość kolumny {column}",
-      "filterColumn": "Filtruj tę kolumnę",
       "sortedLoaded": "Posortowano tylko wśród wczytanych wpisów. Wczytaj więcej, aby uwzględnić pozostałe."
     }
   }

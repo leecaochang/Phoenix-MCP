@@ -120,7 +120,7 @@ describe("workspace controller", () => {
     expect(ids(make(2, upgraded.layout()!)).sort()).toEqual(["auditLog", "conversationLog"]);
   });
 
-  it("saves table settings with the arrangement, loads them back, and Restore Original Layout clears them", () => {
+  it("saves table settings with the arrangement, loads them back, and Reset This Workspace clears them", () => {
     const c = mount();
     c.tables.set("auditLog", { order: ["resource", "time"], sort: { column: "resource", dir: "asc" } });
     const saved = c.layout()!;

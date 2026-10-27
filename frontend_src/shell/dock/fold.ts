@@ -100,6 +100,26 @@ export function foldWindow(api: DockviewApi, store: FoldStore, group: DockviewGr
   }
 }
 
+/**
+ * Keep folded rows right after windows moved, closed or arrived: a row whose
+ * windows are all folded shrinks to its title bars (a folded window pinned or
+ * docked from floating, or left alone when its neighbour closed), and a
+ * shrunk row that now holds an open window grows back to its own height, its
+ * folded windows staying folded.
+ */
+export function settleFolds(api: DockviewApi, store: FoldStore): void {
+  const allFolded = (row: DockviewGroupPanel[]) => row.every((g) => { const rid = idOf(g); return rid !== undefined && store.isFolded(rid); });
+  for (const group of api.groups) {
+    const id = idOf(group);
+    if (!id || group.api.location.type !== "grid") continue;
+    const collapsed = store.collapsedHeight(id) !== undefined;
+    if (!collapsed && !store.isFolded(id)) continue;
+    const row = rowOf(api, group);
+    if (!collapsed && allFolded(row)) for (const g of row) collapse(store, g);
+    else if (collapsed && !allFolded(row)) expand(store, group);
+  }
+}
+
 export function unfoldWindow(api: DockviewApi, store: FoldStore, group: DockviewGroupPanel): void {
   const id = idOf(group);
   if (!id || !store.isFolded(id)) return;

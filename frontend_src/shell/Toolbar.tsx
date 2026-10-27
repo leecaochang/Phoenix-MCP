@@ -14,10 +14,11 @@ import { Icon, type IconName } from "../ui/Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { WorkspaceController } from "./dock/controller";
 import { usePanelData } from "./PanelData";
-import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState } from "./storage";
+import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState, type WorkspaceId } from "./storage";
 import { chooseFit, fitClass, rowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
 import { useSettings } from "./settings";
+import { HELP_WINDOW } from "./help";
 import { WORKSPACES, windowTitle } from "./workspaces";
 
 /** The shell's arrangement actions, shared by every Workspace Options menu. */
@@ -26,21 +27,29 @@ export interface WorkspaceActions {
   restoreMyDefault: (controller: WorkspaceController) => void;
   hasMyDefault: (controller: WorkspaceController) => boolean;
   restoreOriginal: (controller: WorkspaceController) => void;
-  /** Asks first; resets the toolbar and every arrangement, never My Defaults or settings. */
+  /** Reset All Workspaces: the toolbar, Help Bar, Guide and every arrangement, never My Defaults or settings. */
   restorePanelDefaults: () => void;
 }
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);
 
 /**
  * Workspace options: reopen closed windows, save or restore My Default,
- * restore the original arrangement, and restore the panel's default settings.
+ * Reset This Workspace, and Reset All Workspaces (every arrangement plus the
+ * toolbar, Help Bar and Guide).
  */
 export function workspaceMenu(controller: WorkspaceController, actions: WorkspaceActions | null): MenuEntry[] {
-  const items: MenuEntry[] = controller.closedWindows().map((id) => ({
+  const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
+  // Help is shown and hidden from Documentation, Show Help Bar; Notifications has its own check below.
+  const items: MenuEntry[] = controller.closedWindows().filter((id) => id !== NOTIFICATIONS && id !== HELP_WINDOW && !toolWindows.includes(id)).map((id) => ({
     id: `reopen-${id}`,
     label: t("workspace.reopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
+  // Notifications is shown or hidden here, with a check while it is open.
+  if (controller.windows.includes(NOTIFICATIONS)) {
+    const group = controller.groupOf(NOTIFICATIONS);
+    items.push({ id: "show-notifications", label: t("notifications.showHistory"), checked: !!group, onSelect: () => (group ? controller.close(group) : controller.reopen(NOTIFICATIONS)) });
+  }
   if (items.length) items.push("separator");
   if (actions) {
     items.push(
@@ -48,10 +57,12 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
       { id: "restore-default", label: t("workspace.restoreMyDefault"), disabled: !actions.hasMyDefault(controller), onSelect: () => actions.restoreMyDefault(controller) },
     );
   }
-  items.push({ id: "restore", label: t("workspace.restoreOriginal"), onSelect: () => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal()) });
-  if (actions) items.push("separator", { id: "panel-defaults", label: t("workspace.restorePanelDefaults"), onSelect: actions.restorePanelDefaults });
+  items.push({ id: "restore", label: t("workspace.restoreOriginal"), hint: t("workspace.resetWorkspaceHint"), onSelect: () => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal()) });
+  if (actions) items.push("separator", { id: "panel-defaults", label: t("workspace.restorePanelDefaults"), hint: t("workspace.resetAllHint"), onSelect: actions.restorePanelDefaults });
   return items;
 }
+
+const NOTIFICATIONS = "notifications";
 
 const DOCKS: Array<[ToolbarDock, string]> = [
   ["top", "workspace.dockTop"], ["bottom", "workspace.dockBottom"], ["left", "workspace.dockLeft"], ["right", "workspace.dockRight"], ["floating", "workspace.floatToolbar"],
@@ -315,8 +326,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 <Icon name="killSwitch" size={16} />
                 <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
               </button>
-            ) : d.accessKeys.length > 0 ? (
-              <button type="button" className={`phx-toolbar-button ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => (onAgentChat ? onAgentChat() : d.openAgentCli())}>
+            ) : d.accessKeys.length > 0 && d.agentCliInstances.length > 0 ? (
+              // Only with an AI provider to talk to; a heavier border makes it easy to find.
+              <button type="button" className={`phx-toolbar-button phx-toolbar-chat ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => (onAgentChat ? onAgentChat() : d.openAgentCli())}>
                 <Icon name="agentChat" size={16} />
                 <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
               </button>

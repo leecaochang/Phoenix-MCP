@@ -905,12 +905,14 @@
       "rowAccessKey": "Tilgangsnøkkel",
       "rowIp": "Kilde",
       "rowMethod": "Metode",
-      "rowMode": "Modus",
       "rowOutcome": "Utfall",
       "rowPayload": "Nyttelast",
       "rowRequestId": "Forespørsels-ID",
       "rowResource": "Ressurs",
-      "rowTime": "Tid"
+      "rowTime": "Tid",
+      "rowAccess": "Tilgang",
+      "accessPermissions": "Tillatelser",
+      "accessPassThrough": "Gjennomkobling"
     },
     "caps": {
       "cap_automation_write": {
@@ -1339,7 +1341,7 @@
       "turns": "Runder: {count}",
       "unknown": "Ukjent",
       "week": "Siste uke",
-      "clearShort": "Tøm historikk",
+      "clearShort": "Tøm samtaler",
       "retention": "Oppbevaring"
     },
     "diff": {
@@ -2347,7 +2349,7 @@
       "fold": "Rull opp",
       "unfold": "Rull ned",
       "options": "Alternativer for arbeidsområdet",
-      "restoreOriginal": "Gjenopprett opprinnelig oppsett",
+      "restoreOriginal": "Tilbakestill dette arbeidsområdet",
       "reopen": "Åpne {window} igjen",
       "empty": "Ingen vinduer er åpne i dette arbeidsområdet.",
       "moveToolbar": "Flytt verktøylinjen",
@@ -2380,12 +2382,10 @@
       "unpin": "Løsne",
       "saveMyDefault": "Lagre som Min standard",
       "restoreMyDefault": "Gjenopprett Min standard",
-      "restorePanelDefaults": "Gjenopprett panelets standardinnstillinger",
-      "restorePanelDefaultsConfirm": "Vil du tilbakestille verktøylinjen og oppsettet i alle arbeidsområder til standard? Lagrede standarder og alle Phoenix-innstillinger beholdes.",
-      "restoreDefaultsAction": "Gjenopprett standard",
+      "restorePanelDefaults": "Tilbakestill alle arbeidsområder",
       "myDefaultSaved": "Dette oppsettet er lagret som din standard for {workspace}.",
       "myDefaultRestored": "Standardoppsettet ditt er gjenopprettet.",
-      "panelDefaultsRestored": "Panelets standardinnstillinger er gjenopprettet.",
+      "panelDefaultsRestored": "Alle arbeidsområder, verktøylinjen og hjelpelinjen er tilbakestilt til standard.",
       "review": "Gjennomgang",
       "reviewEmpty": "Velg en forespørsel for å gå gjennom den.",
       "requestDetails": "Forespørselsdetaljer",
@@ -2413,14 +2413,16 @@
       "myWorkspace": "Mitt arbeidsområde",
       "removeFromMy": "Fjern fra Mitt arbeidsområde",
       "removedFromMy": "{window} fjernet fra Mitt arbeidsområde",
-      "safety": "Sikkerhet"
+      "safety": "Sikkerhet",
+      "resetWorkspaceHint": "Flytter vinduene i dette arbeidsområdet tilbake dit Phoenix plasserer dem. Andre arbeidsområder og Min standard forblir uendret.",
+      "resetAllHint": "Tilbakestiller alle arbeidsområder, verktøylinjen, hjelpelinjen og veiledningen. Min standard og Phoenix-innstillingene forblir uendret."
     },
     "notifications": {
       "title": "Varsler",
       "empty": "Ingen varsler i denne økten.",
       "clear": "Fjern varsel",
-      "clearAll": "Tøm alle",
-      "dismiss": "Lukk"
+      "dismiss": "Lukk",
+      "showHistory": "Vis varselhistorikk"
     },
     "help": {
       "title": "Hjelp",
@@ -2468,11 +2470,10 @@
       "filtersCount": "Filtre ({count})",
       "activeFilters": "Aktive filtre: {count}",
       "clearFilters": "Tøm filtre",
-      "latest": "Siste",
       "turns": "Runder",
       "toolCalls": "Verktøykall",
       "pauseUpdates": "Sett oppdateringer på pause",
-      "recordingSettings": "Registreringsinnstillinger"
+      "logSettings": "Logginnstillinger"
     },
     "table": {
       "sortAscending": "Sorter stigende",
@@ -2483,7 +2484,6 @@
       "resetColumns": "Tilbakestill kolonner",
       "columnMenu": "Alternativer for kolonnen {column}",
       "resizeColumn": "Endre bredden på kolonnen {column}",
-      "filterColumn": "Filtrer denne kolonnen",
       "sortedLoaded": "Sortert bare blant de innlastede oppføringene. Last inn mer for å ta med resten."
     }
   },

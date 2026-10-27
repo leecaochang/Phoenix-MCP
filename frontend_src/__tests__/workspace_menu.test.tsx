@@ -1,0 +1,52 @@
+/**
+ * Workspace Options: Notifications is shown or hidden with a check rather than
+ * reopened, a window a toolbar tool opens (Log Settings in Logs) is not
+ * offered there, other closed windows are offered to reopen, and the two
+ * resets say what they reset.
+ */
+import { describe, expect, it } from "vitest";
+import { render } from "@testing-library/react";
+import { DockviewReact, type DockviewApi } from "dockview-react";
+import { WorkspaceController } from "../shell/dock/controller";
+import { workspaceMenu } from "../shell/Toolbar";
+import type { MenuEntry } from "../ui/Menu";
+
+type Item = Exclude<MenuEntry, "separator">;
+const WINDOWS = ["auditLog", "settingsLogs", "notifications", "attention"];
+const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div>{id}</div>]));
+
+function mount() {
+  const c = new WorkspaceController("logs", WINDOWS, (_, add) => { add("auditLog"); add("notifications", { referencePanel: "auditLog", direction: "below" }); }, (id) => id);
+  render(<DockviewReact components={components} onReady={(e: { api: DockviewApi }) => { c.api = e.api; c.load(undefined); }} />);
+  return c;
+}
+const items = (c: WorkspaceController) => workspaceMenu(c, null).filter((e): e is Item => e !== "separator");
+
+describe("Workspace Options", () => {
+  it("shows Notifications with a check, and hides and shows it again", () => {
+    const c = mount();
+    const show = () => items(c).find((i) => i.id === "show-notifications")!;
+    expect(show()).toMatchObject({ label: "Show Notification History", checked: true });
+    show().onSelect!();
+    expect(c.groupOf("notifications")).toBeNull();
+    expect(show().checked).toBe(false);
+    expect(items(c).some((i) => i.id === "reopen-notifications")).toBe(false);
+    show().onSelect!();
+    expect(c.groupOf("notifications")).not.toBeNull();
+  });
+
+  it("names the two resets for what they reset, and says more in their hints", () => {
+    const c = mount();
+    const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {} };
+    const all = workspaceMenu(c, actions).filter((e): e is Item => e !== "separator");
+    expect(all.find((i) => i.id === "restore")).toMatchObject({ label: "Reset This Workspace", hint: expect.stringContaining("Other workspaces") });
+    expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, the Help Bar and the Guide") });
+  });
+
+  it("does not offer to reopen a window a toolbar tool opens here, and offers other closed windows", () => {
+    const c = mount();
+    const ids = items(c).map((i) => i.id);
+    expect(ids).not.toContain("reopen-settingsLogs");
+    expect(ids).toContain("reopen-attention");
+  });
+});

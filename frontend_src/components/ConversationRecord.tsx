@@ -303,7 +303,7 @@ export function EntryDetail({ id, revision, accessKeyNames }: { id: string; revi
     return () => { active = false; };
   }, [id, revision, retry]);
   if (error) return <div role="alert">{error} <button className="btn btn-text" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
-  if (!entry) return <p role="status">{t("common.loading")}</p>;
+  if (!entry) return <p role="status" data-loading="">{t("common.loading")}</p>;
   const finalTextIndex = entry.events.reduce((last, event, index) => event.kind === "assistant_text" && event.payload === entry.response ? index : last, -1);
   const accessKeyName = accessKeyNames[String(entry.metadata.access_key_id ?? "")] ?? entry.metadata.access_key_name;
   const identityFields = [

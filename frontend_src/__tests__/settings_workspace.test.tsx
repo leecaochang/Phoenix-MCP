@@ -408,7 +408,7 @@ describe("AI Providers", () => {
     const table = await providers.findByRole("grid", { name: "LLM Providers" });
     await within(table).findByText("Kitchen Ollama");
     const rows = [...table.querySelectorAll<HTMLElement>("tbody tr[data-row]")];
-    expect(rows.map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent))).toEqual([
+    expect(rows.map((r) => [...r.querySelectorAll("td:not([aria-hidden])")].map((c) => c.textContent))).toEqual([
       ["Work Anthropic", "Anthropic", "claude-opus-5"],
       ["Kitchen Ollama", "Ollama", "qwen3 (automatic)"],
     ]);

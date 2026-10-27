@@ -29,8 +29,8 @@ const stacked: Arrange = (_, add) => {
 };
 
 /** A controller with all four hosts, each a real Dockview instance with a stubbed size. */
-function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number } = {}) {
-  const controller = new WorkspaceController("test", WINDOWS, stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned });
+function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number; pairs?: Record<string, string>; closedAt?: Record<string, { neighbor: string; side: "bottom" }>; arrange?: Arrange } = {}) {
+  const controller = new WorkspaceController("test", WINDOWS, opts.arrange ?? stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned, pairs: opts.pairs, closedAt: opts.closedAt });
   const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div>{id}</div>]));
   const hosts: Partial<Record<HostId, HTMLElement>> = {};
   const apis: Partial<Record<HostId, DockviewApi>> = {};
@@ -70,6 +70,172 @@ function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record
 }
 
 describe("pinned bands and the floating layer", () => {
+  it("reopens a paired window beside its partner in the band, alone at the partner's height, and the partner beside it", () => {
+    // c is paired to the right of a, as Notifications is to Help.
+    const w = mount({ heights: { a: 200, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.close(w.group("c"));
+    w.controller.reopen("c");
+    expect(w.controller.hostOf("c")).toBe("bottom");
+    expect(w.group("c")).not.toBe(w.group("a"));
+    // Left to right, in the order the band draws its windows.
+    const sideBySide = () => [...w.hosts.bottom!.querySelectorAll<HTMLElement>(".dv-groupview")].map((el) => w.apis.bottom!.groups.find((g) => g.element === el)!.activePanel!.id);
+    expect(sideBySide()).toEqual(["a", "c"]);
+    expect(w.heights("bottom")).toEqual({ a: 200, c: 200 });
+
+    // Without its partner it takes the band alone, at the partner's height.
+    w.controller.close(w.group("a"));
+    w.controller.close(w.group("c"));
+    w.controller.reopen("c");
+    expect(w.controller.hostOf("c")).toBe("bottom");
+    expect(w.hosts.bottom!.style.height).toBe("200px");
+    // The partner comes back to its left.
+    w.controller.reopen("a");
+    expect(w.controller.hostOf("a")).toBe("bottom");
+    expect(sideBySide()).toEqual(["a", "c"]);
+  });
+
+  it("reopens a paired window in the top band it was pinned to, not the bottom", () => {
+    const w = mount({ heights: { a: 200, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.pin(w.group("a"), "top");
+    w.controller.close(w.group("a"));
+    w.controller.reopen("a");
+    expect(w.controller.hostOf("a")).toBe("top");
+    // Its partner, never shown yet, joins it there.
+    w.controller.reopen("c");
+    expect(w.controller.hostOf("c")).toBe("top");
+    w.controller.close(w.group("c"));
+    w.controller.close(w.group("a"));
+    // The partner closed too: each still comes back to the top band.
+    w.controller.reopen("c");
+    expect(w.controller.hostOf("c")).toBe("top");
+  });
+
+  it("reopens a paired window that was floating as floating, not beside its partner in the band", () => {
+    const w = mount({ heights: { a: 200, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.reopen("c");
+    w.controller.float(w.group("a"));
+    expect(w.controller.hostOf("a")).toBe("float");
+    w.controller.close(w.group("a"));
+    w.controller.reopen("a");
+    expect(w.controller.hostOf("a")).toBe("float");
+  });
+
+  it("pins a floating window at the height it had before it floated, not its floating size", () => {
+    const w = mount({ heights: { a: 120, b: 300, c: 300 }, pinned: { bottom: ["a"] } });
+    expect(w.heights("bottom")).toEqual({ a: 120 });
+    w.controller.float(w.group("a"));
+    expect(w.controller.hostOf("a")).toBe("float");
+    // Hidden and shown again while floating, it still remembers the band it floated from.
+    w.controller.close(w.group("a"));
+    w.controller.reopen("a");
+    expect(w.controller.hostOf("a")).toBe("float");
+    w.controller.pin(w.group("a"), "top");
+    expect(w.controller.hostOf("a")).toBe("top");
+    expect(w.heights("top")).toEqual({ a: 120 });
+    w.controller.float(w.group("a"));
+    w.controller.dock(w.group("a"));
+    expect(w.controller.hostOf("a")).toBe("top");
+  });
+
+  it("pins a floating paired window beside its partner, bringing the partner along", () => {
+    const w = mount({ heights: { a: 120, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.reopen("c");
+    w.controller.float(w.group("c"));
+    w.controller.pin(w.group("a"), "top");
+    w.controller.pin(w.group("c"), "bottom");
+    expect(w.controller.hostOf("a")).toBe("bottom");
+    expect(w.controller.hostOf("c")).toBe("bottom");
+    expect(w.heights("bottom")).toEqual({ a: 120, c: 120 });
+  });
+
+  it("pins or docks a folded floating window as just its title bar, and unfolds it to its own height", () => {
+    const w = mount({ heights: { a: 120, b: 300, c: 300 }, pinned: { bottom: ["a"] } });
+    w.controller.toggleFold(w.group("a"));
+    w.controller.float(w.group("a"));
+    w.controller.pin(w.group("a"), "top");
+    expect(w.controller.folds.isFolded("a")).toBe(true);
+    // The band shows only the title bar (it draws its grid at Dockview's smallest size and clips it).
+    expect(w.hosts.top!.style.height).toBe("34px");
+    w.controller.toggleFold(w.group("a"));
+    expect(w.heights("top")).toEqual({ a: 120 });
+    expect(w.hosts.top!.style.height).toBe("120px");
+    // Folded while floating, then docked into the grid.
+    w.controller.float(w.group("b"));
+    w.controller.toggleFold(w.group("b"));
+    w.controller.dock(w.group("b"));
+    expect(w.controller.hostOf("b")).toBe("main");
+    expect(w.heights("main").b).toBe(34);
+  });
+
+  it("shrinks a folded window to its title bar once its open neighbour leaves", () => {
+    const w = mount({ heights: { a: 120, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.reopen("c");
+    w.controller.toggleFold(w.group("a"));
+    // Beside an open window, a folded one keeps the row's height.
+    expect(w.hosts.bottom!.style.height).toBe("120px");
+    w.controller.close(w.group("c"));
+    expect(w.hosts.bottom!.style.height).toBe("34px");
+    // Growing the row back needs window geometry (rows here are stubbed one window each); the live checks cover it.
+    w.controller.reopen("c");
+    expect(w.controller.folds.isFolded("a")).toBe(true);
+  });
+
+  it("remembers a closed window's place by the window it shares its column with", () => {
+    // a over b on the left, c on the right: c's column holds only c, b's sibling is a.
+    const columns: Arrange = (_, add) => { add("a"); add("c", { referencePanel: "a", direction: "right" }); add("b", { referencePanel: "a", direction: "below" }); };
+    const w = mount({ arrange: columns });
+    w.controller.close(w.group("b"));
+    expect(w.controller.layout()!.closed.b).toMatchObject({ neighbor: "a", side: "bottom" });
+    w.controller.reopen("b");
+    w.controller.close(w.group("a"));
+    expect(w.controller.layout()!.closed.a).toMatchObject({ neighbor: "b", side: "top" });
+  });
+
+  it("docks a window back along the grid edge it floated from, beside the whole column", () => {
+    // As in Logs: a over b on the left, c down the right half.
+    const columns: Arrange = (_, add) => { add("a"); add("c", { referencePanel: "a", direction: "right" }); add("b", { referencePanel: "a", direction: "below" }); };
+    const w = mount({ arrange: columns });
+    const shape = () => { const g = w.apis.main!.toJSON().grid; const kids = (g.root.data as Array<{ type: string; data: unknown }>); return { orientation: g.orientation, kinds: kids.map((k) => k.type), last: (kids[kids.length - 1].data as { views?: string[] }).views }; };
+    expect(shape()).toEqual({ orientation: "HORIZONTAL", kinds: ["branch", "leaf"], last: ["c"] });
+    w.controller.float(w.group("c"));
+    w.controller.dock(w.group("c"));
+    expect(shape()).toEqual({ orientation: "HORIZONTAL", kinds: ["branch", "leaf"], last: ["c"] });
+  });
+
+  it("pins both paired windows together, side by side in the new band", () => {
+    const w = mount({ heights: { a: 200, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
+    w.controller.reopen("c");
+    expect(w.controller.hostOf("c")).toBe("bottom");
+    w.controller.pin(w.group("c"), "top");
+    expect(w.controller.hostOf("a")).toBe("top");
+    expect(w.controller.hostOf("c")).toBe("top");
+    const order = [...w.hosts.top!.querySelectorAll<HTMLElement>(".dv-groupview")].map((el) => w.apis.top!.groups.find((g) => g.element === el)!.activePanel!.id);
+    expect(order).toEqual(["a", "c"]);
+    expect(w.heights("top")).toEqual({ a: 200, c: 200 });
+    expect(w.apis.bottom!.panels).toHaveLength(0);
+  });
+
+  it("gives height freed by a top band to the window just below it", () => {
+    const w = mount({ heights: { a: 200, b: 200, c: 100 }, frame: 600 });
+    w.controller.pin(w.group("c"), "top");
+    const before = w.heights("main");
+    w.controller.close(w.group("c"));
+    const after = w.heights("main");
+    expect(after.a).toBeGreaterThan(before.a);
+    expect(after.b).toBe(before.b);
+  });
+
+  it("floats a closed window over the workspace from a tool, and closes it from the same tool", () => {
+    const w = mount();
+    w.controller.close(w.group("b"));
+    w.controller.toggleFloating("b", 680, 640);
+    expect(w.controller.hostOf("b")).toBe("float");
+    expect(w.group("b").api.location.type).toBe("floating");
+    w.controller.toggleFloating("b", 680, 640);
+    expect(w.controller.hostOf("b")).toBeNull();
+    expect(w.controller.closedWindows()).toContain("b");
+  });
+
   it("pins a window to a band, keeps its height there, and returns it to its place on Unpin", () => {
     const w = mount({ heights: { a: 300, b: 250, c: 300 } });
     w.controller.pin(w.group("b"), "bottom");
@@ -178,7 +344,7 @@ describe("pinned bands and the floating layer", () => {
     expect(second.controller.hostOf("b")).toBe("float");
   });
 
-  it("Restore Original Layout empties the bands and the floating layer and pins the defaults", () => {
+  it("Reset This Workspace empties the bands and the floating layer and pins the defaults", () => {
     const w = mount({ pinned: { bottom: ["c"] } });
     expect(w.controller.hostOf("c")).toBe("bottom");
     w.controller.unpin(w.group("c"));

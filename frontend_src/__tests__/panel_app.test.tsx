@@ -247,7 +247,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       expect(menuItem(el, "Restore My Default")).not.toHaveAttribute("aria-disabled");
     });
 
-    it("Restore Panel Default Settings asks first, then resets the toolbar and keeps My Defaults", async () => {
+    it("Reset All Workspaces resets the toolbar at once and keeps My Defaults", async () => {
       const toolbar = { dock: "left", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icon-text" };
       const saved = { schema: 1, savedAt: 1, rev: 2, toolbar, workspaces: {}, myDefaults: { logs: { dock: {}, folds: { folded: [], collapsed: {} }, closed: {} } } };
       const { connection, sets } = userData({ "phoenix_mcp_ui:desktop": saved });
@@ -256,11 +256,8 @@ describe("phoenix-mcp-panel full app shell", () => {
       // At a side the toolbar does not need the fit rule.
       expect(el.shadowRoot!.querySelector(".phx-toolbar")).not.toHaveAttribute("data-fit");
       openOptions(el);
-      act(() => { menuItem(el, "Restore Panel Default Settings")!.click(); });
-      const confirm = el.shadowRoot!.querySelector(".phx-shell-confirm")!;
-      expect(confirm).toHaveAttribute("role", "alertdialog");
-      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "left");
-      act(() => { [...confirm.querySelectorAll("button")].find((b) => b.textContent === "Restore Defaults")!.click(); });
+      act(() => { menuItem(el, "Reset All Workspaces")!.click(); });
+      expect(el.shadowRoot!.querySelector('[role="alertdialog"]')).toBeNull();
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "top"));
       expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icons");
       expect(el.shadowRoot!.querySelector(".phx-toolbar")).not.toHaveAttribute("data-fit");

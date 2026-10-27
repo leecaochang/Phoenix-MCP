@@ -10,11 +10,15 @@
  */
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
-import { FoldStore, foldWindow, reapplyCollapsed, toggleFold, type FoldSnapshot } from "./fold";
+import { FoldStore, MIN_WINDOW_HEIGHT, foldWindow, reapplyCollapsed, settleFolds, toggleFold, type FoldSnapshot } from "./fold";
 import { TableSettingsStore, type TableSettings } from "../../ui/table/settings";
-import { largestGridGroup, moveWindow, rowOf, slotOf, type Direction, type Side, type Slot } from "./geometry";
+import { largestGridGroup, moveWindow, neighbor, rowOf, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
-import { leafOrder, type Heights, type WorkspaceCanvas } from "./scroll";
+import { gridHeights, leafOrder, type Heights, type WorkspaceCanvas } from "./scroll";
+
+/** The first window of each child of a grid's root, in order. */
+const leafOrderByChild = (root: unknown): string[] =>
+  (Array.isArray((root as { data?: unknown }).data) ? ((root as { data: unknown[] }).data) : []).map((child) => leafOrder(child)[0]).filter((id): id is string => !!id);
 
 /** The Dockview instances a workspace's windows can live in. */
 export type HostId = "main" | "top" | "bottom" | "float";
@@ -47,7 +51,12 @@ export interface WorkspaceLayout {
   tables?: Record<string, TableSettings>;
   /** The workspace's layout version when saved; an arrangement saved under another version loads the default. */
   version?: number;
+  /** Where each window last floated, and its size there, for the next time it floats. */
+  floatBoxes?: Record<string, FloatBox>;
 }
+
+/** A floating window's place and size, relative to the floating layer. */
+export interface FloatBox { left: number; top: number; width: number; height: number }
 
 interface Host {
   api: DockviewApi;
@@ -71,6 +80,12 @@ const isBand = (host: unknown): host is Band => host === "top" || host === "bott
 
 /** Size given to a window floated from the grid: its own size within these bounds. */
 const FLOAT_BOUNDS = { minWidth: 360, maxWidth: 640, minHeight: 260, maxHeight: 480, left: 80, top: 64 };
+/** A window floating onto another's corner moves down and right by this much, so neither hides the other. */
+const FLOAT_CASCADE = 28;
+
+const validBox = (b: unknown): b is FloatBox => !!b && typeof b === "object"
+  && (["left", "top", "width", "height"] as const).every((k) => Number.isFinite((b as Record<string, unknown>)[k]))
+  && (b as FloatBox).width > 0 && (b as FloatBox).height > 0;
 
 export interface WindowSpec {
   id: string;
@@ -100,10 +115,21 @@ export interface WorkspaceExtras {
    * the usual rule.
    */
   collect?: (id: string) => boolean;
+  /** The windows always share the visible height and the workspace never scrolls (Logs). */
+  fit?: boolean;
+  /**
+   * Windows that open beside a partner in its pinned band, at its height, rather
+   * than along the bottom: { notifications: "help" } puts Notifications to the
+   * right of Help, and Help back to its left. Without the partner open, the
+   * window takes the bottom band at the partner's height.
+   */
+  pairs?: Readonly<Record<string, string>>;
 }
 
 export class WorkspaceController {
   readonly folds = new FoldStore();
+  /** Where each window last floated, for the next time it floats. */
+  private floatBoxes = new Map<string, FloatBox>();
   /** The workspace's table settings, saved with its arrangement. */
   readonly tables = new TableSettingsStore();
   /** Called when the user closes a shell-managed window. */
@@ -131,6 +157,8 @@ export class WorkspaceController {
   private allowed: readonly string[];
   /** Whether the workspace is on screen. */
   private shown = true;
+  /** Windows the user resized or moved this session; sizing them to their content may only make them smaller. */
+  private userSized = new Set<string>();
   /** The windows changed while the workspace was hidden or not yet laid out. */
   private windowsChanged = false;
 
@@ -145,10 +173,77 @@ export class WorkspaceController {
     private readonly extras: WorkspaceExtras = {},
   ) {
     this.allowed = [...windows];
+    this.folds.subscribe(() => this.markFloatingFolds());
+  }
+
+  /**
+   * A floating window folds to its title bar too. Dockview offers no call to
+   * resize a floating window, so its frame is marked and the stylesheet clips
+   * it; its own size is kept for when it unfolds.
+   */
+  private markFloatingFolds(): void {
+    for (const group of this.apiOf("float")?.groups ?? []) {
+      const id = group.activePanel?.id;
+      group.element.closest(".dv-resize-container")?.classList.toggle("phx-float-folded", !!id && this.folds.isFolded(id));
+    }
   }
 
   /** The windows this workspace may hold, in default order. */
   get windows(): readonly string[] { return this.allowed; }
+
+  /** Whether the windows always fit the visible height (the workspace never scrolls). */
+  get fits(): boolean { return !!this.extras.fit; }
+
+  /** Whether the user resized or moved this window this session. */
+  isUserSized(id: string): boolean {
+    return this.userSized.has(id);
+  }
+
+  /** Record that the user resized or moved these windows. */
+  markUserSized(ids: Iterable<string>): void {
+    for (const id of ids) this.noteUserSized(id);
+  }
+
+  /** Called once the user resized or moved a window and its new size is laid out. */
+  onUserSized: ((id: string) => void) | null = null;
+
+  private noteUserSized(id: string): void {
+    this.userSized.add(id);
+    if (this.onUserSized && typeof requestAnimationFrame === "function") requestAnimationFrame(() => this.onUserSized?.(id));
+  }
+
+  /** Whether a docked window has another window directly above or below it in its host. */
+  isStacked(id: string): boolean {
+    const group = this.groupOf(id);
+    const host = group && this.hostOfGroup(group);
+    const api = host && this.apiOf(host);
+    if (!group || !api || group.api.location.type !== "grid") return false;
+    return !!(neighbor(api, group, "up") || neighbor(api, group, "down"));
+  }
+
+  /** The height the scrolling grid shows; 0 before it is laid out. */
+  visibleHeight(): number {
+    return this.canvas?.visibleHeight() ?? 0;
+  }
+
+  /**
+   * Give a docked window the height its content needs. A window the user
+   * resized or moved keeps its height unless the content needs less, unless
+   * `chosen`: the caller already limited the height to the one the user chose.
+   */
+  sizeToContent(id: string, height: number, chosen = false): void {
+    const group = this.groupOf(id);
+    if (!group || group.api.location.type !== "grid" || this.folds.isFolded(id)) return;
+    const host = this.hostOfGroup(group);
+    const canvas = host ? this.canvasOf(host) : null;
+    if (!canvas) return;
+    // The user is dragging a border: their size wins.
+    if (canvas.host.classList.contains("phx-resizing")) return;
+    const current = Math.round(group.height);
+    const target = Math.max(MIN_WINDOW_HEIGHT, Math.round(height));
+    if (Math.abs(target - current) < 4 || (!chosen && this.userSized.has(id) && target > current)) return;
+    this.batch(() => canvas.apply({ [id]: target }));
+  }
 
   /**
    * Change the windows this workspace may hold (My Workspace). A window taken
@@ -278,6 +373,8 @@ export class WorkspaceController {
   getVersion = (): number => this.version;
   changed(): void {
     if (this.quiet) return;
+    // A window floated while folded, or folded in a saved layout, keeps its folded frame.
+    this.markFloatingFolds();
     this.version++;
     for (const listener of this.listeners) listener();
   }
@@ -286,6 +383,10 @@ export class WorkspaceController {
     this.quiet++;
     try { change(); } finally { this.quiet--; }
     this.changed();
+    // A host can need a scrollbar only part way through a change; once it settles, use the width it leaves.
+    if (!this.quiet && typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => { for (const [, host] of this.attached()) host.canvas?.fitWidth(); });
+    }
   }
 
   private panelOptions(id: string) {
@@ -304,6 +405,7 @@ export class WorkspaceController {
     const hosts = this.attached().filter(([, h]) => h.canvas);
     for (const [, h] of hosts) h.canvas!.capture();
     change();
+    this.settleAllFolds();
     for (const [, h] of this.attached(LAYOUT_ORDER)) {
       const canvas = h.canvas;
       if (!canvas) continue;
@@ -344,6 +446,7 @@ export class WorkspaceController {
           for (const band of BANDS) this.loadHost(band, saved?.bands?.[band]?.dock, saved?.bands?.[band]?.heights, known, used);
           this.loadHost("float", saved?.floats, undefined, known, used);
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
+          this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
           this.folds.restore(saved?.folds, (id) => used.has(id));
           this.tables.restore(saved?.tables);
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
@@ -405,6 +508,9 @@ export class WorkspaceController {
       this.closed.clear();
       this.floatedFrom.clear();
       this.pinnedFrom.clear();
+      // The default arrangement's pairs come back in their default order and shares.
+      this.pairLeft.clear();
+      this.pairShare.clear();
       this.maximizedHere = false;
       for (const [, host] of this.attached()) {
         if (!host.canvas) continue;
@@ -420,6 +526,8 @@ export class WorkspaceController {
           if (group) this.pin(group, band);
         }
       }
+      // With the pinned windows out of the grid, its columns share the width equally.
+      this.equalizeColumns(api);
       // Pinning recorded the grid's heights mid-arrangement; keep only the arrangement's own,
       // so windows without one still share the space left over.
       if (this.canvas) {
@@ -503,7 +611,9 @@ export class WorkspaceController {
     const heights = this.canvas ? { ...this.canvas.intended } : undefined;
     const tables = this.tables.snapshot();
     const version = this.extras.layoutVersion;
-    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}) };
+    for (const id of this.apiOf("float")?.panels.map((p) => p.id) ?? []) this.rememberFloat(id);
+    const floatBoxes = this.floatBoxes.size ? Object.fromEntries([...this.floatBoxes].filter(([id]) => saved.has(id))) : undefined;
+    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}), ...(floatBoxes ? { floatBoxes } : {}) };
     const bands: Partial<Record<Band, BandLayout>> = {};
     for (const band of BANDS) {
       const bandApi = this.apiOf(band);
@@ -552,6 +662,7 @@ export class WorkspaceController {
 
   /** Make a docked or pinned window taller or shorter from the keyboard, moving the windows below it. */
   resizeHeight(group: DockviewGroupPanel, delta: number): void {
+    if (group.activePanel) this.noteUserSized(group.activePanel.id);
     const host = this.hostOfGroup(group);
     const api = host && this.apiOf(host);
     if (!api || group.api.location.type !== "grid") return;
@@ -571,6 +682,7 @@ export class WorkspaceController {
 
   /** Swap a window with its neighbour in the same host. */
   move(group: DockviewGroupPanel, dir: Direction): boolean {
+    if (group.activePanel) this.noteUserSized(group.activePanel.id);
     const host = this.hostOfGroup(group);
     const api = host && this.apiOf(host);
     if (!api) return false;
@@ -598,9 +710,11 @@ export class WorkspaceController {
     const height = this.canvasOf(host!)?.intended[id] ?? this.folds.collapsedHeight(id) ?? Math.round(group.height);
     if (isBand(host)) return { neighbor: "", side: "bottom", host, ...(height ? { height } : {}) };
     if (group.api.location.type !== "grid") return this.floatedFrom.get(id) ?? null;
-    // Without a neighbour the window comes back along the bottom, still at its own height.
+    // Without a neighbour the window comes back along the bottom, still at its own height; one along a side
+    // edge comes back at its own width too.
     const slot = slotOf(api, group) ?? { neighbor: "", side: "bottom" as const };
-    return { ...slot, ...(height ? { height } : {}) };
+    const width = !slot.neighbor && (slot.side === "left" || slot.side === "right") ? Math.round(group.width) : undefined;
+    return { ...slot, ...(height ? { height } : {}), ...(width ? { width } : {}) };
   }
 
   close(group: DockviewGroupPanel): void {
@@ -612,11 +726,14 @@ export class WorkspaceController {
   private closeGroup(group: DockviewGroupPanel): string | null {
     const panel = group.activePanel;
     if (!panel || !this.hostOfGroup(group)) return null;
+    this.notePairOrder(panel.id);
     if (!this.transient.has(panel.id)) {
       const place = this.placeOf(panel.id, group);
       const floating = this.hostOfGroup(group) === "float";
-      this.closed.set(panel.id, floating ? { ...(place ?? { neighbor: "", side: "bottom" }), host: "float" } : place);
+      if (floating) this.rememberFloat(panel.id);
+      this.closed.set(panel.id, floating ? { ...(place ?? { neighbor: "", side: "bottom" }), host: "float", from: place } : place);
     }
+    this.bandChanging(this.hostOfGroup(group));
     this.floatedFrom.delete(panel.id);
     this.pinnedFrom.delete(panel.id);
     if (this.folds.isFolded(panel.id)) this.folds.setFolded(panel.id, false);
@@ -659,13 +776,15 @@ export class WorkspaceController {
     this.closed.delete(id);
     const height = validHeight(slot?.height) ?? this.extras.heights?.[id] ?? REOPEN_HEIGHT;
     const band = isBand(slot?.host) ? slot!.host as Band : slot ? undefined : BANDS.find((b) => this.extras.pinned?.[b]?.includes(id));
+    if (this.placePaired(id, slot)) return true;
     this.batch(() => {
       if (band && this.apiOf(band)) {
+        this.bandChanging(band);
         this.keepHeights(() => this.addToBand(id, band), { [id]: height });
         return;
       }
       if (slot?.host === "float" && this.apiOf("float")) {
-        this.floatedFrom.set(id, slot.neighbor ? { neighbor: slot.neighbor, side: slot.side, height } : null);
+        this.floatedFrom.set(id, slot.from !== undefined ? slot.from : slot.neighbor ? { neighbor: slot.neighbor, side: slot.side, height } : null);
         this.addFloating(id, FLOAT_BOUNDS.minWidth + 120, Math.min(FLOAT_BOUNDS.maxHeight, height));
         return;
       }
@@ -674,8 +793,9 @@ export class WorkspaceController {
         if (anchor && anchor.group.api.location.type === "grid") {
           this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] });
         } else {
-          // No remembered neighbour: full width along the bottom of the workspace.
-          this.add(id, { direction: "below" });
+          // No remembered neighbour: along the edge it was on (the bottom by default), across the workspace.
+          this.add(id, { direction: slot && !slot.neighbor ? DIRECTION_OF[slot.side] : "below" });
+          this.restoreWidth(id, slot);
         }
       }, { [id]: height });
     });
@@ -709,13 +829,154 @@ export class WorkspaceController {
     const toApi = this.apiOf(to);
     const panel = fromApi?.getPanel(id);
     if (!fromApi || !toApi || !panel || from === to) return;
+    if (from === "float") this.rememberFloat(id);
     this.batch(() => {
       fromApi.removePanel(panel);
       if (place) place(toApi);
       else if (isBand(to)) this.addToBand(id, to);
       else if (to === "float") this.addFloating(id, FLOAT_BOUNDS.minWidth + 120, FLOAT_BOUNDS.minHeight + 80);
       else toApi.addPanel({ ...this.panelOptions(id), position: { direction: "below" } });
+      // Floating, a folded window only hides its content; in a grid its row is settled with the others.
+      if (to === "float") this.folds.setCollapsed(id, undefined);
     });
+  }
+
+  /** Shrink rows that are now all folded and grow rows that now hold an open window, in every docked host. */
+  private settleAllFolds(): void {
+    for (const [id, host] of this.attached()) if (id !== "float") settleFolds(host.api, this.folds);
+  }
+
+  /**
+   * Side-by-side columns of the default arrangement share the width equally: Dockview splits by the
+   * proportions it last had, so an arrangement rebuilt over a rearranged one would otherwise come back uneven.
+   */
+  private equalizeColumns(api: DockviewApi): void {
+    const grid = api.toJSON().grid;
+    // Dockview may keep a root from the arrangement before, holding the real split one level down.
+    let node = grid.root as { type: string; data: unknown };
+    let horizontal = grid.orientation === "HORIZONTAL";
+    while (Array.isArray(node.data) && node.data.length === 1 && (node.data[0] as { type: string }).type === "branch") {
+      node = node.data[0] as typeof node;
+      horizontal = !horizontal;
+    }
+    if (!horizontal) return;
+    const columns = leafOrderByChild(node);
+    if (columns.length < 2 || api.width <= 0) return;
+    const width = Math.floor(api.width / columns.length);
+    for (const first of columns.slice(0, -1)) api.getPanel(first)?.group.api.setSize({ width });
+  }
+
+  /** A window back along a side edge of the grid takes the width it had there. */
+  private restoreWidth(id: string, slot: Slot | null): void {
+    const width = slot && !slot.neighbor ? slot.width : undefined;
+    const group = width ? this.api?.getPanel(id)?.group : undefined;
+    if (group && width && width > 0 && width < 100000) group.api.setSize({ width: Math.round(width) });
+  }
+
+  /** A band is about to change height: the grid window beside it takes or gives the difference. */
+  private bandChanging(band: HostId | null): void {
+    if (this.canvas && isBand(band)) this.canvas.growEdge = band;
+  }
+
+  /** For each pair, the window the user last had on the left when the two shared a row. */
+  private pairLeft = new Map<string, string>();
+  /** For each pair, the share of their row the left window had then, so a width the user set survives a move. */
+  private pairShare = new Map<string, number>();
+
+  /** Note which window of a pair is on the left while both share a band row. */
+  private notePairOrder(id: string): void {
+    const pair = this.partnerOf(id);
+    const mine = this.groupOf(id), theirs = pair ? this.groupOf(pair.partner) : null;
+    if (!pair || !mine || !theirs || !isBand(this.hostOfGroup(mine)) || this.hostOfGroup(mine) !== this.hostOfGroup(theirs)) return;
+    const a = mine.element.getBoundingClientRect(), b = theirs.element.getBoundingClientRect();
+    if (Math.abs(a.top - b.top) > 2 || a.left === b.left) return;
+    const leader = pair.right ? pair.partner : id;
+    this.pairLeft.set(leader, a.left < b.left ? id : pair.partner);
+    const total = a.width + b.width;
+    if (total > 0) this.pairShare.set(leader, (a.left < b.left ? a.width : b.width) / total);
+  }
+
+  /** Give a pair side by side in a band the shares of the row they last had. */
+  private restorePairShare(id: string): void {
+    const pair = this.partnerOf(id);
+    if (!pair) return;
+    const leader = pair.right ? pair.partner : id;
+    const share = this.pairShare.get(leader);
+    const left = this.pairLeft.get(leader) ?? leader;
+    const right = left === id ? pair.partner : id;
+    const lg = this.groupOf(left), rg = this.groupOf(right);
+    if (share === undefined || !lg || !rg || !isBand(this.hostOfGroup(lg)) || this.hostOfGroup(lg) !== this.hostOfGroup(rg)) return;
+    const total = lg.width + rg.width;
+    if (total > 0) lg.api.setSize({ width: Math.round(share * total) });
+  }
+
+  /** The side of its partner a paired window goes on: as the user last had them, else the follower on the right. */
+  private sideOfPartner(id: string, pair: { partner: string; right: boolean }): "left" | "right" {
+    const leader = pair.right ? pair.partner : id;
+    const left = this.pairLeft.get(leader);
+    if (left === id) return "left";
+    if (left === pair.partner) return "right";
+    return pair.right ? "right" : "left";
+  }
+
+  /** A paired window's partner, and whether this window sits to the partner's right. */
+  private partnerOf(id: string): { partner: string; right: boolean } | null {
+    const pairs = this.extras.pairs ?? {};
+    if (pairs[id]) return { partner: pairs[id], right: true };
+    const partner = Object.keys(pairs).find((k) => pairs[k] === id);
+    return partner ? { partner, right: false } : null;
+  }
+
+  /**
+   * Place a paired window beside its partner in the partner's band. With the
+   * partner closed it takes a band row of its own: the band it was last in,
+   * else the partner's, else the bottom. False when it has no partner, or its
+   * partner or its own last place is outside the bands.
+   */
+  private placePaired(id: string, slot: Slot | null): boolean {
+    const pair = this.partnerOf(id);
+    if (!pair) return false;
+    const { partner, right } = pair;
+    // A window last floating, or in the grid, goes back there rather than to its partner's band.
+    if (slot && !isBand(slot.host)) return false;
+    const group = this.groupOf(partner);
+    const host = group ? this.hostOfGroup(group) : null;
+    if (group && isBand(host)) {
+      const api = this.apiOf(host)!;
+      this.bandChanging(host);
+      this.batch(() => this.keepHeights(() => api.addPanel({ ...this.panelOptions(id), position: { referenceGroup: group, direction: this.sideOfPartner(id, pair) } })));
+      this.restorePairShare(id);
+      return true;
+    }
+    if (group) return false;
+    const partnerSlot = this.closed.get(partner);
+    const band: Band = isBand(slot?.host) ? slot!.host as Band
+      : isBand(partnerSlot?.host) ? partnerSlot!.host as Band
+      : BANDS.find((b) => this.extras.pinned?.[b]?.includes(partner) || this.extras.pinned?.[b]?.includes(id)) ?? "bottom";
+    if (!this.apiOf(band)) return false;
+    const leader = right ? partner : id;
+    const height = validHeight(slot?.height) ?? this.extras.heights?.[leader] ?? REOPEN_HEIGHT;
+    this.bandChanging(band);
+    this.batch(() => this.keepHeights(() => this.addToBand(id, band), { [id]: height }));
+    return true;
+  }
+
+  /** Open a closed window as a floating window over the workspace; close it again when it is open. */
+  toggleFloating(id: string, width: number, height: number): void {
+    const group = this.groupOf(id);
+    if (group) { this.close(group); return; }
+    const float = this.apiOf("float");
+    if (!float || !this.windows.includes(id)) return;
+    this.closed.delete(id);
+    const visible = this.visibleHeight() || height;
+    const room = (this.canvas?.host.clientWidth ?? 0) - 2 * FLOAT_BOUNDS.left;
+    const w = Math.max(FLOAT_BOUNDS.minWidth, Math.round(room > 0 ? Math.min(width, room) : width));
+    const h = Math.max(FLOAT_BOUNDS.minHeight, Math.min(Math.round(height), Math.round(visible * 0.85)));
+    this.batch(() => {
+      this.floatedFrom.set(id, null);
+      this.addFloating(id, w, h, true);
+    });
+    this.onWindowToggle?.(id, true);
   }
 
   private addToBand(id: string, band: Band): void {
@@ -726,19 +987,50 @@ export class WorkspaceController {
     else api.addPanel(this.panelOptions(id));
   }
 
-  private addFloating(id: string, width: number, height: number): void {
+  /**
+   * Float a window where it last floated, at its size there; a window floating
+   * for the first time takes this size, within FLOAT_BOUNDS unless `free`.
+   * Either way it moves down and right while it would land on another
+   * floating window's corner.
+   */
+  private addFloating(id: string, width: number, height: number, free = false): void {
+    const float = this.apiOf("float");
+    if (!float) return;
     const b = FLOAT_BOUNDS;
-    this.apiOf("float")?.addPanel({
-      ...this.panelOptions(id),
-      floating: {
-        position: { left: b.left, top: b.top },
-        width: Math.min(b.maxWidth, Math.max(b.minWidth, Math.round(width))),
-        height: Math.min(b.maxHeight, Math.max(b.minHeight, Math.round(height))),
-      },
-    });
+    const box = this.floatBoxes.get(id);
+    const w = Math.max(b.minWidth, Math.round(box?.width ?? (free ? width : Math.min(b.maxWidth, width))));
+    const h = Math.max(MIN_WINDOW_HEIGHT, Math.round(box?.height ?? (free ? height : Math.min(b.maxHeight, Math.max(b.minHeight, height)))));
+    let left = Math.round(box?.left ?? b.left);
+    let top = Math.round(box?.top ?? b.top);
+    const taken = float.groups.map((g) => this.floatBox(g)).filter((x): x is FloatBox => !!x);
+    for (let i = 0; i < 12 && taken.some((t) => Math.abs(t.left - left) < FLOAT_CASCADE / 2 && Math.abs(t.top - top) < FLOAT_CASCADE / 2); i++) {
+      left += FLOAT_CASCADE;
+      top += FLOAT_CASCADE;
+    }
+    float.addPanel({ ...this.panelOptions(id), floating: { position: { left, top }, width: w, height: h } });
+  }
+
+  /** A floating window's place and size now, relative to the floating layer; a folded one keeps its unfolded height. */
+  private floatBox(group: DockviewGroupPanel): FloatBox | null {
+    const frame = group.element.closest<HTMLElement>(".dv-resize-container");
+    const layer = this.apiOf("float") && frame?.offsetParent;
+    if (!frame || !layer) return null;
+    const r = frame.getBoundingClientRect();
+    const l = layer.getBoundingClientRect();
+    const height = frame.classList.contains("phx-float-folded") ? parseFloat(frame.style.height) : r.height;
+    const box = { left: Math.round(r.left - l.left), top: Math.round(r.top - l.top), width: Math.round(r.width), height: Math.round(height) };
+    return validBox(box) ? box : null;
+  }
+
+  /** Note where a floating window is, before it leaves the floating layer. */
+  private rememberFloat(id: string): void {
+    const group = this.apiOf("float")?.getPanel(id)?.group;
+    const box = group && this.floatBox(group);
+    if (box) this.floatBoxes.set(id, box);
   }
 
   float(group: DockviewGroupPanel): void {
+    if (group.activePanel) this.noteUserSized(group.activePanel.id);
     const panel = group.activePanel;
     const host = this.hostOfGroup(group);
     if (!panel || !host || host === "float" || group.api.location.type !== "grid") return;
@@ -764,6 +1056,7 @@ export class WorkspaceController {
 
   /** Return a floating window to where it was floated from, or beside the largest window. */
   dock(group: DockviewGroupPanel): void {
+    if (group.activePanel) this.noteUserSized(group.activePanel.id);
     const panel = group.activePanel;
     const host = this.hostOfGroup(group);
     const api = this.api;
@@ -779,7 +1072,8 @@ export class WorkspaceController {
         const anchor = slot?.neighbor ? api.getPanel(slot.neighbor) : undefined;
         this.keepHeights(() => this.transfer(id, "main", (main) => {
           if (anchor && anchor.group.api.location.type === "grid") main.addPanel({ ...this.panelOptions(id), position: { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] } });
-          else main.addPanel({ ...this.panelOptions(id), position: { direction: "below" } });
+          else main.addPanel({ ...this.panelOptions(id), position: { direction: slot && !slot.neighbor ? DIRECTION_OF[slot.side] : "below" } });
+          this.restoreWidth(id, slot);
         }), { [id]: height });
       }
       this.changed();
@@ -803,13 +1097,48 @@ export class WorkspaceController {
     const host = this.hostOfGroup(group);
     if (!panel || !host || host === band || !this.apiOf(band)) return;
     const id = panel.id;
+    this.notePairOrder(id);
+    // A paired window shares its partner's row in the band, and pinning either moves both;
+    // the row keeps the leading window's height, so the leader moves first and brings this one.
+    const pair = this.partnerOf(id);
+    const partner = pair ? this.groupOf(pair.partner) : null;
+    const partnerHost = partner ? this.hostOfGroup(partner) : null;
+    const together = !!partner && partnerHost !== band && partnerHost !== "float";
+    if (pair?.right && together) {
+      this.pin(partner!, band);
+      // The leader brings this window only when it is not floating; then it follows on its own.
+      const self = this.groupOf(id);
+      if (self && this.hostOfGroup(self) !== band) this.pin(self, band);
+      return;
+    }
     const place = this.placeOf(id, group);
+    // A floating window is pinned at the height it had before it floated, not its floating size.
+    const floatedFrom = host === "float" ? this.floatedFrom.get(id) ?? null : null;
     if (host === "main") this.pinnedFrom.set(id, place);
-    else if (host === "float") this.pinnedFrom.set(id, this.floatedFrom.get(id) ?? null);
+    else if (host === "float") this.pinnedFrom.set(id, floatedFrom);
     else this.pinnedFrom.set(id, this.pinnedFrom.get(id) ?? null);
     this.floatedFrom.delete(id);
-    const height = this.canvasOf(host)?.intended[id] ?? (host === "main" ? undefined : Math.round(group.height));
-    this.keepHeights(() => this.transfer(id, band), { [id]: Math.min(height ?? PIN_HEIGHT, PIN_MAX_HEIGHT) });
+    const height = host === "float"
+      ? validHeight(floatedFrom?.height) ?? this.extras.heights?.[id]
+      : this.canvasOf(host)?.intended[id] ?? (host === "main" ? undefined : Math.round(group.height));
+    const beside = partner && partnerHost === band
+      ? (api: DockviewApi) => api.addPanel({ ...this.panelOptions(id), position: { referenceGroup: partner, direction: this.sideOfPartner(id, pair!) } })
+      : undefined;
+    this.bandChanging(band);
+    // Beside its partner it takes the row's height.
+    const rowHeight = beside ? this.canvasOf(band)?.intended[pair!.partner] ?? Math.round(partner!.height) : Math.min(height ?? PIN_HEIGHT, PIN_MAX_HEIGHT);
+    // From another band or the floating layer, both bands may change: note the grid's edges and heights first.
+    const edges = host !== "main" && this.api && this.canvas ? { box: this.canvas.host.getBoundingClientRect(), heights: gridHeights(this.api) } : null;
+    this.keepHeights(() => this.transfer(id, band, beside), { [id]: rowHeight });
+    if (beside) this.restorePairShare(id);
+    if (edges && this.canvas) {
+      const now = this.canvas.host.getBoundingClientRect();
+      const top = Math.round(now.top - edges.box.top);
+      const bottom = Math.round(edges.box.bottom - now.bottom);
+      // The windows beside a band that grew give the space up; those beside one that shrank take it.
+      if (top || bottom) this.canvas.shiftEdges(edges.heights, top, bottom);
+    }
+    if (together) this.pin(partner!, band);
     this.changed();
   }
 
@@ -824,9 +1153,11 @@ export class WorkspaceController {
     this.pinnedFrom.delete(id);
     const height = validHeight(slot?.height) ?? this.canvasOf(host)?.intended[id] ?? REOPEN_HEIGHT;
     const anchor = slot?.neighbor ? api.getPanel(slot.neighbor) : undefined;
+    this.bandChanging(host);
     this.keepHeights(() => this.transfer(id, "main", (main) => {
       if (anchor && anchor.group.api.location.type === "grid") main.addPanel({ ...this.panelOptions(id), position: { referencePanel: anchor, direction: DIRECTION_OF[slot!.side] } });
-      else main.addPanel({ ...this.panelOptions(id), position: { direction: host === "top" ? "above" : "below" } });
+      else main.addPanel({ ...this.panelOptions(id), position: { direction: slot && !slot.neighbor ? DIRECTION_OF[slot.side] : host === "top" ? "above" : "below" } });
+      this.restoreWidth(id, slot);
     }), { [id]: height });
     this.changed();
   }
@@ -883,6 +1214,7 @@ export class WorkspaceController {
   /** After a drop, lay every docked window out at its intended height again. */
   layoutSettled(): void {
     if (this.api?.hasMaximizedGroup()) return;
+    this.settleAllFolds();
     for (const [, host] of this.attached()) {
       if (!host.canvas) continue;
       host.canvas.prune();

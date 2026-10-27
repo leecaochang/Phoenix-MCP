@@ -344,14 +344,16 @@
       "resourcePlaceholder": "Risorsa...",
       "rowIp": "Origine",
       "rowMethod": "Metodo",
-      "rowMode": "Modalità",
       "rowOutcome": "Esito",
       "rowPayload": "Carico utile",
       "rowRequestId": "ID richiesta",
       "rowResource": "Risorsa",
       "rowTime": "Ora",
       "rowAccessKey": "Chiave di accesso",
-      "loadFailed": "Impossibile caricare il registro di controllo. Aggiorna per riprovare."
+      "loadFailed": "Impossibile caricare il registro di controllo. Aggiorna per riprovare.",
+      "rowAccess": "Accesso",
+      "accessPermissions": "Autorizzazioni",
+      "accessPassThrough": "Pass-through"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo facoltativo",
@@ -2305,7 +2307,7 @@
         "requestCompleted": "Richiesta al modello completata"
       },
       "attachmentPrompt": "Messaggio con immagine o file",
-      "clearShort": "Cancella cronologia",
+      "clearShort": "Cancella conversazioni",
       "retention": "Conservazione"
     },
     "attention": {
@@ -2342,7 +2344,7 @@
       "fold": "Piega",
       "unfold": "Dispiega",
       "options": "Opzioni dell'area di lavoro",
-      "restoreOriginal": "Ripristina il layout originale",
+      "restoreOriginal": "Reimposta questa area di lavoro",
       "reopen": "Riapri {window}",
       "empty": "Nessuna finestra è aperta in quest'area di lavoro.",
       "moveToolbar": "Sposta la barra degli strumenti",
@@ -2375,12 +2377,10 @@
       "unpin": "Sblocca",
       "saveMyDefault": "Salva come Mio predefinito",
       "restoreMyDefault": "Ripristina Mio predefinito",
-      "restorePanelDefaults": "Ripristina le impostazioni predefinite del pannello",
-      "restorePanelDefaultsConfirm": "Ripristinare la barra degli strumenti e la disposizione di tutte le aree di lavoro ai valori predefiniti? I tuoi predefiniti salvati e tutte le impostazioni di Phoenix vengono mantenuti.",
-      "restoreDefaultsAction": "Ripristina predefiniti",
+      "restorePanelDefaults": "Reimposta tutte le aree di lavoro",
       "myDefaultSaved": "Questa disposizione è stata salvata come tuo predefinito per {workspace}.",
       "myDefaultRestored": "La tua disposizione predefinita è stata ripristinata.",
-      "panelDefaultsRestored": "Le impostazioni predefinite del pannello sono state ripristinate.",
+      "panelDefaultsRestored": "Tutte le aree di lavoro, la barra degli strumenti e la barra di aiuto sono tornate ai valori predefiniti.",
       "review": "Revisione",
       "reviewEmpty": "Seleziona una richiesta per esaminarla.",
       "requestDetails": "Dettagli della richiesta",
@@ -2408,14 +2408,16 @@
       "myWorkspace": "Mia area di lavoro",
       "removeFromMy": "Rimuovi dalla Mia area di lavoro",
       "removedFromMy": "Finestra {window} rimossa dalla Mia area di lavoro",
-      "safety": "Sicurezza"
+      "safety": "Sicurezza",
+      "resetWorkspaceHint": "Riporta le finestre di questa area di lavoro dove Phoenix le dispone. Le altre aree di lavoro e Mio predefinito restano invariati.",
+      "resetAllHint": "Reimposta tutte le aree di lavoro, la barra degli strumenti, la barra di aiuto e la guida. Mio predefinito e le impostazioni di Phoenix restano invariati."
     },
     "notifications": {
       "title": "Notifiche",
       "empty": "Nessuna notifica in questa sessione.",
       "clear": "Cancella notifica",
-      "clearAll": "Cancella tutto",
-      "dismiss": "Chiudi"
+      "dismiss": "Chiudi",
+      "showHistory": "Mostra cronologia notifiche"
     },
     "help": {
       "title": "Aiuto",
@@ -2463,11 +2465,10 @@
       "filtersCount": "Filtri ({count})",
       "activeFilters": "Filtri attivi: {count}",
       "clearFilters": "Cancella filtri",
-      "latest": "Ultimo",
       "turns": "Turni",
       "toolCalls": "Chiamate a strumenti",
       "pauseUpdates": "Sospendi aggiornamenti",
-      "recordingSettings": "Impostazioni di registrazione"
+      "logSettings": "Impostazioni dei registri"
     },
     "table": {
       "sortAscending": "Ordine crescente",
@@ -2478,7 +2479,6 @@
       "resetColumns": "Ripristina colonne",
       "columnMenu": "Opzioni della colonna {column}",
       "resizeColumn": "Ridimensiona la colonna {column}",
-      "filterColumn": "Filtra questa colonna",
       "sortedLoaded": "Ordinato solo tra le voci caricate. Carica altro per includere il resto."
     }
   },

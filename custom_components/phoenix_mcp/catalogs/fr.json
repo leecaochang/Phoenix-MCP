@@ -664,7 +664,6 @@
       "detailTitle": "Entrée d'audit",
       "rowTime": "Heure",
       "rowAccessKey": "Clé d’accès",
-      "rowMode": "Mode d'accès",
       "rowMethod": "Méthode",
       "rowResource": "Ressource",
       "rowOutcome": "Résultat",
@@ -691,7 +690,10 @@
       "filterIpAria": "Filtrer par source",
       "ipPlaceholder": "Adresse source...",
       "refreshAria": "Actualiser le journal d'audit",
-      "loadFailed": "Impossible de charger le journal d'audit. Actualisez pour réessayer."
+      "loadFailed": "Impossible de charger le journal d'audit. Actualisez pour réessayer.",
+      "rowAccess": "Accès",
+      "accessPermissions": "Autorisations",
+      "accessPassThrough": "Transmission directe"
     },
     "wizard": {
       "accessSub": "Développez le groupe <code>light</code> et choisissez une lumière que vous pouvez vérifier. Sélectionnez <strong>W</strong> pour accorder un accès en lecture et en écriture. Accordez un appareil entier ou développez-le pour choisir une entité. Vous pourrez ajouter d'autres autorisations plus tard.",
@@ -2305,7 +2307,7 @@
         "requestCompleted": "Demande au modèle terminée"
       },
       "attachmentPrompt": "Message avec image ou fichier",
-      "clearShort": "Effacer l’historique",
+      "clearShort": "Effacer les conversations",
       "retention": "Conservation"
     },
     "attention": {
@@ -2342,7 +2344,7 @@
       "fold": "Replier",
       "unfold": "Déplier",
       "options": "Réglages de l’espace de travail",
-      "restoreOriginal": "Restaurer la disposition d’origine",
+      "restoreOriginal": "Réinitialiser cet espace de travail",
       "reopen": "Rouvrir {window}",
       "empty": "Aucune fenêtre n’est ouverte dans cet espace de travail.",
       "moveToolbar": "Déplacer la barre d’outils",
@@ -2375,12 +2377,10 @@
       "unpin": "Désépingler",
       "saveMyDefault": "Enregistrer comme Ma disposition par défaut",
       "restoreMyDefault": "Restaurer Ma disposition par défaut",
-      "restorePanelDefaults": "Restaurer les réglages par défaut du panneau",
-      "restorePanelDefaultsConfirm": "Rétablir la barre d’outils et la disposition de chaque espace de travail par défaut ? Vos dispositions par défaut enregistrées et tous les réglages de Phoenix sont conservés.",
-      "restoreDefaultsAction": "Restaurer les valeurs par défaut",
+      "restorePanelDefaults": "Réinitialiser tous les espaces de travail",
       "myDefaultSaved": "Cette disposition a été enregistrée comme votre disposition par défaut pour {workspace}.",
       "myDefaultRestored": "Votre disposition par défaut a été restaurée.",
-      "panelDefaultsRestored": "Les réglages par défaut du panneau ont été restaurés.",
+      "panelDefaultsRestored": "Tous les espaces de travail, la barre d’outils et la barre d’aide ont retrouvé leurs réglages par défaut.",
       "review": "Examen",
       "reviewEmpty": "Sélectionnez une demande pour l'examiner.",
       "requestDetails": "Détails de la demande",
@@ -2408,14 +2408,16 @@
       "myWorkspace": "Mon espace de travail",
       "removeFromMy": "Retirer de Mon espace de travail",
       "removedFromMy": "Fenêtre {window} retirée de Mon espace de travail",
-      "safety": "Sécurité"
+      "safety": "Sécurité",
+      "resetWorkspaceHint": "Replace les fenêtres de cet espace de travail là où Phoenix les dispose. Les autres espaces de travail et Ma disposition par défaut ne changent pas.",
+      "resetAllHint": "Réinitialise tous les espaces de travail, la barre d’outils, la barre d’aide et le guide. Ma disposition par défaut et les réglages de Phoenix ne changent pas."
     },
     "notifications": {
       "title": "Notifications",
       "empty": "Aucune notification dans cette session.",
       "clear": "Effacer la notification",
-      "clearAll": "Tout effacer",
-      "dismiss": "Fermer"
+      "dismiss": "Fermer",
+      "showHistory": "Afficher l’historique des notifications"
     },
     "help": {
       "title": "Aide",
@@ -2463,11 +2465,10 @@
       "filtersCount": "Filtres ({count})",
       "activeFilters": "Filtres actifs : {count}",
       "clearFilters": "Effacer les filtres",
-      "latest": "Dernier",
       "turns": "Tours",
       "toolCalls": "Appels d'outils",
       "pauseUpdates": "Suspendre les mises à jour",
-      "recordingSettings": "Paramètres d'enregistrement"
+      "logSettings": "Paramètres des journaux"
     },
     "table": {
       "sortAscending": "Tri croissant",
@@ -2478,7 +2479,6 @@
       "resetColumns": "Rétablir les colonnes",
       "columnMenu": "Options de la colonne {column}",
       "resizeColumn": "Redimensionner la colonne {column}",
-      "filterColumn": "Filtrer cette colonne",
       "sortedLoaded": "Trié parmi les entrées chargées uniquement. Chargez-en plus pour inclure le reste."
     }
   },

@@ -6,7 +6,7 @@
  * state is `shell/changes.tsx`.
  */
 
-import { useContext, useRef, useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import type { VersionSummary } from "../types";
 import { ErrorMsg, Loading } from "../components/common";
 import { CodeToggle, diffLines, LayoutToggle, RawDiffPane, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
@@ -104,7 +104,6 @@ function versionSummary(v: { summary?: string | null; summary_key?: string | nul
 
 export function ChangesListWindow() {
   const c = useChanges();
-  const root = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [action, setAction] = useState("");
@@ -123,19 +122,13 @@ export function ChangesListWindow() {
   if (!c) return null;
   const showFilters = !onToolbar || filtersOpen;
   const clearFilters = () => { setType(""); setAction(""); };
-  // A column's menu opens the filter for that column.
-  const openFilter = (name: string) => {
-    setFiltersOpen(true);
-    requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-filter="${name}"]`)?.focus());
-  };
-  const filterItem = (name: string) => (): MenuEntry[] => [{ id: "filter", label: t("table.filterColumn"), onSelect: () => openFilter(name) }];
 
   const shown = c.feed.filter((v) => (!type || v.resource_type === type)
     && (!action || v.action === action)
     && matchesListSearch(`${changeLabel(v)} ${v.resource_id} ${v.resource_type} ${resourceTypeLabel(v.resource_type)} ${v.action} ${actionLabel(v.action)} ${whoNow(v, c.names)} ${versionSummary(v)}`, search));
   const columns: Column<VersionSummary>[] = [
     {
-      id: "item", label: t("changes.colName"), width: 220, sortValue: (v) => changeLabel(v), title: (v) => changeLabel(v),
+      id: "item", label: t("changes.colName"), width: 220, maxWidth: 360, sortValue: (v) => changeLabel(v), title: (v) => changeLabel(v),
       // The compact default: what changed and who changed it when, under the item's name.
       cell: (v) => (
         <span className="change-item">
@@ -145,14 +138,14 @@ export function ChangesListWindow() {
         </span>
       ),
     },
-    { id: "action", label: t("changes.colAction"), width: 120, sortValue: (v) => actionLabel(v.action), cell: (v) => <ChangeAction action={v.action} />, menu: filterItem("action") },
-    { id: "type", label: t("changes.colType"), width: 150, hidden: true, sortValue: (v) => resourceTypeLabel(v.resource_type), cell: (v) => resourceTypeLabel(v.resource_type), menu: filterItem("type") },
+    { id: "action", label: t("changes.colAction"), width: 120, sortValue: (v) => actionLabel(v.action), cell: (v) => <ChangeAction action={v.action} /> },
+    { id: "type", label: t("changes.colType"), width: 150, hidden: true, sortValue: (v) => resourceTypeLabel(v.resource_type), cell: (v) => resourceTypeLabel(v.resource_type) },
     { id: "by", label: t("changes.colBy"), width: 140, hidden: true, sortValue: (v) => whoNow(v, c.names), cell: (v) => whoNow(v, c.names) },
     { id: "time", label: t("changes.colWhen"), width: 160, hidden: true, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
   ];
 
   return (
-    <div className="phx-list-view changes-list-view" ref={root}>
+    <div className="phx-list-view changes-list-view">
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
@@ -365,7 +358,7 @@ export function ItemHistoryWindow() {
     { id: "time", label: t("changes.colWhen"), width: 170, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
     { id: "action", label: t("changes.colAction"), width: 130, sortValue: (v) => actionLabel(v.action), cell: (v) => <ChangeAction action={v.action} /> },
     { id: "by", label: t("changes.colBy"), width: 140, hidden: true, sortValue: (v) => whoNow(v, c.names), cell: (v) => whoNow(v, c.names) },
-    { id: "summary", label: t("changes.colSummary"), width: 260, sortValue: (v) => versionSummary(v), cell: (v) => versionSummary(v), title: (v) => versionSummary(v) || undefined },
+    { id: "summary", label: t("changes.colSummary"), width: 260, maxWidth: 360, sortValue: (v) => versionSummary(v), cell: (v) => versionSummary(v), title: (v) => versionSummary(v) || undefined },
   ];
   return (
     <div className="phx-list-view">
