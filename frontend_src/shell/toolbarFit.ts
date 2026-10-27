@@ -1,13 +1,14 @@
 /**
  * The toolbar's fit rule. With icons and text along the top or bottom, or
  * floating, the main row stays on one line: when it does not fit, its
- * controls give up their text in a fixed order (Collapse and Show Tools,
- * then Workspace Options, Documentation, Agent Chat, and last the
- * workspaces), keeping their names as tooltips and accessible names.
+ * controls give up their text in a fixed order (Workspace Options, then
+ * Documentation, Agent Chat, and last the workspaces), keeping their names
+ * as tooltips and accessible names. The toolbar options and the tools toggle
+ * never carry text.
  */
 
 /** How many steps the main row can drop text in; each control's class `phx-fit-<step>` says when it does. */
-export const FIT_STEPS = 5;
+export const FIT_STEPS = 4;
 
 /** The class that makes a control give up its text from the given step on. */
 export const fitClass = (step: number): string => `phx-fit-${step}`;

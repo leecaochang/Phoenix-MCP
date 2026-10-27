@@ -35,7 +35,7 @@ const noSubscribe = () => () => {};
 const noVersion = () => 0;
 
 /** A toolbar toggle that opens a closed window or closes an open one, for the window it belongs to. */
-export function useWindowToggle(windowId: string): { open: boolean; toggle: () => void } | null {
+export function useWindowToggle(windowId: string): { open: boolean; toggle: () => void; autoOpen: () => void } | null {
   const controller = useContext(ControllerContext);
   useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
   if (!controller) return null;
@@ -46,6 +46,8 @@ export function useWindowToggle(windowId: string): { open: boolean; toggle: () =
       if (group) controller.close(group);
       else controller.ensureOpen(windowId);
     },
+    // Opens it when there is something to show, unless the user closed it.
+    autoOpen: () => controller.autoOpen(windowId),
   };
 }
 

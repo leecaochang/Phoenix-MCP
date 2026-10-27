@@ -221,9 +221,11 @@ describe("phoenix-mcp-panel full app shell", () => {
       // Icons and text at the top: the fit rule runs, and each main-row control says when it gives up its text.
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-fit", "0"));
       const main = el.shadowRoot!.querySelector(".phx-toolbar-main")!;
-      expect(main.querySelector('[aria-label="Collapse Toolbar"]')).toHaveClass("phx-fit-1");
-      expect(main.querySelector('[aria-label="Workspace Options"]')).toHaveClass("phx-fit-2");
-      expect([...main.querySelectorAll(".phx-toolbar-nav button")].every((b) => b.classList.contains("phx-fit-5"))).toBe(true);
+      expect(main.querySelector('[aria-label="Workspace Options"]')).toHaveClass("phx-fit-1");
+      expect(main.querySelector('[aria-label="Documentation"]')).toHaveClass("phx-fit-2");
+      expect([...main.querySelectorAll(".phx-toolbar-nav button")].every((b) => b.classList.contains("phx-fit-4"))).toBe(true);
+      // The toolbar options and the tools toggle are icons only and never part of the fit.
+      expect(main.querySelector('[aria-label="Toolbar Options"]')?.className).not.toMatch(/phx-fit-/);
     });
 
     it("sends this browser's arrangement when Home Assistant has none yet", async () => {
@@ -265,6 +267,70 @@ describe("phoenix-mcp-panel full app shell", () => {
       const last = sets[sets.length - 1].value;
       expect((last.toolbar as { dock: string }).dock).toBe("top");
       expect(last.myDefaults).toEqual(saved.myDefaults);
+    });
+
+    it("moves a floating toolbar back inside the panel on load, so it is drawn in full", async () => {
+      // jsdom has no layout: the panel is 1200 by 900 and the toolbar 300 by 100.
+      const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+        const box = (w: number, h: number) => ({ x: 0, y: 0, left: 0, top: 0, width: w, height: h, right: w, bottom: h, toJSON: () => ({}) }) as DOMRect;
+        if (this.classList.contains("phx-shell")) return box(1200, 900);
+        if (this.classList.contains("phx-toolbar")) return box(300, 100);
+        return box(0, 0);
+      });
+      try {
+        const toolbar = { dock: "floating", x: 1150, y: 880, collapsed: false, toolsShown: true, mode: "icons", vertical: true };
+        const { connection } = userData({ "phoenix_mcp_ui:desktop": { schema: 1, savedAt: 1, rev: 2, toolbar, workspaces: {} } });
+        const el = mountWith(connection);
+        const bar = () => el.shadowRoot!.querySelector<HTMLElement>(".phx-toolbar");
+        await waitFor(() => expect(bar()).toHaveAttribute("data-dock", "floating"));
+        // 8 px from the right and bottom edges: moved left and up, never shrunk.
+        await waitFor(() => expect(bar()!.style.left).toBe("892px"));
+        expect(bar()!.style.top).toBe("792px");
+      } finally {
+        rect.mockRestore();
+      }
+    });
+
+    it("offers the toolbar menu from its own button and the grip; orientation only while floating; collapsed, only the grip", async () => {
+      const { connection } = userData();
+      const el = mountWith(connection);
+      const bar = () => el.shadowRoot!.querySelector(".phx-toolbar")!;
+      await waitFor(() => expect(bar()).toHaveAttribute("data-orient", "horizontal"));
+      const items = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].map((i) => i.textContent!.replace("\u2713", "").trim());
+      const pick = (label: string) => act(() => { [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].find((i) => i.textContent!.replace("\u2713", "").trim() === label)!.click(); });
+      const options = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar-main [aria-label="Toolbar Options"]')!.click(); });
+      const grip = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar > [aria-label="Move toolbar"]')!.click(); });
+      // The grip sits outside the rows, beside both of them.
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-main [aria-label='Move toolbar']")).toBeNull();
+      // No separate collapse button: Collapse lives in the menu. Docked, no orientation choice.
+      expect(el.shadowRoot!.querySelector('[aria-label="Collapse Toolbar"]')).toBeNull();
+      options();
+      expect(items()).toEqual(expect.arrayContaining(["Icons Only", "Icons and Text", "Dock at Left", "Float Toolbar", "Collapse Toolbar"]));
+      expect(items()).not.toContain("Vertical");
+      expect(items()).not.toContain("Horizontal");
+      pick("Dock at Left");
+      await waitFor(() => expect(bar()).toHaveAttribute("data-orient", "vertical"));
+      options();
+      expect(items()).not.toContain("Horizontal");
+      pick("Float Toolbar");
+      await waitFor(() => expect(bar()).toHaveAttribute("data-dock", "floating"));
+      expect(bar()).toHaveAttribute("data-orient", "vertical");
+      // Floating: the other orientation is offered, and Float Toolbar is not.
+      options();
+      expect(items()).toContain("Horizontal");
+      expect(items()).not.toContain("Vertical");
+      expect(items()).not.toContain("Float Toolbar");
+      pick("Horizontal");
+      await waitFor(() => expect(bar()).toHaveAttribute("data-orient", "horizontal"));
+      expect(bar()).toHaveAttribute("data-dock", "floating");
+      options();
+      pick("Collapse Toolbar");
+      await waitFor(() => expect(bar()).toHaveAttribute("data-collapsed"));
+      // Collapsed, only the grip remains, and it holds Expand.
+      expect(el.shadowRoot!.querySelector('[aria-label="Toolbar Options"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-body")).toBeNull();
+      grip();
+      expect(items()).toContain("Expand Toolbar");
     });
   });
 });

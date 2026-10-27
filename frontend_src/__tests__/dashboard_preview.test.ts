@@ -209,15 +209,15 @@ describe("DashboardPreview custom card resources", () => {
     let release!: () => void;
     vi.mocked(loadLovelaceResources).mockClear().mockReturnValueOnce(new Promise<void>((resolve) => { release = resolve; }));
     const custom = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [{ type: "custom:x-card" }] }] } }));
-    expect(custom.container.querySelector("hui-card")).toBeNull();
+    expect(custom.container.querySelector(".dash-preview-card-slot")).toBeNull();
     expect(custom.getByRole("status")).toBeTruthy();
     release();
-    await waitFor(() => expect(custom.container.querySelector("hui-card")).toBeTruthy());
+    await waitFor(() => expect(custom.container.querySelector(".dash-preview-card-slot")).toBeTruthy());
     expect(loadLovelaceResources).toHaveBeenCalledTimes(1);
     custom.unmount();
 
     const builtIn = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [{ type: "tile", entity: "light.x" }] }] } }));
-    expect(builtIn.container.querySelector("hui-card")).toBeTruthy();
+    expect(builtIn.container.querySelector(".dash-preview-card-slot")).toBeTruthy();
     expect(loadLovelaceResources).toHaveBeenCalledTimes(1);
   });
 });

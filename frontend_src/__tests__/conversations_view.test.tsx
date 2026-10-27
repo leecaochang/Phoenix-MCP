@@ -141,6 +141,11 @@ describe("ConversationsView", () => {
     fireEvent.change(search, { target: { value: "lamp" } });
     act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());
     expect(view.queryByRole("searchbox")).toBeNull();
+    // Hidden filters stop applying (user, 2026-10-27), and come back as they were when shown again.
+    expect(registry.latest("logs", "conversationLog", "filters")!.badge).toBeUndefined();
+    await waitFor(() => expect(vi.mocked(api.getConversations)).toHaveBeenLastCalledWith(expect.objectContaining({ search: "" })));
+    act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());
+    expect(view.getByRole("searchbox")).toHaveValue("lamp");
     expect(registry.latest("logs", "conversationLog", "filters")!.badge).toBe(1);
   });
 

@@ -14,7 +14,7 @@ import { SignalIcon, label, outcomeIcon, outcomeSignal, rowStatus } from "../com
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
 import { useLogSelection } from "../shell/logDetails";
-import { useToolbarTools } from "../shell/tools";
+import { useOnToolbar, useToolbarTools } from "../shell/tools";
 import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { ActionButton } from "../ui/ActionButton";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -49,6 +49,8 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Hidden filters, the text search included, stop applying and come back as they were (user, 2026-10-27).
+  const filtersApply = !useOnToolbar() || filtersOpen;
   const generation = useRef(0);
   const clearingRef = useRef(false);
   const logSelection = useLogSelection();
@@ -65,8 +67,9 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     const own = ++generation.current;
     if (!quiet) setLoading(true);
     try {
-      const params = { grouped: true, search: debouncedSearch, source, outcome,
-        since: days ? new Date(Date.now() - Number(days) * 86400000).toISOString() : undefined };
+      const params = filtersApply
+        ? { grouped: true, search: debouncedSearch, source, outcome, since: days ? new Date(Date.now() - Number(days) * 86400000).toISOString() : undefined }
+        : { grouped: true, search: "", source: "", outcome: "", since: undefined };
       const result = await api.getConversations({ ...params, limit: Math.min(100, limit) });
       for (let offset = 100; offset < Math.min(limit, result.total); offset += 100) {
         if (own !== generation.current) return;
@@ -80,7 +83,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       selectionRef.current?.follow(unique);
     } catch { if (own === generation.current) setError(t("conversations.loadFailed")); }
     finally { if (own === generation.current) setLoading(false); }
-  }, [limit, debouncedSearch, source, outcome, days]);
+  }, [limit, debouncedSearch, source, outcome, days, filtersApply]);
   const windowVisible = useWindowVisible();
   const [paused, setPaused] = useState(false);
   const updatingRef = useRef(true);
@@ -94,7 +97,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const logSettings = useLogSettingsTool();
   const resetPage = () => setLimit(25);
   // The search is one of the filters: it shows and hides with them, and counts while hidden.
-  const activeFilters = [source, outcome, days, search.trim()].filter(Boolean).length;
+  const activeFilters = filtersApply ? [source, outcome, days, search.trim()].filter(Boolean).length : 0;
   const clearFilters = () => { setSource(""); setOutcome(""); setDays(""); setSearch(""); resetPage(); };
   // In the workspace shell, Filters and Clear Conversation History move to the toolbar; the log
   // updates itself, so Refresh is offered only while updates are paused.
@@ -166,12 +169,6 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
       </div>
     </div>
-    {!showFilters && activeFilters > 0 && (
-      <p className="phx-filters-active">
-        {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-        <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
-      </p>
-    )}
     {/* The search sits below the filters, as the text filters do in the Audit Log. */}
     {showFilters && <div className="filter-row conversation-toolbar">
       <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}

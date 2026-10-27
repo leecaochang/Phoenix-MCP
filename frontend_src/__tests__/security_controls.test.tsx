@@ -84,8 +84,8 @@ it("draws proposed cards through HA's renderer with the live session, inside an 
   });
   const card = { type: "custom:button-card", name: "[[[ return 'x'; ]]]" };
   const { container } = render(<DashboardPreview config={{ views: [{ cards: [card] }] }} />);
-  await waitFor(() => expect(container.querySelector("hui-card")).toBeTruthy());
-  expect(seen.config).toBe(card);
+  // Cards are built one per task, so the config arrives after the first render.
+  await waitFor(() => expect(seen.config).toBe(card));
   expect(seen.hass).toBe(LIVE_HASS);
   expect(seen.preview).toBe(true);
   const region = container.querySelector(".dash-preview-cards") as HTMLElement & { inert?: boolean };

@@ -57,6 +57,15 @@ const MOVES: Array<[Direction, string]> = [
   ["left", "workspace.moveLeft"], ["right", "workspace.moveRight"], ["up", "workspace.moveUp"], ["down", "workspace.moveDown"],
 ];
 
+/** Asks a window's menu button to enter keyboard resizing, which its arrow keys then drive. */
+const RESIZE_EVENT = "phx-window-resize";
+
+function startResize(controller: WorkspaceController, windowId: string) {
+  const button = controller.groupOf(windowId)?.element.querySelector<HTMLElement>("[data-phx-window-menu]");
+  button?.focus();
+  button?.dispatchEvent(new CustomEvent(RESIZE_EVENT));
+}
+
 /** A move, float or dock re-parents the window: afterwards give focus back to its menu button. */
 function refocusWindowMenu(controller: WorkspaceController, windowId: string) {
   requestAnimationFrame(() => {
@@ -66,13 +75,13 @@ function refocusWindowMenu(controller: WorkspaceController, windowId: string) {
 }
 
 /**
- * The window's moves, Float or Dock, and pinning, built when a menu opens so
- * availability reflects the current layout. Moves stay within the window's own
- * area: the scrolling grid or its pinned band. `onResize` adds Resize with
- * Keyboard; `extras` adds the shell's items; `full` adds Fold, Maximize and
- * Close for the right-click menu on a title bar.
+ * The window menu, the same from the title bar's menu button and from a
+ * right-click on the title bar: moves, Resize with Keyboard, Float or Dock,
+ * pinning, the shell's `extras`, then Fold, Maximize and Close. Built when it
+ * opens so availability reflects the current layout. Moves stay within the
+ * window's own area: the scrolling grid or its pinned band.
  */
-export function windowMenuEntries(controller: WorkspaceController, group: DockviewGroupPanel, opts: { onResize?: () => void; full?: boolean; extras?: WindowMenuExtras | null } = {}): MenuEntry[] {
+export function windowMenuEntries(controller: WorkspaceController, group: DockviewGroupPanel, extras?: WindowMenuExtras | null): MenuEntry[] {
   const windowId = group.activePanel?.id;
   if (!windowId) return [];
   const host = controller.hostOfGroup(group);
@@ -87,7 +96,7 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
     onSelect: then(() => controller.move(group, dir)),
   }));
   entries.push("separator");
-  if (opts.onResize) entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: opts.onResize });
+  entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: () => startResize(controller, windowId) });
   entries.push(floating
     ? { id: "dock", label: t("workspace.dockWindow"), onSelect: then(() => controller.dock(group)) }
     : { id: "float", label: t("workspace.floatWindow"), onSelect: then(() => controller.float(group)) });
@@ -97,16 +106,14 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
     if (host !== "top") entries.push({ id: "pin-top", label: t("workspace.pinTop"), onSelect: then(() => controller.pin(group, "top")) });
     if (host !== "bottom") entries.push({ id: "pin-bottom", label: t("workspace.pinBottom"), onSelect: then(() => controller.pin(group, "bottom")) });
   }
-  const extra = opts.extras?.(controller, windowId) ?? [];
+  const extra = extras?.(controller, windowId) ?? [];
   if (extra.length) entries.push("separator", ...extra);
-  if (opts.full) {
-    const folded = controller.folds.isFolded(windowId);
-    const maximized = group.api.isMaximized();
-    entries.push("separator",
-      { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), onSelect: () => controller.toggleFold(group) });
-    if (!floating && !pinned) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? controller.restoreMaximized(group) : controller.maximize(group)) });
-    entries.push({ id: "close", label: t("common.close"), onSelect: () => controller.close(group) });
-  }
+  const folded = controller.folds.isFolded(windowId);
+  const maximized = group.api.isMaximized();
+  entries.push("separator",
+    { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), onSelect: () => controller.toggleFold(group) });
+  if (!floating && !pinned) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? controller.restoreMaximized(group) : controller.maximize(group)) });
+  entries.push({ id: "close", label: t("common.close"), onSelect: () => controller.close(group) });
   return entries;
 }
 const RESIZE_STEP = 24;
@@ -123,6 +130,15 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
   const menuButton = useRef<HTMLButtonElement | null>(null);
   useSyncExternalStore(controller.subscribe, controller.getVersion);
 
+  // Resize with Keyboard, chosen from either menu, arrives as an event on the menu button.
+  useEffect(() => {
+    const button = menuButton.current;
+    if (!button) return undefined;
+    const begin = () => setResizing(true);
+    button.addEventListener(RESIZE_EVENT, begin);
+    return () => button.removeEventListener(RESIZE_EVENT, begin);
+  }, [panel]);
+
   useEffect(() => {
     const a = group.api.onDidLocationChange(() => setFloating(group.api.location.type === "floating"));
     const b = props.containerApi.onDidMaximizedGroupChange(() => setMaximized(group.api.isMaximized()));
@@ -134,7 +150,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
   const host = controller.hostOfGroup(group);
   const pinned = host === "top" || host === "bottom";
   const thenRefocus = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
-  const items = () => windowMenuEntries(controller, group, { extras, onResize: () => { setResizing(true); menuButton.current?.focus(); } });
+  const items = () => windowMenuEntries(controller, group, extras);
 
   const resizeKeys = (e: KeyboardEvent<HTMLButtonElement>): boolean => {
     if (!resizing) return false;

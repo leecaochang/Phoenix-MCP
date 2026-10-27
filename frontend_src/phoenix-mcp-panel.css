@@ -255,8 +255,10 @@
   /* The companion app's status-bar inset (HA's inherited property) pads a top toolbar clear of it. */
   --phx-toolbar-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   z-index: var(--phx-z-tabbar);
+  /* The grip, then the body holding the main row and the tools row; upright, the grip sits on top. */
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: stretch;
   gap: 6px;
   flex-shrink: 0;
   margin: 8px 8px 0;
@@ -267,28 +269,31 @@
 }
 .phx-toolbar[data-dock="top"] { margin-top: calc(8px + var(--phx-toolbar-safe-top)); }
 .phx-toolbar[data-dock="bottom"] { margin: 0 8px 8px; }
-.phx-toolbar[data-dock="left"] { margin: 8px 0 8px 8px; flex-direction: row; align-items: flex-start; }
-.phx-toolbar[data-dock="right"] { margin: 8px 8px 8px 0; flex-direction: row-reverse; align-items: flex-start; }
+.phx-toolbar[data-dock="left"] { margin: 8px 0 8px 8px; }
+.phx-toolbar[data-dock="right"] { margin: 8px 8px 8px 0; }
+.phx-toolbar[data-orient="vertical"] { flex-direction: column; }
+.phx-toolbar-body { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-body { flex-direction: row; align-items: flex-start; }
+.phx-toolbar[data-dock="right"] .phx-toolbar-body { flex-direction: row-reverse; }
 .phx-toolbar[data-dock="floating"] {
   position: absolute;
   margin: 0;
+  /* Its own full size wherever it sits: placed near the right edge it would otherwise shrink and drop its
+     text. The toolbar then moves itself left or up until it fits inside the panel. */
+  width: max-content;
   max-width: calc(100% - 16px);
   background: color-mix(in srgb, var(--phx-raised) 90%, transparent);
   backdrop-filter: blur(12px);
   box-shadow: var(--phx-shadow-lg);
 }
 .phx-toolbar-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
-.phx-toolbar[data-dock="left"] .phx-toolbar-main,
-.phx-toolbar[data-dock="right"] .phx-toolbar-main { flex-direction: column; flex-wrap: nowrap; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-main { flex-direction: column; flex-wrap: nowrap; }
 .phx-toolbar-nav,
 .phx-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.phx-toolbar[data-dock="left"] .phx-toolbar-nav,
-.phx-toolbar[data-dock="right"] .phx-toolbar-nav,
-.phx-toolbar[data-dock="left"] .phx-toolbar-group,
-.phx-toolbar[data-dock="right"] .phx-toolbar-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-nav,
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-group { flex-direction: column; align-items: stretch; }
 .phx-toolbar-nav + .phx-toolbar-group { margin-inline-start: auto; }
-.phx-toolbar[data-dock="left"] .phx-toolbar-nav + .phx-toolbar-group,
-.phx-toolbar[data-dock="right"] .phx-toolbar-nav + .phx-toolbar-group { margin: 6px 0 0; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-nav + .phx-toolbar-group { margin: 6px 0 0; }
 
 .phx-toolbar-button,
 .phx-toolbar-handle {
@@ -319,7 +324,9 @@
 .phx-toolbar-button.is-active,
 .phx-toolbar-button[aria-pressed="true"] { background: var(--phx-accent-lt); }
 .phx-toolbar-button.is-danger { color: var(--phx-error); }
-.phx-toolbar-handle { min-width: 24px; width: 24px; padding: 0; border-color: transparent; background: transparent; color: var(--phx-text-2); cursor: grab; }
+/* The grip runs the full height of both rows, or the full width of both columns standing upright. */
+.phx-toolbar-handle { min-width: 24px; width: 24px; height: auto; min-height: 36px; padding: 0; border-color: transparent; background: transparent; color: var(--phx-text-2); cursor: grab; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-handle { width: auto; min-width: 36px; height: 24px; min-height: 24px; }
 .phx-toolbar-plain { border-color: transparent; background: transparent; color: var(--phx-text-2); }
 .phx-toolbar-badge {
   display: inline-flex;
@@ -354,29 +361,27 @@
 /* Icons and text along the top or bottom, or floating: each label sits under its icon, and the workspaces and
    each window's tools share one width per group, set by the widest label, so the rows read evenly. Agent Chat,
    Documentation and Workspace Options keep their own widths. Phones keep plain wrapping. */
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) :is(.phx-toolbar-nav, .phx-tool-group) {
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] :is(.phx-toolbar-nav, .phx-tool-group) {
   display: inline-grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
 }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-button {
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] .phx-toolbar-button {
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   height: auto;
-  min-height: 46px;
-  padding: 4px 8px;
-  font-size: 12px;
-  line-height: 15px;
+  min-height: 40px;
+  padding: 3px 6px;
+  font-size: 11px;
+  line-height: 13px;
 }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-handle { height: 46px; }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:not([data-dock="left"]):not([data-dock="right"]) .phx-toolbar-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; font-size: 10px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] .phx-toolbar-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; font-size: 10px; }
 /* The fit rule (shell/toolbarFit.ts): the main row stays on one line by taking text away in steps,
    phx-fit-1 first. The toolbar's data-fit holds the step. */
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1,
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2),
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3),
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4),
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="5"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4, .phx-fit-5) {
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) {
   width: 36px;
   min-width: 36px;
   padding: 0;
@@ -384,8 +389,7 @@
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1 .phx-toolbar-label,
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2) .phx-toolbar-label,
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3) .phx-toolbar-label,
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) .phx-toolbar-label,
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="5"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4, .phx-fit-5) .phx-toolbar-label {
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) .phx-toolbar-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -403,31 +407,25 @@
   padding-top: 6px;
   border-top: 1px solid var(--phx-border);
 }
-.phx-toolbar[data-dock="left"] .phx-toolbar-tools,
-.phx-toolbar[data-dock="right"] .phx-toolbar-tools { flex-direction: column; align-items: stretch; padding: 0 0 0 6px; border-top: none; border-left: 1px solid var(--phx-border); }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-tools { flex-direction: column; align-items: stretch; padding: 0 0 0 6px; border-top: none; border-left: 1px solid var(--phx-border); }
 .phx-toolbar[data-dock="right"] .phx-toolbar-tools { padding: 0 6px 0 0; border-left: none; border-right: 1px solid var(--phx-border); }
 .phx-tool-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-/* Hide Tools ends the tools row it hides. */
-.phx-toolbar-tools > .phx-toolbar-tools-toggle { margin-inline-start: auto; }
-.phx-toolbar[data-dock="left"] .phx-toolbar-tools > .phx-toolbar-tools-toggle,
-.phx-toolbar[data-dock="right"] .phx-toolbar-tools > .phx-toolbar-tools-toggle { margin: auto 0 0; }
 .phx-tool-group + .phx-tool-group { padding-inline-start: 6px; border-inline-start: 1px solid var(--phx-border); }
-.phx-toolbar[data-dock="left"] .phx-tool-group,
-.phx-toolbar[data-dock="right"] .phx-tool-group { flex-direction: column; align-items: stretch; }
-.phx-toolbar[data-dock="left"] .phx-tool-group + .phx-tool-group,
-.phx-toolbar[data-dock="right"] .phx-tool-group + .phx-tool-group { padding: 6px 0 0; border-inline-start: none; border-top: 1px solid var(--phx-border); }
+.phx-toolbar[data-orient="vertical"] .phx-tool-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar[data-orient="vertical"] .phx-tool-group + .phx-tool-group { padding: 6px 0 0; border-inline-start: none; border-top: 1px solid var(--phx-border); }
 /* Docked at a side with icons and text: every button in both columns shares one width, set by the widest
    label, with icon and text from the start edge like Home Assistant's sidebar. The main column matches the
    tools column's separator (6 px padding and a 1 px line) so the buttons come out equal. */
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) {
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-body {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   align-items: start;
 }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) .phx-toolbar-main { align-items: stretch; }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"]:is([data-dock="left"], [data-dock="right"]) .phx-toolbar-button { justify-content: flex-start; }
-.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="left"] .phx-toolbar-main:not(:only-child) { padding-inline-end: 7px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-main { align-items: stretch; }
+/* Icons and text standing upright: smaller text and a lower, tighter button than icons only. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-button { justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 11px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"]:not([data-dock="right"]) .phx-toolbar-main:not(:only-child) { padding-inline-end: 7px; }
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main { order: 2; }
 .phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main:not(:only-child) { padding-inline-start: 7px; }
 
@@ -610,6 +608,9 @@
 /* A window's own action buttons follow the toolbar's display mode. */
 .phx-action { display: inline-flex; align-items: center; gap: 6px; }
 .phx-action.is-icon-only { padding-inline: 8px; }
+/* Icons and text: smaller text and less padding than a plain button, so a row of them stays compact. */
+.phx-action:not(.is-icon-only) { gap: 4px; padding: 3px 7px; }
+.phx-action:not(.is-icon-only) > span { font-size: 11px; }
 .phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
 .access-key-table tr.is-selected > td { background: var(--phx-accent-lt); }
 
@@ -736,6 +737,7 @@
 .change-action-create { color: var(--phx-success); }
 .change-action-delete { color: var(--phx-error); }
 .change-action-rollback { color: var(--phx-warning); }
+.change-action-edit { color: var(--phx-read); }
 .phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Column headers stay at the top of their window while the rows scroll under them. */
 .phx-table th {
@@ -796,7 +798,6 @@
 /* Filters open in a panel above a log; while closed, a line says how many are active. */
 .phx-filters { padding: 4px 0 8px; }
 .phx-filters[hidden] { display: none; }
-.phx-filters-active { margin: 0 0 8px; color: var(--phx-text-2); font-size: 12px; }
 
 /* Access Keys: the selected key's windows below the key list. */
 .phx-window-pad { padding-top: 12px; }
@@ -2138,11 +2139,10 @@ select.input {
 .change-detail-body { min-width: 0; }
 
 .change-diff-wrap { min-width: 0; }
-.change-diff-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-/* flex: 1 makes the hint absorb the free space, so every trailing control
-   (Diff|Preview switch, layout toggle) clusters together at the right edge
-   instead of space-between spreading them across the row. */
-.change-diff-hint { font-size: 12px; color: var(--phx-text-2); min-width: 0; flex: 1 1 auto; }
+/* The view controls sit together on the left, with no hint beside them (user, 2026-10-27); Comparison puts
+   Restore at the right end. */
+.change-diff-toolbar { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.change-diff-toolbar-end { margin-left: auto; display: inline-flex; }
 
 .yaml-diff-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
 .yaml-diff-cols.stacked { grid-template-columns: 1fr; }
@@ -2246,12 +2246,13 @@ select.input {
 }
 .diff-mode-btn + .diff-mode-btn { border-left: 1px solid var(--phx-border); }
 .diff-mode-btn.active { color: var(--phx-accent); background: var(--phx-accent-lt); cursor: default; }
+.diff-mode-btn.has-icon { display: inline-flex; align-items: center; gap: 4px; }
+.diff-mode-btn.has-icon > span { font-size: 11px; }
 .diff-mode-btn:disabled { opacity: 0.45; cursor: default; }
 .diff-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .dash-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .dash-preview-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--phx-border); }
 .dash-preview-note { font-size: 12px; color: var(--phx-text-2); font-style: italic; padding: 12px; margin: 0; }
-.dash-preview-disclaimer { font-size: 11px; color: var(--phx-text-2); }
 .dash-preview-scroll {
   overflow: auto; max-height: 45vh; padding: 10px;
   border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); background: var(--phx-surface-2);
@@ -2259,6 +2260,11 @@ select.input {
 /* Backstop to the inert property set on this wrapper; scrolling still works
    because hit-testing falls through to the .dash-preview-scroll parent. */
 .dash-preview-cards { pointer-events: none; }
+/* A previewed dashboard sits on a page of its own colour inside a clear frame, so its edges show. */
+.dash-preview .dash-preview-scroll { background: var(--phx-bg); border-color: var(--phx-line-strong); }
+/* In Comparison and Review the whole dashboard shows at its full height and the window scrolls, not a box inside it. */
+.change-comparison .dash-preview-scroll,
+.phx-review-change .dash-preview-scroll { max-height: none; overflow: visible; }
 .dash-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; align-items: start; }
 .dash-preview-section-title { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin: 12px 0 6px; }
 .dash-preview-cards > .dash-preview-section-title:first-child { margin-top: 0; }
@@ -2274,26 +2280,23 @@ select.input {
   border: 1px solid var(--phx-error); border-radius: var(--phx-radius-xs);
   background: var(--phx-error-bg);
 }
-.dash-preview-error-head { font-size: 12px; color: var(--phx-text); }
-.dash-preview-error-item { display: flex; flex-direction: column; gap: 4px; }
-.dash-preview-error-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dash-preview-error-meta code { font-size: 12px; color: var(--phx-text-2); }
-.dash-preview-error-msg {
-  margin: 0; padding: 8px 10px; user-select: text;
-  background: var(--phx-surface); border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45;
-  white-space: pre-wrap; word-break: break-word;
-  /* Explicit: the wrapper pins inherited color to HA's --primary-text-color
-     for the CARD content; this panel is Phoenix MCP chrome on a Phoenix MCP background, so
-     inheriting that (light text from a dark dashboard theme, on Phoenix MCP light's
-     white surface) was near-illegible. Every Phoenix-chrome element inside the
-     preview must set its own color for this reason. */
-  color: var(--phx-text);
+.dash-preview-error-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dash-preview-error-head { margin: 0; font-size: 12px; color: var(--phx-text); }
+/* One list the operator can select or copy whole. Explicit colours: the wrapper pins inherited
+   color to HA's --primary-text-color for the CARD content; this panel is Phoenix MCP chrome on a
+   Phoenix MCP background, so inheriting that (light text from a dark dashboard theme, on Phoenix
+   MCP light's white surface) was near-illegible. Every Phoenix-chrome element inside the preview
+   must set its own color for this reason. */
+.dash-preview-error-list {
+  margin: 0; padding-left: 18px; user-select: text; color: var(--phx-text);
+  font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
+.dash-preview-error-list code { font-size: 12px; color: var(--phx-text-2); }
+.dash-preview-error-msg { white-space: pre-wrap; }
 /* Safe: the panel renders in its own shadow root, so this cannot leak into HA.
    Cards pick up HA's active theme (HA's CSS custom properties inherit into the
    shadow root from the page), which may differ from a forced Phoenix MCP panel theme. */
-hui-card { display: block; min-width: 0; }
+hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 @media (max-width: 800px) { .dash-preview-grid { grid-template-columns: 1fr; } }
 
 .approval-summary-line { margin: 4px 0 8px 0; font-size: 13px; }

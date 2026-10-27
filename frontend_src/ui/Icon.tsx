@@ -5,10 +5,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   Archive, ArrowDownLeft, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
-  Download, Ellipsis, FunnelX, FilePenLine, GitBranch, GripVertical, History, Info, KeyRound, KeySquare,
+  Download, Ellipsis, Eye, FileDiff, FileText, FunnelX, FilePenLine, GitBranch, GripHorizontal, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, Save, ScrollText, Search, SearchCheck,
-  Settings, Shield, SlidersHorizontal, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
+  Settings, Shield, SlidersHorizontal, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
 } from "lucide-react";
 
@@ -62,6 +62,7 @@ const ICONS = {
   workspaceOptions: LayoutDashboard,
   killSwitch: OctagonAlert,
   grip: GripVertical,
+  gripHorizontal: GripHorizontal,
   showTools: ChevronsDown,
   hideTools: ChevronsUp,
   toolbarCloseTop: PanelTopClose,
@@ -107,6 +108,11 @@ const ICONS = {
   suggestions: Lightbulb,
   search: Search,
   recordingSettings: SlidersHorizontal,
+  diff: FileDiff,
+  preview: Eye,
+  before: StepBack,
+  after: StepForward,
+  lineView: FileText,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

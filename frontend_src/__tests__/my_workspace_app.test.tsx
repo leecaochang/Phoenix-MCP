@@ -154,6 +154,28 @@ describe("My Workspace", () => {
   });
 });
 
+describe("Window menu", () => {
+  const labels = (el: Panel) => [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].map((i) => i.textContent!.replace("\u2713", "").trim());
+  const closeMenu = (el: Panel) => act(() => { fireEvent.keyDown(sr(el).querySelector(".phx-menu")!, { key: "Escape" }); });
+
+  it("offers the same items from the title bar's menu button and from a right-click on the title bar", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    openWindowMenu(el, "Access Keys");
+    const fromButton = labels(el);
+    closeMenu(el);
+    await waitFor(() => expect(sr(el).querySelector(".phx-menu")).toBeNull());
+    act(() => { fireEvent.contextMenu(titleControl(el, "Access Keys", ".phx-window-title-text"), { clientX: 40, clientY: 40 }); });
+    const fromRightClick = labels(el);
+    expect(fromRightClick).toEqual(fromButton);
+    expect(fromButton).toEqual(expect.arrayContaining(["Resize with Keyboard", "Add to My Workspace", "Fold", "Close"]));
+    // Resize with Keyboard from the right-click menu starts resizing on the window's menu button.
+    act(() => { menuItem(el, "Resize with Keyboard")!.click(); });
+    await waitFor(() => expect(titleControl(el, "Access Keys", ".phx-window-resize-hint")).toBeTruthy());
+    expect(sr(el).activeElement).toBe(titleControl(el, "Access Keys", "[data-phx-window-menu]"));
+  });
+});
+
 describe("Agent Chat in My Workspace", () => {
   const chat = (el: Panel) => sr(el).querySelector<HTMLElement>(".agentcli-window");
   const chatMenu = (el: Panel, label: string) => {

@@ -238,6 +238,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.workspace.horizontal",  # "Horizontal"
         "panel.changes.typeLabel",  # "Label"
         "panel.mesa.colName",  # "Name"
         "panel.mesa.colSignal",  # "Signal"
@@ -265,7 +266,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.approvals.metaTool",            # "Tool"
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.actionRollback",        # "Rollback"
-        "panel.changes.colName",               # "Name"
         "panel.changes.typeBlueprint",         # "Blueprint"
         "panel.changes.typeDashboard",         # "Dashboard"
         "panel.common.diff",                   # "Diff"
@@ -333,6 +333,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     }),
     "es": frozenset({
         "panel.workspace.general",  # "General"
+        "panel.workspace.horizontal",  # "Horizontal"
+        "panel.workspace.vertical",  # "Vertical"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -448,6 +450,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.changes.colName",               # "Item", the Dutch loanword
         "panel.settings.colAccount",  # "Account"
         "panel.settings.colProvider",  # "Provider"
         "panel.settings.privacySection",  # "Privacy"

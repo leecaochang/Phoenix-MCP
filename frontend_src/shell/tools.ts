@@ -143,6 +143,13 @@ export const ToolRegistryContext = createContext<ToolRegistry | null>(null);
  * Offer tools on the toolbar while this view is drawn in a shell window.
  * Returns true when they are offered, so the view can leave out its own copy.
  */
+/** Whether this window's tools are on the workspace toolbar, as useToolbarTools reports, without registering any. */
+export function useOnToolbar(): boolean {
+  const registry = useContext(ToolRegistryContext);
+  const place = useContext(WindowPlaceContext);
+  return !!registry && !!place;
+}
+
 export function useToolbarTools(groups: ToolGroup[]): boolean {
   const registry = useContext(ToolRegistryContext);
   const place = useContext(WindowPlaceContext);

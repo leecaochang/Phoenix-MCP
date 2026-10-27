@@ -53,6 +53,8 @@ export interface WorkspaceLayout {
   version?: number;
   /** Where each window last floated, and its size there, for the next time it floats. */
   floatBoxes?: Record<string, FloatBox>;
+  /** Windows the user closed, which do not open by themselves until reopened or the workspace is reset. */
+  dismissed?: string[];
 }
 
 /** A floating window's place and size, relative to the floating layer. */
@@ -130,6 +132,8 @@ export class WorkspaceController {
   readonly folds = new FoldStore();
   /** Where each window last floated, for the next time it floats. */
   private floatBoxes = new Map<string, FloatBox>();
+  /** Windows the user closed: autoOpen leaves them closed until they are reopened or the workspace is reset. */
+  private dismissed = new Set<string>();
   /** The workspace's table settings, saved with its arrangement. */
   readonly tables = new TableSettingsStore();
   /** Called when the user closes a shell-managed window. */
@@ -447,6 +451,7 @@ export class WorkspaceController {
           this.loadHost("float", saved?.floats, undefined, known, used);
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
           this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
+          this.dismissed = new Set((Array.isArray(saved?.dismissed) ? saved.dismissed : []).filter((id) => typeof id === "string" && known.has(id)));
           this.folds.restore(saved?.folds, (id) => used.has(id));
           this.tables.restore(saved?.tables);
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
@@ -511,6 +516,7 @@ export class WorkspaceController {
       // The default arrangement's pairs come back in their default order and shares.
       this.pairLeft.clear();
       this.pairShare.clear();
+      this.dismissed.clear();
       this.maximizedHere = false;
       for (const [, host] of this.attached()) {
         if (!host.canvas) continue;
@@ -613,7 +619,8 @@ export class WorkspaceController {
     const version = this.extras.layoutVersion;
     for (const id of this.apiOf("float")?.panels.map((p) => p.id) ?? []) this.rememberFloat(id);
     const floatBoxes = this.floatBoxes.size ? Object.fromEntries([...this.floatBoxes].filter(([id]) => saved.has(id))) : undefined;
-    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}), ...(floatBoxes ? { floatBoxes } : {}) };
+    const dismissed = [...this.dismissed].filter((id) => saved.has(id));
+    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}), ...(floatBoxes ? { floatBoxes } : {}), ...(dismissed.length ? { dismissed } : {}) };
     const bands: Partial<Record<Band, BandLayout>> = {};
     for (const band of BANDS) {
       const bandApi = this.apiOf(band);
@@ -719,7 +726,16 @@ export class WorkspaceController {
 
   close(group: DockviewGroupPanel): void {
     const id = this.closeGroup(group);
-    if (id && !this.transient.has(id)) this.onWindowToggle?.(id, false);
+    if (id && !this.transient.has(id)) {
+      this.dismissed.add(id);
+      this.onWindowToggle?.(id, false);
+    }
+  }
+
+  /** Open a window the workspace offers when it has something to show, unless the user closed it. */
+  autoOpen(id: string): void {
+    if (this.dismissed.has(id) || this.hostOf(id) || !this.api) return;
+    this.ensureOpen(id);
   }
 
   /** Close a window, remembering where it was; returns its id. */
@@ -759,6 +775,7 @@ export class WorkspaceController {
   }
 
   reopen(id: string): void {
+    this.dismissed.delete(id);
     if (!this.place(id)) return;
     this.reveal(id);
     this.onWindowToggle?.(id, true);

@@ -202,6 +202,27 @@ describe("pinned bands and the floating layer", () => {
     expect(shape()).toEqual({ orientation: "HORIZONTAL", kinds: ["branch", "leaf"], last: ["c"] });
   });
 
+  it("opens a window by itself until the user closes it, then only after a reopen or a reset", () => {
+    const twoOpen: Arrange = (_, add) => { add("a"); add("b", { referencePanel: "a", direction: "below" }); };
+    const w = mount({ arrange: twoOpen, closedAt: { c: { neighbor: "a", side: "bottom" } } });
+    w.controller.autoOpen("c");
+    expect(w.controller.hostOf("c")).toBe("main");
+    w.controller.close(w.group("c"));
+    w.controller.autoOpen("c");
+    expect(w.controller.hostOf("c")).toBeNull();
+    // The choice survives a reload of the arrangement.
+    const saved = w.controller.layout()!;
+    expect(saved.dismissed).toEqual(["c"]);
+    w.controller.load(saved);
+    w.controller.autoOpen("c");
+    expect(w.controller.hostOf("c")).toBeNull();
+    w.controller.reopen("c");
+    w.controller.close(w.group("c"));
+    w.controller.restoreOriginal();
+    w.controller.autoOpen("c");
+    expect(w.controller.hostOf("c")).toBe("main");
+  });
+
   it("pins both paired windows together, side by side in the new band", () => {
     const w = mount({ heights: { a: 200, b: 300, c: 300 }, pinned: { bottom: ["a"] }, pairs: { c: "a" } });
     w.controller.reopen("c");

@@ -80,13 +80,19 @@ export interface ChangesState {
   loadingMore: boolean;
   error: string | null;
   hasMore: boolean;
+  /** How many changes are recorded in all, loaded or not. */
+  total: number;
   refresh: () => void;
   loadMore: () => void;
   /** access_key_id to the key's current name, active and archived keys alike. */
   names: Map<string, string>;
 
   selectedId: string | null;
-  select: (id: string | null) => void;
+  /** Choose a change; `order` is the list it was chosen from, in its shown order, for Previous and Next. */
+  select: (id: string | null, order?: readonly string[]) => void;
+  /** The change before (-1) or after (1) the chosen one in the list it was chosen from; null at either end. */
+  neighbour: (delta: -1 | 1) => string | null;
+  step: (delta: -1 | 1) => void;
   /** The chosen change with its saved Before and After. */
   record: VersionRecord | null;
   recordLoading: boolean;
@@ -121,7 +127,8 @@ export function ChangesProvider({ hass, active = true, children }: {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const hasMore = feed.length < total;
   const [names, setNames] = useState<Map<string, string>>(() => new Map());
 
   // access_key_id -> latest known name, so a renamed access key shows its new name here.
@@ -156,8 +163,18 @@ export function ChangesProvider({ hass, active = true, children }: {
     try {
       const resp = await api.listVersions({ limit: CHANGES_PAGE, offset });
       if (!isLatest()) return;
-      setFeed((prev) => (offset === 0 ? resp.versions : [...prev, ...resp.versions]));
-      setHasMore(offset + resp.versions.length < resp.total);
+      setFeed((prev) => {
+        if (offset > 0) return [...prev, ...resp.versions];
+        // A background update with more pages loaded adds only the changes not shown yet, at the top, so the
+        // pages below stay (they vanished every few seconds before). A foreground load starts over.
+        if (background && prev.length > resp.versions.length) {
+          const seen = new Set(prev.map((v) => v.id));
+          const fresh = resp.versions.filter((v) => !seen.has(v.id));
+          return fresh.length ? [...fresh, ...prev] : prev;
+        }
+        return resp.versions;
+      });
+      setTotal(resp.total);
     } catch (e: unknown) {
       if (!background && isLatest()) setError(e instanceof Error ? e.message : t("changes.loadFailed"));
     } finally {
@@ -184,6 +201,14 @@ export function ChangesProvider({ hass, active = true, children }: {
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
+  // A recorded change never changes, so a copy once read is kept: stepping back to it, or to a neighbour
+  // fetched ahead, shows it at once instead of a loading state.
+  const recordCache = useRef(new Map<string, VersionRecord>());
+  const readRecord = useCallback((id: string): Promise<VersionRecord> => {
+    const cached = recordCache.current.get(id);
+    if (cached) return Promise.resolve(cached);
+    return api.getVersion(id).then((r) => { recordCache.current.set(id, r); return r; });
+  }, []);
   const beginRecord = useLatestRequest();
   useEffect(() => {
     if (!selectedId) {
@@ -194,7 +219,7 @@ export function ChangesProvider({ hass, active = true, children }: {
     const isLatest = beginRecord();
     setRecordLoading(true);
     setRecordError(null);
-    api.getVersion(selectedId)
+    readRecord(selectedId)
       .then((r) => {
         if (!isLatest()) return;
         setRecord(r);
@@ -204,7 +229,7 @@ export function ChangesProvider({ hass, active = true, children }: {
       })
       .catch((e: unknown) => { if (isLatest()) { setRecord(null); setRecordError(e instanceof Error ? e.message : t("changes.loadVersionFailed")); } })
       .finally(() => { if (isLatest()) setRecordLoading(false); });
-  }, [selectedId, beginRecord]);
+  }, [selectedId, beginRecord, readRecord]);
 
   const beginHistory = useLatestRequest();
   const recordRef = useRef(record);
@@ -238,14 +263,32 @@ export function ChangesProvider({ hass, active = true, children }: {
     return () => clearInterval(id);
   }, [active, loadFeed]);
 
-  const select = useCallback((id: string | null) => {
+  const [order, setOrder] = useState<readonly string[]>([]);
+  const select = useCallback((id: string | null, chosenFrom?: readonly string[]) => {
     setSelectedId(id);
+    if (chosenFrom) setOrder(chosenFrom);
     setConfirm(null);
     setRestoreError(null);
   }, []);
+  const neighbour = (delta: -1 | 1): string | null => {
+    const at = selectedId ? order.indexOf(selectedId) : -1;
+    return at >= 0 ? order[at + delta] ?? null : null;
+  };
+  // Read the changes on either side ahead of time, so Previous and Next show them at once.
+  useEffect(() => {
+    if (!selectedId) return;
+    const at = order.indexOf(selectedId);
+    if (at < 0) return;
+    for (const id of [order[at - 1], order[at + 1]]) if (id) readRecord(id).catch(() => undefined);
+  }, [selectedId, order, readRecord]);
+  const step = (delta: -1 | 1) => {
+    const next = neighbour(delta);
+    if (next) select(next);
+  };
 
   const askRestore = useCallback((side: RestoreSide) => {
-    if (!record || !restoreAvailability(record, history, side).ok) return;
+    // Not while the shown change is the previous choice, still on screen as the new one loads.
+    if (!record || record.id !== selectedRef.current || !restoreAvailability(record, history, side).ok) return;
     setRestoreError(null);
     setConfirm({ side, latestId: history[0]?.id ?? null });
   }, [record, history]);
@@ -286,11 +329,11 @@ export function ChangesProvider({ hass, active = true, children }: {
   }, [record, confirm, restoring, notify, loadFeed, select]);
 
   const value: ChangesState = {
-    feed, loading, loadingMore, error, hasMore,
+    feed, loading, loadingMore, error, hasMore, total,
     refresh: () => { void loadFeed(0); void loadNames(); void reloadHistory(); },
     loadMore: () => { if (!loadingMore) void loadFeed(feed.length); },
     names,
-    selectedId, select, record, recordLoading, recordError, history,
+    selectedId, select, neighbour, step, record, recordLoading, recordError, history,
     confirm, askRestore, cancelRestore: () => setConfirm(null), restore, restoring, restoreError,
   };
   return <ChangesContext.Provider value={value}>{children}</ChangesContext.Provider>;

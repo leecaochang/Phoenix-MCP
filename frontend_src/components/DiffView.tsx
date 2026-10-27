@@ -1,7 +1,8 @@
 /** Before/after diff pane for approval review. */
-import React, { useMemo, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { toYaml, YamlView } from "./YamlView";
 import { t } from "../i18n";
+import { DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 
 // The approval diff carries before/after as JSON strings (possibly truncated).
@@ -76,16 +77,20 @@ export function rememberCodeView(code: boolean): void {
  * with that one instead of competing with it. */
 export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => void }) {
   const label = code ? t("changes.toCodeOff") : t("changes.toCodeOn");
+  // Icons only, or icons with their short name, as the toolbar's display mode says.
+  const withText = useContext(DisplayModeContext) !== "icons";
+  // Like the layout toggle, the icon and name show the view the button switches TO.
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm btn-icon diff-code-toggle"
+      className={`btn btn-ghost btn-sm diff-code-toggle${withText ? " phx-action" : " btn-icon"}`}
       onClick={onToggle}
       aria-label={label}
-      aria-pressed={code}
       title={label}
     >
-      <Icon name="code" size={16} style={{ display: "block" }} />
+      {/* Not "Diff": the Diff|Preview control can sit beside it, and two Diffs read as one broken control. */}
+      <Icon name={code ? "lineView" : "code"} size={16} style={{ display: "block" }} />
+      {withText && <span aria-hidden="true">{t(code ? "changes.lineViewShort" : "changes.codeEditorShort")}</span>}
     </button>
   );
 }
@@ -95,16 +100,18 @@ export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => 
  * the Changes tab. */
 export function LayoutToggle({ stacked, onToggle }: { stacked: boolean; onToggle: () => void }) {
   const label = stacked ? t("changes.toSideBySide") : t("changes.toStacked");
+  const withText = useContext(DisplayModeContext) !== "icons";
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm btn-icon diff-layout-toggle"
+      className={`btn btn-ghost btn-sm diff-layout-toggle${withText ? " phx-action" : " btn-icon"}`}
       onClick={onToggle}
       aria-label={label}
       title={label}
     >
-      {/* The icon shows the layout the button switches TO. */}
+      {/* The icon and name show the layout the button switches TO. */}
       <Icon name={stacked ? "sideBySide" : "stacked"} size={16} style={{ display: "block" }} />
+      {withText && <span aria-hidden="true">{t(stacked ? "changes.sideBySideShort" : "changes.stackedShort")}</span>}
     </button>
   );
 }
@@ -136,15 +143,8 @@ export function BeforeAfter({ before, after, toolbarExtra }: {
   );
   return (
     <div className="change-diff-wrap">
+      {/* No explanatory hint (user, 2026-10-27): the pressed Code Editor button says the tinting is off. */}
       <div className="change-diff-toolbar">
-        <span className="change-diff-hint">
-          {code
-            // Say what this view GIVES UP. The tinting is how an approver sees
-            // what they are approving, and a syntax-coloured pane looks
-            // authoritative enough that its absence would otherwise go unnoticed.
-            ? t("changes.hintCode")
-            : t("changes.hintDiff")}
-        </span>
         {toolbarExtra}
         <CodeToggle code={code} onToggle={toggleCode} />
         <LayoutToggle stacked={stacked} onToggle={toggleStacked} />

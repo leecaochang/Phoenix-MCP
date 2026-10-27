@@ -1,20 +1,21 @@
 /**
  * The main toolbar: workspaces, Agent Chat or the kill-switch warning,
  * documentation and workspace options, plus a second row of tools for the
- * visible workspace. It docks to any edge or floats by its grip, collapses to
- * one icon, and shows icons only or icons with text (chosen by right-click).
- * With icons and text along the top or bottom, or floating, labels sit under
- * the icons and the main row keeps to one line (toolbarFit.ts); at a side,
- * every button shares one width.
+ * visible workspace. It docks to any edge or floats by its grip, lies
+ * horizontal or stands vertical, collapses to its grip and options, and shows
+ * icons only or icons with text. Its options menu opens from its own button,
+ * from the grip and by right-click. Horizontal with icons and text, labels
+ * sit under the icons and the main row keeps to one line (toolbarFit.ts);
+ * vertical, every button shares one width.
  */
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { localeNumber, t } from "../i18n";
-import { Icon, type IconName } from "../ui/Icon";
+import { Icon } from "../ui/Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { WorkspaceController } from "./dock/controller";
 import { usePanelData } from "./PanelData";
-import { WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState, type WorkspaceId } from "./storage";
+import { toolbarVertical, withToolbarDock, WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState, type WorkspaceId } from "./storage";
 import { chooseFit, fitClass, rowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
 import { useSettings } from "./settings";
@@ -71,12 +72,6 @@ const MOVE_STEP = 16;
 /** Space kept between a floating toolbar and the panel's edges. */
 const FLOAT_MARGIN = 8;
 
-/** Collapse and expand look like closing or opening a panel along the edge the toolbar is docked to. */
-function collapseIcon(dock: ToolbarDock, collapsed: boolean): IconName {
-  const side = dock === "bottom" ? "Bottom" : dock === "left" ? "Left" : dock === "right" ? "Right" : "Top";
-  return `toolbar${collapsed ? "Open" : "Close"}${side}` as IconName;
-}
-
 /** A floating toolbar's position kept inside the panel. */
 function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number; y: number } {
   return {
@@ -85,20 +80,36 @@ function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number
   };
 }
 
-/** The toolbar's own menu: display mode, then where it sits. Phones keep it docked at the top. */
-function appearanceMenu(state: ToolbarState, update: (patch: Partial<ToolbarState>) => void, env: Env): MenuEntry[] {
+/**
+ * The toolbar's own menu: display mode, where it sits, and Collapse or
+ * Expand. While floating it offers the orientation it is not in, and no
+ * Float Toolbar. Phones keep it docked at the top.
+ */
+function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => void, env: Env): MenuEntry[] {
+  const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
   const items: MenuEntry[] = [
     { id: "icons", label: t("workspace.iconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
     { id: "icon-text", label: t("workspace.iconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
   ];
   if (env === "desktop") {
     items.push("separator");
-    for (const [dock, key] of DOCKS) items.push({ id: `dock-${dock}`, label: t(key), checked: state.dock === dock, onSelect: () => update({ dock }) });
+    const floating = state.dock === "floating";
+    for (const [dock, key] of DOCKS) {
+      if (dock === "floating" && floating) continue;
+      items.push({ id: `dock-${dock}`, label: t(key), checked: state.dock === dock, onSelect: () => onChange(withToolbarDock(state, dock)) });
+    }
+    if (floating) {
+      const vertical = state.vertical;
+      items.push({ id: vertical ? "horizontal" : "vertical", label: t(vertical ? "workspace.horizontal" : "workspace.vertical"), onSelect: () => update({ vertical: !vertical }) });
+    }
   }
+  items.push("separator", state.collapsed
+    ? { id: "expand", label: t("workspace.expandToolbar"), onSelect: () => update({ collapsed: false }) }
+    : { id: "collapse", label: t("workspace.collapseToolbar"), onSelect: () => update({ collapsed: true }) });
   return items;
 }
 
-function ToolRow({ registry, workspace, order, groups, hide }: { registry: ToolRegistry; workspace: string; order: readonly string[]; groups: ToolGroup[]; hide: ReactNode }) {
+function ToolRow({ registry, workspace, order, groups }: { registry: ToolRegistry; workspace: string; order: readonly string[]; groups: ToolGroup[] }) {
   const run = (group: ToolGroup, tool: Tool) => (group.id === SHARED_GROUP
     ? registry.runShared(workspace, order, tool.id)
     : registry.latest(workspace, group.id, tool.id)?.onSelect?.());
@@ -122,7 +133,6 @@ function ToolRow({ registry, workspace, order, groups, hide }: { registry: ToolR
           ))}
         </div>
       ))}
-      {hide}
     </div>
   );
 }
@@ -181,7 +191,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
       // A docked toolbar spans the panel; once floating it is only as wide as its buttons, so keep it inside by its live size.
       const size = self.current?.getBoundingClientRect() ?? bar;
       next = within(shell, size, bar.left - shell.left + ev.clientX - x0, bar.top - shell.top + ev.clientY - y0);
-      onChange({ ...state, dock: "floating", ...next });
+      onChange({ ...withToolbarDock(state, "floating"), ...next });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -208,9 +218,12 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     return true;
   };
 
-  // A floating toolbar stays inside the panel when the panel or the toolbar changes size.
+  // A floating toolbar stays inside the panel when the panel or the toolbar changes size, as when it
+  // turns, expands or shows its text: it moves left or up as far as it needs to be drawn in full.
   useLayoutEffect(() => {
-    const shellEl = shellRoot.current;
+    // On the first render the shell's ref is attached only after this effect runs; the toolbar's own
+    // parent is the same element.
+    const shellEl = shellRoot.current ?? self.current?.parentElement ?? null;
     if (effective.dock !== "floating" || !shellEl) return;
     const fit = () => {
       const shell = shellEl.getBoundingClientRect();
@@ -225,11 +238,12 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     observer.observe(shellEl);
     if (self.current) observer.observe(self.current);
     return () => observer.disconnect();
-  }, [effective.dock, state.x, state.y, state.mode, state.collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [effective.dock, state.x, state.y, state.mode, state.collapsed, state.vertical]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Icons and text along the top or bottom, or floating, keep the main row on one line (toolbarFit.ts).
+  // A horizontal toolbar with icons and text keeps the main row on one line (toolbarFit.ts).
   // The step is set on the toolbar directly, only when the panel's width or the row's text changes.
-  const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && effective.dock !== "left" && effective.dock !== "right";
+  const vertical = env === "desktop" && toolbarVertical(effective);
+  const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
   const fitKey = useRef("");
   const refit = useRef<(force?: boolean) => void>(() => {});
   useLayoutEffect(() => {
@@ -238,7 +252,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
       const main = bar?.querySelector<HTMLElement>(".phx-toolbar-main");
       if (!bar || !main) return;
       if (!fitOneLine) { delete bar.dataset.fit; fitKey.current = ""; return; }
-      const key = `${shellRoot.current?.clientWidth ?? 0}|${effective.dock}|${d.workspace}|${main.textContent}`;
+      const key = `${shellRoot.current?.clientWidth ?? 0}|${effective.dock}|${vertical}|${d.workspace}|${main.textContent}`;
       if (!force && key === fitKey.current) return;
       fitKey.current = key;
       chooseFit((step) => { bar.dataset.fit = String(step); }, () => rowFits(main));
@@ -257,108 +271,109 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
 
   const onContextMenu = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("input, textarea, select")) return;
-    showMenu?.(e, t("workspace.toolbarMenu"), appearanceMenu(state, update, env));
+    showMenu?.(e, t("workspace.toolbarMenu"), appearanceMenu(state, onChange, env));
   };
 
   const collapsed = effective.collapsed;
-  const toolsToggle = (
-    <button type="button" className={`phx-toolbar-button phx-toolbar-plain phx-toolbar-tools-toggle ${fitClass(1)}`}
-      aria-label={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
-      title={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
-      data-help="help.tools"
-      aria-expanded={effective.toolsShown}
-      onClick={() => update({ toolsShown: !state.toolsShown })}>
-      <Icon name={effective.toolsShown ? "hideTools" : "showTools"} size={16} />
-      <span className="phx-toolbar-label">{effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}</span>
-    </button>
-  );
   return (
     <div
       ref={self}
       className="phx-toolbar"
       data-dock={effective.dock}
+      data-orient={vertical ? "vertical" : "horizontal"}
       data-mode={effective.mode}
       data-collapsed={collapsed || undefined}
       style={effective.dock === "floating" ? { left: effective.x, top: effective.y } : undefined}
       onContextMenu={onContextMenu}
     >
-      <div className="phx-toolbar-main">
-        {d.narrow && <ha-menu-button ref={menuRef as RefObject<HTMLElement>} />}
-        {/* The grip stays while collapsed, so a collapsed toolbar can still be moved. */}
-        {env === "desktop" && (
-          <MenuButton
-            label={t("workspace.moveToolbar")}
-            help="help.moveToolbar"
-            icon={<Icon name="grip" size={16} />}
-            items={() => appearanceMenu(state, update, env)}
-            className="phx-toolbar-handle"
-            onButtonKeyDown={moveByKeys}
-            onPointerDown={startMove}
-          />
-        )}
-        {!collapsed && (
-          <nav className="phx-toolbar-nav" aria-label={t("shell.sectionsAria")}>
-            {WORKSPACE_IDS.map((id) => {
-              const def = WORKSPACES[id];
-              const active = d.workspace === id;
-              const count = id === "approvals" ? d.pendingCount : 0;
-              const label = t(def.labelKey);
-              return (
-                <button key={id} type="button"
-                  className={`phx-toolbar-button ${fitClass(5)}${active ? " is-current" : ""}`}
-                  aria-current={active ? "page" : undefined}
-                  aria-label={count > 0 ? t("shell.approvalsTabAria", { count }) : undefined}
-                  title={label}
-                  data-help={def.helpKey}
-                  onClick={() => d.navigate(id)}>
-                  <Icon name={def.icon} size={16} />
-                  <span className="phx-toolbar-label">{label}</span>
-                  {count > 0 && <span className="phx-toolbar-badge" aria-hidden="true">{localeNumber(count)}</span>}
-                </button>
-              );
-            })}
-          </nav>
-        )}
-        {!collapsed && (
-          <div className="phx-toolbar-group">
-            {d.settings?.kill_switch ? (
-              <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} onClick={openKillSwitch}>
-                <Icon name="killSwitch" size={16} />
-                <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
+      {/* The grip spans both rows (both columns standing upright) and stays while collapsed, so a
+          collapsed toolbar can still be moved and its menu opened. */}
+      {env === "desktop" && (
+        <MenuButton
+          label={t("workspace.moveToolbar")}
+          help="help.moveToolbar"
+          icon={<Icon name={vertical ? "gripHorizontal" : "grip"} size={16} />}
+          items={() => appearanceMenu(state, onChange, env)}
+          className="phx-toolbar-handle"
+          onButtonKeyDown={moveByKeys}
+          onPointerDown={startMove}
+        />
+      )}
+      {(!collapsed || d.narrow || env !== "desktop") && (
+        <div className="phx-toolbar-body">
+          <div className="phx-toolbar-main">
+            {d.narrow && <ha-menu-button ref={menuRef as RefObject<HTMLElement>} />}
+            {!collapsed && (
+              <nav className="phx-toolbar-nav" aria-label={t("shell.sectionsAria")}>
+                {WORKSPACE_IDS.map((id) => {
+                  const def = WORKSPACES[id];
+                  const active = d.workspace === id;
+                  const count = id === "approvals" ? d.pendingCount : 0;
+                  const label = t(def.labelKey);
+                  return (
+                    <button key={id} type="button"
+                      className={`phx-toolbar-button ${fitClass(4)}${active ? " is-current" : ""}`}
+                      aria-current={active ? "page" : undefined}
+                      aria-label={count > 0 ? t("shell.approvalsTabAria", { count }) : undefined}
+                      title={label}
+                      data-help={def.helpKey}
+                      onClick={() => d.navigate(id)}>
+                      <Icon name={def.icon} size={16} />
+                      <span className="phx-toolbar-label">{label}</span>
+                      {count > 0 && <span className="phx-toolbar-badge" aria-hidden="true">{localeNumber(count)}</span>}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+            {!collapsed && (
+              <div className="phx-toolbar-group">
+                {d.settings?.kill_switch ? (
+                  <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} onClick={openKillSwitch}>
+                    <Icon name="killSwitch" size={16} />
+                    <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
+                  </button>
+                ) : d.accessKeys.length > 0 && d.agentCliInstances.length > 0 ? (
+                  // Only with an AI provider to talk to; a heavier border makes it easy to find.
+                  <button type="button" className={`phx-toolbar-button phx-toolbar-chat ${fitClass(3)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => (onAgentChat ? onAgentChat() : d.openAgentCli())}>
+                    <Icon name="agentChat" size={16} />
+                    <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
+                  </button>
+                ) : null}
+                <MenuButton label={t("shell.documentation")} help="help.documentation" icon={<Icon name="documentation" size={16} />}
+                  items={documentation} className={`phx-toolbar-button ${fitClass(2)}`}>
+                  <span className="phx-toolbar-label">{t("shell.documentation")}</span>
+                </MenuButton>
+                {controller && (
+                  <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}
+                    items={() => workspaceMenu(controller, actions)} className={`phx-toolbar-button ${fitClass(1)}`}>
+                    <span className="phx-toolbar-label">{t("workspace.options")}</span>
+                  </MenuButton>
+                )}
+              </div>
+            )}
+            {/* The toolbar's options, the same menu as the grip and right-click. Collapsed, the grip holds it;
+                phones have no grip, so there it stays. */}
+            {(!collapsed || env !== "desktop") && (
+              <MenuButton label={t("workspace.toolbarOptions")} help="help.toolbarOptions" icon={<Icon name="more" size={16} />}
+                items={() => appearanceMenu(state, onChange, env)} className="phx-toolbar-button phx-toolbar-plain phx-toolbar-options" />
+            )}
+            {/* One icon-only control shows or hides the tools row, in the same place either way. */}
+            {!collapsed && groups.length > 0 && (
+              <button type="button" className="phx-toolbar-button phx-toolbar-plain phx-toolbar-tools-toggle"
+                aria-label={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
+                title={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
+                data-help="help.tools"
+                aria-expanded={effective.toolsShown}
+                onClick={() => update({ toolsShown: !state.toolsShown })}>
+                <Icon name={effective.toolsShown ? "hideTools" : "showTools"} size={16} />
               </button>
-            ) : d.accessKeys.length > 0 && d.agentCliInstances.length > 0 ? (
-              // Only with an AI provider to talk to; a heavier border makes it easy to find.
-              <button type="button" className={`phx-toolbar-button phx-toolbar-chat ${fitClass(4)}`} title={t("shell.agentChat")} data-help="help.agentChat" onClick={() => (onAgentChat ? onAgentChat() : d.openAgentCli())}>
-                <Icon name="agentChat" size={16} />
-                <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
-              </button>
-            ) : null}
-            <MenuButton label={t("shell.documentation")} help="help.documentation" icon={<Icon name="documentation" size={16} />}
-              items={documentation} className={`phx-toolbar-button ${fitClass(3)}`}>
-              <span className="phx-toolbar-label">{t("shell.documentation")}</span>
-            </MenuButton>
-            {controller && (
-              <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}
-                items={() => workspaceMenu(controller, actions)} className={`phx-toolbar-button ${fitClass(2)}`}>
-                <span className="phx-toolbar-label">{t("workspace.options")}</span>
-              </MenuButton>
             )}
           </div>
-        )}
-        {/* While the tools row is hidden, the control that shows it sits here; while shown, it ends the row. */}
-        {!collapsed && groups.length > 0 && !effective.toolsShown && toolsToggle}
-        <button type="button" className={`phx-toolbar-button phx-toolbar-plain ${fitClass(1)}`}
-          aria-label={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
-          title={collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}
-          data-help="help.collapseToolbar"
-          aria-expanded={!collapsed}
-          onClick={() => update({ collapsed: !state.collapsed })}>
-          <Icon name={collapseIcon(effective.dock, collapsed)} size={16} />
-          <span className="phx-toolbar-label">{collapsed ? t("workspace.expandToolbar") : t("workspace.collapseToolbar")}</span>
-        </button>
-      </div>
-      {!collapsed && effective.toolsShown && registry && groups.length > 0 && (
-        <ToolRow registry={registry} workspace={d.workspace} order={order} groups={groups} hide={toolsToggle} />
+          {!collapsed && effective.toolsShown && registry && groups.length > 0 && (
+            <ToolRow registry={registry} workspace={d.workspace} order={order} groups={groups} />
+          )}
+        </div>
       )}
     </div>
   );

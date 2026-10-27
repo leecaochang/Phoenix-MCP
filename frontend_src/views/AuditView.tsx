@@ -17,7 +17,7 @@ import { friendlyResource } from "../utils";
 import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
 import { useLogSelection } from "../shell/logDetails";
-import { useToolbarTools } from "../shell/tools";
+import { useOnToolbar, useToolbarTools } from "../shell/tools";
 import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { useWindowVisible } from "../shell/visibility";
 import { ActionButton } from "../ui/ActionButton";
@@ -59,6 +59,8 @@ export function AuditView({ accessKeys }: Props) {
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Hidden filters stop applying, and come back as they were when shown again (user, 2026-10-27).
+  const filtersApply = !useOnToolbar() || filtersOpen;
 
   // Method/resource/ip are server-side filters; debounce them so typing does
   // not fire a request per keystroke.
@@ -82,14 +84,14 @@ export function AuditView({ accessKeys }: Props) {
   );
   const displayName = useCallback((e: AuditEntry): string => accessKeyNames[e.access_key_id] ?? e.access_key_name, [accessKeyNames]);
 
-  const filterParams = useMemo(() => ({
+  const filterParams = useMemo(() => (filtersApply ? {
     outcome: outcomeFilter || undefined,
     access_key_id: accessKeyFilter || undefined,
     since: timeWindow ? new Date(Date.now() - TIME_WINDOW_MS[timeWindow]).toISOString() : undefined,
     method: debouncedMethod || undefined,
     resource: debouncedResource || undefined,
     ip: debouncedIp ? auditSourceFilterValue(debouncedIp) : undefined,
-  }), [outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
+  } : {}), [filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
 
   const beginLoad = useLatestRequest();
   // Each load starts a generation; a background update applies only within the one it began in.
@@ -160,7 +162,7 @@ export function AuditView({ accessKeys }: Props) {
   }, [paused, windowVisible, updateQuietly]);
   const logSettings = useLogSettingsTool();
 
-  const activeFilters = [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter].filter(Boolean).length;
+  const activeFilters = filtersApply ? [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter].filter(Boolean).length : 0;
   const clearFilters = () => {
     setOutcomeFilter(""); setAccessKeyFilter(""); setTimeWindow("");
     setMethodFilter(""); setResourceFilter(""); setIpFilter("");
@@ -289,12 +291,6 @@ export function AuditView({ accessKeys }: Props) {
           )}
         </div>
       </div>
-      {!showFilters && activeFilters > 0 && (
-        <p className="phx-filters-active">
-          {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-          <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
-        </p>
-      )}
 
       {error && <div className="banner banner-error mb-8" role="alert">{error}</div>}
       {loading ? (

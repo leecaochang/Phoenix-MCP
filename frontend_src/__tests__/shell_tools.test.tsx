@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
-import { DEFAULT_TOOLBAR, readToolbar } from "../shell/storage";
+import { DEFAULT_TOOLBAR, readToolbar, toolbarVertical, withToolbarDock } from "../shell/storage";
 import { FIT_STEPS, chooseFit, rowFits } from "../shell/toolbarFit";
 import { auditEntryKey } from "../components/AuditEntry";
 import { ConfigTable } from "../ui/table/ConfigTable";
@@ -192,9 +192,19 @@ describe("Log Details", () => {
 describe("saved toolbar placement", () => {
   it("keeps valid values and replaces anything else with the defaults", () => {
     expect(readToolbar(undefined)).toEqual(DEFAULT_TOOLBAR);
-    expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" }))
-      .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text" });
-    expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge" })).toEqual(DEFAULT_TOOLBAR);
+    expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true }))
+      .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true });
+    expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge", vertical: "up" })).toEqual(DEFAULT_TOOLBAR);
+  });
+
+  it("keeps the orientation a docked toolbar had when it floats, and follows the edge when docked", () => {
+    const at = (dock: "top" | "bottom" | "left" | "right" | "floating", vertical = false) => ({ ...DEFAULT_TOOLBAR, dock, vertical });
+    expect(withToolbarDock(at("left"), "floating")).toMatchObject({ dock: "floating", vertical: true });
+    expect(withToolbarDock(at("right"), "floating")).toMatchObject({ dock: "floating", vertical: true });
+    expect(withToolbarDock(at("top", true), "floating")).toMatchObject({ dock: "floating", vertical: false });
+    expect(toolbarVertical(at("floating", true))).toBe(true);
+    expect(toolbarVertical(withToolbarDock(at("floating", true), "top"))).toBe(false);
+    expect(toolbarVertical(withToolbarDock(at("floating", false), "left"))).toBe(true);
   });
 });
 

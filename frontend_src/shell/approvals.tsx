@@ -49,7 +49,11 @@ export interface ApprovalsState {
 
   /** The request in Review, as most recently loaded. */
   current: ApprovalRecord | null;
-  select: (record: ApprovalRecord | null) => void;
+  /** Choose a request; `order` is the list it was chosen from, in its shown order, for Previous and Next. */
+  select: (record: ApprovalRecord | null, order?: readonly string[]) => void;
+  /** The request before (-1) or after (1) the chosen one in that list; null at either end. */
+  neighbour: (delta: -1 | 1) => ApprovalRecord | null;
+  step: (delta: -1 | 1) => void;
   /** A decision on this request is running here, or its action is running anywhere. */
   locked: (record: ApprovalRecord) => boolean;
   deciding: "approve" | "reject" | null;
@@ -248,10 +252,21 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   // A reload brings a newer copy of the request in Review (a claim, for one).
   const current = selected ? records.find((r) => r.id === selected.id && r.status === selected.status) ?? selected : null;
 
-  const select = useCallback((record: ApprovalRecord | null) => {
+  const [order, setOrder] = useState<readonly string[]>([]);
+  const select = useCallback((record: ApprovalRecord | null, chosenFrom?: readonly string[]) => {
     setSelected(record);
+    if (chosenFrom) setOrder(chosenFrom);
     setRejecting(false);
   }, []);
+  const neighbour = (delta: -1 | 1): ApprovalRecord | null => {
+    const at = selected ? order.indexOf(selected.id) : -1;
+    const id = at >= 0 ? order[at + delta] : undefined;
+    return (id && records.find((r) => r.id === id)) || null;
+  };
+  const step = (delta: -1 | 1) => {
+    const next = neighbour(delta);
+    if (next) select(next);
+  };
 
   // Seeded from (and mirrored to) the shared draft store, so the reason typed in
   // Review is also what Agent Chat's Reject sends for the same request.
@@ -430,7 +445,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
 
   const value: ApprovalsState = {
     scope, setScope: onScopeChange, search, setSearch, shown, loading, loadingMore, error, hasMore, pendingTotal, refresh, loadMore, isClaimed,
-    current, select, locked,
+    current, select, neighbour, step, locked,
     deciding: current && deciding?.id === current.id ? deciding.kind : null,
     decisionError: current && decisionError?.id === current.id ? decisionError.message : null,
     rejecting, setRejecting, reason, setReason,

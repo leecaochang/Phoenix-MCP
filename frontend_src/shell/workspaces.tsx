@@ -163,15 +163,16 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsChanges",
     icon: "changes",
     windows: ["changes", "comparison", "itemHistory", "attention"],
-    // The list beside a larger Comparison, as accepted for Changes. Item History starts
-    // closed and opens below the list from its toolbar tool.
-    arrange: (api, add) => {
+    // The list and Comparison in two equal columns (user, 2026-10-27). Item History starts closed and opens
+    // below the list by itself when a chosen change's item has other changes, unless the user closed it.
+    // The windows always fit the screen: Changes never scrolls.
+    arrange: (_, add) => {
       add("changes");
       add("comparison", { referencePanel: "changes", direction: "right" });
-      size(api, "changes", { width: Math.round(api.width * 0.34) });
     },
     closedAt: { itemHistory: { neighbor: "changes", side: "bottom" } },
     heights: { itemHistory: 280 },
+    fit: true,
     // 2: the three windows replaced the single Changes window.
     layoutVersion: 2,
   },

@@ -99,6 +99,9 @@ export function Shell() {
   const d = usePanelData();
   const root = useRef<HTMLDivElement | null>(null);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  // Stable, so React never detaches the root between renders: an inline callback left root.current
+  // null while children's layout effects ran, and the toolbar could not keep itself inside the panel.
+  const attachRoot = useCallback((el: HTMLDivElement | null) => { root.current = el; setRootEl(el); }, []);
   const env = useEnvironment(root);
   const userId = (d.hass as { user?: { id?: string } } | null)?.user?.id ?? null;
 
@@ -600,7 +603,7 @@ export function Shell() {
       esphomeIntegration={s ? !!s.esphome_integration : null}
       esphomeBuilder={s ? !!s.esphome_builder : null}
     >
-      <div ref={(el) => { root.current = el; setRootEl(el); }} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
+      <div ref={attachRoot} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
           state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat} />

@@ -15,7 +15,7 @@ import { MODE_LABEL_KEYS, SIGNAL_LABEL_KEYS, suggestionReason } from "../compone
 import { localeNumber, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useMesa, type MesaState, type ProfileRow } from "../shell/mesa";
-import { useToolbarTools, type ToolGroup } from "../shell/tools";
+import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { InlineTools, useEnsureOpen, useWindowToggle } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
@@ -52,7 +52,9 @@ export function MesaProfilesWindow() {
   const [control, setControl] = useState("");
   const [enforcement, setEnforcement] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const activeFilters = (scope ? 1 : 0) + (control ? 1 : 0) + (enforcement ? 1 : 0);
+  // Hidden filters stop applying and come back as they were (user, 2026-10-27); the search is not one of them.
+  const filtersApply = !useOnToolbar() || filtersOpen;
+  const activeFilters = filtersApply ? (scope ? 1 : 0) + (control ? 1 : 0) + (enforcement ? 1 : 0) : 0;
 
   const openNew = (s: MesaProfileScope) => { m?.open({ scope: s, key: null, isNew: true }); ensureOpen("mesaEditor"); };
   const actionsMenu = (): MenuEntry[] => [
@@ -82,9 +84,9 @@ export function MesaProfilesWindow() {
   // The control-mode filter keeps the old summary's counts.
   const count = (mode: string) => m.rows.filter((r) => (mode === "enforced" ? isEnforced(r.document) : rawControlMode(r.document) === mode)).length;
 
-  const shown = m.rows.filter((r) => (!scope || r.scope === scope)
+  const shown = m.rows.filter((r) => (!filtersApply || ((!scope || r.scope === scope)
     && (!control || rawControlMode(r.document) === control)
-    && (!enforcement || (enforcement === "enforced") === isEnforced(r.document))
+    && (!enforcement || (enforcement === "enforced") === isEnforced(r.document))))
     && matchesListSearch(`${r.name} ${r.key} ${scopeLabel(r.scope)} ${tagsOf(r.document).join(" ")}`, search));
   const columns: Column<ProfileRow>[] = [
     {
@@ -137,12 +139,6 @@ export function MesaProfilesWindow() {
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
         </div>
       </div>
-      {!showFilters && activeFilters > 0 && (
-        <p className="phx-filters-active">
-          {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-          <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
-        </p>
-      )}
       <div className="approvals-filter-row">
         <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder={t("mesa.searchPlaceholder")} aria-label={t("mesa.searchAria")} />

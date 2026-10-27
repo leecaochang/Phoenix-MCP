@@ -72,7 +72,7 @@ describe("the Changes list", () => {
     vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], 3));
     const view = renderChanges();
     await view.findByText("Zebra lamp");
-    fireEvent.click(view.getByRole("button", { name: "Name" }));
+    fireEvent.click(view.getByRole("button", { name: "Item" }));
     expect(rowsOf(listWindow())[0]).toHaveTextContent("Alpha lamp");
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
     expect(view.queryByText("Alpha lamp")).toBeNull();
@@ -104,13 +104,27 @@ describe("the Changes list", () => {
     expect(queryByText("Load More")).toBeNull();
   });
 
-  it("Refresh reloads from offset 0, replacing the loaded feed", async () => {
-    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "First change" })]));
-    const { findByText, getByRole } = renderChanges();
-    await findByText("First change");
-    fireEvent.click(getByRole("button", { name: "Refresh Changes" }));
-    await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(2));
+  it("offers no Refresh: a configuration change reloads the first page, replacing the loaded feed", async () => {
+    let configChanged: (() => void) | undefined;
+    const hass = { connection: { subscribeEvents: vi.fn(async (cb: () => void) => { configChanged = cb; return () => {}; }) } };
+    vi.mocked(api.listVersions)
+      .mockResolvedValueOnce(page([version({ id: "v1", alias: "First change" })]))
+      .mockResolvedValue(page([version({ id: "v2", alias: "Newer change" })]));
+    const view = renderChanges({ hass });
+    await view.findByText("First change");
+    expect(view.queryByRole("button", { name: "Refresh Changes" })).toBeNull();
+    await waitFor(() => expect(configChanged).toBeTypeOf("function"));
+    configChanged!();
+    await view.findByText("Newer change");
     expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 100, offset: 0 });
+    expect(view.queryByText("First change")).toBeNull();
+  });
+
+  it("shows how many changes are loaded of all recorded", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "First change" })], 42));
+    const view = renderChanges();
+    await view.findByText("First change");
+    expect(view.getByText("Showing 1 of 42")).toBeTruthy();
   });
 
   it("lets a newer config-change refresh release an older foreground load", async () => {
@@ -119,15 +133,13 @@ describe("the Changes list", () => {
     let configChanged: (() => void) | undefined;
     const hass = { connection: { subscribeEvents: vi.fn(async (cb: () => void) => { configChanged = cb; return () => {}; }) } };
     vi.mocked(api.listVersions)
-      .mockResolvedValueOnce(page([version()]))
       .mockReturnValueOnce(foreground.promise)
       .mockReturnValueOnce(background.promise);
+    // The first load is the foreground one; a configuration change starts a newer one before it answers.
     const view = renderChanges({ hass });
-    await view.findByText("My automation");
     await waitFor(() => expect(configChanged).toBeTypeOf("function"));
-    fireEvent.click(view.getByRole("button", { name: "Refresh Changes" }));
     configChanged!();
-    await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(2));
     // The newer, event-driven reload answers first with nothing: its answer stands, and loading ends.
     background.resolve(page([]));
     expect(await view.findByText(/No agent configuration changes yet/)).toBeTruthy();
@@ -305,7 +317,8 @@ describe("Comparison of device YAML", () => {
     fireEvent.click(view.getByRole("button", { name: /code editor view/i }));
     expect(view.container.querySelectorAll(".diff-line").length).toBe(0);
     expect(comparisonWindow().textContent).toContain("name: rf-blaster2");
-    expect(view.container.querySelector(".change-diff-hint")?.textContent).toContain("not marked");
+    // No explanatory hint in Comparison (user, 2026-10-27): just the controls and Restore.
+    expect(view.container.querySelector(".change-diff-hint")).toBeNull();
   });
 
   it("shares the choice with the approval diff rather than keeping its own", async () => {

@@ -182,11 +182,13 @@ export function ApprovalsListWindow() {
       <ConfigTable
         id="approvals"
         label={t("shell.tabApprovals")}
+        // Newest request first, as every table with a time sorts by default (user, 2026-10-27).
+        defaultSort={{ column: "requested", dir: "desc" }}
         columns={listColumns(a)}
         rows={a.shown}
         rowKey={(r) => r.id}
         selectedKey={a.current?.id ?? null}
-        onSelect={(r) => a.select(r)}
+        onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
         rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}`}
         empty={a.loading ? null : empty}
         selection={a.batchMode ? {
@@ -261,7 +263,14 @@ export function ReviewWindow() {
   return (
     <div className="phx-review" key={r.id}>
       <div className="phx-review-head">
-        <h3 className="phx-review-title">{approvalListTitle(r.diff)}</h3>
+        {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
+        <div className="phx-log-details-bar">
+          <h3 className="phx-review-title">{approvalListTitle(r.diff)}</h3>
+          <div className="phx-log-details-nav">
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
+          </div>
+        </div>
         <p className="phx-review-context">
           <ApprovalStatusLabel record={r} claimed={claimed} />
           <span>{r.access_key_name}</span>

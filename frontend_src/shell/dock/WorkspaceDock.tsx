@@ -190,7 +190,7 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     if (!showMenu || target.closest("input, textarea, select, [contenteditable='true']")) return;
     if (target.closest(".dv-tabs-and-actions-container")) {
       const group = controller.groupContaining(target);
-      if (group) showMenu(e, t("workspace.windowMenu"), windowMenuEntries(controller, group, { full: true, extras: menuExtras }));
+      if (group) showMenu(e, t("workspace.windowMenu"), windowMenuEntries(controller, group, menuExtras));
       return;
     }
     if (target.closest(".dv-content-container, .dv-render-overlay, .phx-float-layer")) return;

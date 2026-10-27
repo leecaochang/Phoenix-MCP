@@ -6,17 +6,16 @@
  * state is `shell/changes.tsx`.
  */
 
-import { useContext, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import type { VersionSummary } from "../types";
 import { ErrorMsg, Loading } from "../components/common";
 import { CodeToggle, diffLines, LayoutToggle, RawDiffPane, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode, useHuiCardReady } from "../components/DashboardPreview";
 import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t } from "../i18n";
-import { tRich } from "../i18n/rich";
 import { changeLabel, RAW_CONTENT_TYPES, rawSide, restoreAvailability, useChanges, type ChangesState, type RestoreSide } from "../shell/changes";
-import { useToolbarTools, type ToolGroup } from "../shell/tools";
-import { InlineTools, useWindowToggle } from "../shell/windowTools";
+import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
+import { InlineTools, useEnsureOpen, useWindowToggle } from "../shell/windowTools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -102,18 +101,25 @@ function versionSummary(v: { summary?: string | null; summary_key?: string | nul
   return v.summary ?? "";
 }
 
+/** Every table with a time column starts sorted by it, newest first (user, 2026-10-27). */
+const NEWEST_FIRST = { column: "time", dir: "desc" } as const;
+
 export function ChangesListWindow() {
   const c = useChanges();
+  // Choosing a change brings Comparison back if the user closed it, as Log Details comes back in Logs.
+  const ensureOpen = useEnsureOpen();
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
   const [action, setAction] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const activeFilters = (type ? 1 : 0) + (action ? 1 : 0);
+  // Hidden filters, the search included, stop applying and come back as they were (user, 2026-10-27).
+  const filtersApply = !useOnToolbar() || filtersOpen;
+  const activeFilters = filtersApply ? (type ? 1 : 0) + (action ? 1 : 0) + (search.trim() ? 1 : 0) : 0;
   const groups: ToolGroup[] = c ? [{
     id: "changes",
     label: t("shell.tabChanges"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabChanges") }), short: t("common.refresh"), icon: "refresh", onSelect: c.refresh },
+      // No Refresh: the list follows Home Assistant's configuration events, and polls while shown.
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
         pressed: filtersOpen, badge: activeFilters || undefined, onSelect: () => setFiltersOpen((open) => !open) },
     ],
@@ -121,27 +127,18 @@ export function ChangesListWindow() {
   const onToolbar = useToolbarTools(groups);
   if (!c) return null;
   const showFilters = !onToolbar || filtersOpen;
-  const clearFilters = () => { setType(""); setAction(""); };
+  const clearFilters = () => { setType(""); setAction(""); setSearch(""); };
 
-  const shown = c.feed.filter((v) => (!type || v.resource_type === type)
+  const shown = !filtersApply ? c.feed : c.feed.filter((v) => (!type || v.resource_type === type)
     && (!action || v.action === action)
     && matchesListSearch(`${changeLabel(v)} ${v.resource_id} ${v.resource_type} ${resourceTypeLabel(v.resource_type)} ${v.action} ${actionLabel(v.action)} ${whoNow(v, c.names)} ${versionSummary(v)}`, search));
+  // Time first and every column shown (user, 2026-10-27); the Item cell is the item's name alone.
   const columns: Column<VersionSummary>[] = [
-    {
-      id: "item", label: t("changes.colName"), width: 220, maxWidth: 360, sortValue: (v) => changeLabel(v), title: (v) => changeLabel(v),
-      // The compact default: what changed and who changed it when, under the item's name.
-      cell: (v) => (
-        <span className="change-item">
-          <span>{changeLabel(v)}</span>
-          {versionSummary(v) && <span className="conversation-secondary">{versionSummary(v)}</span>}
-          <span className="conversation-secondary">{formatDateTime(v.timestamp)} · {whoNow(v, c.names)}</span>
-        </span>
-      ),
-    },
+    { id: "time", label: t("audit.rowTime"), width: 160, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
+    { id: "item", label: t("changes.colName"), width: 220, maxWidth: 360, sortValue: (v) => changeLabel(v), title: (v) => changeLabel(v), cell: (v) => changeLabel(v) },
     { id: "action", label: t("changes.colAction"), width: 120, sortValue: (v) => actionLabel(v.action), cell: (v) => <ChangeAction action={v.action} /> },
-    { id: "type", label: t("changes.colType"), width: 150, hidden: true, sortValue: (v) => resourceTypeLabel(v.resource_type), cell: (v) => resourceTypeLabel(v.resource_type) },
-    { id: "by", label: t("changes.colBy"), width: 140, hidden: true, sortValue: (v) => whoNow(v, c.names), cell: (v) => whoNow(v, c.names) },
-    { id: "time", label: t("changes.colWhen"), width: 160, hidden: true, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
+    { id: "type", label: t("changes.colType"), width: 150, sortValue: (v) => resourceTypeLabel(v.resource_type), cell: (v) => resourceTypeLabel(v.resource_type) },
+    { id: "by", label: t("changes.colBy"), width: 140, sortValue: (v) => whoNow(v, c.names), cell: (v) => whoNow(v, c.names), title: (v) => whoNow(v, c.names) },
   ];
 
   return (
@@ -160,32 +157,32 @@ export function ChangesListWindow() {
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
         </div>
       </div>
-      {!showFilters && activeFilters > 0 && (
-        <p className="phx-filters-active">
-          {t("logs.activeFilters", { count: localeNumber(activeFilters) })}{" "}
-          <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} className="btn btn-text btn-sm" />
-        </p>
+      {showFilters && (
+        <div className="approvals-filter-row">
+          <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("changes.search")} aria-label={t("changes.search")} />
+        </div>
       )}
-      <div className="approvals-filter-row">
-        <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("changes.search")} aria-label={t("changes.search")} />
-      </div>
       {c.error && <ErrorMsg msg={c.error} />}
       {c.loading && !c.feed.length && <Loading />}
       <ConfigTable
         id="changes"
         label={t("changes.title")}
+        defaultSort={NEWEST_FIRST}
         columns={columns}
         rows={shown}
         rowKey={(v) => v.id}
         selectedKey={c.selectedId}
-        onSelect={(v) => c.select(v.id)}
+        onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
         rowLabel={(v) => `${changeLabel(v)}, ${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
         empty={c.loading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
-      {c.hasMore && (
+      {!c.loading && c.feed.length > 0 && (
         <div className="phx-table-footer">
-          <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} busy={c.loadingMore} onClick={c.loadMore} />
+          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shown.length), total: localeNumber(c.total) })}</span>
+          {c.hasMore && (
+            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} busy={c.loadingMore} onClick={c.loadMore} />
+          )}
         </div>
       )}
     </div>
@@ -229,7 +226,7 @@ function RestoreConfirmation({ c }: { c: ChangesState }) {
 }
 
 /** The saved Before and After: a line diff or the code, side by side or stacked, or a dashboard preview. */
-function VersionComparison({ c }: { c: ChangesState }) {
+function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode }) {
   const record = c.record!;
   // A stored preference wins; otherwise stacked on narrow viewports and side by side on wider ones.
   const [stacked, setStacked] = useState(() => storedDiffLayout(typeof window !== "undefined" && window.matchMedia("(max-width: 800px)").matches));
@@ -241,7 +238,10 @@ function VersionComparison({ c }: { c: ChangesState }) {
   const huiReady = useHuiCardReady();
   const [mode, setModeState] = useState<"diff" | "preview">(() => storedPreviewMode());
   const setMode = (m: "diff" | "preview") => { rememberPreviewMode(m); setModeState(m); };
-  const [side, setSide] = useState<RestoreSide>("after");
+  // The Before or After choice holds for the change it was made on; the next change starts on After again.
+  const [picked, setPicked] = useState<{ id: string; side: RestoreSide } | null>(null);
+  const side: RestoreSide = picked?.id === record.id ? picked.side : "after";
+  const setSide = (value: RestoreSide) => setPicked({ id: record.id, side: value });
 
   const isRaw = RAW_CONTENT_TYPES.has(record.resource_type);
   const beforeRaw = isRaw ? rawSide(record.before) : null;
@@ -278,29 +278,26 @@ function VersionComparison({ c }: { c: ChangesState }) {
 
   return (
     <div className="change-diff-wrap">
+      {/* The view controls, then Restore at the end of the same row (user, 2026-10-27). */}
       <div className="change-diff-toolbar">
-        <span className="change-diff-hint">
-          {showPreview
-            ? tRich("changes.hintPreviewSide", { strong: (s) => <strong>{s}</strong> }, { side: t(previewSide === "before" ? "common.before" : "common.after") })
-            : <>{t("changes.hintDiff")}{code && <> {t("changes.hintCode")}</>}</>}
-        </span>
         {canPreview && (
           <SegmentedToggle value={mode} onChange={setMode} ariaLabel={t("approvals.diffModeAria")}
             options={[{ value: "diff", label: t("common.diff") }, { value: "preview", label: t("common.preview") }]} />
         )}
         {!showPreview && <CodeToggle code={code} onToggle={toggleCode} />}
         {!showPreview && <LayoutToggle stacked={stacked} onToggle={toggleStacked} />}
+        {showPreview && (
+          <SegmentedToggle value={previewSide} onChange={setSide} ariaLabel={t("approvals.diffSideAria")}
+            options={[
+              { value: "before", label: t("common.before"), disabled: !beforeOk },
+              { value: "after", label: t("common.after"), disabled: !afterOk },
+            ]} />
+        )}
+        <span className="change-diff-toolbar-end">{restore}</span>
       </div>
       {showPreview ? (
         <div className="dash-preview-host">
-          <div className="diff-mode-row">
-            <SegmentedToggle value={previewSide} onChange={setSide} ariaLabel={t("approvals.diffSideAria")}
-              options={[
-                { value: "before", label: t("common.before"), disabled: !beforeOk },
-                { value: "after", label: t("common.after"), disabled: !afterOk },
-              ]} />
-          </div>
-          <DashboardPreview key={previewSide} config={previewSide === "before" ? record.before : record.after} />
+          <DashboardPreview key={`${record.id}:${previewSide}`} config={previewSide === "before" ? record.before : record.after} />
         </div>
       ) : (
         <div className={`yaml-diff-cols${stacked ? " stacked" : ""}`}>
@@ -320,21 +317,30 @@ function VersionComparison({ c }: { c: ChangesState }) {
 
 export function ComparisonWindow() {
   const c = useChanges();
+  // Item History opens by itself once a chosen change's item has other changes (user, 2026-10-27); once the user
+  // closes it, it stays closed until reopened from Workspace Options or the workspace is reset.
   const history = useWindowToggle("itemHistory");
-  useToolbarTools(history ? [{
-    id: "comparison",
-    label: t("workspace.comparison"),
-    tools: [{ id: "itemHistory", label: t("workspace.itemHistory"), icon: "itemHistory", pressed: history.open, onSelect: history.toggle }],
-  }] : []);
+  const hasHistory = !!c?.record && c.record.id === c.selectedId && c.history.length > 1;
+  useEffect(() => { if (hasHistory) history?.autoOpen(); }, [hasHistory, c?.selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!c || !c.selectedId) return <p className="phx-window-empty">{t("workspace.comparisonEmpty")}</p>;
   if (c.recordError) return <div className="phx-review"><ErrorMsg msg={c.recordError} /></div>;
-  if (!c.record || c.record.id !== c.selectedId) return <Loading />;
+  // While the next change loads, the one before stays on screen (no flash of a loading state), marked busy.
+  if (!c.record) return <Loading />;
   const record = c.record;
+  const stale = record.id !== c.selectedId;
   const summary = versionSummary(record);
   return (
-    <div className="phx-review change-comparison" key={record.id}>
+    // Not keyed by the change: stepping updates the window in place, so the head and its buttons stay put.
+    <div className="phx-review change-comparison" aria-busy={stale}>
       <div className="phx-review-head">
-        <h3 className="phx-review-title">{changeLabel(record)}</h3>
+        {/* Previous and Next step through the list the change was chosen from, as in Log Details. */}
+        <div className="phx-log-details-bar">
+          <h3 className="phx-review-title">{changeLabel(record)}</h3>
+          <div className="phx-log-details-nav">
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
+          </div>
+        </div>
         <p className="phx-review-context">
           <ChangeAction action={record.action} />
           <span>{resourceTypeLabel(record.resource_type)}</span>
@@ -343,19 +349,19 @@ export function ComparisonWindow() {
         </p>
         {summary && <p className="phx-review-body">{summary}</p>}
       </div>
-      <div className="phx-review-actions"><RestoreMenu c={c} /></div>
       {c.confirm && <RestoreConfirmation c={c} />}
       {c.restoreError && <div className="banner banner-error" role="alert">{c.restoreError}</div>}
-      <div className="change-detail-body"><VersionComparison c={c} /></div>
+      <div className="change-detail-body"><VersionComparison c={c} restore={<RestoreMenu c={c} />} /></div>
     </div>
   );
 }
 
 export function ItemHistoryWindow() {
   const c = useChanges();
+  const ensureOpen = useEnsureOpen();
   if (!c || !c.selectedId || !c.record) return <p className="phx-window-empty">{t("workspace.itemHistoryEmpty")}</p>;
   const columns: Column<VersionSummary>[] = [
-    { id: "time", label: t("changes.colWhen"), width: 170, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
+    { id: "time", label: t("audit.rowTime"), width: 170, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
     { id: "action", label: t("changes.colAction"), width: 130, sortValue: (v) => actionLabel(v.action), cell: (v) => <ChangeAction action={v.action} /> },
     { id: "by", label: t("changes.colBy"), width: 140, hidden: true, sortValue: (v) => whoNow(v, c.names), cell: (v) => whoNow(v, c.names) },
     { id: "summary", label: t("changes.colSummary"), width: 260, maxWidth: 360, sortValue: (v) => versionSummary(v), cell: (v) => versionSummary(v), title: (v) => versionSummary(v) || undefined },
@@ -365,11 +371,12 @@ export function ItemHistoryWindow() {
       <ConfigTable
         id="itemHistory"
         label={t("workspace.itemHistory")}
+        defaultSort={NEWEST_FIRST}
         columns={columns}
         rows={c.history}
         rowKey={(v) => v.id}
         selectedKey={c.selectedId}
-        onSelect={(v) => c.select(v.id)}
+        onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
         rowLabel={(v) => `${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
       />
     </div>

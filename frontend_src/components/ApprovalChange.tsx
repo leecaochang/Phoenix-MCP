@@ -120,11 +120,6 @@ export function ApprovalChange({ record }: {
     return (
       <div className="change-diff-wrap">
         <div className="change-diff-toolbar">
-          <span className="change-diff-hint">
-            {isWholeLayout
-              ? t("approvals.diffWholeLayout")
-              : previewSide === "before" ? t("approvals.diffCardBefore") : t("approvals.diffCardAfter")}
-          </span>
           {modeToggle}
         </div>
         {showSideToggle && (
