@@ -49,7 +49,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -2694,6 +2694,9 @@ async def _tool_describe_entity(
             "name_source": entity_name_source(hass, entry),
         }
 
+    if (defined_by := await _entity_definition(entry, state, access_key, hass)) is not None:
+        body["defined_by"] = defined_by
+
     # The spoken names HA matches this entity by, RESOLVED: the entity's own name
     # appears as the name itself, not as the registry sentinel that stands for it,
     # because a caller compares this list against a failing voice command.
@@ -2715,6 +2718,51 @@ async def _tool_describe_entity(
             )
 
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
+
+
+async def _entity_definition(
+    entry: er.RegistryEntry | None, state: Any, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> dict[str, Any] | None:
+    """Where an entity is defined, and the tool that reads that definition.
+
+    A Template helper and a template written in YAML look alike from the
+    registry, so without this a caller searches YAML for a helper created in the
+    UI. A helper's entry id is shown only to a key that can list helpers, which
+    shows it too; a tool is named only when this key may call it. An entity with
+    no registry entry, such as the home zone, is left undescribed.
+    """
+    if entry is None:
+        return None
+    from .helper import _helper_config_entry  # noqa: PLC0415 - helper imports this module
+
+    def tool(name: str, cap: str) -> dict[str, str]:
+        return {"read_with": name} if effective_cap(access_key, cap) != CAP_DENY else {}
+
+    can_list = effective_cap(access_key, "cap_registry_read") != CAP_DENY
+    if entry.config_entry_id:
+        helper = await _helper_config_entry(hass, entry.config_entry_id)
+        if helper is None:
+            config_entry = hass.config_entries.async_get_entry(entry.config_entry_id)
+            return {"kind": "integration", "integration": config_entry.domain if config_entry else entry.platform}
+        return {"kind": "ui_helper", "helper_type": helper.domain, "title": helper.title,
+                **({"entry_id": helper.entry_id} if can_list else {}), **tool("get_helper_settings", "cap_helper_write")}
+    attributes = getattr(state, "attributes", {}) or {}
+    # HA marks a storage helper editable and a YAML one not; tags exist only in
+    # storage and carry no such flag.
+    stored = attributes.get("editable") is True or entry.domain == "tag"
+    if entry.domain in STORAGE_HELPER_TYPES and entry.platform == entry.domain and stored:
+        return {"kind": "storage_helper", "helper_type": entry.domain,
+                **({"helper_id": entry.unique_id} if can_list else {}), **tool("list_helpers", "cap_registry_read")}
+    # Automations, scripts and scenes live in YAML too, but each has its own reader.
+    reader = _YAML_READERS.get(entry.domain, ("get_yaml_config", "cap_yaml_edit"))
+    return {"kind": "yaml", **tool(*reader)}
+
+
+_YAML_READERS = {
+    "automation": ("get_automation", "cap_automation_write"),
+    "script": ("get_script", "cap_script_write"),
+    "scene": ("get_scene", "cap_scene_write"),
+}
 
 
 async def _tool_get_audit_summary(

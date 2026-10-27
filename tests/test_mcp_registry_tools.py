@@ -1679,3 +1679,62 @@ class TestSearchMembership:
         assert all("member_entity_ids" not in row for row in rows if row["is_group"] is None)
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["light." + "x" * MAX_SEARCH_MEMBER_ID_LEN]})
         assert _search_membership("light.kitchen", _access_key(), hass, None, [4096]) == {"is_group": None}
+
+
+@pytest.fixture
+def definition_env(hass: HomeAssistant):
+    """One entity defined each way: a UI Template helper, storage and YAML helpers, an integration, an automation."""
+    ent_reg = er.async_get(hass)
+    template = MockConfigEntry(domain="template", title="Server Room AC Not On 10min", entry_id="01TEMPLATEHELPER")
+    template.add_to_hass(hass)
+    integration = MockConfigEntry(domain="hue", entry_id="hue-entry")
+    integration.add_to_hass(hass)
+    rows = {
+        "binary_sensor.ac_not_on": ("binary_sensor", "template", "01TEMPLATEHELPER", template, {}),
+        "input_boolean.guest": ("input_boolean", "input_boolean", "guest", None, {"editable": True}),
+        "input_boolean.yaml_flag": ("input_boolean", "input_boolean", "yaml_flag", None, {"editable": False}),
+        "light.hue_lamp": ("light", "hue", "lamp-1", integration, {}),
+        "automation.wake": ("automation", "automation", "1700", None, {"id": "1700"}),
+        "tag.front_door": ("tag", "tag", "front_door", None, {"tag_id": "front_door"}),
+    }
+    for entity_id, (domain, platform, unique_id, entry, attrs) in rows.items():
+        ent_reg.async_get_or_create(domain, platform, unique_id, config_entry=entry,
+                                    suggested_object_id=entity_id.split(".")[1])
+        hass.states.async_set(entity_id, "on", attrs)
+    hass.states.async_set("binary_sensor.unregistered", "on")
+    return hass
+
+
+def _definition_key(**caps) -> AccessKeyRecord:
+    return _access_key(permissions=PermissionTree(domains={
+        domain: PermissionNode(state="GREEN") for domain in ("binary_sensor", "input_boolean", "light", "automation", "tag")}),
+        **{"cap_helper_write": "allow", "cap_yaml_edit": "allow", "cap_automation_write": "allow", **caps})
+
+
+class TestDescribeEntityDefinedBy:
+    @pytest.mark.parametrize(("entity_id", "expected"), [
+        ("binary_sensor.ac_not_on", {"kind": "ui_helper", "helper_type": "template", "title": "Server Room AC Not On 10min",
+                                     "entry_id": "01TEMPLATEHELPER", "read_with": "get_helper_settings"}),
+        ("input_boolean.guest", {"kind": "storage_helper", "helper_type": "input_boolean", "helper_id": "guest",
+                                 "read_with": "list_helpers"}),
+        ("input_boolean.yaml_flag", {"kind": "yaml", "read_with": "get_yaml_config"}),
+        ("light.hue_lamp", {"kind": "integration", "integration": "hue"}),
+        ("automation.wake", {"kind": "yaml", "read_with": "get_automation"}),
+        # Tags exist only in storage and carry no editable flag.
+        ("tag.front_door", {"kind": "storage_helper", "helper_type": "tag", "helper_id": "front_door",
+                            "read_with": "list_helpers"}),
+    ])
+    async def test_says_where_an_entity_is_defined_and_what_reads_it(self, definition_env, entity_id, expected):
+        content, outcome, _ = await _call("describe_entity", {"entity_id": entity_id}, _definition_key(), definition_env)
+        assert outcome == "allowed" and _result_json(content)["defined_by"] == expected
+
+    async def test_a_tool_or_id_the_key_cannot_use_is_left_out(self, definition_env):
+        content, _, _ = await _call("describe_entity", {"entity_id": "binary_sensor.ac_not_on"},
+                                    _definition_key(cap_helper_write="deny", cap_registry_read="deny"), definition_env)
+        assert _result_json(content)["defined_by"] == {"kind": "ui_helper", "helper_type": "template",
+                                                       "title": "Server Room AC Not On 10min"}
+
+    async def test_an_entity_without_a_registry_entry_is_not_guessed(self, definition_env):
+        content, outcome, _ = await _call("describe_entity", {"entity_id": "binary_sensor.unregistered"},
+                                          _definition_key(), definition_env)
+        assert outcome == "allowed" and "defined_by" not in _result_json(content)
