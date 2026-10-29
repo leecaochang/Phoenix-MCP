@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
@@ -664,8 +664,9 @@ export function AgentCliWindow({
   });
   const minimized = mode === "min";
   const maximized = mode === "max";
-  // The connection fields (key, provider, model and its options) replace their one-line summary while open.
+  // The connection fields (key, provider, model and its options) open under the line that names them.
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const connectionId = useId();
   const [options, setOptions] = useState<GenOptions>(saved.options);
   const [showFooter, setShowFooter] = useState(saved.showFooter);
   const [showTimestamps, setShowTimestamps] = useState(saved.showTimestamps);
@@ -1981,59 +1982,73 @@ export function AgentCliWindow({
 
       {!collapsed && (
         <>
-          {/* One line naming the key, model and account; it opens in place into the fields that change them. */}
+          {/* One line naming the key, provider and model; the triangle beside it opens the fields that change them. */}
           <div className="agentcli-connection">
-            {!connectionOpen && (
-              <button type="button" className="agentcli-connection-summary" aria-expanded={false}
-                      title={t("agentchat.changeConnection")} onClick={() => setConnectionOpen(true)}>
-                <span className="agentcli-connection-key">{accessKeys.find((k) => k.id === accessKeyId)?.name ?? t("common.none")}</span>
-                <span className="agentcli-connection-rest">{noInstances ? ` · ${t("common.none")}` : ` · ${model || t("agentchat.noModels")} · ${instance?.name ?? ""}`}</span>
+            <div className="agentcli-connection-head">
+              {/* Only the triangle opens the fields: the line itself is text, not a control (user, 2026-10-29). */}
+              <button type="button" className="agentcli-connection-toggle" aria-expanded={connectionOpen}
+                      aria-controls={connectionId} aria-label={t("agentchat.changeConnection")}
+                      title={t("agentchat.changeConnection")} onClick={() => setConnectionOpen((open) => !open)}>
+                <Icon name={connectionOpen ? "expand" : "folded"} size={14} />
               </button>
-            )}
+              {connectionOpen
+                ? <span className="agentcli-connection-label">{t("agentchat.connection")}</span>
+                : (
+                  <span className="agentcli-connection-summary">
+                    <span className="agentcli-connection-key">{accessKeys.find((k) => k.id === accessKeyId)?.name ?? t("common.none")}</span>
+                    <span className="agentcli-connection-rest">{noInstances ? ` · ${t("common.none")}` : ` · ${instance?.name ?? ""} · ${model || t("agentchat.noModels")}`}</span>
+                  </span>
+                )}
+            </div>
             {/* Kept mounted while closed, so the selections stay in place for the rest of the window. */}
-            <div className="agentcli-controls" hidden={!connectionOpen}
+            <div className="agentcli-controls" id={connectionId} hidden={!connectionOpen}
                  onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setConnectionOpen(false); } }}>
-              <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
-                <span>{t("agentchat.accessKey")}</span>
-                <select className="input agentcli-select" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} aria-label={t("agentchat.accessKey")} disabled={sending}>
-                  {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
-                </select>
-              </label>
-              <label className="agentcli-control" title={t("agentchat.providerHint")}>
-                <span>{t("agentchat.provider")}</span>
-                <select className="input agentcli-select" value={instanceId} onChange={(e) => setInstanceId(e.target.value)} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
-                  {noInstances
-                    ? <option value="">{t("common.none")}</option>
-                    : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                </select>
-              </label>
-              <label className="agentcli-control" title={t("agentchat.modelHint")}>
-                <span>{t("agentchat.model")}</span>
-                <select className="input agentcli-select" value={model} onChange={(e) => setModel(e.target.value)} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
-                  {noInstances
-                    ? <option value="">{t("common.none")}</option>
-                    : models.length
-                      ? models.map((m) => <option key={m} value={m}>{m}</option>)
-                      : <option value="">{t("agentchat.noModels")}</option>}
-                </select>
-              </label>
-              {caps.thinking.length > 0 && (
-                // One dropdown carries this provider's real API thinking levels.
-                <label className="agentcli-control">
-                  <span>{kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}</span>
-                  <select className="input agentcli-select" value={thinkValue(caps, options)}
-                          onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
-                    {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              {/* Two rows of their own: too narrow for one line, the second drops below the first and neither wraps. */}
+              <div className="agentcli-control-row">
+                <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
+                  <span>{t("agentchat.accessKey")}</span>
+                  <select className="input agentcli-select" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} aria-label={t("agentchat.accessKey")} disabled={sending}>
+                    {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
                   </select>
                 </label>
-              )}
-              {caps.temperature && (
-                <label className="agentcli-control">
-                  <span>{t("agentchat.temperature")}</span>
-                  <input className="input agentcli-select" type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
-                         onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
+                <label className="agentcli-control" title={t("agentchat.providerHint")}>
+                  <span>{t("agentchat.provider")}</span>
+                  <select className="input agentcli-select" value={instanceId} onChange={(e) => setInstanceId(e.target.value)} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
+                    {noInstances
+                      ? <option value="">{t("common.none")}</option>
+                      : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
                 </label>
-              )}
+              </div>
+              <div className="agentcli-control-row">
+                <label className="agentcli-control" title={t("agentchat.modelHint")}>
+                  <span>{t("agentchat.model")}</span>
+                  <select className="input agentcli-select" value={model} onChange={(e) => setModel(e.target.value)} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
+                    {noInstances
+                      ? <option value="">{t("common.none")}</option>
+                      : models.length
+                        ? models.map((m) => <option key={m} value={m}>{m}</option>)
+                        : <option value="">{t("agentchat.noModels")}</option>}
+                  </select>
+                </label>
+                {caps.thinking.length > 0 && (
+                  // One dropdown carries this provider's real API thinking levels.
+                  <label className="agentcli-control">
+                    <span>{kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}</span>
+                    <select className="input agentcli-select" value={thinkValue(caps, options)}
+                            onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
+                      {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </label>
+                )}
+                {caps.temperature && (
+                  <label className="agentcli-control">
+                    <span>{t("agentchat.temperature")}</span>
+                    <input className="input agentcli-select agentcli-number" type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
+                           onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
+                  </label>
+                )}
+              </div>
               {caps.note && <div className="agentcli-connection-note">{caps.note}</div>}
             </div>
           </div>

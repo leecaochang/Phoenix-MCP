@@ -305,11 +305,19 @@ export function ReviewWindow() {
   );
 }
 
+/**
+ * Which Request Details sections the user left open. The window is built again
+ * for each request, and folding a section is a standing choice about what to
+ * read, so it holds for the requests after it (user, 2026-10-29).
+ */
+const sectionOpen: Record<string, boolean> = {};
+
 /** A section of Request Details; its body is built only while it is open. */
-function Section({ label, defaultOpen, children }: { label: string; defaultOpen: boolean; children: () => ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
+function Section({ id, label, defaultOpen, children }: { id: string; label: string; defaultOpen: boolean; children: () => ReactNode }) {
+  const [open, setOpen] = useState(sectionOpen[id] ?? defaultOpen);
+  const toggle = (next: boolean) => { sectionOpen[id] = next; setOpen(next); };
   return (
-    <details className="phx-request-section" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details className="phx-request-section" open={open} onToggle={(e) => toggle(e.currentTarget.open)}>
       <summary>{label}</summary>
       {open && <div className="phx-request-section-body">{children()}</div>}
     </details>
@@ -323,7 +331,7 @@ export function RequestDetailsWindow() {
   const pending = r.status === "pending";
   return (
     <div className="phx-request-details" key={r.id}>
-      <Section label={t("approvals.colRequest")} defaultOpen>
+      <Section id="request" label={t("approvals.colRequest")} defaultOpen>
         {() => (
           <>
             <h4 className="phx-request-title">{diffSummary(r.diff) || friendlyToolName(r.tool_name)}</h4>
@@ -345,11 +353,11 @@ export function RequestDetailsWindow() {
           </>
         )}
       </Section>
-      <Section label={t("approvals.detailTabArgs")} defaultOpen={false}>
+      <Section id="args" label={t("approvals.detailTabArgs")} defaultOpen={false}>
         {() => <YamlView value={toYaml(r.args as Record<string, unknown>)} />}
       </Section>
       {!pending && (
-        <Section label={t("approvals.detailTabResult")} defaultOpen>
+        <Section id="result" label={t("approvals.detailTabResult")} defaultOpen>
           {() => (r.result == null
             ? <p className="approvals-empty">{r.rejected_reason
               ? t("approvals.noResult", { status: approvalStatusLabel(r.status), reason: friendlyReason(r) })

@@ -2052,7 +2052,7 @@ describe("AgentCliWindow streaming", () => {
     );
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-a"));
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "m-b" } });
-    fireEvent.change(screen.getByLabelText("Access key"), { target: { value: "t2" } });
+    fireEvent.change(screen.getByLabelText("Access Key"), { target: { value: "t2" } });
     pickChatMenu("Show Verbose Output");
 
     await waitFor(() => expect(getDurable().model).toBe("m-b"));
@@ -2065,7 +2065,7 @@ describe("AgentCliWindow streaming", () => {
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     // Restored from persistence, not reset to defaults.
-    await waitFor(() => expect((screen.getByLabelText("Access key") as HTMLSelectElement).value).toBe("t2"));
+    await waitFor(() => expect((screen.getByLabelText("Access Key") as HTMLSelectElement).value).toBe("t2"));
     expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-b");
   });
 });
@@ -2102,17 +2102,22 @@ describe("AgentCliWindow header and connection", () => {
     expect(getDurable().textSizePt).toBeGreaterThan(before);
   });
 
-  it("shows the connection as one line that opens in place into its fields", async () => {
+  it("names the connection on one line, opened only by the triangle beside it", async () => {
     mount();
-    const summary = await screen.findByTitle("Change Connection");
-    await waitFor(() => expect(summary.textContent).toBe("alpha · claude-opus-4-8 · Claude"));
+    const toggle = await screen.findByTitle("Change Connection");
+    // Access key, then provider, then model (user, 2026-10-29).
+    const head = toggle.parentElement as HTMLElement;
+    await waitFor(() => expect(head.textContent).toBe("alpha · Claude · claude-opus-4-8"));
     expect(screen.getByLabelText("Model")).not.toBeVisible();
-    fireEvent.click(summary);
-    expect(screen.queryByTitle("Change Connection")).toBeNull();
+    // The line itself is text: clicking it does nothing.
+    fireEvent.click(head.querySelector(".agentcli-connection-summary") as HTMLElement);
+    expect(screen.getByLabelText("Model")).not.toBeVisible();
+    fireEvent.click(toggle);
     expect(screen.getByLabelText("Model")).toBeVisible();
     expect(screen.getByLabelText("Thinking")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
     fireEvent.keyDown(screen.getByLabelText("Model"), { key: "Escape" });
-    expect(screen.getByTitle("Change Connection")).toBeInTheDocument();
+    expect(screen.getByTitle("Change Connection")).toHaveAttribute("aria-expanded", "false");
     // The menu's Connection item opens it too, and is checked while it is open.
     pickChatMenu("Connection");
     expect(screen.getByLabelText("Model")).toBeVisible();

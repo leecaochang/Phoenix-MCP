@@ -138,30 +138,30 @@ function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSu
   if ((type.includes("file") || type.includes("yaml") || previewFile) && file) {
     return {
       title: t("approvalSummary.fallback.file.title", { file }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if (type.includes("integration") && label) {
     return {
       title: t("approvalSummary.fallback.integration.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if ((type.includes("device") || type.includes("entity")) && label) {
     return {
       title: t("approvalSummary.fallback.item.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if (type.includes("service") && label) {
     return {
       title: t("approvalSummary.fallback.service.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   return {
     title: t("approvalSummary.fallback.unknown.title"),
-    body: t("approvalSummary.fallback.body"),
+    body: "",
   };
 }
 
@@ -172,5 +172,8 @@ export function friendlyApprovalSummary(diff: ApprovalDiff | undefined): Friendl
   const message = semantics === "exact" ? "targets.exact"
     : semantics === "future_native_execution" ? "targets.futureNative"
     : semantics === "dynamic_accessible_devices" ? "targets.dynamicAccessible" : null;
-  return message ? { ...summary, body: `${summary.body} ${t(`approvalSummary.${message}`)}` } : summary;
+  if (!message) return summary;
+  const note = t(`approvalSummary.${message}`);
+  // A request with no consequence copy of its own keeps the note alone.
+  return { ...summary, body: summary.body ? `${summary.body} ${note}` : note };
 }

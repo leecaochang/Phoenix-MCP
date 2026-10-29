@@ -136,6 +136,12 @@ export interface WorkspaceExtras {
    */
   contentHeights?: boolean;
   /**
+   * Windows that are as tall as their content although the rest of the
+   * workspace is not: Review takes the height its request needs and the window
+   * below it takes the space left (user, 2026-10-29).
+   */
+  contentWindows?: readonly string[];
+  /**
    * Windows that open beside a partner in its pinned band, at its height, rather
    * than along the bottom: { notifications: "help" } puts Notifications to the
    * right of Help, and Help back to its left. Without the partner open, the
@@ -229,15 +235,28 @@ export class WorkspaceController {
   /** Whether docked windows are as tall as their content (see `WorkspaceExtras.contentHeights`). */
   get contentSized(): boolean { return !!this.extras.contentHeights; }
 
+  /** Windows that follow their content although the workspace does not size every window to it. */
+  private contentOwnIds: ReadonlySet<string> | null = null;
+  private get contentOwn(): ReadonlySet<string> {
+    return (this.contentOwnIds ??= new Set(this.extras.contentWindows ?? []));
+  }
+
+  /**
+   * Whether this window is as tall as its content: every window in a
+   * content-sized workspace, Needs Attention wherever it appears, and the
+   * windows a workspace names itself.
+   */
+  followsContent(id: string): boolean {
+    return this.contentSized || this.transient.has(id) || this.contentOwn.has(id);
+  }
+
   /**
    * A window's content now needs `height` pixels, title bar included. While
    * windows follow their content, the docked one gets that height at the next
    * frame; folded, hidden, floating and pinned windows keep theirs.
    */
   contentResized(id: string, height: number): void {
-    // Needs Attention is as tall as what it shows in every workspace, not only in one
-    // that sizes every window to its content (user, 2026-10-29).
-    if (!(this.contentSized || this.transient.has(id)) || !(height > 0)) return;
+    if (!this.followsContent(id) || !(height > 0)) return;
     const rounded = Math.round(height);
     const known = this.natural.get(id);
     if (known === rounded) return;
@@ -246,22 +265,34 @@ export class WorkspaceController {
     // chase each other and the workspace never settles.
     if (known !== undefined && !this.contentSized && Math.abs(known - rounded) < CONTENT_TOLERANCE) return;
     this.natural.set(id, rounded);
-    if (!this.naturalFrame && typeof requestAnimationFrame === "function") {
-      this.naturalFrame = requestAnimationFrame(() => { this.naturalFrame = 0; this.followContent(); });
-    }
+    this.requestFollow();
+  }
+
+  /**
+   * Look at the heights the content asks for at the next frame. Closing a
+   * window or resizing the workspace changes the room a window held back from
+   * its content can take, without its content changing at all.
+   */
+  requestFollow(): void {
+    if (!this.natural.size || this.naturalFrame || typeof requestAnimationFrame !== "function") return;
+    this.naturalFrame = requestAnimationFrame(() => { this.naturalFrame = 0; this.followContent(); });
   }
 
   private followContent(): void {
     const api = this.api;
     const canvas = this.canvas;
     if (!api || !canvas || !this.shown || api.hasMaximizedGroup() || canvas.host.classList.contains("phx-resizing")) return;
-    if (!this.contentSized && !this.natural.size) return;
+    if (!this.natural.size) return;
     const targets: Heights = {};
     for (const [id, h] of this.natural) {
-      if (!this.contentSized && !this.transient.has(id)) continue;
+      if (!this.followsContent(id)) continue;
       const group = api.getPanel(id)?.group;
       if (!group || this.folds.isFolded(id) || this.hiddenIds.has(id)) continue;
-      const target = Math.max(MIN_WINDOW_HEIGHT, h);
+      let target = Math.max(MIN_WINDOW_HEIGHT, h);
+      // A window the workspace names may shrink to its content, but never take room another
+      // window needs: a long request must not resize Needs Attention (user, 2026-10-29).
+      // Needs Attention itself is not held back, so what it holds is always shown.
+      if (this.contentOwn.has(id)) target = Math.min(target, canvas.roomFor(id));
       if (Math.abs((canvas.intended[id] ?? 0) - target) >= 2) targets[id] = target;
     }
     if (Object.keys(targets).length) this.batch(() => canvas.apply(targets));
@@ -275,11 +306,11 @@ export class WorkspaceController {
    */
   markSlack(): void {
     const api = this.api;
-    if (!api || !this.contentSized) return;
+    if (!api || !this.natural.size) return;
     const maximized = api.hasMaximizedGroup();
     for (const group of api.groups) {
       const id = group.activePanel?.id;
-      const natural = id ? this.natural.get(id) : undefined;
+      const natural = id && this.followsContent(id) ? this.natural.get(id) : undefined;
       const slack = !maximized && natural && id && !this.folds.isFolded(id) && !this.hiddenIds.has(id) ? Math.round(group.height - natural) : 0;
       if (slack > 2) group.element.style.setProperty("--phx-slack", `${slack}px`);
       else group.element.style.removeProperty("--phx-slack");
@@ -448,7 +479,7 @@ export class WorkspaceController {
   /** Whether the workspace is on screen; changes to its windows made while it was hidden apply now. */
   setShown(shown: boolean): void {
     this.shown = shown;
-    if (shown && this.contentSized) this.followContent();
+    if (shown) this.followContent();
     if (!shown || !this.windowsChanged || !this.api) return;
     this.windowsChanged = false;
     this.batch(() => this.applyWindows());
@@ -624,6 +655,7 @@ export class WorkspaceController {
     if (this.quiet) return;
     // A window floated while folded, or folded in a saved layout, keeps its folded frame.
     this.markFloatingFolds();
+    this.requestFollow();
     this.version++;
     for (const listener of this.listeners) listener();
   }
@@ -1508,7 +1540,7 @@ export class WorkspaceController {
     if (!this.maximizedHere) return;
     this.maximizedHere = false;
     this.canvas?.apply();
-    if (this.contentSized) this.followContent();
+    this.followContent();
   }
 
   /** Before a window starts moving, record every docked window's height. */

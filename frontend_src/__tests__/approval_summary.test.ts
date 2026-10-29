@@ -45,7 +45,7 @@ describe("friendly approval summary", () => {
       "diff.dashboard_card.edit.section",
       { card_index: 4, label: "dashboard-steve", view_index: 0, section_index: 5 },
       "Update a card on dashboard 'dashboard-steve'",
-      "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
+      "This will update the Home Assistant dashboard configuration.",
     ],
   ])("renders %s without parsing YAML", (summaryKey, summaryParams, title, body) => {
     expect(friendlyApprovalSummary({ summary_key: summaryKey, summary_params: summaryParams })).toEqual({ title, body });

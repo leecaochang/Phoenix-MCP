@@ -277,6 +277,27 @@ export class WorkspaceCanvas {
   }
 
   /**
+   * The tallest this window can be drawn while every other window keeps its
+   * height and the windows still fit the visible height. A window that follows
+   * its content asks for no more than this, so growing to fit a long record
+   * never shrinks the windows around it. A canvas that scrolls has no limit.
+   */
+  roomFor(id: string): number {
+    const visible = this.visibleHeight();
+    if (!this.fit || visible <= 0) return Number.MAX_SAFE_INTEGER;
+    const grid = this.api.toJSON().grid;
+    const rootStacks = grid.orientation === "VERTICAL";
+    const withHeight = (h: number) => (other: string): number => (other === id ? h : this.heightOf(other));
+    if (requiredHeight(grid.root, rootStacks, withHeight(visible)) <= visible) return visible;
+    let lo = MIN_WINDOW_HEIGHT, hi = visible;
+    for (let i = 0; i < 16 && hi - lo > 1; i++) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (requiredHeight(grid.root, rootStacks, withHeight(mid)) <= visible) lo = mid; else hi = mid;
+    }
+    return lo;
+  }
+
+  /**
    * In a fitted workspace, make the intended heights fit the visible height:
    * windows not just given a height shrink in proportion first, and the ones
    * just sized only if that is not enough.

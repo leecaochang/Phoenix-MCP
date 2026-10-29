@@ -110,6 +110,8 @@ export interface WorkspaceDef {
   fit?: boolean;
   /** Docked windows are as tall as their content and never scroll inside; the workspace scrolls instead. */
   contentHeights?: boolean;
+  /** Windows as tall as their content although the rest of the workspace is not. */
+  contentWindows?: readonly WindowId[];
   /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
   pairs?: Readonly<Record<string, string>>;
 }
@@ -172,21 +174,27 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsApprovals",
     icon: "approvals",
     windows: ["approvals", "review", "requestDetails", "attention"],
-    // The list beside a larger Review, as accepted for Approvals. Request Details starts
-    // closed and opens below Review from its toolbar tool.
+    // The list beside Review, with Request Details under it from the start (user, 2026-10-29);
+    // its toolbar tool closes and reopens it there.
     arrange: (api, add) => {
       add("approvals");
       add("review", { referencePanel: "approvals", direction: "right" });
+      add("requestDetails", { referencePanel: "review", direction: "below" });
       share(api, "approvals", 0.34);
     },
-    closedAt: { requestDetails: { neighbor: "review", side: "bottom" } },
     toolWindows: ["requestDetails"],
-    heights: { requestDetails: 320 },
+    // Until a request is chosen there is nothing to measure, so the two windows start
+    // at these heights and Request Details takes the rest of the column.
+    heights: { review: 420, requestDetails: 320 },
     // The windows always fit the screen (user, 2026-10-29): Approvals never scrolls, so the
     // list scrolls inside its own window and keeps the chosen request in view.
     fit: true,
-    // 2: the three windows replaced the single Approvals window.
-    layoutVersion: 2,
+    // Review is as tall as the request it shows and Request Details takes the rest of
+    // the column, rather than the two splitting it evenly (user, 2026-10-29). Only Review
+    // asks for a height, so when the column is too short Request Details gives way first.
+    contentWindows: ["review"],
+    // 3: Request Details opens with the workspace, under a Review sized to its request.
+    layoutVersion: 3,
   },
   changes: {
     labelKey: "shell.tabChanges",
@@ -353,6 +361,32 @@ export const MY_EXTRAS = { heights: MY_HEIGHTS, conditional: MY_CONDITIONAL, col
 const noSubscribe = () => () => {};
 const noVersion = () => 0;
 
+const px = (value: string): number => {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * The height a window's content needs: the content's own boxes plus the room
+ * the frame keeps around them. The frame itself is as tall as the window, so
+ * measuring it says only how much room the content was given, never how much
+ * it wanted (user, 2026-10-29).
+ */
+function contentHeight(el: HTMLElement): number {
+  // The heading screen readers announce the window by takes no room.
+  const content = (Array.from(el.children) as HTMLElement[]).filter((child) => !child.classList.contains("sr-only"));
+  // A window with nothing to show yet keeps the height the arrangement gave it,
+  // rather than shrinking to the line that says so.
+  if (content.every((child) => child.classList.contains("phx-window-empty"))) return 0;
+  const frame = getComputedStyle(el);
+  let height = px(frame.paddingTop) + px(frame.paddingBottom);
+  for (const child of content) {
+    const box = getComputedStyle(child);
+    height += child.offsetHeight + px(box.marginTop) + px(box.marginBottom);
+  }
+  return height;
+}
+
 /**
  * A window's content frame: one error boundary per window, hidden but mounted
  * while folded. A window set to Always Show Icons and Text shows its buttons'
@@ -367,17 +401,21 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   const folded = controller?.folds.isFolded(id) ?? false;
   const labels = controller?.display.hasLabels(id) ?? false;
   const place = useMemo(() => (controller ? { workspace: controller.id, window: id } : null), [controller, id]);
-  // In a workspace whose windows follow their content, report the height this window's content needs.
+  // While this window follows its content, report the height that content needs.
   const body = useRef<HTMLDivElement | null>(null);
-  // Needs Attention is as tall as what it shows in every workspace (user, 2026-10-29).
-  const followsContent = !!controller && (controller.contentSized || id === ATTENTION_WINDOW);
+  const followsContent = !!controller && controller.followsContent(id);
   useLayoutEffect(() => {
     const el = body.current;
     if (!followsContent || !controller || !el || typeof ResizeObserver === "undefined") return undefined;
     // The title bar and the window's frame come on top of the content.
     // A folded window, or one in a hidden workspace, measures nothing.
-    const observer = new ResizeObserver(() => { if (el.offsetHeight) controller.contentResized(id, TITLE_BAR_HEIGHT + el.offsetHeight + 2); });
+    const observer = new ResizeObserver(() => {
+      for (const child of Array.from(el.children)) observer.observe(child);
+      const needed = el.offsetHeight ? contentHeight(el) : 0;
+      if (needed > 0) controller.contentResized(id, TITLE_BAR_HEIGHT + needed + 2);
+    });
     observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
     return () => observer.disconnect();
   }, [followsContent, controller, id]);
   return (

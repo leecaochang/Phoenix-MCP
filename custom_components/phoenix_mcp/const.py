@@ -1827,11 +1827,11 @@ def _approval_summary_body(key: str) -> str:
     if key.startswith("integration."):
         return "This will change the {label} integration in Home Assistant."
     if key.startswith(("dashboard", "patch_dashboard", "edit_energy_config")):
-        return "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change."
+        return "This will update the Home Assistant dashboard configuration."
     if key in ("location.delete", "label.delete", "category.delete"):
         return "This will remove the selected item. The change may not be reversible."
     if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.", "label.", "category.")):
-        return "This will apply the proposed configuration change. Open Details to review the exact proposed change."
+        return "This will apply the proposed configuration change."
     if key.startswith(("call_service", "mesa_service")):
         return "This will run the proposed Home Assistant service action."
     if key.startswith(("hass_turn", "hass_set_position", "hass_stop_moving")):
@@ -1840,7 +1840,7 @@ def _approval_summary_body(key: str) -> str:
         return "This will change whether new devices can join the Zigbee network."
     if key.startswith(("delete_", "remove_")):
         return "This will remove the selected item. The change may not be reversible."
-    return "This will apply the proposed action. Open Details to review the exact proposed change."
+    return "This will apply the proposed action."
 
 
 APPROVAL_SUMMARY_TEMPLATES: dict[str, str] = {
@@ -1853,14 +1853,6 @@ APPROVAL_SUMMARY_TEMPLATES: dict[str, str] = {
 }
 
 APPROVAL_SUMMARY_UI: dict[str, str] = {
-    "view.summary": "Summary",
-    "view.details": "Details",
-    "view.defaultAria": "Default approval view",
-    "action.approve": "Approve",
-    "action.approving": "Approving...",
-    "action.reject": "Reject",
-    "action.rejecting": "Rejecting...",
-    "action.cancelReject": "Cancel",
     "action.optionalReason": "Optional reason",
     "action.reasonPlaceholder": "Explain why this request was rejected",
     "fallback.file.title": "Update {file}",
@@ -1868,7 +1860,6 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "fallback.item.title": "Update {label}",
     "fallback.service.title": "Run {label}",
     "fallback.unknown.title": "Review proposed action",
-    "fallback.body": "Open Details to review the exact proposed change.",
     "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
     "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
     "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
@@ -1899,7 +1890,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "named.resource.deleteTitle": "Delete {kind} '{label}'",
     "named.resource.deleteUnnamedTitle": "Delete {kind}",
     "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Open Details to review its configuration.",
-    "named.resource.editBody": "This will update {kind} '{label}'. Open Details to review the exact proposed change.",
+    "named.resource.editBody": "This will update {kind} '{label}'.",
     "named.resource.deleteBody": "This will permanently delete {kind} '{label}'. This action cannot be undone.",
     "named.resource.deleteUnnamedBody": "This will permanently delete the selected {kind}. This action cannot be undone.",
     "history.approved.body": "The request completed successfully.",

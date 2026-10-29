@@ -188,9 +188,9 @@
 /* Their heights come from the content, so the borders between stacked windows do not drag; side-by-side ones still do. */
 .phx-workspace.phx-content-sized .dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash { pointer-events: none; cursor: default; }
 .phx-workspace.phx-content-sized > .phx-grid-edge { display: none; }
-/* The last window of the shorter column ends its frame at its content; the rest of its place is empty workspace. */
+/* A window taller than its content ends its frame at the content; the rest of its place is empty workspace. */
 /* Dockview sets the frame's height inline; a maximum shortens it without fighting that. */
-.phx-workspace.phx-content-sized .phx-dock .dv-groupview { max-height: calc(100% - var(--phx-slack, 0px)); }
+.phx-workspace .phx-dock .dv-groupview { max-height: calc(100% - var(--phx-slack, 0px)); }
 /* A floating window hidden in place. */
 .phx-float-hidden { display: none !important; }
 .phx-window-body[hidden] { display: none; }
