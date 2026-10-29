@@ -4389,6 +4389,31 @@ async def test_http_200_prompt_block_is_never_retried(kind):
 
 
 @pytest.mark.asyncio
+async def test_groq_in_stream_tool_use_failure_is_an_invalid_call_not_a_block():
+    """Groq streams tool_use_failed in place of a call it rejects; the model erred, so it is retried.
+
+    Reported as a provider block it read as a policy refusal and ended the turn.
+    """
+    error = ('data: {"error":{"message":"Tool choice is none, but model called a tool","type":"invalid_request_error",'
+             '"code":"tool_use_failed","failed_generation":"{\\"name\\": \\"x\\"}","status_code":400}}')
+    provider = OpenAICompatProvider(ProviderConfig("groq", "model", "https://example", "key"))
+    replies = iter([_FakeResp(200, _sse(error)), _FakeResp(200, _sse(
+        'data: {"choices":[{"delta":{"content":"Done."},"finish_reason":"stop"}]}', "data: [DONE]"))])
+    session = _FakeSession(_FakeResp())
+    post = session.post
+    session.post = lambda *args, **kwargs: (post(*args, **kwargs), next(replies))[1]
+    events = await _collect(agentcli._stream_turn_resilient(
+        provider, session, system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert len(session.calls) == 2
+    assert [e["text"] for e in events if e["type"] == agentcli.EV_TEXT] == ["Done."]
+    single = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, _sse(error))),
+                                                 system_prompt="s", messages=[], tools=[], options={}))
+    failure = next(e for e in single if e["type"] == agentcli.EV_ERROR)
+    assert failure["code"] == "bad_tool_call" and failure["retryable"] is True
+    assert "failed_generation" not in json.dumps(single) and '"x"' not in json.dumps(single)
+
+
+@pytest.mark.asyncio
 async def test_valid_json_tool_without_terminal_stream_never_dispatches():
     provider = OpenAICompatProvider(ProviderConfig("deepseek", "model", "https://example", "key"))
     body = _sse('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"call_service","arguments":"{}"}}]}}]}')
@@ -5250,7 +5275,8 @@ def test_documented_tools_array_caps(kind, capped):
 @pytest.mark.parametrize("count", [128, 129])
 async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(hass, count):
     """Past the cap the provider answers HTTP 400 to every request; trimming would
-    hide capabilities silently. So the turn is refused up front, saying why."""
+    hide capabilities silently. A catalog with no deferrable tools cannot be
+    declared in parts, so the turn is refused up front, saying why."""
     catalog = [{"name": f"tool_{i}", "description": "d", "inputSchema": {"type": "object", "properties": {}}}
                for i in range(count)]
     provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])

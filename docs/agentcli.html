@@ -99,7 +99,7 @@
               <div><dt>Temperature</dt><dd>Standard GPT models.</dd></div>
               <div><dt>Thinking</dt><dd>Reasoning levels on o-series and GPT-5 models when no tools are involved. Tool turns run with reasoning off, because the Chat Completions API cannot combine tools with reasoning on current models.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability varies">Limited test access may be account-dependent</span></dd></div>
-              <div><dt>Additional notes</dt><dd>API billing is separate from a ChatGPT subscription. Choose United States or Europe only for a project set up for that data residency. Caps tool definitions at 128 per request; an access key that announces more is refused before the request, with the count.</dd></div>
+              <div><dt>Additional notes</dt><dd>API billing is separate from a ChatGPT subscription. Choose United States or Europe only for a project set up for that data residency. Accepts a tool list of at most 128 per request; see <a href="#large-catalogs">large tool catalogs</a>.</dd></div>
             </dl>
             <a class="provider-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">Get an OpenAI API key</a>
           </div>
@@ -183,7 +183,7 @@
               <div><dt>Temperature</dt><dd>Available; Check options verifies the selected model.</dd></div>
               <div><dt>Thinking</dt><dd>Model-dependent; use Check options.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">Free tier with rate limits</span></dd></div>
-              <div><dt>Additional notes</dt><dd>Phoenix hides model options whose support has not been established. Caps tool definitions at 128 per request; an access key that announces more is refused before the request, with the count.</dd></div>
+              <div><dt>Additional notes</dt><dd>Phoenix hides model options whose support has not been established. Accepts a tool list of at most 128 per request; see <a href="#large-catalogs">large tool catalogs</a>.</dd></div>
             </dl>
             <a class="provider-link" href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a Groq API key</a>
           </div>
@@ -239,7 +239,7 @@
               <div><dt>Temperature</dt><dd>Available on supported models.</dd></div>
               <div><dt>Thinking</dt><dd>None or High on <code>mistral-small-latest</code> and <code>mistral-medium-3-5</code>.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">Free mode with included usage</span></dd></div>
-              <div><dt>Additional notes</dt><dd>Refresh models to update Phoenix's capability metadata. The Europe and United States endpoints serve only the models Mistral hosts in that region. Caps tool definitions at 128 per request; an access key that announces more is refused before the request, with the count.</dd></div>
+              <div><dt>Additional notes</dt><dd>Refresh models to update Phoenix's capability metadata. The Europe and United States endpoints serve only the models Mistral hosts in that region. Accepts a tool list of at most 128 per request; see <a href="#large-catalogs">large tool catalogs</a>.</dd></div>
             </dl>
             <a class="provider-link" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Get a Mistral API key</a>
           </div>
@@ -365,7 +365,7 @@
               <div><dt>Temperature</dt><dd>Available when thinking is off.</dd></div>
               <div><dt>Thinking</dt><dd>On or Off; the newest GLM models always think.</dd></div>
               <div><dt>Free option</dt><dd><span class="provider-availability yes">Free Flash models</span></dd></div>
-              <div><dt>Additional notes</dt><dd>The same key can be saved once for Standard API and once for Coding Plan. Caps tool definitions at 128 per request; an access key that announces more is refused before the request, with the count.</dd></div>
+              <div><dt>Additional notes</dt><dd>The same key can be saved once for Standard API and once for Coding Plan. Accepts a tool list of at most 128 per request; see <a href="#large-catalogs">large tool catalogs</a>.</dd></div>
             </dl>
             <a class="provider-link" href="https://z.ai/manage-apikey/apikey-list" target="_blank" rel="noopener">Get a Z.ai API key</a>
           </div>
@@ -455,6 +455,7 @@
 
         <h2 id="conversation-behavior">Conversation style, detail, and Home focus</h2>
         <p><strong>Interrupted responses:</strong> Agent Chat, Voice Agent, and AI Task make at most three provider requests for transient connection or malformed-response failures within a 12-second retry window, only before any output or tool dispatch. A retry waits at most 60 seconds for a first reply, since a provider that has just failed and then sends nothing is stuck rather than thinking; a first request may stay silent for up to 180 seconds, and the error then says the provider sent nothing rather than calling it unreachable. When retries run out, the error gives the time actually spent and the provider's reason for the first failure. Provider policy blocks and output-length limits are not retried. After a tool has been dispatched, a provider failure stops the turn. Earlier actions may already have run.</p>
+        <p id="large-catalogs"><strong>Large tool catalogs:</strong> OpenAI, Groq, Mistral AI, and Z.ai accept a tool list of at most 128 in one request. When an access key announces more, Agent Chat, Voice Agent, and AI Task send the everyday tools and a list of the rest, grouped as ESPHome, dashboards, Zigbee and radio, integrations, registry changes, files and backups, helpers, and MESA. The model loads the tools a task needs, which Agent Chat shows as a <code>load_tools</code> step, so a task that uses them takes an extra step. Loading grants nothing: every call is checked as usual, and a call to a tool that is not loaded is refused without running. If the everyday tools alone leave no room under the limit, the turn is refused before the request, with the count. Other providers, and MCP clients, receive every tool at once.</p>
         <p><strong>Invalid tool calls:</strong> when a model finishes a tool call whose arguments are not valid JSON, nothing from that response runs. Agent Chat, Voice Agent, and AI Task return the error to the model, saying where its JSON stopped parsing and what is probably missing, so it can send the call again in the same turn; Agent Chat shows a note when this happens. After two such corrections in one turn (one for the Home Companion planner, which never corrects after a device command), the turn ends with an invalid tool call error; Voice Agent and AI Task also end it that way when no step is left for the corrected call. A tool call cut off by the output length limit or by a dropped connection is reported as such instead.</p>
         <p><strong>Refused requests:</strong> when a provider refuses a request outright, for example an unknown model or a request it does not accept, the error says so. When the provider explains why, the error includes its message, clipped, with recognisable keys, bearer tokens and IP addresses redacted. The Home Assistant log records the same message, and so does the Conversation Log when recording is on. A refused request is not retried, because the same request would be refused again.</p>
         <p><strong>No credit:</strong> when the provider account has run out of credit, has no balance or has reached a spending limit, the error says so and Phoenix does not retry it. Many providers report this as a rate limit, so Phoenix recognises the billing signals each supported provider uses, while ordinary rate limits are still retried. When a provider's rate-limit refusal says how many seconds to wait, Agent Chat shows that wait in the error.</p>

@@ -330,6 +330,38 @@ def test_esphome_persona_fits_the_provider_tool_cap():
     assert len(names) <= const.AGENTCLI_MAX_TOOLS_PER_REQUEST
 
 
+@pytest.mark.parametrize("surface", ["chat", "voice"])
+def test_the_largest_catalog_loads_within_every_capped_provider(surface):
+    """Tool-level loading must leave room for any one deferred group under the smallest cap.
+
+    The worst case grants every capability, satisfies every system requirement
+    and enables MESA. Past this bound a capped provider could not load some group
+    whole, and if the starting set alone outgrew the cap every turn would be
+    refused, so a new tool must join a deferred group or leave room.
+    """
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp.tool_loading import ToolLoader
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+
+    access_key, _ = _make_access_key()
+    for cap in const.CAPABILITY_NAMES:
+        setattr(access_key, cap, const.CAP_ALLOW)
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = _make_data(access_key)
+    data.hass = _make_hass(data)
+    data.mesa = object()
+    with patch.object(mcp_view, "_requires_satisfied", return_value=True):
+        catalog = agentcli.build_agent_tool_list(access_key, data, surface)
+    limit = min(d.max_tools for d in agentcli.PROVIDER_DEFINITIONS.values() if d.max_tools)
+    loader = ToolLoader(catalog, limit)
+
+    assert len(catalog) > limit, "the worst case no longer needs loading; this bound is then vacuous"
+    assert {tool["name"] for tool in catalog}.isdisjoint({const.AGENTCLI_LOAD_TOOLS_NAME})
+    assert set(loader.groups) == set(const.AGENTCLI_DEFERRED_TOOL_GROUPS)
+    assert max(len(names) for names in loader.groups.values()) <= loader.capacity
+
+
 # ---------------------------------------------------------------------------
 # Dispatch registry invariants.
 #

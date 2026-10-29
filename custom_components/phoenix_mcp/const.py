@@ -498,8 +498,29 @@ AGENTCLI_MAX_ITERATIONS_MAX = 100
 # the iteration cap above; past this cap the turn ends with bad_tool_call.
 AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
 # The tools-array cap OpenAI, Groq, Mistral and Z.ai document or enforce. A
-# provider definition opts in through max_tools; past it the turn is refused.
+# provider definition opts in through max_tools; a larger catalog is declared in
+# parts (tool_loading.py), and one whose starting set still exceeds it is refused.
 AGENTCLI_MAX_TOOLS_PER_REQUEST = 128
+# Phoenix's own client-local function that declares deferred tools; never an MCP tool.
+AGENTCLI_LOAD_TOOLS_NAME = "load_tools"
+# Groups of tools deferred under a provider's tools-array cap: id -> (capabilities,
+# name fragments, directory summary). A tool joins the first group whose
+# capabilities hold its first capability or one of whose fragments is in its
+# name; every other tool is in the starting set.
+AGENTCLI_DEFERRED_TOOL_GROUPS: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
+    "esphome": (("cap_esphome_yaml", "cap_esphome_flash"), ("esphome",),
+                "ESPHome Device Builder: device YAML, validation, builds, flashing, jobs, device logs and diagnostics."),
+    "dashboards": (("cap_lovelace_write", "cap_dashboard_resources"), ("dashboard",),
+                   "Lovelace dashboards, their views and cards, and dashboard resources."),
+    "zigbee": (("cap_radio_write",), ("zigbee", "radio"),
+               "Zigbee and radio networks: network and device diagnostics, pairing, options, bindings, reporting and groups."),
+    "integrations": (("cap_integration_write", "cap_integration_reconfigure"), (),
+                     "Adding, removing, reloading and reconfiguring integrations."),
+    "registry_writes": (("cap_registry_write",), (), "Renaming, moving, enabling, disabling and removing registry entries."),
+    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Configuration files, YAML edits and backups."),
+    "helpers": (("cap_helper_write",), (), "Creating, editing and deleting helpers."),
+    "mesa": ((), ("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
+}
 # Longest provider error-envelope message shown to an administrator.
 AGENTCLI_PROVIDER_DETAIL_CHARS = 300
 # Images an administrator attaches to one Agent Chat message. The browser

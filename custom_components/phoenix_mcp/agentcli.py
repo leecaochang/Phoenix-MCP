@@ -43,7 +43,7 @@ from urllib.parse import urlparse, urlunparse
 from aiohttp import ClientError, ClientSession, ClientTimeout, SocketTimeoutError, web
 
 from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
-from .conversation_log import record_rejected_tool, sanitized
+from .conversation_log import record_event, record_rejected_tool, sanitized
 
 from .view_base import PhoenixView
 from homeassistant.core import HomeAssistant, callback
@@ -129,6 +129,7 @@ from .const import (
     AGENTCLI_MAX_STREAM_BYTES,
     AGENTCLI_MAX_TOOL_CALL_CORRECTIONS,
     AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    AGENTCLI_LOAD_TOOLS_NAME,
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
     AGENTCLI_PROVIDER_DETAIL_CHARS,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
@@ -149,6 +150,7 @@ from .data import PhoenixData
 from .model_selection import effective_model
 from .helpers import get_client_ip, access_key_has_write_scope, voice_text
 from .access_key_store import AccessKeyRecord
+from .tool_loading import ToolLoader
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1339,6 +1341,7 @@ def _provider_failure(code: str, *, retryable: bool = True) -> dict:
         "provider_incomplete": "The provider response ended without a complete message. No tool from this response was run.",
         "provider_blocked": "The provider blocked this response. It will not be retried.",
         "provider_transient": "The provider is temporarily unavailable.",
+        "bad_tool_call": "The model produced an invalid tool call. No tool from this response was run.",
     }
     return _norm(EV_ERROR, status=200, code=code, message=messages[code],
                  retryable=retryable, diagnostic={"category": code})
@@ -1375,6 +1378,11 @@ def _provider_object(payload: str) -> dict:
         "rate_limit_exceeded", "429", "500", "503", "529",
     }:
         raise _ProviderResponseError("provider_transient")
+    if isinstance(error, dict) and error.get("code") == "tool_use_failed":
+        # Groq validates a generated call itself and streams this in place of it
+        # (an undeclared tool, unparseable arguments). The model erred, not a
+        # policy: nothing ran, and a fresh sample usually succeeds.
+        raise _ProviderResponseError("bad_tool_call")
     if error:
         # Unknown HTTP-200 errors are deliberate upstream refusals, not a reason
         # to replay a request. The content itself must never become diagnostics.
@@ -1548,6 +1556,51 @@ def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
                     f"at most {limit} in one request. Narrow the access key's capabilities or choose "
                     "another provider."),
     }
+
+
+def _tool_loader(provider: Any, catalog: list[dict]) -> ToolLoader | None:
+    """Tool-level loading when this provider's tools-array cap is below the catalog."""
+    definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
+    return ToolLoader.plan(catalog, definition.max_tools if definition is not None else None)
+
+
+def _local_tool_results(
+    loader: ToolLoader | None, tool_calls: list[dict], data: PhoenixData,
+) -> tuple[list[dict | None], list[dict]]:
+    """Answer load_tools and calls to undeclared deferred tools without dispatching them.
+
+    Returns one slot per call, holding its local result or None, and the calls
+    left for review and dispatch. Neither kind reaches the dispatcher, so
+    neither can start a write.
+    """
+    if loader is None:
+        return [None] * len(tool_calls), tool_calls
+    slots: list[dict | None] = []
+    dispatch: list[dict] = []
+    for tc in tool_calls:
+        name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+        args = tc.get("input") or {}
+        if name == AGENTCLI_LOAD_TOOLS_NAME:
+            text, is_error = loader.load(args)
+            record_event(data, "tool_call", {"name": name, "arguments": args})
+            record_event(data, "tool_result", {"result": {"content": [{"type": "text", "text": text}], "isError": is_error}},
+                         outcome="invalid_request" if is_error else "allowed")
+        elif (refusal := loader.blocked(name)) is not None:
+            record_rejected_tool(tc.get("id"), name, args, reason=refusal, stage="tool_loading")
+            text, is_error = refusal, True
+        else:
+            loader.use(name)
+            slots.append(None)
+            dispatch.append(tc)
+            continue
+        slots.append({"tool_use_id": tc.get("id"), "tool_name": name, "result_text": text, "is_error": is_error})
+    return slots, dispatch
+
+
+def _merged_results(slots: list[dict | None], dispatched: list[dict]) -> list[dict]:
+    """Every call's result in call order, local ones in their own places."""
+    remaining = iter(dispatched)
+    return [slot if slot is not None else next(remaining) for slot in slots]
 
 
 def _silent_stream_error() -> dict:
@@ -5104,6 +5157,8 @@ async def async_run_agent_turn(
 
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
+    agent_tools = build_agent_tool_list(access_key, data, "chat")
+    loader = _tool_loader(provider, agent_tools)
     system = (
         _build_instructions(access_key, data, base_url, hass)
         + _conversation_behavior_prompt(
@@ -5111,11 +5166,13 @@ async def async_run_agent_turn(
         )
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
+        + (loader.directory() if loader is not None else "")
         # Last: it changes every turn, and the prompt cache ends before it.
         + _agentcli_time_context(hass)
     )
-    agent_tools = build_agent_tool_list(access_key, data, "chat")
-    tools = provider.format_tools(agent_tools)
+    declared = loader.round_tools() if loader is not None else agent_tools
+    tools = provider.format_tools(declared)
+    tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         await emit("error", too_many)
         await emit("messages", {"messages": messages})
@@ -5178,6 +5235,10 @@ async def async_run_agent_turn(
             await emit("error", {"code": "cancelled", "message": "Cancelled."})
             break
         step += 1
+        if loader is not None:
+            definitions = loader.round_tools()
+            if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
+                tools, tools_key = provider.format_tools(definitions), key
         call = await _consume_model_stream(
             provider, session, system=system, messages=messages, tools=tools,
             options=options, cancel=cancel, emit=emit,
@@ -5248,11 +5309,22 @@ async def async_run_agent_turn(
         if stop_reason != "tool_use":
             break
 
+        proposed = tool_calls
+        slots, tool_calls = _local_tool_results(loader, proposed, data)
+        for tc, slot in zip(proposed, slots):
+            if slot is not None:
+                await emit("tool_call", {"id": tc.get("id"), "name": slot["tool_name"], "arguments": tc.get("input") or {}})
+                await emit("tool_result", {"id": tc.get("id"), "name": slot["tool_name"], "is_error": slot["is_error"],
+                                           "summary": _clip_display(slot["result_text"])})
+        if not tool_calls:
+            # Only loads and refusals this round: nothing was dispatched.
+            provider.append_tool_results(messages, _merged_results(slots, []))
+            continue
         review = await async_review_tools(hass, data, review_state, surface="chat",
             language=routing_language, messages=messages, calls=tool_calls, system=system,
             remaining_rounds=max_iterations - iterations, cancel=cancel, announced_tools=agent_tools)
         if review.action != "continue":
-            provider.append_tool_results(messages, withheld_results(tool_calls, review))
+            provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
             if review.action == "stop":
                 await emit("error", {"code": "cancelled" if review.reason == "cancelled" else "unauthorized",
                                     "message": "Tool selection stopped because cancellation or authority changed."})
@@ -5264,7 +5336,7 @@ async def async_run_agent_turn(
             tool_calls, hass=hass, data=data, access_key_id=access_key_id,
             client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
         )
-        results = batch.results
+        results = _merged_results(slots, batch.results)
         tools_run += len(tool_calls)
         write_started = write_started or batch.write_started
         human_resolved = batch.human_resolved
@@ -5462,7 +5534,12 @@ async def _run_headless_turn(
     from .home_companion import is_companion
     review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
-    tools = provider.format_tools(agent_tools)
+    loader = _tool_loader(provider, agent_tools)
+    if loader is not None:
+        system += loader.directory()
+    declared = loader.round_tools() if loader is not None else agent_tools
+    tools = provider.format_tools(declared)
+    tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         return _HeadlessTurnResult("", [], outcome=TURN_PROVIDER_ERROR, detail=too_many["message"])
     messages: list[dict] = [{"role": "user", "content": seed}]
@@ -5502,6 +5579,10 @@ async def _run_headless_turn(
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         if (usage := headless_usage.get()) is not None:
             usage.start_call()
+        if loader is not None and not final_round:
+            definitions = loader.round_tools()
+            if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
+                tools, tools_key = provider.format_tools(definitions), key
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         invalid: dict | None = None
@@ -5638,12 +5719,13 @@ async def _run_headless_turn(
         # The answer is the model's LAST text (after tools resolve), not the
         # intermediate "let me check..." text before a tool round; reset it here.
         final_text = ""
-        if review_state is not None:
+        slots, tool_calls = _local_tool_results(loader, tool_calls, data)
+        if review_state is not None and tool_calls:
             review = await async_review_tools(hass, data, review_state, surface=routing_surface,
                 language=routing_language, messages=messages, calls=tool_calls, system=system,
                 remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
             if review.action != "continue":
-                provider.append_tool_results(messages, withheld_results(tool_calls, review))
+                provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
                 if review.action == "stop":
                     return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
                 continue
@@ -5721,7 +5803,8 @@ async def _run_headless_turn(
                 "is_error": bool(result.get("isError")),
             })
         # Measured against the longer final-round prompt, which the next round may use.
-        append_fitting_results(access_key, system + _FINAL_ROUND_SYSTEM, messages, results, provider.append_tool_results)
+        append_fitting_results(access_key, system + _FINAL_ROUND_SYSTEM, messages, _merged_results(slots, results),
+                               provider.append_tool_results)
 
     if authority_lost:
         # Reported ahead of exhaustion: a turn can hit both (authority lost in the
