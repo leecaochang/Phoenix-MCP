@@ -43,7 +43,7 @@ export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(nu
  */
 export function workspaceMenu(controller: WorkspaceController, actions: WorkspaceActions | null): MenuEntry[] {
   const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
-  // Help is shown and hidden from Documentation, Show Help Bar; Notifications has its own check below.
+  // Help is shown and hidden from Documentation, Show Help Bar; Notifications keeps its own wording below.
   const items: MenuEntry[] = controller.closedWindows().filter((id) => id !== NOTIFICATIONS && id !== HELP_WINDOW && !toolWindows.includes(id)).map((id) => ({
     id: `reopen-${id}`,
     label: t("workspace.reopen", { window: windowTitle(id) }),
@@ -53,10 +53,10 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
   if (actions?.attentionHidden(controller)) {
     items.push({ id: "show-attention", label: t("workspace.showAttention"), onSelect: () => actions.showAttention(controller) });
   }
-  // Notifications is shown or hidden here, with a check while it is open.
-  if (controller.windows.includes(NOTIFICATIONS)) {
-    const group = controller.groupOf(NOTIFICATIONS);
-    items.push({ id: "show-notifications", label: t("notifications.showHistory"), checked: !!group, onSelect: () => (group ? controller.close(group) : controller.reopen(NOTIFICATIONS)) });
+  // Notifications is offered back like any other closed window, in its own words; it is
+  // closed from its title bar, not from here (user, 2026-10-29).
+  if (controller.windows.includes(NOTIFICATIONS) && !controller.groupOf(NOTIFICATIONS)) {
+    items.push({ id: "show-notifications", label: t("notifications.showHistory"), onSelect: () => controller.reopen(NOTIFICATIONS) });
   }
   if (items.length) items.push("separator");
   if (actions) {

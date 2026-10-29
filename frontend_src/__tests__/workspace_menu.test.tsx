@@ -1,6 +1,6 @@
 /**
- * Workspace Options: Notifications is shown or hidden with a check rather than
- * reopened, a window a toolbar tool opens (Log Settings in Logs) is not
+ * Workspace Options: Notification History is offered only while its window is
+ * closed, a window a toolbar tool opens (Log Settings in Logs) is not
  * offered there, other closed windows are offered to reopen (Request Details
  * among them), and the two resets say what they reset.
  */
@@ -23,16 +23,19 @@ function mount() {
 const items = (c: WorkspaceController) => workspaceMenu(c, null).filter((e): e is Item => e !== "separator");
 
 describe("Workspace Options", () => {
-  it("shows Notifications with a check, and hides and shows it again", () => {
+  it("offers Notification History only while it is closed (user, 2026-10-29)", () => {
     const c = mount();
-    const show = () => items(c).find((i) => i.id === "show-notifications")!;
-    expect(show()).toMatchObject({ label: "Show Notification History", checked: true });
-    show().onSelect!();
-    expect(c.groupOf("notifications")).toBeNull();
-    expect(show().checked).toBe(false);
+    const show = () => items(c).find((i) => i.id === "show-notifications");
+    // Open: nothing to offer, and no second entry for it among the reopenable windows.
+    expect(show()).toBeUndefined();
     expect(items(c).some((i) => i.id === "reopen-notifications")).toBe(false);
-    show().onSelect!();
+    c.close(c.groupOf("notifications")!);
+    expect(show()).toMatchObject({ label: "Show Notification History" });
+    expect(show()!.checked).toBeUndefined();
+    expect(items(c).some((i) => i.id === "reopen-notifications")).toBe(false);
+    show()!.onSelect!();
     expect(c.groupOf("notifications")).not.toBeNull();
+    expect(show()).toBeUndefined();
   });
 
   it("names the two resets for what they reset, and says more in their hints", () => {
