@@ -9141,15 +9141,6 @@ async def _call_tool_checked(
     progress = DispatchProgress(tracked=handler in (_tool_call_service, _tool_calendar_write))
     parent_progress = dispatch_progress.get()
     progress_context = dispatch_progress.set(progress)
-    # Past every refusal above: from here the handler may reach Home Assistant, so the
-    # dispatch claim is marked. A claim without the marker never got this far, and a
-    # restart clears it instead of asking the operator (user, 2026-10-29). A refusal
-    # inside the handler still removes or settles the claim on the way out.
-    if not tool_is_read_only(tool_name):
-        try:
-            await data.agent_recovery.dispatching(request_id)
-        except Exception as marker_error:  # noqa: BLE001 - an unmarked claim is the safe side
-            log_internal_failure(_LOGGER, "dispatch_marker", marker_error)
     try:
         result = await handler(
             arguments, access_key, hass, **{k: context[k] for k in wanted}, **bound
