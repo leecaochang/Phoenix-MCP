@@ -435,6 +435,35 @@ async def test_mistral_reasoning_is_preserved_when_verbose_output_is_hidden():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "mistral_shape"), [("mistral-large-4", True), ("glm-5.3", False)])
+async def test_opencode_accepts_mistral_content_parts_only_for_mistral_models(model, mistral_shape):
+    """OpenCode forwards a Mistral model's replies in Mistral's typed content shape.
+
+    Every turn on such a model failed as malformed. The same shape from any other
+    model behind OpenCode is still malformed, so the exception follows the family.
+    """
+    chunks = [{"type": "thinking", "thinking": [{"type": "text", "text": "Check the light."}], "closed": True}]
+    body = _sse(
+        'data: {"choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}',
+        f'data: {json.dumps({"choices": [{"delta": {"content": chunks}, "finish_reason": None}]})}',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{\\"entity_id\\": \\"light.desk\\"}"}}]},"finish_reason":"tool_calls"}]}',
+        "data: [DONE]",
+    )
+    cfg = ProviderConfig(kind="opencode", model=model, base_url="https://opencode.ai/zen/v1", api_key="k")
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+
+    done = next((e for e in events if e["type"] == agentcli.EV_DONE), None)
+    if not mistral_shape:
+        assert done is None
+        assert next(e for e in events if e["type"] == agentcli.EV_ERROR)["code"] == "provider_malformed"
+        return
+    assert next(e for e in events if e["type"] == agentcli.EV_TOOL)["input"] == {"entity_id": "light.desk"}
+    # Mistral requires the reasoning parts back on the next turn.
+    assert done["assistant_msg"]["content"] == chunks
+
+
+@pytest.mark.asyncio
 async def test_openai_tool_only_assistant_content_is_empty_string_not_null():
     # A tool-only reply (no text) must carry content "" not null: a JSON null is
     # rejected by Ollama's OpenAI-compatible endpoint on the next turn.

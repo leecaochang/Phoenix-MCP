@@ -2621,6 +2621,8 @@ async def _ollama_capabilities(
 _OPENCODE_OTHER_ENDPOINT_RE = re.compile(
     r"^(?:gpt|grok|claude|gemini|jev|muse|qwen)", re.I,
 )
+# Mistral AI's model families, whose replies OpenCode forwards in Mistral's content shape.
+_MISTRAL_FAMILY_RE = re.compile(r"^(?:mistral|magistral|ministral|devstral|codestral)-", re.I)
 
 
 def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
@@ -2716,6 +2718,16 @@ class OpenAICompatProvider:
     @property
     def _unsupported_model_api(self) -> bool:
         return self._is_opencode_console and self.cfg.model not in AGENTCLI_OPENCODE_CHAT_MODELS
+
+    @property
+    def _mistral_content(self) -> bool:
+        """Whether replies use Mistral's typed content parts, which carry its reasoning.
+
+        OpenCode forwards a Mistral model's replies in Mistral's own shape, so the
+        model family decides it there, not the provider kind.
+        """
+        return self.definition.model_filter == "mistral" or (
+            self.kind == "opencode" and bool(_MISTRAL_FAMILY_RE.match(self.cfg.model)))
 
     def _model_fallback(self) -> list[str]:
         return [self.cfg.model] if self.cfg.model and not self._unsupported_model_api else []
@@ -3259,10 +3271,10 @@ class OpenAICompatProvider:
                 yield _norm(EV_THINKING, text=reasoning)
             content = delta.get("content")
             if content is not None and not isinstance(content, str) and not (
-                self.definition.model_filter == "mistral" and isinstance(content, list)
+                self._mistral_content and isinstance(content, list)
             ):
                 raise _ProviderResponseError()
-            if self.definition.model_filter == "mistral" and isinstance(content, list):
+            if self._mistral_content and isinstance(content, list):
                 for block in content:
                     if not isinstance(block, dict):
                         continue
@@ -3283,7 +3295,7 @@ class OpenAICompatProvider:
                         seg = str(block["text"])
                         text_parts.append(seg)
                         yield _norm(EV_TEXT, text=seg)
-            elif self.definition.model_filter == "mistral" and isinstance(content, str) \
+            elif self._mistral_content and isinstance(content, str) \
                     and content and mistral_content_parts:
                 # Mistral may switch from structured ThinkChunk content to
                 # ordinary string deltas for the answer. Materialize those as
@@ -3390,7 +3402,7 @@ class OpenAICompatProvider:
         # turn ("invalid message content type: <nil>"). An empty string is valid
         # for OpenAI/DeepSeek/Gemini too, so this is safe across all of them.
         answer_text = "".join(text_parts)
-        if self.kind == "mistral" and mistral_content_parts:
+        if self._mistral_content and mistral_content_parts:
             assistant_content: str | list[dict] = mistral_content_parts
         else:
             assistant_content = answer_text
