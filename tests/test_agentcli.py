@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
@@ -1740,6 +1741,7 @@ class _ScriptedProvider:
         self.turns = turns
         self.i = 0
         self.system_prompts: list[str] = []
+        self.sent_messages: list[list[dict]] = []
         self.tool_catalogs: list[list[dict]] = []
 
     def format_tools(self, tools):
@@ -1753,6 +1755,7 @@ class _ScriptedProvider:
 
     async def stream_turn(self, session, *, system_prompt, messages, tools, options):
         self.system_prompts.append(system_prompt)
+        self.sent_messages.append(copy.deepcopy(messages))
         self.tool_catalogs.append(tools)
         turn = self.turns[self.i]
         self.i += 1
@@ -1969,26 +1972,26 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=catalog), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
-        await async_run_agent_turn(
+        stored = await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
-            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
-            base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
+            session=MagicMock(), messages=[{"role": "user", "content": "What happened?"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
         )
 
     prompt = provider.system_prompts[0]
-    assert zone in prompt
-    assert offset_label in prompt
-    assert "2026-08-13 11:26" in prompt
     assert "preserve their canonical timestamps" in prompt
     assert "authoritative companion fields" in prompt
     assert "Use the _local value" in prompt
     assert "without a timezone suffix" in prompt
     assert "State dates and times matter-of-factly" in prompt
     assert [tool["name"] for tool in provider.tool_catalogs[0]] == ["get_logbook"]
-    # The time context, the one part that changes every turn, ends the prompt so the cache stops before it.
-    lead = prompt.rfind(agentcli._TIME_CONTEXT_LEAD)
-    assert lead > 0 and agentcli._AGENTCLI_ADDENDUM.strip()[:60] in prompt[:lead]
-    assert prompt[lead:].count("\n\n") == 1
+    # The clock changes every turn, so it stays out of the cached system prompt
+    # and rides on the operator's message in the request copy only.
+    assert "2026-08-13 11:26" not in prompt and agentcli._TIME_CONTEXT_LEAD not in prompt
+    sent = provider.sent_messages[0][-1]["content"]
+    assert sent.startswith("What happened?" + agentcli._TIME_CONTEXT_LEAD)
+    assert zone in sent and offset_label in sent and "2026-08-13 11:26" in sent
+    assert stored[0] == {"role": "user", "content": "What happened?"}
 
 
 def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
@@ -2093,7 +2096,7 @@ def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule(
                 taken.add((definition["name"], name))
     covered = {(tool, field) for tool, fields in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS.items() for field in fields}
     assert taken - exempt == covered
-    prompt = agentcli._agentcli_time_context(MagicMock(config=MagicMock(time_zone="Asia/Bangkok")))
+    prompt = agentcli._agentcli_time_guidance()
     assert all(tool in prompt for tool in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS)
 
 
@@ -2140,6 +2143,56 @@ async def test_run_agent_turn_read_tool(hass):
     tr = next(p for n, p in events if n == "tool_result")
     assert tr["is_error"] is False and tr["summary"] == "on"
     fake_dispatch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_next_turn_resends_earlier_history_unchanged(hass):
+    """A prompt cache is a prefix: the time note must not alter history a later turn re-sends."""
+    provider = _ScriptedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
+         _done("tool_use")],
+        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+        [{"type": agentcli.EV_TEXT, "text": "Yes."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    fake_dispatch = AsyncMock(return_value=({"result": {"content": [{"type": "text", "text": "on"}]}}, "m", "r", "allowed"))
+    clock = [datetime(2026, 8, 13, 11, 26, tzinfo=timezone.utc)]
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+         patch("custom_components.phoenix_mcp.agentcli.dt_util.now", side_effect=lambda: clock[0]):
+        messages = [{"role": "user", "content": "Is the light on?"}]
+        for text in (None, "Still?"):
+            if text is not None:
+                clock[0] += timedelta(minutes=1)
+                messages = [*messages, {"role": "user", "content": text}]
+            messages = await async_run_agent_turn(
+                hass=hass, data=data, access_key=MagicMock(), provider=provider,
+                session=MagicMock(), messages=messages, options={}, client_ip="agentcli",
+                base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
+            )
+
+    first, second, third = provider.sent_messages
+    # Every round of a turn carries the same note on the same message.
+    assert first[0]["content"] == second[0]["content"] != "Is the light on?"
+    assert "11:26" in first[0]["content"]
+    # The next turn re-sends the stored history byte for byte and stamps only its own message.
+    assert third[:-1] == messages[:4] and third[0] == {"role": "user", "content": "Is the light on?"}
+    assert third[-1]["content"].startswith("Still?" + agentcli._TIME_CONTEXT_LEAD) and "11:27" in third[-1]["content"]
+    assert len(set(provider.system_prompts)) == 1
+    assert all(agentcli._TIME_CONTEXT_LEAD not in json.dumps(message) for message in messages)
+
+
+def test_the_time_note_skips_tool_results_and_joins_block_content():
+    tool_results = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "on"}]}
+    image = {"role": "user", "content": [{"type": "image", "source": {}}, {"type": "text", "text": "What is this?"}]}
+    messages = [image, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]}, tool_results]
+    assert agentcli._operator_message_index(messages) == 0
+    assert agentcli._operator_message_index([tool_results]) is None
+    stamped = agentcli._with_time_context(messages, 0, agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]")
+    assert stamped[0]["content"][:2] == image["content"]
+    assert stamped[0]["content"][2] == {"type": "text", "text": agentcli._TIME_CONTEXT_LEAD.lstrip("\n") + "UTC (UTC).]"}
+    assert stamped[1:] == messages[1:] and len(image["content"]) == 2
 
 
 @pytest.mark.asyncio
@@ -5472,15 +5525,29 @@ def test_agentcli_states_when_each_automation_last_triggered_locally():
 
 
 
-def test_the_cached_prefix_ends_before_the_time_context():
-    """The time changes every turn; before this split it rewrote the whole cached prefix."""
-    system = "stable instructions" + agentcli._TIME_CONTEXT_LEAD + "Asia/Bangkok (UTC+07:00). The current ..."
-    blocks, _ = agentcli._cache_marked(system, [])
-    assert blocks[0] == {"type": "text", "text": "stable instructions", "cache_control": {"type": "ephemeral"}}
-    assert blocks[1]["text"].startswith(agentcli._TIME_CONTEXT_LEAD) and "cache_control" not in blocks[1]
-    assert "".join(block["text"] for block in blocks) == system
-    plain, _ = agentcli._cache_marked("no time here", [])
-    assert plain == [{"type": "text", "text": "no time here", "cache_control": {"type": "ephemeral"}}]
+def test_the_history_before_the_operator_message_is_its_own_cached_prefix():
+    """The operator's message carries the turn's time note, so the history before it gets a breakpoint."""
+    marker = {"cache_control": {"type": "ephemeral"}}
+    earlier = [
+        {"role": "user", "content": "Is the light on?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "It is on."},
+                                          {"type": "thinking", "thinking": "t", "signature": "s"}]},
+    ]
+    messages = [*earlier, {"role": "user", "content": "Still?" + agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]"}]
+    system, marked = agentcli._cache_marked("stable instructions", messages)
+    assert system == [{"type": "text", "text": "stable instructions", **marker}]
+    # A thinking block cannot hold a breakpoint, so the text block before it does.
+    assert marked[1]["content"][0] == {"type": "text", "text": "It is on.", **marker}
+    assert "cache_control" not in marked[1]["content"][1] and marked[0] == messages[0]
+    assert marked[2]["content"][-1]["cache_control"] == marker["cache_control"]
+    assert "cache_control" not in json.dumps(messages)
+    # A first message, or a tool-result round, has no earlier history to mark separately.
+    _, single = agentcli._cache_marked("s", messages[2:])
+    assert [block.get("cache_control") for block in single[0]["content"]] == [marker["cache_control"]]
+    tool_round = [*messages, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]},
+                  {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": ""}]}]
+    _, marked = agentcli._cache_marked("s", tool_round)
+    assert ["cache_control" in json.dumps(message) for message in marked] == [False, True, False, False, True]
 
 
 @pytest.mark.asyncio

@@ -1711,34 +1711,52 @@ def _use_enabled_thinking(body: dict) -> None:
     body.pop("output_config", None)
 
 
+_CACHE_MARKER = {"cache_control": {"type": "ephemeral"}}
+
+
+def _cache_marked_message(message: dict) -> dict | None:
+    """Copy one message with a cache breakpoint on its last markable block, or None.
+
+    Anthropic refuses a breakpoint on a thinking block or an empty text block.
+    """
+    content = message.get("content")
+    if isinstance(content, str):
+        return {**message, "content": [{"type": "text", "text": content, **_CACHE_MARKER}]} if content else None
+    if not isinstance(content, list):
+        return None
+    for i in range(len(content) - 1, -1, -1):
+        block = content[i]
+        if (isinstance(block, dict) and block.get("type") not in ("thinking", "redacted_thinking")
+                and not (block.get("type") == "text" and not block.get("text"))):
+            return {**message, "content": [*content[:i], {**block, **_CACHE_MARKER}, *content[i + 1:]]}
+    return None
+
+
 def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[dict]]:
     """Add Anthropic prompt-cache breakpoints (Claude only, never MiniMax).
 
-    Two ephemeral markers: one closing the stable system block, which caches the
-    tools array plus the system prompt up to the time context (large, and
-    unchanged across turns unless the access key's caps change), and one on the
-    last message block, so each agentic-loop iteration reuses the prior message
-    history instead of re-billing it. The time context, which changes every turn,
-    ends the system prompt and goes in its own block after the first marker, so
-    it no longer rewrites the cached prefix. Markers go on copies only; the
-    stored transcript round-trips through the browser and must stay clean.
+    Up to three ephemeral markers: one closing the system block, which caches the
+    tools array plus the system prompt (large, and unchanged across turns unless
+    the access key's caps change); one on the message before the operator's
+    latest message, which ends the history the next turn sends again unchanged;
+    and one on the last message block, so each agentic-loop iteration reuses the
+    prior message history instead of re-billing it. The middle marker exists
+    because the latest operator message carries the turn's time note
+    (_with_time_context), so no later prefix of this turn recurs in the next one.
+    Markers go on copies only; the stored transcript round-trips through the
+    browser and must stay clean.
     """
-    marker = {"cache_control": {"type": "ephemeral"}}
-    cut = system_prompt.rfind(_TIME_CONTEXT_LEAD)
-    system = ([{"type": "text", "text": system_prompt[:cut], **marker},
-               {"type": "text", "text": system_prompt[cut:]}]
-              if cut > 0 else [{"type": "text", "text": system_prompt, **marker}])
+    system = [{"type": "text", "text": system_prompt, **_CACHE_MARKER}]
     if not messages:
         return system, messages
-    last = messages[-1]
-    content = last.get("content")
-    if isinstance(content, str) and content:
-        marked = {**last, "content": [{"type": "text", "text": content, **marker}]}
-    elif isinstance(content, list) and content:
-        marked = {**last, "content": [*content[:-1], {**content[-1], **marker}]}
-    else:
-        return system, messages
-    return system, [*messages[:-1], marked]
+    marked = list(messages)
+    operator = _operator_message_index(messages)
+    if operator:
+        if (history := _cache_marked_message(messages[operator - 1])) is not None:
+            marked[operator - 1] = history
+    if (last := _cache_marked_message(messages[-1])) is not None:
+        marked[-1] = last
+    return system, marked
 
 
 _SCHEMA_COMBINATORS = ("anyOf", "oneOf", "allOf")
@@ -4408,22 +4426,69 @@ _AGENTCLI_ADDENDUM = (
 )
 
 
-# The time context opens with this and closes the system prompt; the prompt cache
-# splits there, since it is the only part that changes between turns.
-_TIME_CONTEXT_LEAD = "\n\nHome Assistant's local time zone is "
+# The per-turn time note opens with this. It rides on the operator's latest
+# message rather than the system prompt: the prompt cache is a prefix, so a
+# changing line ahead of the history would re-bill the whole history every turn.
+_TIME_CONTEXT_LEAD = "\n\n[Phoenix note: Home Assistant's local time zone is "
 
 
 def _agentcli_time_context(hass: HomeAssistant) -> str:
-    """Tell Agent Chat how to present Home Assistant timestamps locally."""
+    """State Home Assistant's zone and the current local time for one chat turn."""
     now = dt_util.now()
     offset = now.strftime("%z")
     offset_label = f"UTC{offset[:3]}:{offset[3:]}" if len(offset) == 5 else "UTC"
-    *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
-    tools = f"{', '.join(leading)} and {last}"
     return (
         _TIME_CONTEXT_LEAD
         + f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
-        f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}. Common temporal tool "
+        f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}.]"
+    )
+
+
+def _operator_message_index(messages: list[dict]) -> int | None:
+    """Index of the latest message the operator wrote, skipping tool-result messages."""
+    for i in range(len(messages) - 1, -1, -1):
+        message = messages[i]
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return i
+        if isinstance(content, list) and not any(
+                isinstance(block, dict) and block.get("type") == "tool_result" for block in content):
+            return i
+    return None
+
+
+def _with_time_context(messages: list[dict], index: int | None, note: str) -> list[dict]:
+    """Copy messages with the turn's time note appended to the operator message at index.
+
+    The stored transcript stays clean; only the request copy carries the note.
+    """
+    if index is None:
+        return messages
+    message = messages[index]
+    content = message.get("content")
+    if isinstance(content, str):
+        stamped = {**message, "content": content + note}
+    elif isinstance(content, list):
+        stamped = {**message, "content": [*content, {"type": "text", "text": note.lstrip("\n")}]}
+    else:
+        return messages
+    return [*messages[:index], stamped, *messages[index + 1:]]
+
+
+def _agentcli_time_guidance() -> str:
+    """Tell Agent Chat how to present Home Assistant timestamps locally.
+
+    Unchanged between turns, so it stays in the cached system prompt; the clock
+    itself is the note _agentcli_time_context adds to the operator's message.
+    """
+    *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
+    tools = f"{', '.join(leading)} and {last}"
+    return (
+        "\n\nThe operator's latest message ends with a Phoenix note giving Home Assistant's "
+        "local time zone and the current local date and time at the start of the turn. Phoenix "
+        "adds that note; the operator did not write it, so do not answer or quote it. Common temporal tool "
         "results preserve their canonical timestamps and add authoritative companion fields "
         "whose names end in _local. Use the _local value when reasoning or reporting; never "
         f"calculate a local value from its canonical counterpart. For {tools} absolute "
@@ -5167,9 +5232,14 @@ async def async_run_agent_turn(
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
         + (loader.directory() if loader is not None else "")
-        # Last: it changes every turn, and the prompt cache ends before it.
-        + _agentcli_time_context(hass)
+        + _agentcli_time_guidance()
     )
+    # The clock goes on the operator's message in each request copy, after the
+    # history the next turn re-sends, so that history stays a cached prefix.
+    operator = _operator_message_index(messages)
+    time_note = _agentcli_time_context(hass)
+    if operator is None:
+        system += time_note
     declared = loader.round_tools() if loader is not None else agent_tools
     tools = provider.format_tools(declared)
     tools_key = tuple(tool["name"] for tool in declared)
@@ -5240,8 +5310,8 @@ async def async_run_agent_turn(
             if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
                 tools, tools_key = provider.format_tools(definitions), key
         call = await _consume_model_stream(
-            provider, session, system=system, messages=messages, tools=tools,
-            options=options, cancel=cancel, emit=emit,
+            provider, session, system=system, messages=_with_time_context(messages, operator, time_note),
+            tools=tools, options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
             context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
