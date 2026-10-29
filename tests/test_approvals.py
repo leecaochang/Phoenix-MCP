@@ -33,6 +33,8 @@ from custom_components.phoenix_mcp.approvals import (
     fire_approval_requested_event,
     list_approvals,
     REASON_EXECUTION_INTERRUPTED,
+    REASON_RESTARTED,
+    async_cancel_queued_approvals_at_startup,
     async_mark_execution_started,
     async_reconcile_interrupted_approvals,
     async_update_approval_status,
@@ -231,6 +233,59 @@ class TestUpdateStatus:
         async with store.async_lock:
             result = await async_update_approval_status(store, "appr_missing", status=STATUS_REJECTED)
         assert result is None
+
+
+# --- async_cancel_queued_approvals_at_startup ------------------------------------------
+
+
+class TestCancelQueuedAtStartup:
+    """A restart drops the requests nobody is waiting for any more (user, 2026-10-29)."""
+
+    @pytest.mark.asyncio
+    async def test_cancels_every_queued_request_and_leaves_decided_ones(self, store):
+        queued = await async_create_pending_approval(
+            store, access_key_id="t1", access_key_name="a", tool_name="restart_ha",
+            cap_name="cap_restart", args={}, diff={}, request_id="r1",
+        )
+        other = await async_create_pending_approval(
+            store, access_key_id="t2", access_key_name="b", tool_name="restart_ha",
+            cap_name="cap_restart", args={}, diff={}, request_id="r2",
+        )
+        decided = await async_create_pending_approval(
+            store, access_key_id="t1", access_key_name="a", tool_name="restart_ha",
+            cap_name="cap_restart", args={}, diff={}, request_id="r3",
+        )
+        async with store.async_lock:
+            await async_update_approval_status(store, decided.id, status=STATUS_APPROVED)
+            cancelled = await async_cancel_queued_approvals_at_startup(store)
+
+        assert sorted(c.id for c in cancelled) == sorted([queued.id, other.id])
+        for approval_id in (queued.id, other.id):
+            record = get_approval(store, approval_id)
+            assert record.status == STATUS_CANCELLED
+            assert record.rejected_reason == REASON_RESTARTED
+            assert record.resolved_at is not None
+        assert get_approval(store, decided.id).status == STATUS_APPROVED
+
+    @pytest.mark.asyncio
+    async def test_nothing_queued_saves_nothing(self, store):
+        async with store.async_lock:
+            assert await async_cancel_queued_approvals_at_startup(store) == []
+
+    @pytest.mark.asyncio
+    async def test_an_interrupted_execution_keeps_its_own_outcome(self, store):
+        """Reconciliation runs first; a claim that may have applied stays failed."""
+        running = await async_create_pending_approval(
+            store, access_key_id="t1", access_key_name="a", tool_name="restart_ha",
+            cap_name="cap_restart", args={}, diff={}, request_id="r1",
+        )
+        async with store.async_lock:
+            await async_mark_execution_started(store, running.id, approved_by_user_id="admin-1")
+            await async_reconcile_interrupted_approvals(store)
+            await async_cancel_queued_approvals_at_startup(store)
+        record = get_approval(store, running.id)
+        assert record.status == STATUS_FAILED
+        assert record.rejected_reason == REASON_EXECUTION_INTERRUPTED
 
 
 # --- async_cancel_approvals_for_access_key ----------------------------------------------

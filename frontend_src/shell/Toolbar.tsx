@@ -30,6 +30,9 @@ export interface WorkspaceActions {
   restoreOriginal: (controller: WorkspaceController) => void;
   /** Reset All Workspaces: the toolbar, Help Bar, Guide and every arrangement, never My Defaults or settings. */
   restorePanelDefaults: () => void;
+  /** Items are waiting and Needs Attention was closed in this workspace: offer it back (user, 2026-10-29). */
+  attentionHidden: (controller: WorkspaceController) => boolean;
+  showAttention: (controller: WorkspaceController) => void;
 }
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);
 
@@ -46,6 +49,10 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
     label: t("workspace.reopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
+  // Needs Attention is closed per workspace: while items wait, every workspace offers it back.
+  if (actions?.attentionHidden(controller)) {
+    items.push({ id: "show-attention", label: t("workspace.showAttention"), onSelect: () => actions.showAttention(controller) });
+  }
   // Notifications is shown or hidden here, with a check while it is open.
   if (controller.windows.includes(NOTIFICATIONS)) {
     const group = controller.groupOf(NOTIFICATIONS);

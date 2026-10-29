@@ -222,6 +222,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
     ) -> list[AuditEntry] | None:
         """Shared filter pass behind query() and count(). Newest first.
@@ -248,6 +249,10 @@ class AuditLog:
             entries = [e for e in entries if method.lower() in str(e.method).lower()]
         if resource is not None:
             entries = [e for e in entries if resource.lower() in str(e.resource).lower()]
+        # Exact, not a substring: a request id identifies one request, and Needs
+        # Attention links to it to show what became of an uncertain write.
+        if request_id is not None:
+            entries = [e for e in entries if str(e.request_id) == request_id]
         if since is not None:
             entries = [e for e in entries if e.timestamp >= since]
 
@@ -262,6 +267,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -274,7 +280,7 @@ class AuditLog:
         """
         entries = self._filtered(
             access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
-            method=method, resource=resource, since=since,
+            method=method, resource=resource, request_id=request_id, since=since,
         )
         if entries is None:
             return None
@@ -289,6 +295,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
     ) -> int | None:
         """Return the number of entries matching query()'s filters, ignoring limit/offset.
@@ -297,7 +304,7 @@ class AuditLog:
         """
         entries = self._filtered(
             access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
-            method=method, resource=resource, since=since,
+            method=method, resource=resource, request_id=request_id, since=since,
         )
         return None if entries is None else len(entries)
 

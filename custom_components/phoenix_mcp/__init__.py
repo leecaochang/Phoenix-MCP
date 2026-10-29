@@ -712,7 +712,53 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
                 },
             )
 
+    async def _cancel_queued_approvals_at_startup() -> None:
+        """Cancel the approvals still queued from the previous run and log each one.
+
+        Their conversations ended with that run, so nothing is waiting for the
+        result. Settled dispatch claims are dropped with them, leaving Needs
+        Attention for the writes whose outcome was never recorded anywhere.
+        """
+        from .approvals import (  # noqa: PLC0415
+            async_cancel_queued_approvals_at_startup,
+            dismiss_approval_notification,
+            fire_approval_resolved_event,
+        )
+
+        async with store.async_lock:
+            cancelled = await async_cancel_queued_approvals_at_startup(store)
+        for approval in cancelled:
+            dismiss_approval_notification(hass, approval.id)
+            fire_approval_resolved_event(hass, approval)
+            audit.record(
+                request_id=approval.request_id,
+                access_key_id=approval.access_key_id,
+                access_key_name=approval.access_key_name,
+                method="approval/cancelled",
+                resource=f"approval:{approval.tool_name}:{approval.id}",
+                outcome="denied",
+                client_ip="",
+                settings=store.get_settings(),
+                payload={"reason": approval.rejected_reason, "cancelled_at_startup": True},
+            )
+        if cancelled:
+            _LOGGER.info(
+                "Phoenix MCP: cancelled %d approval request(s) still queued from the previous run",
+                len(cancelled),
+            )
+        try:
+            settled = await agent_recovery.settle_known_outcomes(store)
+        except Exception:  # noqa: BLE001 - a stuck journal must not stop setup
+            _LOGGER.exception("Phoenix MCP: could not settle recorded dispatch outcomes")
+        else:
+            if settled:
+                _LOGGER.info(
+                    "Phoenix MCP: cleared %d agent action(s) whose outcome is on record or "
+                    "that never reached Home Assistant", settled,
+                )
+
     await _reconcile_interrupted_approvals()
+    await _cancel_queued_approvals_at_startup()
     await _sweep_expired_approvals()
     cancel_approval_sweep = async_track_time_interval(
         hass,

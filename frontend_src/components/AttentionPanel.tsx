@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api } from "../api";
 import type { AttentionItem } from "../types";
 import { localeDateTime, localeNumber, t } from "../i18n";
-import { BusyButton } from "./BusyButton";
+import { ActionButton } from "../ui/ActionButton";
+import { InlineConfirm } from "../ui/InlineConfirm";
 import { Icon } from "../ui/Icon";
 
 const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
@@ -13,8 +14,6 @@ export interface AttentionState {
   error: string | null;
   reviewError: string | null;
   busy: string | null;
-  checked: ReadonlySet<string>;
-  setItemChecked: (key: string, selected: boolean) => void;
   load: () => Promise<void>;
   review: (item: AttentionItem) => Promise<void>;
 }
@@ -25,7 +24,6 @@ export function useAttention(): AttentionState {
   const [error, setError] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   const generation = useRef(0);
   const alive = useRef(true);
   const reviewing = useRef(false);
@@ -56,7 +54,7 @@ export function useAttention(): AttentionState {
 
   const review = useCallback(async (item: AttentionItem) => {
     const key = `${item.kind}:${item.id}`;
-    if (reviewing.current || !checked.has(key) || (item.kind !== "agent" && item.kind !== "calendar")) return;
+    if (reviewing.current || (item.kind !== "agent" && item.kind !== "calendar")) return;
     reviewing.current = true;
     ++generation.current;
     setBusy(key);
@@ -65,55 +63,67 @@ export function useAttention(): AttentionState {
       await api.reviewAttention(item.kind, item.id);
       if (!alive.current) return;
       setItems(rows => rows.filter(row => `${row.kind}:${row.id}` !== key));
-      setChecked(previous => { const next = new Set(previous); next.delete(key); return next; });
     } catch (e: unknown) {
       if (alive.current) setReviewError(e instanceof Error ? e.message : t("attention.saveFailed"));
     } finally {
       reviewing.current = false;
       if (alive.current) { setBusy(null); void load(); }
     }
-  }, [checked, load]);
+  }, [load]);
 
-  const setItemChecked = useCallback((key: string, selected: boolean) => {
-    setChecked(previous => { const next = new Set(previous); if (selected) next.add(key); else next.delete(key); return next; });
-  }, []);
-
-  return { items, error, reviewError, busy, checked, setItemChecked, load, review };
+  return { items, error, reviewError, busy, load, review };
 }
 
-/** The review list: refresh, each item, and its check-then-continue control. */
-export function AttentionList({ state }: { state: AttentionState }) {
-  const { items, error, reviewError, busy, checked, setItemChecked, load, review } = state;
-  return <>
-    <div className="phx-attention-refresh">
-      <p>{error || (items.length ? t("attention.intro") : t("attention.empty"))}</p>
-      <button className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => { void load(); }}>{t("common.refresh")}</button>
-    </div>
-    {reviewError && <p role="alert">{reviewError}</p>}
+/**
+ * The review list, in the UI2 style (user, 2026-10-29): each item says what
+ * happened and what to check, and Mark Reviewed asks for the acknowledgement
+ * in place, like every other confirmation in the panel. The list keeps itself
+ * up to date, so there is no Refresh.
+ */
+export function AttentionList({ state, onShowRequest }: {
+  state: AttentionState;
+  /** Open the Audit Log on one request; absent outside the shell. */
+  onShowRequest?: (requestId: string) => void;
+}) {
+  const { items, error, reviewError, busy, review } = state;
+  const [confirming, setConfirming] = useState<string | null>(null);
+  return <div className="phx-window-pad phx-attention-list">
+    <p className="phx-attention-intro">{error || (items.length ? t("attention.intro") : t("attention.empty"))}</p>
+    {reviewError && <p className="banner banner-error" role="alert">{reviewError}</p>}
     {items.map(item => {
       const key = `${item.kind}:${item.id}`;
       const reviewable = item.kind === "agent" || item.kind === "calendar";
       return <article className="phx-attention-item" key={key}>
-        <h3>{t(TITLES[item.kind])}</h3>
+        <h3 className="phx-attention-item-title">{t(TITLES[item.kind])}</h3>
         {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
-        <p>{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
-        {reviewable && <>
-          <details className="phx-attention-details"><summary>{t("attention.details")}</summary>
-            <code>{item.tool}{item.entity_id && ` / ${item.entity_id}`}<br />{item.id}</code>
-          </details>
+        <p className="phx-attention-help">{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
+        {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t("attention.request")}</span> <code>{item.id}</code></p>}
+        {reviewable && (confirming === key ? (
+          <InlineConfirm label={t("attention.continue")} acknowledge={t("attention.checked")}
+            confirmLabel={t("attention.continue")} cancelLabel={t("common.cancel")}
+            busy={busy === key} onConfirm={() => { void review(item); setConfirming(null); }} onCancel={() => setConfirming(null)}>
+            <p>{t("attention.noReplay")}</p>
+          </InlineConfirm>
+        ) : (
           <div className="phx-attention-actions">
-            <label><input type="checkbox" checked={checked.has(key)} disabled={busy !== null} onChange={e => setItemChecked(key, e.target.checked)} />{t("attention.checked")}</label>
-            <BusyButton className="btn btn-outline btn-sm" busy={busy === key} disabled={!checked.has(key) || (busy !== null && busy !== key)} onClick={() => { void review(item); }}>{t("attention.continue")}</BusyButton>
+            <code className="phx-attention-ref">{item.tool}{item.entity_id && ` / ${item.entity_id}`}</code>
+            <span className="phx-attention-buttons">
+              {onShowRequest && item.kind === "agent" && (
+                <ActionButton icon="logs" label={t("attention.showInAudit")} className="btn btn-outline btn-sm"
+                  disabled={busy !== null} onClick={() => onShowRequest(item.id)} />
+              )}
+              <ActionButton icon="check" label={t("attention.continue")} className="btn btn-outline btn-sm"
+                disabled={busy !== null} onClick={() => setConfirming(key)} />
+            </span>
           </div>
-          <p className="phx-attention-meta">{t("attention.noReplay")}</p>
-        </>}
+        ))}
       </article>;
     })}
-  </>;
+  </div>;
 }
 
 /** Quiet, persistent review of uncertain actions, without dispatching them again. */
-export function AttentionPanel() {
+export function AttentionPanel({ onShowRequest }: { onShowRequest?: (requestId: string) => void } = {}) {
   const state = useAttention();
   const { items, error, load } = state;
   const [open, setOpen] = useState(() => window.location.hash === "#attention");
@@ -142,7 +152,7 @@ export function AttentionPanel() {
       <Icon name="expand" size={16} className="phx-attention-chevron" />
     </button>
     <div className="phx-attention-body" id={bodyId} hidden={!open}>
-      <AttentionList state={state} />
+      <AttentionList state={state} onShowRequest={onShowRequest} />
     </div>
   </section>;
 }

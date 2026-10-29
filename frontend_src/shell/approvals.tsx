@@ -131,7 +131,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   const beginLoad = useLatestRequest();
 
   const pendingWindow = useRef(PAGE);
-  const loadPending = useCallback(async (offset = 0) => {
+  const loadPending = useCallback(async (offset = 0, quiet = false) => {
     if (offset > 0) pendingWindow.current = Math.max(pendingWindow.current, offset + PAGE);
     const isLatest = beginLoad();
     setError(null);
@@ -155,7 +155,8 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
       setHasMore(nextOffset < total);
     } catch (e: unknown) {
       if (!isLatest()) return;
-      setError(e instanceof Error ? e.message : t("approvals.loadFailed"));
+      // A quiet update keeps what is shown: the next one retries, and a restart is announced by the shell.
+      if (!quiet) setError(e instanceof Error ? e.message : t("approvals.loadFailed"));
     } finally {
       if (isLatest()) {
         setLoading(false);
@@ -165,7 +166,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   }, [beginLoad]);
 
   // History and the other scopes page by offset; History leaves pending requests out.
-  const loadOthers = useCallback(async (offset: number) => {
+  const loadOthers = useCallback(async (offset: number, quiet = false) => {
     const isLatest = beginLoad();
     setError(null);
     try {
@@ -177,15 +178,18 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
       if (!isLatest()) return;
       const page = scope === "history" ? resp.approvals.filter((r) => r.status !== "pending") : resp.approvals;
       setRecords((prev) => {
-        if (offset === 0) return page;
+        if (offset === 0 && !quiet) return page;
+        // A quiet update of the first page keeps the pages already loaded below it.
         const seen = new Set(prev.map((r) => r.id));
-        return [...prev, ...page.filter((r) => !seen.has(r.id))];
+        const fresh = new Map(page.map((r) => [r.id, r] as const));
+        const kept = prev.map((r) => fresh.get(r.id) ?? r);
+        return offset === 0 ? [...page.filter((r) => !seen.has(r.id)), ...kept] : [...prev, ...page.filter((r) => !seen.has(r.id))];
       });
-      setRawOffset(offset + resp.approvals.length);
+      if (!(quiet && offset === 0)) setRawOffset(offset + resp.approvals.length);
       setHasMore(offset + resp.approvals.length < resp.total);
     } catch (e: unknown) {
       if (!isLatest()) return;
-      setError(e instanceof Error ? e.message : t("approvals.loadFailed"));
+      if (!quiet) setError(e instanceof Error ? e.message : t("approvals.loadFailed"));
     } finally {
       if (isLatest()) {
         setLoading(false);
@@ -208,12 +212,16 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
     else void loadOthers(0);
   }, [scope, loadPending, loadOthers]);
 
-  // Poll Pending while the workspace is on screen; approval events make the common case instant.
+  // Every scope updates itself while the workspace is on screen, so there is no Refresh
+  // button (user, 2026-10-29); approval events make a new or decided request instant.
   useEffect(() => {
-    if (scope !== "pending" || !active) return;
-    const id = setInterval(loadPending, POLL_INTERVAL_MS);
+    if (!active) return;
+    const id = setInterval(() => {
+      if (scope === "pending") void loadPending(0, true);
+      else void loadOthers(0, true);
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [scope, loadPending, active]);
+  }, [scope, loadPending, loadOthers, active]);
 
   const lastSignal = useRef(refreshSignal);
   useEffect(() => {

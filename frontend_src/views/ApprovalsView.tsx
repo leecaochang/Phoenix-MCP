@@ -148,7 +148,6 @@ export function ApprovalsListWindow() {
     id: "approvals",
     label: t("shell.tabApprovals"),
     tools: [
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabApprovals") }), short: t("common.refresh"), icon: "refresh", onSelect: a.refresh },
       ...(a.batchMode
         ? [
           { id: "approveSelected", label: t("approvals.approveSelected", { count: a.pickedCount }), icon: "approveSelected" as IconName, disabled: a.pickedCount === 0 || a.batchBusy, onSelect: () => { void a.approveSelected(); } },
@@ -167,16 +166,13 @@ export function ApprovalsListWindow() {
   return (
     <div className="phx-list-view approvals-list-view">
       {!onToolbar && <InlineTools groups={groups} />}
-      <div className="approvals-filter-row">
-        <label className="approvals-scope">
-          <span>{t("approvals.show")}</span>
-          <select className="input input-auto" value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
-            {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope}>{scopeLabel(scope)}</option>)}
-          </select>
-        </label>
+      <div className="phx-filters"><div className="filter-row">
+        <select className="input input-auto" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
+          {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope}>{scopeLabel(scope)}</option>)}
+        </select>
         <input type="search" className="input" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />
-      </div>
+      </div></div>
       {a.error && <ErrorMsg msg={a.error} />}
       {a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}
       {a.loading && !a.shown.length && <Loading />}
@@ -242,7 +238,9 @@ export function ReviewWindow() {
   const controller = useContext(ControllerContext);
   useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
   const detailsOpen = !!controller?.hostOf("requestDetails");
-  useToolbarTools(controller ? [{
+  // Nothing to detail until a request is chosen (user, 2026-10-29).
+  const chosen = !!a?.current;
+  const groups: ToolGroup[] = controller ? [{
     id: "review",
     label: t("workspace.review"),
     tools: [{
@@ -250,13 +248,15 @@ export function ReviewWindow() {
       label: t("workspace.requestDetails"),
       icon: "requestDetails",
       pressed: detailsOpen,
+      disabled: !chosen,
       onSelect: () => {
         const group = controller.groupOf("requestDetails");
         if (group) controller.close(group);
-        else controller.ensureOpen("requestDetails");
+        else controller.ensureOpenSplitting("requestDetails", "review");
       },
     }],
-  }] : []);
+  }] : [];
+  const onToolbar = useToolbarTools(groups);
   const decisions = useRef<HTMLDivElement | null>(null);
   const r = a?.current;
   if (!a || !r) return <p className="phx-window-empty">{t("workspace.reviewEmpty")}</p>;
@@ -268,6 +268,8 @@ export function ReviewWindow() {
   const summary = friendlyApprovalSummary(r.diff);
   return (
     <div className="phx-review" key={r.id}>
+      {/* Off the toolbar (a phone), Request Details opens from the window itself. */}
+      {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-review-head">
         {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">

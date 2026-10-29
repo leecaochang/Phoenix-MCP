@@ -31,7 +31,7 @@ import type { WorkspaceId } from "./storage";
 import { WindowVisibleContext, WorkspaceVisibleContext } from "./visibility";
 import { CHAT_WINDOW, ChatDockWindow } from "./chatDock";
 import { WindowPlaceContext } from "./tools";
-import { LogDetailsContent } from "./logDetails";
+import { AuditFocusContext, LogDetailsContent } from "./logDetails";
 import { TableSettingsContext } from "../ui/table/settings";
 import { NotificationsWindow } from "./notifications";
 import { HELP_WINDOW, HelpWindow } from "./help";
@@ -129,6 +129,17 @@ export function windowAvailable(id: string, settings: GlobalSettings | null, mes
 
 const size = (api: DockviewApi, id: string, dims: { width?: number; height?: number }) => api.getPanel(id)?.group.api.setSize(dims);
 
+/**
+ * Give a window its share of the workspace's width. A workspace is arranged
+ * before it is shown, when the grid can still measure zero, and the share is
+ * applied again at the next frame so the columns are not left equal.
+ */
+const share = (api: DockviewApi, id: string, fraction: number) => {
+  const apply = () => { if (api.width > 0) size(api, id, { width: Math.round(api.width * fraction) }); };
+  apply();
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(apply);
+};
+
 const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
   accessKeys: {
     labelKey: "shell.tabAccessKeys",
@@ -166,10 +177,14 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     arrange: (api, add) => {
       add("approvals");
       add("review", { referencePanel: "approvals", direction: "right" });
-      size(api, "approvals", { width: Math.round(api.width * 0.34) });
+      share(api, "approvals", 0.34);
     },
     closedAt: { requestDetails: { neighbor: "review", side: "bottom" } },
+    toolWindows: ["requestDetails"],
     heights: { requestDetails: 320 },
+    // The windows always fit the screen (user, 2026-10-29): Approvals never scrolls, so the
+    // list scrolls inside its own window and keeps the chosen request in view.
+    fit: true,
     // 2: the three windows replaced the single Approvals window.
     layoutVersion: 2,
   },
@@ -204,7 +219,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       add("mesaProfiles");
       add("mesaEditor", { referencePanel: "mesaProfiles", direction: "right" });
       add("mesaSuggestions", { direction: "below" });
-      size(api, "mesaProfiles", { width: Math.round(api.width * 0.45) });
+      share(api, "mesaProfiles", 0.45);
     },
     conditional: {
       mesaOrphans: { neighbor: "mesaSuggestions", side: "bottom" },
@@ -262,7 +277,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       add("settingsSafety", { referencePanel: "settingsChat", direction: "below" });
       add("settingsLogs", { direction: "below" });
       add("settingsGeneral", { referencePanel: "settingsLogs", direction: "below" });
-      size(api, "settingsProviders", { width: Math.round(api.width * 0.55) });
+      share(api, "settingsProviders", 0.55);
     },
     folded: ["settingsLogs", "settingsGeneral"],
     heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520 },
@@ -354,7 +369,8 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   const place = useMemo(() => (controller ? { workspace: controller.id, window: id } : null), [controller, id]);
   // In a workspace whose windows follow their content, report the height this window's content needs.
   const body = useRef<HTMLDivElement | null>(null);
-  const followsContent = !!controller?.contentSized;
+  // Needs Attention is as tall as what it shows in every workspace (user, 2026-10-29).
+  const followsContent = !!controller && (controller.contentSized || id === ATTENTION_WINDOW);
   useLayoutEffect(() => {
     const el = body.current;
     if (!followsContent || !controller || !el || typeof ResizeObserver === "undefined") return undefined;
@@ -434,7 +450,12 @@ function ConversationLogContent() { return <ConversationsView accessKeys={usePan
 function LogDetailsWindowContent() { return <LogDetailsContent />; }
 
 function AttentionContent() {
-  return <div className="phx-attention phx-attention-window"><AttentionList state={usePanelData().attention} /></div>;
+  const focus = useContext(AuditFocusContext);
+  return (
+    <div className="phx-attention phx-attention-window">
+      <AttentionList state={usePanelData().attention} onShowRequest={focus ? (id) => focus.ask(id) : undefined} />
+    </div>
+  );
 }
 
 export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {

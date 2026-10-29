@@ -16,6 +16,7 @@ export const APPROVAL_REASON_LABEL_KEYS: Readonly<Record<string, string>> = {
   execution_interrupted: "approvals.reason.execution_interrupted",
   approval_format_incompatible: "approvals.reason.approval_format_incompatible",
   agent_chat_ended: "approvals.reason.agent_chat_ended",
+  phoenix_mcp_restarted: "approvals.reason.phoenix_mcp_restarted",
 };
 
 /** Localize a backend reason slug; preserve free-form operator/tool text. */

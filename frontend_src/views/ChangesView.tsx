@@ -156,13 +156,11 @@ export function ChangesListWindow() {
           </select>
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
         </div>
-      </div>
-      {showFilters && (
-        <div className="approvals-filter-row">
+        <div className="filter-row">
           <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder={t("changes.search")} aria-label={t("changes.search")} />
         </div>
-      )}
+      </div>
       {c.error && <ErrorMsg msg={c.error} />}
       {c.loading && !c.feed.length && <Loading />}
       <ConfigTable

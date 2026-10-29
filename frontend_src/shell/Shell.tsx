@@ -21,11 +21,12 @@ import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeR
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
-import { LogSelection, LogSelectionContext } from "./logDetails";
+import { AuditFocus, AuditFocusContext, LogSelection, LogSelectionContext } from "./logDetails";
 import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
+import { Reconnecting } from "./Reconnecting";
 import { MesaProvider, type MesaFindings } from "./mesa";
 import { SettingsProvider } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
@@ -195,6 +196,9 @@ export function Shell() {
   // conversation at most CONVERSATION_SHARE of the height. A window the user resized or moved
   // only ever gets smaller. Conversations load their detail after opening, so the size
   // follows the content for a moment.
+  // Needs Attention asking for one request: show the Logs workspace with the Audit Log on it.
+  const auditFocus = useMemo(() => new AuditFocus(), []);
+  auditFocus.onFocus = () => { d.navigate("logs"); revealIn("logs", "auditLog"); };
   const logSelection = useMemo(() => new LogSelection(), []);
   const stopSizing = useRef<() => void>(() => {});
   const sizeLogDetails = useCallback((here: WorkspaceId) => {
@@ -514,10 +518,14 @@ export function Shell() {
       if (mine) clearMy();
       // The key list's Show Archived is part of how the workspace looks (user, 2026-10-28).
       if (controller.id === "accessKeys") setShowArchived(false);
+      // A reset brings Needs Attention back while items are still waiting (user, 2026-10-29).
+      attentionRef.current.showAttentionIn(controller.id as WorkspaceId);
       controller.restoreOriginal();
       markChanged([`ws:${controller.id as WorkspaceId}`, ...(mine ? ["myWindows" as const] : [])], true);
     },
     restorePanelDefaults,
+    attentionHidden: (controller) => attentionRef.current.waiting && !attentionRef.current.attentionShownIn(controller.id as WorkspaceId),
+    showAttention: (controller) => attentionRef.current.showAttentionIn(controller.id as WorkspaceId),
   }), [clearMy, commit, markChanged, notify, restorePanelDefaults, setShowArchived]);
 
   // Window titles follow the panel language.
@@ -527,12 +535,22 @@ export function Shell() {
   }, [controllers, languageSignature]);
 
   // Needs Attention appears in the visible workspace while items need checking (or a
-  // notification asked for it). Closing it hides it until more items arrive.
+  // notification asked for it). Closing it hides it in THAT workspace only, until more
+  // items arrive, and Workspace Options offers it back there (user, 2026-10-29).
   const attentionCount = d.attention.items.length;
-  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
-  const showAttention = (attentionCount > 0 || d.attentionRequested) && (dismissedAt === null || attentionCount > dismissedAt);
-  useEffect(() => { if (attentionCount === 0) setDismissedAt(null); }, [attentionCount]);
+  const [dismissedAt, setDismissedAt] = useState<Partial<Record<WorkspaceId, number>>>({});
+  const waiting = attentionCount > 0 || d.attentionRequested;
+  const attentionShownIn = useCallback((id: WorkspaceId) => {
+    const at = dismissedAt[id];
+    return waiting && (at === undefined || attentionCount > at);
+  }, [waiting, attentionCount, dismissedAt]);
+  useEffect(() => { if (attentionCount === 0) setDismissedAt({}); }, [attentionCount]);
   const dismissAttention = d.dismissAttentionRequest;
+  const showAttentionIn = useCallback((id: WorkspaceId) => {
+    setDismissedAt((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  }, []);
+  const attentionRef = useRef({ attentionShownIn, showAttentionIn, waiting });
+  attentionRef.current = { attentionShownIn, showAttentionIn, waiting };
   // Orphaned Profiles and Advisory show only while MESA has undismissed findings for them.
   const [mesaFindings, setMesaFindings] = useState<MesaFindings | null>(null);
   const settings = d.settings;
@@ -542,8 +560,8 @@ export function Shell() {
       // Presets appears only while its setting is on.
       controller.availability = (w) => windowAvailable(w, settings, mesaFindings, showArchived);
       controller.syncAvailable();
-      controller.onTransientClose = () => { setDismissedAt(attentionCount); dismissAttention(); };
-      if (env === "desktop" && id === d.workspace && showAttention) controller.showTransient(ATTENTION_WINDOW);
+      controller.onTransientClose = () => { setDismissedAt((prev) => ({ ...prev, [id]: attentionCount })); dismissAttention(); };
+      if (env === "desktop" && id === d.workspace && attentionShownIn(id)) controller.showTransient(ATTENTION_WINDOW);
       else controller.hideTransient(ATTENTION_WINDOW);
     }
     // Show Archived opens and closes the archived keys' own window (user, 2026-10-28). Asked for only
@@ -616,6 +634,7 @@ export function Shell() {
     <NotificationsContext.Provider value={notifications}>
     <DisplayModeContext.Provider value={toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
+    <AuditFocusContext.Provider value={auditFocus}>
     <LogSelectionContext.Provider value={logSelection}>
     <ApprovalsProvider
       scope={d.approvalsTab}
@@ -666,7 +685,7 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
+            : <PhoneStack workspace={active} showAttention={attentionShownIn(active)} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
               guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => userSetGuide(active, false)}
                 topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
@@ -697,6 +716,8 @@ export function Shell() {
             follow={wizardGuideShown ? wizardStep : null} />
         )}
         <Toasts center={notifications} />
+        {/* Home Assistant away: one notice over the panel, cleared when it answers again. */}
+        <Reconnecting root={rootEl} />
       </div>
     </AccessKeyDetailProvider>
     </WizardGuideContext.Provider>
@@ -708,6 +729,7 @@ export function Shell() {
     </ChangesProvider>
     </ApprovalsProvider>
     </LogSelectionContext.Provider>
+    </AuditFocusContext.Provider>
     </HelpContext.Provider>
     </DisplayModeContext.Provider>
     </NotificationsContext.Provider>

@@ -738,3 +738,19 @@ async def test_restore_origin_survives_persistence_without_relaxing_payload_scru
     assert entry["originating_access_key_id"] == "source-identity"
     assert "private-payload" not in entry["payload"]
     assert "private-key" not in entry["payload"]
+
+
+class TestRequestIdFilter:
+    """Needs Attention links to one request, so the filter is exact (user, 2026-10-29)."""
+
+    def test_returns_only_that_request_and_counts_it(self):
+        log = AuditLog()
+        for rid in ("req-a", "req-b", "req-a"):
+            log.record(request_id=rid, access_key_id="t1", access_key_name="a", method="POST",
+                       resource="tool:add_dashboard_card", outcome="allowed", client_ip="",
+                       settings=_settings())
+        entries = log.query(request_id="req-a")
+        assert [e.request_id for e in entries] == ["req-a", "req-a"]
+        assert log.count(request_id="req-a") == 2
+        assert log.query(request_id="req-") == []
+        assert log.count(request_id="nope") == 0

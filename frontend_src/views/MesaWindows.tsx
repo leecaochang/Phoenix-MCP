@@ -137,10 +137,10 @@ export function MesaProfilesWindow() {
           </select>
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
         </div>
-      </div>
-      <div className="approvals-filter-row">
-        <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("mesa.searchPlaceholder")} aria-label={t("mesa.searchAria")} />
+        <div className="filter-row">
+          <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("mesa.searchPlaceholder")} aria-label={t("mesa.searchAria")} />
+        </div>
       </div>
       {m.error && <ErrorMsg msg={m.error} />}
       {!m.loaded && m.loading && <Loading />}

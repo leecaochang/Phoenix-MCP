@@ -2044,6 +2044,7 @@ class PhoenixAdminAuditView(PhoenixView):
         ip_filter = request.query.get("ip")
         method_filter = request.query.get("method")
         resource_filter = request.query.get("resource")
+        request_id_filter = request.query.get("request_id")
         since_raw = request.query.get("since")
         since_filter = parse_datetime(since_raw) if since_raw else None
         if since_raw and since_filter is None:
@@ -2062,6 +2063,7 @@ class PhoenixAdminAuditView(PhoenixView):
             "client_ip": ip_filter,
             "method": method_filter,
             "resource": resource_filter,
+            "request_id": request_id_filter,
             "since": since_filter,
         }
         total = data.audit.count(**filter_kwargs)

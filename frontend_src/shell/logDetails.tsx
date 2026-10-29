@@ -35,6 +35,40 @@ function keyOf(record: LogRecord, entry: LogRecord["entry"] = record.entry): str
   return record.kind === "audit" ? auditEntryKey(entry as AuditEntry) : (entry as ConversationSummary).id;
 }
 
+/**
+ * A request Needs Attention asked the Audit Log to show. The window narrows
+ * itself to that one request and shows the filter, so it is plain why the list
+ * is short and a click clears it (user, 2026-10-29).
+ */
+export class AuditFocus {
+  private value: string | null = null;
+  private listeners = new Set<() => void>();
+  private version = 0;
+  /** Called when a request is asked for, so the shell can bring the Audit Log into view. */
+  onFocus: (() => void) | null = null;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
+  getVersion = (): number => this.version;
+  /** The request asked for since the last take(), if any. */
+  take = (): string | null => {
+    const value = this.value;
+    this.value = null;
+    return value;
+  };
+
+  ask(requestId: string): void {
+    this.value = requestId;
+    this.version++;
+    for (const listener of this.listeners) listener();
+    this.onFocus?.();
+  }
+}
+
+export const AuditFocusContext = createContext<AuditFocus | null>(null);
+
 export class LogSelection {
   private value: LogRecord | null = null;
   private listeners = new Set<() => void>();

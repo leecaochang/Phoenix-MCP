@@ -89,7 +89,7 @@ describe("rejection reason draft sharing", () => {
     const view = await openDetail();
     const input = await view.findByLabelText("Optional reason");
     fireEvent.change(input, { target: { value: "wrong entity" } });
-    fireEvent.pointerDown(view.getByRole("button", { name: "Approve and Execute" }));
+    fireEvent.pointerDown(view.getByRole("button", { name: "Approve" }));
     fireEvent.pointerDown(input);
     expect(view.getByLabelText("Optional reason")).toBeInTheDocument();
     fireEvent.pointerDown(document.body);

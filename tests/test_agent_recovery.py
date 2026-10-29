@@ -90,6 +90,59 @@ async def test_reconciliation_requires_attributed_approval_receipt(status, marke
 
 
 @pytest.mark.asyncio
+async def test_a_claim_from_an_older_version_stays_uncertain():
+    """No marker and no journal version: it may have run, so it is still reviewed."""
+    recovery = AgentRecovery()
+    await recovery.begin("access_key", "call_service", "old")
+    recovery.interrupted("old")
+    del recovery._records["old"]["journal"]
+    store = SimpleNamespace(get_pending_approvals=lambda: [])
+    assert await recovery.settle_known_outcomes(store) == 0
+    assert recovery.blocks("access_key") is True
+
+
+@pytest.mark.asyncio
+async def test_startup_settles_recorded_outcomes_and_keeps_the_unknown_one():
+    """A restart clears the claims whose outcome is on record (user, 2026-10-29).
+
+    What is left is a write that reached Home Assistant with nothing recorded
+    anywhere, which still blocks the access key until it is reviewed.
+    """
+    disk = Disk()
+    recovery = AgentRecovery(disk)
+    # One claim per access key: a second one is refused while the first is outstanding.
+    for key, rid in (("answered_key", "answered"), ("decided_key", "decided"), ("unknown_key", "unknown"),
+                     ("never_key", "never")):
+        await recovery.begin(key, "call_service", rid)
+        recovery.interrupted(rid)
+    # Three of them reached Home Assistant; "never" stopped before the handler.
+    for rid in ("answered", "decided", "unknown"):
+        await recovery.dispatching(rid)
+    # Home Assistant answered the agent for one of them.
+    recovery._records["answered"]["dispatch_result"] = "received"
+    store = SimpleNamespace(get_pending_approvals=lambda: [
+        {"request_id": "decided", "access_key_id": "decided_key", "status": "cancelled"},
+        {"request_id": "unknown", "access_key_id": "unknown_key", "status": "pending"},
+    ])
+
+    assert await recovery.settle_known_outcomes(store) == 3
+    assert recovery.records("answered_key") == []
+    assert recovery.records("decided_key") == []
+    # Never asked Home Assistant: nothing to review (user, 2026-10-29).
+    assert recovery.records("never_key") == []
+    assert recovery.blocks("never_key") is False
+    assert [r["request_id"] for r in recovery.records("unknown_key")] == ["unknown"]
+    # The settled access keys may dispatch again; the unknown one still blocks.
+    assert recovery.blocks("answered_key") is False
+    assert recovery.blocks("decided_key") is False
+    assert recovery.blocks("unknown_key") is True
+    restored = AgentRecovery(disk)
+    await restored.async_load()
+    assert [r["request_id"] for r in restored.records("unknown_key")] == ["unknown"]
+    assert await restored.settle_known_outcomes(store) == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["cancel", "exception", "error", "save"])
 async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(hass, failure):
     disk = Disk()
@@ -344,3 +397,34 @@ async def test_begin_persists_only_bounded_catalog_tool_names(tool, expected):
     await recovery.begin("access_key", tool, "request")
     assert recovery.records("access_key")[0]["tool"] == expected
     assert disk.saved["records"]["request"]["tool"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read_only,marked", [(False, True), (True, False)])
+async def test_only_a_write_that_reaches_its_handler_is_marked(hass, read_only, marked):
+    """The marker is what tells a crash before Home Assistant from one after it."""
+    from custom_components.phoenix_mcp import mcp_view
+
+    recovery = AgentRecovery(Disk())
+    await recovery.begin("t1", "call_service", "rid-1")
+    recovery.interrupted("rid-1")
+    assert recovery._records["rid-1"].get("dispatched") is None
+
+    seen: list[bool] = []
+
+    async def handler(arguments, access_key, hass_arg, **kwargs):
+        seen.append(recovery._records["rid-1"].get("dispatched") is True)
+        return {"content": []}, "allowed", "call_service"
+
+    data = SimpleNamespace(agent_recovery=recovery)
+    access_key = SimpleNamespace(id="t1", name="a", pass_through=False)
+    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}, clear=False), \
+         patch.object(mcp_view, "_tool_capability_denied", return_value=False), \
+         patch.object(mcp_view, "tool_arguments_error", return_value=None), \
+         patch.object(mcp_view, "unknown_argument_error", return_value=None), \
+         patch.object(mcp_view, "tool_is_read_only", return_value=read_only):
+        await mcp_view._call_tool("call_service", {}, access_key, hass, data, "rid-1", "ip")
+
+    # The handler saw the marker already written, and only for a write.
+    assert seen == [marked]
+    assert (recovery._records["rid-1"].get("dispatched") is True) is marked

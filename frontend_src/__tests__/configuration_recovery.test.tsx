@@ -43,12 +43,12 @@ it.each(["approve", "reject"] as const)("resolves recovery through the existing 
   expect(review.getByText("saved content")).toBeTruthy();
   expect(review.queryByText("Verify")).toBeNull();
   if (action === "approve") {
-    fireEvent.click(review.getByRole("button", { name: "Approve and Execute" }));
+    fireEvent.click(review.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith(recovery.id));
   } else {
     fireEvent.click(review.getByRole("button", { name: "Reject" }));
     fireEvent.click(await review.findByRole("button", { name: "Confirm Rejection" }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledWith(recovery.id, {}));
   }
-  await waitFor(() => expect(review.queryByRole("button", { name: "Approve and Execute" })).toBeNull());
+  await waitFor(() => expect(review.queryByRole("button", { name: "Approve" })).toBeNull());
 });

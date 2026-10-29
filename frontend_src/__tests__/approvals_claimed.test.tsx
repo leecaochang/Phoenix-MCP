@@ -60,7 +60,7 @@ describe("an approval claimed for execution", () => {
     fireEvent.click(await findByText("Restart Home Assistant"));
 
     // The stable visible button reports that it is busy, and does nothing.
-    const approve = await findByRole("button", { name: "Approve and Execute" });
+    const approve = await findByRole("button", { name: "Approve" });
     expect(approve).toHaveAttribute("aria-disabled", "true");
     expect(approve).toHaveAttribute("aria-busy", "true");
     expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
@@ -76,7 +76,7 @@ describe("an approval claimed for execution", () => {
     const { findByText, findByRole } = renderApprovals();
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    expect(await findByRole("button", { name: "Approve and Execute" })).toHaveAttribute("aria-disabled", "true");
+    expect(await findByRole("button", { name: "Approve" })).toHaveAttribute("aria-disabled", "true");
     expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
     expect(within(reviewWindow()).getByText("Being processed")).toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe("an approval claimed for execution", () => {
     const { findByText, findByRole } = renderApprovals();
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    const approve = await findByRole("button", { name: "Approve and Execute" });
+    const approve = await findByRole("button", { name: "Approve" });
     expect(approve).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(approve);
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith("appr_1"));

@@ -51,6 +51,9 @@ REASON_WIPED = "phoenix_mcp_data_wiped"
 # See async_reconcile_interrupted_approvals for why that resolves as failed.
 REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
+# Home Assistant restarted while the request was still queued. Nothing ran, and
+# the conversation that asked for it ended with the previous run.
+REASON_RESTARTED = "phoenix_mcp_restarted"
 # There is deliberately no constant for target_out_of_scope / target_missing /
 # rate_limited_at_execution. The approve path re-validates only the three things
 # it owns (access key active, capability permits, kill switch off); target scope and
@@ -474,6 +477,38 @@ async def async_cancel_approvals_for_access_key(
         entry["status"] = STATUS_FAILED if interrupted else STATUS_CANCELLED
         entry["resolved_at"] = now_iso
         entry["rejected_reason"] = REASON_EXECUTION_INTERRUPTED if interrupted else reason
+        entry.pop("execution_started_at", None)
+        changed.append(PendingApproval.from_dict(entry))
+    if changed:
+        store.set_pending_approvals(raw)
+        await store.async_save()
+    return changed
+
+
+async def async_cancel_queued_approvals_at_startup(
+    store: AccessKeyStore,
+) -> list[PendingApproval]:
+    """Cancel every approval still queued when Home Assistant starts.
+
+    Runs after async_reconcile_interrupted_approvals, which has already failed
+    the records that carried an execution claim, so everything left here was
+    waiting for a decision and never ran. The conversation that asked for it
+    ended with the previous run: approving it now would apply a change whose
+    requester can never see the result, and the agent would retry its request
+    instead (user, 2026-10-29). Cancelling is the fail-closed outcome and keeps
+    the record in the queue with its reason, so the operator sees what was
+    dropped. Caller must hold store.async_lock, and must dismiss each returned
+    record's notification and fire phoenix_mcp_approval_resolved outside it.
+    """
+    raw = store.get_pending_approvals()
+    changed: list[PendingApproval] = []
+    now_iso = utcnow().isoformat()
+    for entry in raw:
+        if entry.get("status") != STATUS_PENDING:
+            continue
+        entry["status"] = STATUS_CANCELLED
+        entry["resolved_at"] = now_iso
+        entry["rejected_reason"] = REASON_RESTARTED
         entry.pop("execution_started_at", None)
         changed.append(PendingApproval.from_dict(entry))
     if changed:

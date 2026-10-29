@@ -1808,7 +1808,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "view.summary": "Summary",
     "view.details": "Details",
     "view.defaultAria": "Default approval view",
-    "action.approve": "Approve and Execute",
+    "action.approve": "Approve",
     "action.approving": "Approving...",
     "action.reject": "Reject",
     "action.rejecting": "Rejecting...",

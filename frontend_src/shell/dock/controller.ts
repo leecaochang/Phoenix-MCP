@@ -73,6 +73,12 @@ const DIRECTION_OF: Record<Side, "left" | "right" | "above" | "below"> = { left:
 
 /** Height a shell-managed window opens at, so it does not take half the workspace. */
 const TRANSIENT_HEIGHT = 240;
+/**
+ * How far a measured content height may drift before a window that cannot grow freely
+ * follows it. Large enough that settling noise never moves the windows under the
+ * pointer, small enough that opening a confirmation inside the window still shows it.
+ */
+const CONTENT_TOLERANCE = 24;
 /** Height a reopened window gets when its earlier height is unknown. */
 const REOPEN_HEIGHT = 360;
 /** Height a window gets when it is pinned without one of its own, and the most a newly pinned window takes. */
@@ -229,9 +235,16 @@ export class WorkspaceController {
    * frame; folded, hidden, floating and pinned windows keep theirs.
    */
   contentResized(id: string, height: number): void {
-    if (!this.contentSized || !(height > 0)) return;
+    // Needs Attention is as tall as what it shows in every workspace, not only in one
+    // that sizes every window to its content (user, 2026-10-29).
+    if (!(this.contentSized || this.transient.has(id)) || !(height > 0)) return;
     const rounded = Math.round(height);
-    if (this.natural.get(id) === rounded) return;
+    const known = this.natural.get(id);
+    if (known === rounded) return;
+    // A workspace that fits the screen cannot always give a window the height it asks
+    // for, and the height it does give is measured again: without a tolerance the two
+    // chase each other and the workspace never settles.
+    if (known !== undefined && !this.contentSized && Math.abs(known - rounded) < CONTENT_TOLERANCE) return;
     this.natural.set(id, rounded);
     if (!this.naturalFrame && typeof requestAnimationFrame === "function") {
       this.naturalFrame = requestAnimationFrame(() => { this.naturalFrame = 0; this.followContent(); });
@@ -242,8 +255,10 @@ export class WorkspaceController {
     const api = this.api;
     const canvas = this.canvas;
     if (!api || !canvas || !this.shown || api.hasMaximizedGroup() || canvas.host.classList.contains("phx-resizing")) return;
+    if (!this.contentSized && !this.natural.size) return;
     const targets: Heights = {};
     for (const [id, h] of this.natural) {
+      if (!this.contentSized && !this.transient.has(id)) continue;
       const group = api.getPanel(id)?.group;
       if (!group || this.folds.isFolded(id) || this.hiddenIds.has(id)) continue;
       const target = Math.max(MIN_WINDOW_HEIGHT, h);
@@ -1067,6 +1082,25 @@ export class WorkspaceController {
     });
   }
 
+  /**
+   * Open a window under `neighbour`, sharing its height equally, unless the
+   * user has since given it a place of its own. Request Details opens as the
+   * bottom half of Review's column this way (user, 2026-10-29).
+   */
+  ensureOpenSplitting(id: string, neighbour: string): void {
+    const share = this.api && !this.hostOf(id) && !this.closed.get(id)?.height
+      ? Math.round((this.groupOf(neighbour)?.height ?? 0) / 2) : 0;
+    if (share >= MIN_WINDOW_HEIGHT) {
+      this.closed.set(id, { ...(this.closed.get(id) ?? { neighbor: neighbour, side: "bottom" }), height: share });
+    }
+    this.ensureOpen(id);
+    // Both halves are given the same height: in a workspace that fits the screen, sizing
+    // only the new one leaves the other with whatever is left, which is not half.
+    if (share >= MIN_WINDOW_HEIGHT && this.canvas && this.hostOf(id) === "main" && this.hostOf(neighbour) === "main") {
+      this.batch(() => this.canvas?.apply({ [id]: share, [neighbour]: share }));
+    }
+  }
+
   /** Make a window visible: reopen it if closed, unfold it if folded. */
   ensureOpen(id: string): void {
     if (!this.api || !this.windows.includes(id)) return;
@@ -1422,7 +1456,11 @@ export class WorkspaceController {
   showTransient(id: string): void {
     const api = this.api;
     if (!api || this.hostOf(id)) return;
-    const height = Math.min(TRANSIENT_HEIGHT, Math.max((this.canvas?.visibleHeight() || api.height) / 3, 140));
+    // Its own measured height when it has one, so nothing it shows is clipped.
+    const measured = this.natural.get(id);
+    const height = measured && measured > 0
+      ? measured
+      : Math.min(TRANSIENT_HEIGHT, Math.max((this.canvas?.visibleHeight() || api.height) / 3, 140));
     if (this.canvas) {
       this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: height });
     } else {

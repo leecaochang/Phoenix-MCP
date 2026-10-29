@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
 import type { ApprovalsScope } from "../shell/approvals";
 import { listRows, renderApprovals, reviewWindow } from "./approvals_harness";
@@ -53,7 +53,7 @@ describe("Review and Request Details", () => {
     localStorage.clear();
   });
 
-  it("filters the list by search and refreshes without remounting its controls", async () => {
+  it("filters the list by search and updates itself without remounting its controls", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
     const view = renderApprovals();
     await view.findByText("Restart Home Assistant");
@@ -63,9 +63,32 @@ describe("Review and Request Details", () => {
     fireEvent.change(search, { target: { value: "unmatched-value" } });
     expect(view.queryByText("Restart Home Assistant")).toBeNull();
     expect(view.getByText("No approvals match your search.")).toBeVisible();
-    fireEvent.click(view.getByRole("button", { name: "Refresh Approvals" }));
-    await waitFor(() => expect(api.listApprovals).toHaveBeenCalledTimes(2));
+    // The list updates itself, so there is no Refresh button (user, 2026-10-29).
+    expect(view.queryByRole("button", { name: "Refresh Approvals" })).toBeNull();
     expect(view.getByRole("searchbox")).toBe(search);
+  });
+
+  it("updates itself while it is shown, in every scope (user, 2026-10-29)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
+      const view = renderApprovals();
+      await view.findByText("Restart Home Assistant");
+      const first = vi.mocked(api.listApprovals).mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(vi.mocked(api.listApprovals).mock.calls.length).toBeGreaterThan(first);
+
+      // History updates too, and a failed update keeps what is shown.
+      fireEvent.change(view.getByRole("combobox"), { target: { value: "history" } });
+      await waitFor(() => expect(vi.mocked(api.listApprovals).mock.lastCall?.[0]?.status).toBeUndefined());
+      const before = vi.mocked(api.listApprovals).mock.calls.length;
+      vi.mocked(api.listApprovals).mockRejectedValueOnce(new Error("NetworkError"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(vi.mocked(api.listApprovals).mock.calls.length).toBeGreaterThan(before);
+      expect(view.queryByText("NetworkError")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the summary in Review and the technical detail in Request Details, building inputs only on request", async () => {
@@ -90,7 +113,7 @@ describe("Review and Request Details", () => {
     expect(document.activeElement).toBe(input);
     expect(view.getByRole("button", { name: "Reject" })).toHaveAttribute("aria-pressed", "true");
     // Approve stays where it is but cannot be pressed while a rejection is being written.
-    expect(view.getByRole("button", { name: "Approve and Execute" })).toHaveAttribute("aria-disabled", "true");
+    expect(view.getByRole("button", { name: "Approve" })).toHaveAttribute("aria-disabled", "true");
     expect(view.getByRole("button", { name: "Cancel Rejection" })).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Confirm Rejection" }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledWith("appr_summary", {}));
@@ -105,7 +128,7 @@ describe("Review and Request Details", () => {
     fireEvent.keyDown(await view.findByLabelText("Optional reason"), { key: "Escape" });
     expect(view.queryByLabelText("Optional reason")).toBeNull();
     expect(api.rejectApproval).not.toHaveBeenCalled();
-    expect(view.getByRole("button", { name: "Approve and Execute" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(view.getByRole("button", { name: "Approve" })).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it.each(["approve", "reject"] as const)("signals Agent Chat after a successful %s", async (action) => {
@@ -117,7 +140,7 @@ describe("Review and Request Details", () => {
     try {
       const view = await open();
       if (action === "approve") {
-        fireEvent.click(view.getByRole("button", { name: "Approve and Execute" }));
+        fireEvent.click(view.getByRole("button", { name: "Approve" }));
       } else {
         fireEvent.click(view.getByRole("button", { name: "Reject" }));
         fireEvent.click(await view.findByRole("button", { name: "Confirm Rejection" }));
@@ -133,16 +156,16 @@ describe("Review and Request Details", () => {
     let finish!: (value: ApprovalRecord) => void;
     vi.mocked(api.approveApproval).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const view = await open();
-    const approve = view.getByRole("button", { name: "Approve and Execute" });
+    const approve = view.getByRole("button", { name: "Approve" });
     fireEvent.click(approve);
     await waitFor(() => expect(approve).toHaveAttribute("aria-busy", "true"));
-    expect(approve).toHaveTextContent("Approve and Execute");
+    expect(approve).toHaveTextContent("Approve");
     fireEvent.click(approve);
     expect(api.approveApproval).toHaveBeenCalledOnce();
 
     finish(record({ status: "approved", resolved_at: "2026-08-13T04:05:00Z" }));
     expect(await within(reviewWindow()).findByText("The request completed successfully.")).toBeTruthy();
-    expect(view.queryByRole("button", { name: "Approve and Execute" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Approve" })).toBeNull();
   });
 
   it("uses friendly titles in History, with the technical summary in Request Details", async () => {
@@ -193,7 +216,7 @@ describe("Review and Request Details", () => {
     const resolved = record({ status, rejected_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });
     await open(resolved, "history");
     expect(await within(reviewWindow()).findByText(expected)).toBeTruthy();
-    expect(within(reviewWindow()).queryByRole("button", { name: "Approve and Execute" })).toBeNull();
+    expect(within(reviewWindow()).queryByRole("button", { name: "Approve" })).toBeNull();
   });
 
   it.each(["pending", "history"] as const)("uses arrows in the %s list to move Review through it", async (scope) => {

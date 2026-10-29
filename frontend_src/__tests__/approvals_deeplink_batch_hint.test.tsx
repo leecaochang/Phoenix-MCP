@@ -93,7 +93,7 @@ describe("a request opened from a link", () => {
     const { findByRole } = renderApprovals({ openApprovalId: "a", onScopeChange });
     await waitFor(() => expect(onScopeChange).toHaveBeenCalledWith("history"));
     expect((await findByRole("combobox", { name: "Show" }) as HTMLSelectElement).value).toBe("history");
-    expect(within(reviewWindow()).queryByRole("button", { name: "Approve and Execute" })).toBeNull();
+    expect(within(reviewWindow()).queryByRole("button", { name: "Approve" })).toBeNull();
   });
 
   it("tells Agent Chat the review closed when the link cannot be opened, and clears the route", async () => {
@@ -127,7 +127,7 @@ describe("a request opened from a link", () => {
   it("tells Agent Chat it was decided, and not closed, after a decision", async () => {
     vi.mocked(api.approveApproval).mockResolvedValue(record("a", { status: "approved", resolved_at: "2026-01-01T00:05:00Z" }));
     const { getByRole } = await renderDeepLink([record("a"), record("b")], "a");
-    fireEvent.click(getByRole("button", { name: "Approve and Execute" }));
+    fireEvent.click(getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(decided).toHaveBeenCalledOnce());
     expect((decided.mock.calls[0][0] as CustomEvent).detail).toEqual({ approvalId: "a" });
     fireEvent.click(listRows()[0]);

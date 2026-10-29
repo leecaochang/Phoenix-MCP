@@ -37,10 +37,25 @@ describe("Workspace Options", () => {
 
   it("names the two resets for what they reset, and says more in their hints", () => {
     const c = mount();
-    const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {} };
+    const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {},
+      restorePanelDefaults: () => {}, attentionHidden: () => false, showAttention: () => {} };
     const all = workspaceMenu(c, actions).filter((e): e is Item => e !== "separator");
     expect(all.find((i) => i.id === "restore")).toMatchObject({ label: "Reset This Workspace", hint: expect.stringContaining("Other workspaces") });
     expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, the Help Bar and the Guide") });
+  });
+
+  it("offers Needs Attention back, in this workspace, while items are waiting (user, 2026-10-29)", () => {
+    const c = mount();
+    const base = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {} };
+    const entry = (hidden: boolean, show = () => {}) =>
+      workspaceMenu(c, { ...base, attentionHidden: () => hidden, showAttention: show })
+        .filter((e): e is Item => e !== "separator").find((i) => i.id === "show-attention");
+    expect(entry(false)).toBeUndefined();
+    const shown: string[] = [];
+    const item = entry(true, () => shown.push(c.id))!;
+    expect(item.label).toBe("Show Needs Attention");
+    item.onSelect!();
+    expect(shown).toEqual([c.id]);
   });
 
   it("does not offer to reopen a window a toolbar tool opens here, and offers other closed windows", () => {

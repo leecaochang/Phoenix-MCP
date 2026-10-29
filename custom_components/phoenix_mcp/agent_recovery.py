@@ -17,11 +17,18 @@ from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN, TURN_DELIVERED_EVENT
 
+# Approval outcomes that settle a dispatch claim; mirrors approvals.TERMINAL_STATUSES,
+# named here so loading this module never pulls the approval machinery in.
+TERMINAL_APPROVAL_STATUSES = frozenset({"approved", "rejected", "failed", "expired", "cancelled"})
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .access_key_store import AccessKeyStore
 
 STORAGE_KEY = "phoenix_mcp_agent_recovery"
+# 2: claims carry a "dispatched" marker, so one that never reached Home Assistant
+# is told apart from one whose outcome is unknown. Records without it stay uncertain.
+JOURNAL_VERSION = 2
 MAX_RECORDS = 200
 _turn_id: ContextVar[str | None] = ContextVar("phoenix_recovery_turn", default=None)
 
@@ -135,7 +142,11 @@ class AgentRecovery:
             if self.blocks(access_key_id) or len(self._records) >= MAX_RECORDS:
                 raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs Attention before retrying.")
             tool = _journal_tool_name(tool)
-            self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
+            # journal=2 records carry the dispatched marker below, so a claim that never
+            # reached the handler can be told apart from one that may have run. A record
+            # written by an older version has no marker and stays uncertain.
+            self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(),
+                                  "turn_id": _turn_id.get(), "journal": JOURNAL_VERSION}
             try:
                 await self._save()
             except Exception:
@@ -144,6 +155,26 @@ class AgentRecovery:
                 raise RecoveryRequired("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
 
+    async def dispatching(self, rid: str) -> None:
+        """Mark that this write is about to leave Phoenix for Home Assistant.
+
+        Every gate has passed and the handler is about to run, so from here the
+        action may reach Home Assistant and its outcome matters. A claim without
+        this marker never got that far: Home Assistant was never asked, so a
+        restart clears it instead of asking the operator (user, 2026-10-29).
+        """
+        async with self._lock:
+            record = self._records.get(rid)
+            if record is None or record.get("dispatched"):
+                return
+            record["dispatched"] = True
+            try:
+                await self._save()
+            except Exception:
+                # The claim stands either way; an unsaved marker only means the
+                # next startup treats this one as uncertain, which is the safe side.
+                record.pop("dispatched", None)
+
     async def retain_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
         """Retain a write whose authority was lost after entering dispatch."""
         async with self._lock:
@@ -151,7 +182,10 @@ class AgentRecovery:
                 self._records[rid] = {
                     "access_key_id": access_key_id, "tool": _journal_tool_name(tool),
                     "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
+                    "journal": JOURNAL_VERSION,
                 }
+            # Authority changed after dispatch entered: the outcome is unknown by definition.
+            self._records[rid]["dispatched"] = True
             try:
                 await self._save()
             finally:
@@ -191,6 +225,47 @@ class AgentRecovery:
                         record["dispatch_result"] = "approval_" + status
                         await self._save()
                 break
+
+    async def settle_known_outcomes(self, store: AccessKeyStore) -> int:
+        """Drop the claims whose outcome is on record, and return how many.
+
+        Run at startup. A claim is settled when Home Assistant answered the
+        agent (dispatch_result "received": the tool reported back, so whether it
+        ran is recorded in the audit log and the approval queue), when the
+        approval queue holds a terminal record for the same request, or when the
+        write never left Phoenix (no "dispatched" marker, so Home Assistant was
+        never asked). What is left is a write that reached Home Assistant with no
+        outcome recorded anywhere, which is the case Needs Attention exists for
+        (user, 2026-10-29): it still blocks the access key until the operator
+        reviews it, because retrying could apply the same change a second time.
+        """
+        terminal = {
+            approval.get("request_id")
+            for approval in store.get_pending_approvals()
+            if approval.get("status") in TERMINAL_APPROVAL_STATUSES
+            and isinstance(approval.get("request_id"), str)
+        }
+
+        def settled_outcome(rid: str, record: dict) -> bool:
+            if record.get("dispatch_result") == "received" or rid in terminal:
+                return True
+            # Never asked Home Assistant: nothing can have happened.
+            return record.get("journal") == JOURNAL_VERSION and not record.get("dispatched")
+
+        async with self._lock:
+            settled = [
+                rid for rid, record in self._records.items()
+                if rid not in self._active and settled_outcome(rid, record)
+            ]
+            if not settled:
+                return 0
+            removed = {rid: self._records.pop(rid) for rid in settled}
+            try:
+                await self._save()
+            except BaseException:
+                self._records.update(removed)
+                raise
+        return len(settled)
 
     async def reviewed(self, rid: str) -> bool:
         """Persist one explicit review while preserving active and failed claims."""

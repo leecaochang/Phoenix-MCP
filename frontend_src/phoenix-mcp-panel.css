@@ -442,7 +442,8 @@
   padding: 8px;
 }
 .phx-env-mobile .phx-workspaces { overflow-y: auto; padding: 8px 8px 16px; touch-action: pan-y; }
-.phx-window-body .view-root { padding-top: 12px; }
+/* Every window's content starts the same distance below its title bar. */
+.phx-window-body > :is(.view-root, .phx-list-view, .phx-log-view) { padding-top: 12px; }
 .phx-workspace-empty {
   display: flex;
   flex-direction: column;
@@ -553,7 +554,7 @@
 .phx-notification-text p { margin: 0; }
 .phx-notification-text time { display: block; margin-top: 2px; font-size: 12px; color: var(--phx-text-2); }
 .phx-notifications-empty { margin: 12px 0 0; color: var(--phx-text-2); }
-.phx-attention.phx-attention-window { margin: 0; border: none; border-radius: 0; padding: 0 0 16px; }
+.phx-attention.phx-attention-window { margin: 0; border: none; border-radius: 0; padding: 0; }
 
 /* Narrow screens: the workspace's windows as one stack. */
 .phx-phone-stack { display: flex; flex-direction: column; gap: 8px; }
@@ -645,9 +646,6 @@
 
 /* Approvals: the list with its Show menu and search, Review, and Request Details. */
 .phx-window-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
-.approvals-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
-.approvals-filter-row > input[type="search"] { flex: 1 1 180px; min-width: 0; }
-.approvals-scope { display: inline-flex; align-items: center; gap: 6px; color: var(--phx-text-2); font-size: 13px; }
 .phx-table th.phx-table-pick,
 .phx-table td.phx-table-pick { width: 36px; padding: 0; text-align: center; }
 .phx-table-pick input { margin: 0; cursor: pointer; }
@@ -1618,7 +1616,10 @@ select.input {
    ============================================================ */
 /* Wrap on narrow screens; a nowrap+hidden combo clipped the trailing
    controls entirely once the inputs hit their min-width. */
+/* Every window's filters sit in .phx-filters with one or more .filter-row children, so the
+   gap under the title bar and between rows is the same everywhere (user, 2026-10-29). */
 .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.filter-row input[type="search"] { flex: 1 1 180px; min-width: 0; }
 .filter-row .input:not(.input-auto) { flex: 1 1 0; min-width: 80px; width: auto; }
 .filter-row .input-auto { flex: 0 0 auto; }
 .filter-row-right { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
@@ -2282,6 +2283,32 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   border-radius: var(--phx-radius-xs); font-size: 13px; font-family: inherit;
   background: var(--phx-surface); color: var(--phx-text);
 }
+
+/* Home Assistant is away: one notice over the panel while it comes back. */
+.phx-offline {
+  position: fixed; inset: 0; z-index: var(--phx-z-modal);
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--phx-bg) 72%, transparent);
+}
+.phx-offline-box {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  max-width: 360px; padding: 24px 28px; text-align: center;
+  background: var(--phx-surface); border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius); box-shadow: var(--phx-shadow-lg);
+}
+.phx-offline-spinner {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid var(--phx-border); border-top-color: var(--phx-text-2);
+  animation: phx-offline-spin 0.9s linear infinite;
+}
+@keyframes phx-offline-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .phx-offline-spinner { animation-duration: 2.4s; } }
+.phx-offline-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--phx-text); }
+/* Agent Chat floats over every page, so it says so in its own window. */
+.agentcli-offline { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px;
+  color: var(--phx-text-2); border-top: 1px solid var(--phx-border); }
+
+.phx-offline-body { margin: 0; font-size: 13px; color: var(--phx-text-2); }
 
 /* Onboarding wizard */
 .wizard-hero { text-align: center; padding: 40px 24px; }
@@ -3245,16 +3272,15 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .phx-attention-toggle:hover { background: var(--phx-hover); }
 .phx-attention-count { margin-inline-start: 8px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
 .phx-attention-body { padding: 0 16px 16px; }
-.phx-attention-refresh { display: flex; align-items: baseline; gap: 16px; justify-content: space-between; }
-.phx-attention p { max-width: 70ch; line-height: 1.5; margin-block: 8px; }
-.phx-attention-item { padding-block: 16px; border-block-start: 1px solid var(--phx-border); }
-.phx-attention-item:last-child { padding-block-end: 0; }
-.phx-attention h3 { font-size: 14px; margin: 0; }
-.phx-attention-meta { color: var(--phx-text-2); font-size: 13px; }
-.phx-attention-details { margin-block: 12px; }
-.phx-attention-details summary { cursor: pointer; color: var(--phx-text-2); }
-.phx-attention-details code { display: block; margin-block-start: 8px; }
-.phx-attention-actions { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin-block-start: 16px; }
-.phx-attention-actions label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
-.phx-attention-actions input { accent-color: var(--phx-accent); width: 18px; height: 18px; }
-@media (max-width: 600px) { .phx-attention-item > p:not(.phx-attention-meta) { font-size: 16px; } .phx-attention-actions .btn { min-height: 44px; } }
+.phx-attention-list { display: flex; flex-direction: column; gap: 12px; }
+.phx-attention-intro { margin: 0; font-size: 13px; color: var(--phx-text-2); }
+.phx-attention-item { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); padding: 12px; }
+.phx-attention-item-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--phx-text); }
+.phx-attention-help { margin: 6px 0 0; font-size: 13px; color: var(--phx-text-2); max-width: 70ch; }
+.phx-attention-ref { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.phx-attention-meta { margin: 4px 0 0; color: var(--phx-text-2); font-size: 12px; }
+/* The reference and Mark Reviewed share the last row, the reference giving up width first. */
+.phx-attention-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-block-start: 12px; }
+.phx-attention-actions .phx-attention-ref { flex: 1 1 160px; min-width: 0; }
+.phx-attention-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.phx-attention-meta .stat-label { margin-inline-end: 2px; }

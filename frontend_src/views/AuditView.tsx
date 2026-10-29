@@ -7,7 +7,7 @@
  * panel above the table, and a column's menu can open its filter.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
 import { AuditOutcome, accessLabel, auditEntryKey, mesaLabel, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
@@ -16,7 +16,7 @@ import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { friendlyResource } from "../utils";
 import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
-import { useLogSelection } from "../shell/logDetails";
+import { AuditFocusContext, useLogSelection } from "../shell/logDetails";
 import { useOnToolbar, useToolbarTools } from "../shell/tools";
 import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { useWindowVisible } from "../shell/visibility";
@@ -36,6 +36,9 @@ const TIME_WINDOW_MS: Record<Exclude<TimeWindow, "">, number> = {
   "24h": 24 * 60 * 60 * 1000,
   "1w": 7 * 24 * 60 * 60 * 1000,
 };
+
+const noSubscribe = () => () => {};
+const noVersion = () => 0;
 
 const PAGE_SIZE = 100;
 /** How often a visible, unpaused Audit Log checks for new entries. */
@@ -58,6 +61,8 @@ export function AuditView({ accessKeys }: Props) {
   const [methodFilter, setMethodFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
+  // Set by Needs Attention, to show what became of one uncertain write (user, 2026-10-29).
+  const [requestFilter, setRequestFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Hidden filters stop applying, and come back as they were when shown again (user, 2026-10-27).
   const filtersApply = !useOnToolbar() || filtersOpen;
@@ -91,7 +96,24 @@ export function AuditView({ accessKeys }: Props) {
     method: debouncedMethod || undefined,
     resource: debouncedResource || undefined,
     ip: debouncedIp ? auditSourceFilterValue(debouncedIp) : undefined,
-  } : {}), [filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
+    request_id: requestFilter || undefined,
+  } : {}), [filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp, requestFilter]);
+
+  // A request asked for by Needs Attention replaces the filters, so the one row it means is what shows.
+  const focus = useContext(AuditFocusContext);
+  const focusVersion = useSyncExternalStore(focus?.subscribe ?? noSubscribe, focus?.getVersion ?? noVersion);
+  useEffect(() => {
+    const asked = focus?.take();
+    if (!asked) return;
+    setRequestFilter(asked);
+    setOutcomeFilter("");
+    setAccessKeyFilter("");
+    setTimeWindow("");
+    setMethodFilter("");
+    setResourceFilter("");
+    setIpFilter("");
+    setFiltersOpen(true);
+  }, [focus, focusVersion]);
 
   const beginLoad = useLatestRequest();
   // Each load starts a generation; a background update applies only within the one it began in.
@@ -162,7 +184,7 @@ export function AuditView({ accessKeys }: Props) {
   }, [paused, windowVisible, updateQuietly]);
   const logSettings = useLogSettingsTool();
 
-  const activeFilters = filtersApply ? [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter].filter(Boolean).length : 0;
+  const activeFilters = filtersApply ? [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter, requestFilter].filter(Boolean).length : 0;
   const clearFilters = () => {
     setOutcomeFilter(""); setAccessKeyFilter(""); setTimeWindow("");
     setMethodFilter(""); setResourceFilter(""); setIpFilter("");
@@ -275,6 +297,14 @@ export function AuditView({ accessKeys }: Props) {
             placeholder={t("audit.ipPlaceholder")}
             value={ipFilter}
             onChange={(e) => setIpFilter(e.target.value)}
+          />
+          <input
+            className="input"
+            aria-label={t("audit.filterRequestAria")}
+            data-filter="request"
+            placeholder={t("audit.requestPlaceholder")}
+            value={requestFilter}
+            onChange={(e) => setRequestFilter(e.target.value)}
           />
           {!onToolbar && (
             <button

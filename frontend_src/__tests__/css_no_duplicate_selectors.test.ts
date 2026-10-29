@@ -131,9 +131,10 @@ describe("panel stylesheet", () => {
   });
 
   it("keeps long localized approval text inside the Approvals windows", () => {
-    // The list's search gives way to the Show menu instead of pushing it out of the window.
-    expect(CSS).toMatch(/\.approvals-filter-row\s*\{[^}]*flex-wrap:\s*wrap;/s);
-    expect(CSS).toMatch(/\.approvals-filter-row\s*>\s*input\[type="search"\]\s*\{[^}]*min-width:\s*0;/s);
+    // Every window's filters share one shape, so the search gives way to the choices
+    // beside it instead of pushing them out of the window (user, 2026-10-29).
+    expect(CSS).toMatch(/\.filter-row\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.filter-row\s+input\[type="search"\]\s*\{[^}]*min-width:\s*0;/s);
     // A long request title wraps in Review and in Request Details.
     expect(CSS).toMatch(/\.phx-review-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
     expect(CSS).toMatch(/\.phx-request-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);

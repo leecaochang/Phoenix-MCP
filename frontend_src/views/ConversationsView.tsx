@@ -169,13 +169,13 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         </select>
         {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
       </div>
+      {/* The search sits below the filters, in the same wrapper, as in the Audit Log. */}
+      <div className="filter-row conversation-toolbar">
+        <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
+          onChange={e => { setSearch(e.target.value); resetPage(); }} />
+        {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
+      </div>
     </div>
-    {/* The search sits below the filters, as the text filters do in the Audit Log. */}
-    {showFilters && <div className="filter-row conversation-toolbar">
-      <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
-        onChange={e => { setSearch(e.target.value); resetPage(); }} />
-      {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
-    </div>}
     <div className="conversation-list" aria-busy={loading}>
       <ConfigTable
         id="conversationLog"

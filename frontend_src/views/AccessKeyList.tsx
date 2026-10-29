@@ -196,10 +196,10 @@ export function AccessKeyListView({
       {notices}
       {createForm}
 
-      <div className="approvals-filter-row">
+      <div className="phx-filters"><div className="filter-row">
         <input type="search" className="input" aria-label={t("accessKeys.filterAria")} placeholder={t("accessKeys.filterPlaceholder")}
           value={filter} onChange={(e) => setFilter(e.target.value)} />
-      </div>
+      </div></div>
       {/* Reading the list again keeps the table in place; only a first load shows the loading state. */}
       {error && accessKeys.length > 0 && <ErrorMsg msg={error} />}
       {loading && accessKeys.length === 0 ? <Loading /> : error && accessKeys.length === 0 ? <ErrorMsg msg={error} /> : (

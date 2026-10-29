@@ -1639,6 +1639,7 @@ async def test_global_audit_query_all_access_keys():
         client_ip=None,
         method=None,
         resource=None,
+        request_id=None,
         since=None,
     )
     data.audit.query.assert_called_once_with(
@@ -1647,6 +1648,7 @@ async def test_global_audit_query_all_access_keys():
         client_ip=None,
         method=None,
         resource=None,
+        request_id=None,
         since=None,
         limit=100,
         offset=0,
@@ -1680,7 +1682,8 @@ async def test_global_audit_forwards_method_resource_since():
     view.hass = hass
 
     request = _make_admin_request()
-    request.query = {"method": "create_automation", "resource": "appr_", "since": "2026-01-01T00:00:00+00:00"}
+    request.query = {"method": "create_automation", "resource": "appr_", "request_id": "req-1",
+                     "since": "2026-01-01T00:00:00+00:00"}
     await view.get(request)
 
     data.audit.query.assert_called_once_with(
@@ -1689,6 +1692,7 @@ async def test_global_audit_forwards_method_resource_since():
         client_ip=None,
         method="create_automation",
         resource="appr_",
+        request_id="req-1",
         since=datetime(2026, 1, 1, tzinfo=timezone.utc),
         limit=100,
         offset=0,

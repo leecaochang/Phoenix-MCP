@@ -598,6 +598,8 @@ export interface AuditQueryParams {
   ip?: string;
   method?: string;
   resource?: string;
+  /** One request, exactly: Needs Attention links to its audit entry. */
+  request_id?: string;
   /** ISO timestamp: only entries at or after this time. */
   since?: string;
 }

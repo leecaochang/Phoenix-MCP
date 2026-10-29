@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
+import { homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
 import {
   ATTACHMENT_MAX_COUNT, AttachmentError, imageFiles, prepareAttachment, withoutSentImages,
@@ -614,6 +615,9 @@ export function clampPosToViewport(
   };
 }
 
+/** Statuses a card never asks about again. */
+const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "rejected", "cancelled", "expired", "failed", "resolved"]);
+
 export function AgentCliWindow({
   accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
   summonVersion, dockMount = null, dock = null,
@@ -632,7 +636,7 @@ export function AgentCliWindow({
   const [turns, setTurns] = useState<Turn[]>(() => (saved.freshConversation ? [] : restorableTurns(getSessionTurns())).map((turn) => ({
     ...turn,
     entries: turn.entries.map((entry) => {
-      if (entry.kind !== "approval" || ["approved", "rejected", "cancelled", "expired", "failed", "resolved"].includes(entry.status)) return entry;
+      if (entry.kind !== "approval" || TERMINAL_APPROVAL_STATUSES.has(entry.status)) return entry;
       restoredApprovals.current.add(entry.approvalId);
       return { ...entry, checking: true };
     }),
@@ -681,6 +685,9 @@ export function AgentCliWindow({
   const docked = dockMount !== null && !poppedOut;
   const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
   const agentChatTitle = t("agentchat.title");
+  // Home Assistant away: the chat floats over every page and pops out into a window of its
+  // own, where the panel's notice cannot reach it, so it says so and takes no work (user, 2026-10-29).
+  const away = useHomeAssistantAway(() => api.getSettings());
   const currentHass = useCallback(() => getLiveHass?.() ?? hass, [getLiveHass, hass]);
   const agentChatLanguage = resolveLanguage(currentHass());
 
@@ -1336,7 +1343,14 @@ export function AgentCliWindow({
     } catch (err) {
       // An intentional cancel aborts the fetch; don't surface that as an error.
       if (!cancelledRef.current && turnGenerationRef.current === generation) {
-        push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
+        // Home Assistant going away is not the model provider failing, and the window
+        // already says so above the composer: no red line is added, and what was typed
+        // comes back so it can be sent again (user, 2026-10-29).
+        if (homeAssistantReachable()) {
+          push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
+        } else if (lastQueryRef.current) {
+          setInput((current) => current || lastQueryRef.current);
+        }
       }
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
@@ -1520,6 +1534,23 @@ export function AgentCliWindow({
         ? { ...turn, entries: turn.entries.map(mapEntry) } : turn));
   }, [updateLive]);
 
+  // Home Assistant restarting cancels the approvals it was still holding, so a
+  // card left offering Approve and Reject is stale. When it answers again, every
+  // unresolved card is verified the same way a restored one is (user, 2026-10-29).
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
+  const [verifyNonce, setVerifyNonce] = useState(0);
+  useEffect(() => onConnectionChange((up) => {
+    if (!up) return;
+    let found = false;
+    for (const entry of [...liveRef.current, ...turnsRef.current.flatMap((turn) => turn.entries)]) {
+      if (entry.kind !== "approval" || TERMINAL_APPROVAL_STATUSES.has(entry.status)) continue;
+      restoredApprovals.current.add(entry.approvalId);
+      found = true;
+    }
+    if (found) setVerifyNonce((n) => n + 1);
+  }), []);
+
   // Resolution events sent while this document was absent cannot reach its
   // subscription. Verify restored cards before offering actions, and poll until
   // terminal so a disconnect cleanup that lands just after reload is not missed.
@@ -1548,7 +1579,7 @@ export function AgentCliWindow({
     };
     void refresh();
     return () => { disposed = true; clearTimeout(timer); };
-  }, [updateApprovalEntry]);
+  }, [updateApprovalEntry, verifyNonce]);
 
   // Learn about approvals resolved or claimed ELSEWHERE, straight off the HA bus.
   //
@@ -2012,7 +2043,7 @@ export function AgentCliWindow({
               <div className="agentcli-empty">{t("agentchat.noProvider")}</div>
             )}
             {displayed.map((e, i) => (
-              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps}
+              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps} away={away}
                         onResolve={resolveApproval} onReview={openReview}
                       />
             ))}
@@ -2061,6 +2092,13 @@ export function AgentCliWindow({
             </div>
           )}
 
+          {away && (
+            <div className="agentcli-offline" role="status">
+              <span className="agentcli-spin" aria-hidden="true" />
+              <span>{t("shell.offlineBody")}</span>
+            </div>
+          )}
+
           <div className="agentcli-input">
             <input
               ref={fileInputRef} type="file" accept="image/*" multiple hidden
@@ -2084,8 +2122,8 @@ export function AgentCliWindow({
               ref={inputRef}
               value={input}
               aria-label={t("agentchat.messageAria")}
-              placeholder={noInstances ? t("agentchat.configureFirst") : t("agentchat.messagePlaceholder")}
-              disabled={noInstances}
+              placeholder={noInstances ? t("agentchat.configureFirst") : away ? t("shell.offlineTitle") : t("agentchat.messagePlaceholder")}
+              disabled={noInstances || away}
               rows={2}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
@@ -2102,8 +2140,8 @@ export function AgentCliWindow({
             ) : (
               <button type="button" className="btn btn-primary btn-sm agentcli-send-btn"
                       aria-label={t("agentchat.send")} title={t("agentchat.send")}
-                      aria-disabled={noInstances || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
-                      onClick={() => { if (!noInstances) void send(); }}>
+                      aria-disabled={noInstances || away || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
+                      onClick={() => { if (!noInstances && !away) void send(); }}>
                 <Icon name="send" size={18} />
               </button>
             )}
@@ -2279,11 +2317,13 @@ function CopyResponseButton({ text }: { text: string }) {
 }
 
 function ChatItem({
-  entry, verbose, showTs, onResolve, onReview,
+  entry, verbose, showTs, away = false, onResolve, onReview,
 }: {
   entry: ChatEntry;
   verbose: boolean;
   showTs: boolean;
+  /** Home Assistant is not answering: a decision cannot be sent, so it is not offered. */
+  away?: boolean;
   onResolve: (id: string, approve: boolean) => void;
   onReview: (approvalId: string) => void;
 }) {
@@ -2397,11 +2437,11 @@ function ChatItem({
           <div>{tRich("agentchat.approvalNeeded", { code: (c) => <code>{c}</code> }, { name: entry.toolName })}</div>
           {entry.status === "pending" && !entry.checking ? (
             <div className="agentcli-approval-actions">
-              <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
-              <button className="btn btn-sm agentcli-approve" onClick={() => onResolve(entry.approvalId, true)}>
+              <button className="btn btn-outline btn-sm" disabled={away} onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
+              <button className="btn btn-sm agentcli-approve" disabled={away} onClick={() => onResolve(entry.approvalId, true)}>
                 <Icon name="check" size={14} />{t("agentchat.approve")}
               </button>
-              <button className="btn btn-sm agentcli-reject" onClick={() => onResolve(entry.approvalId, false)}>
+              <button className="btn btn-sm agentcli-reject" disabled={away} onClick={() => onResolve(entry.approvalId, false)}>
                 <Icon name="close" size={14} />{t("agentchat.reject")}
               </button>
             </div>

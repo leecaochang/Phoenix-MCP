@@ -75,7 +75,7 @@ describe("Approvals pending pagination", () => {
 
     // Choose it for review (a deep link lands here too).
     fireEvent.click(await findByText("Front door notify"));
-    expect(await findByRole("button", { name: "Approve and Execute" })).toBeTruthy();
+    expect(await findByRole("button", { name: "Approve" })).toBeTruthy();
 
     // It is approved elsewhere (inline Approve in Agent Chat): the list now
     // returns nothing and getApproval reports it resolved. The event bumps
@@ -86,7 +86,7 @@ describe("Approvals pending pagination", () => {
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
     update({ onCountChange, refreshSignal: 1 });
 
-    await waitFor(() => expect(queryByRole("button", { name: "Approve and Execute" })).toBeNull());
+    await waitFor(() => expect(queryByRole("button", { name: "Approve" })).toBeNull());
     expect(api.getApproval).toHaveBeenCalledWith("appr_1");
     expect(onCountChange).toHaveBeenCalled();
     // Review keeps the request, now with its outcome.

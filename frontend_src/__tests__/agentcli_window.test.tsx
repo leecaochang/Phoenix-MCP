@@ -47,6 +47,7 @@ import {
   __reloadFromStorage,
 } from "../utils/agentcli_state";
 import { clearReasonDraft, getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
+import { noteConnection, __resetConnectionState } from "../utils/connection";
 import {
   AGENTCHAT_REVIEW_OPENED_EVENT,
   notifyAgentChatReviewClosed,
@@ -2276,6 +2277,32 @@ describe("unsent message box survives a panel remount", () => {
     mount();
 
     await waitFor(() => expect(box().value).toBe("How many lights are in my home?"));
+  });
+
+  it("takes no work while Home Assistant is away, and takes it again after (user, 2026-10-29)", async () => {
+    __resetConnectionState();
+    const view = mount();
+    // By label, not by placeholder: the placeholder is part of what this changes.
+    const composer = () => view.container.querySelector("textarea")!;
+    await waitFor(() => expect(composer()).toBeInTheDocument());
+    expect(composer()).not.toBeDisabled();
+    // With something to send, Send is available: that is what going away takes away.
+    fireEvent.change(composer(), { target: { value: "turn the kitchen light on" } });
+    await waitFor(() => expect(view.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "false"));
+
+    act(() => noteConnection(false));
+    // The panel's notice cannot reach a window floating over another page, so the window says it.
+    await waitFor(() => expect(composer()).toBeDisabled());
+    expect(composer().placeholder).toBe("Home Assistant is unavailable");
+    expect(view.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "true");
+    expect(view.container.querySelector(".agentcli-offline")?.textContent).toMatch(/Retrying, please wait/);
+
+    act(() => noteConnection(true));
+    await waitFor(() => expect(composer()).not.toBeDisabled());
+    expect(view.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "false");
+    expect(view.container.querySelector(".agentcli-offline")).toBeNull();
+    // What was typed while it was away is still there.
+    expect(composer().value).toBe("turn the kitchen light on");
   });
 
   it("starts a new conversation once when the wizard asks for one (user, 2026-10-28)", async () => {
