@@ -6701,7 +6701,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
             return body
         if unknown := set(body) - {"model", "auto"}:
             fields = ", ".join(sorted(unknown))
-            return _err("invalid_request", f"Unknown field(s): {fields}.", 400, rid,
+            return _err("invalid_request", f"The request contains fields Phoenix does not recognize: {fields}.", 400, rid,
                         key="unknownFields", params={"fields": fields})
         auto = body.get("auto")
         if auto is not None and not isinstance(auto, bool):

@@ -868,7 +868,7 @@ def _validated_access_key_patch(
         fields = ", ".join(unknown)
         return {}, _err(
             "invalid_request",
-            f"Unknown field(s): {fields}.",
+            f"The request contains fields Phoenix does not recognize: {fields}.",
             400,
             rid,
             key="unknownFields",
@@ -2246,7 +2246,7 @@ async def _validated_settings_patch(
         fields = ", ".join(unknown)
         return {}, _err(
             "invalid_request",
-            f"Unknown field(s): {fields}.",
+            f"The request contains fields Phoenix does not recognize: {fields}.",
             400,
             rid,
             key="unknownFields",
