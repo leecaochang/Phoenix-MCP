@@ -323,7 +323,8 @@
       "lineViewShort": "Regelweergave",
       "previewErrorHeadMany": "Kaarten in dit voorbeeld meldden configuratiefouten. Kopieer zo nodig het bericht hieronder en plak het naar de agent, zodat die de kaarten kan herstellen.",
       "previewErrorCopy": "Fouten kopiëren",
-      "previewErrorCopyLead": "Er zijn configuratiefouten van kaarten gevonden in het dashboardvoorbeeld, onderzoek ze:"
+      "previewErrorCopyLead": "Er zijn configuratiefouten van kaarten gevonden in het dashboardvoorbeeld, onderzoek ze:",
+      "previewStrategySection": "Deze sectie wordt tijdens runtime door een strategie gegenereerd; er zijn geen statische kaarten om te bekijken."
     },
     "audit": {
       "allOutcomes": "Alle uitkomsten",

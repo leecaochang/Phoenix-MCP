@@ -180,12 +180,25 @@ class TestShapes:
         ({"views": [{"header": {"card": "x"}}]}, ["views", 0, "header", "card"]),
         ({"strategy": {"type": "original-states"}}, []),
         ({"views": [{"strategy": {"type": "x"}}]}, ["views", 0]),
+        ({"views": [{"sections": [{"strategy": {"type": "x"}}]}]}, ["views", 0, "sections", 0]),
         ("not a layout", []),
     ])
     def test_wrong_shapes_are_reported_not_searched_silently(self, layout, where):
         matches, problems = _search(layout, query="x")
         assert matches == []
         assert problems and problems[0]["path"] == where
+
+    def test_a_strategy_section_is_reported_and_its_stored_cards_skipped(self):
+        # The frontend replaces the section with the generated config, so its
+        # stored cards never show; the ordinary section beside it is searched.
+        layout = {"views": [{"sections": [
+            {"cards": [{"type": "tile", "entity": "light.a"}]},
+            {"strategy": {"type": "common-controls"}, "cards": [{"type": "tile", "entity": "light.b"}]},
+        ]}]}
+        matches, problems = _search(layout, card_type="tile")
+        assert _paths(matches) == [("views", 0, "sections", 0, "cards", 0)]
+        assert [p["path"] for p in problems] == [["views", 0, "sections", 1]]
+        assert "strategy" in problems[0]["problem"]
 
     def test_an_untyped_view_with_sections_and_cards_is_searched_whole(self):
         layout = {"views": [{"cards": [{"type": "tile", "entity": "light.a"}],

@@ -1128,7 +1128,8 @@
       "lineViewShort": "Linjevisning",
       "previewErrorHeadMany": "Kort i denne forhåndsvisning rapporterede konfigurationsfejl. Kopiér om nødvendigt meddelelsen nedenfor, og indsæt den hos agenten, så den kan rette kortene.",
       "previewErrorCopy": "Kopiér fejl",
-      "previewErrorCopyLead": "Der blev fundet konfigurationsfejl for kort i forhåndsvisningen af betjeningspanelet, undersøg dem:"
+      "previewErrorCopyLead": "Der blev fundet konfigurationsfejl for kort i forhåndsvisningen af betjeningspanelet, undersøg dem:",
+      "previewStrategySection": "Denne sektion genereres af en strategi under kørsel; der er ingen statiske kort at forhåndsvise."
     },
     "common": {
       "after": "Efter",

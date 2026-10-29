@@ -1963,7 +1963,8 @@
       "lineViewShort": "Zeilenansicht",
       "previewErrorHeadMany": "Karten in dieser Vorschau haben Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die Meldung unten und fügen Sie sie beim Agenten ein, damit dieser die Karten korrigieren kann.",
       "previewErrorCopy": "Fehler kopieren",
-      "previewErrorCopyLead": "In der Dashboard-Vorschau wurden Konfigurationsfehler von Karten gefunden, bitte prüfen:"
+      "previewErrorCopyLead": "In der Dashboard-Vorschau wurden Konfigurationsfehler von Karten gefunden, bitte prüfen:",
+      "previewStrategySection": "Dieser Abschnitt wird zur Laufzeit von einer Strategie generiert; es gibt keine statischen Karten für die Vorschau."
     },
     "audit": {
       "outcomeAllowed": "Erlaubt",

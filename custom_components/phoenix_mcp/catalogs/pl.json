@@ -327,7 +327,8 @@
       "lineViewShort": "Widok wierszy",
       "previewErrorHeadMany": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
       "previewErrorCopy": "Kopiuj błędy",
-      "previewErrorCopyLead": "W podglądzie panelu znaleziono błędy konfiguracji kart, zbadaj je:"
+      "previewErrorCopyLead": "W podglądzie panelu znaleziono błędy konfiguracji kart, zbadaj je:",
+      "previewStrategySection": "Ta sekcja jest generowana przez strategię w czasie działania; nie ma statycznych kart do podglądu."
     },
     "audit": {
       "allOutcomes": "Wszystkie wyniki",

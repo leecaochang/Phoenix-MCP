@@ -1647,7 +1647,8 @@
       "lineViewShort": "Vista a righe",
       "previewErrorHeadMany": "Alcune schede in questa anteprima hanno segnalato errori di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere le schede.",
       "previewErrorCopy": "Copia errori",
-      "previewErrorCopyLead": "Sono stati trovati errori di configurazione delle schede nell'anteprima della plancia, verifica:"
+      "previewErrorCopyLead": "Sono stati trovati errori di configurazione delle schede nell'anteprima della plancia, verifica:",
+      "previewStrategySection": "Questa sezione è generata da una strategia in fase di esecuzione; non ci sono schede statiche da visualizzare in anteprima."
     },
     "shell": {
       "agentChat": "Agent Chat",

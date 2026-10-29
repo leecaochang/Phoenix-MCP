@@ -189,6 +189,37 @@ class TestCardOpValidationBeforeGate:
             "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
+    async def test_strategy_section_rejected_for_every_op(self, hass, lovelace_env):
+        # The frontend replaces a strategy section's stored fields with the
+        # generated config, so a card saved there would never display. A stored
+        # cards list (legal, just ignored) must not make edit/delete addressable.
+        h, _light = lovelace_env
+        layout = {"views": [{"type": "sections", "sections": [
+            {"type": "grid", "cards": [CARD_A]},
+            {"strategy": {"type": "common-controls"}, "cards": [CARD_A]},
+        ]}]}
+        await _seed(h, layout)
+        before = await async_get_lovelace_config(h, None)
+        for name, args in (
+            ("add_dashboard_card", {"view_index": 0, "section_index": 1, "card": NEW_CARD}),
+            ("edit_dashboard_card", {"view_index": 0, "section_index": 1, "card_index": 0, "card": NEW_CARD}),
+            ("delete_dashboard_card", {"view_index": 0, "section_index": 1, "card_index": 0}),
+        ):
+            data, versions = _data()
+            content, outcome, _ = await _call(name, args, _access_key(cap_lovelace_write="confirm"), h, data)
+            assert outcome == "invalid_request", name
+            assert "section is strategy-generated" in content["content"][0]["text"], name
+            data.store.set_pending_approvals.assert_not_called()
+            assert versions.list_for("dashboard", "lovelace") == []
+        assert await async_get_lovelace_config(h, None) == before
+        # Positive control: the ordinary section next to it still takes the card.
+        _, outcome, _ = await _call(
+            "add_dashboard_card", {"view_index": 0, "section_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
+        assert outcome == "allowed"
+        saved = await async_get_lovelace_config(h, None)
+        assert saved["views"][0]["sections"][0]["cards"] == [CARD_A, NEW_CARD]
+        assert saved["views"][0]["sections"][1] == layout["views"][0]["sections"][1]
+
     async def test_autogen_dashboard_steers_to_set_dashboard_config(self, hass, lovelace_env):
         # Card ops need a stored base layout; a fresh default dashboard has none.
         # The message must NAME the addressed dashboard: an agent that drops

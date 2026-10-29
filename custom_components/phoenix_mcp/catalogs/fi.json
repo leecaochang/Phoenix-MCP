@@ -1128,7 +1128,8 @@
       "lineViewShort": "Rivinäkymä",
       "previewErrorHeadMany": "Tämän esikatselun kortit ilmoittivat kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit.",
       "previewErrorCopy": "Kopioi virheet",
-      "previewErrorCopyLead": "Kojelaudan esikatselusta löytyi korttien kokoonpanovirheitä, tutki ne:"
+      "previewErrorCopyLead": "Kojelaudan esikatselusta löytyi korttien kokoonpanovirheitä, tutki ne:",
+      "previewStrategySection": "Tämä osio luodaan strategialla suorituksen aikana; esikatseltavia staattisia kortteja ei ole."
     },
     "common": {
       "after": "Jälkeen",

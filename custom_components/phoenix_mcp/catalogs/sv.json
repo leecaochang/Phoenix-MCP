@@ -1128,7 +1128,8 @@
       "lineViewShort": "Radvy",
       "previewErrorHeadMany": "Kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten.",
       "previewErrorCopy": "Kopiera fel",
-      "previewErrorCopyLead": "Konfigurationsfel för kort hittades i förhandsgranskningen av kontrollpanelen, undersök dem:"
+      "previewErrorCopyLead": "Konfigurationsfel för kort hittades i förhandsgranskningen av kontrollpanelen, undersök dem:",
+      "previewStrategySection": "Det här avsnittet genereras av en strategi vid körning; det finns inga statiska kort att förhandsgranska."
     },
     "common": {
       "after": "Efter",

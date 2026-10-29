@@ -638,7 +638,8 @@
       "lineViewShort": "Vue par lignes",
       "previewErrorHeadMany": "Des cartes de cet aperçu ont signalé des erreurs de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige les cartes.",
       "previewErrorCopy": "Copier les erreurs",
-      "previewErrorCopyLead": "Des erreurs de configuration de cartes ont été trouvées dans l'aperçu du tableau de bord, veuillez examiner :"
+      "previewErrorCopyLead": "Des erreurs de configuration de cartes ont été trouvées dans l'aperçu du tableau de bord, veuillez examiner :",
+      "previewStrategySection": "Cette section est générée par une stratégie à l'exécution ; il n'y a aucune carte statique à prévisualiser."
     },
     "audit": {
       "outcomeAllowed": "Autorisé",

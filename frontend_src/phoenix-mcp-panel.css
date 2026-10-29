@@ -2244,7 +2244,7 @@ select.input {
 .dash-preview-section-title { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin: 12px 0 6px; }
 .dash-preview-cards > .dash-preview-section-title:first-child { margin-top: 0; }
 .dash-preview-grid + .dash-preview-grid { margin-top: 12px; }
-.dash-preview-card-error {
+.dash-preview-card-error, .dash-preview-placeholder {
   border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-xs);
   padding: 10px; font-size: 12px; color: var(--phx-text-2); font-style: italic;
 }

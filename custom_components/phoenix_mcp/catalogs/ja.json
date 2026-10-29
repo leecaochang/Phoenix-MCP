@@ -465,7 +465,8 @@
       "lineViewShort": "行表示",
       "previewErrorHeadMany": "このプレビュー内の複数のカードから設定エラーが報告されました。必要に応じて下のメッセージをコピーしてエージェントに貼り付け、カードを修正させてください。",
       "previewErrorCopy": "エラーをコピー",
-      "previewErrorCopyLead": "ダッシュボードのプレビューでカードの設定エラーが見つかりました。調査してください:"
+      "previewErrorCopyLead": "ダッシュボードのプレビューでカードの設定エラーが見つかりました。調査してください:",
+      "previewStrategySection": "このセクションは実行時にストラテジーによって生成されるため、プレビューできる静的カードはありません。"
     },
     "audit": {
       "outcomeAllowed": "許可",

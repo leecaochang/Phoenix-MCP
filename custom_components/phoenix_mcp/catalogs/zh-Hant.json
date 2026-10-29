@@ -937,7 +937,8 @@
       "lineViewShort": "逐行檢視",
       "previewErrorHeadMany": "預覽中有多張卡片報告了設定錯誤。如有需要，請複製下方的訊息並貼給智慧體，讓它修復這些卡片。",
       "previewErrorCopy": "複製錯誤",
-      "previewErrorCopyLead": "在儀表板預覽中發現了卡片設定錯誤，請調查："
+      "previewErrorCopyLead": "在儀表板預覽中發現了卡片設定錯誤，請調查：",
+      "previewStrategySection": "此分割槽由執行時策略生成，沒有可預覽的靜態卡片。"
     },
     "common": {
       "after": "更改後",

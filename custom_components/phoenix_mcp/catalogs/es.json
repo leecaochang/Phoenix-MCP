@@ -343,7 +343,8 @@
       "lineViewShort": "Vista de líneas",
       "previewErrorHeadMany": "Varias tarjetas de esta vista previa han notificado errores de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir las tarjetas.",
       "previewErrorCopy": "Copiar errores",
-      "previewErrorCopyLead": "Se encontraron errores de configuración de tarjetas en la vista previa del panel de control, investíguelos:"
+      "previewErrorCopyLead": "Se encontraron errores de configuración de tarjetas en la vista previa del panel de control, investíguelos:",
+      "previewStrategySection": "Esta sección se genera mediante una estrategia en tiempo de ejecución; no hay tarjetas estáticas que previsualizar."
     },
     "selectBy": {
       "area": "Área",

@@ -1119,6 +1119,10 @@ def _resolve_dashboard_cards(
         section = sections[section_index]
         if not isinstance(section, dict):
             return None, "The target section is not a mapping."
+        # The frontend replaces a strategy section's stored fields with the
+        # generated config, so a card stored there would never show.
+        if "strategy" in section:
+            return None, "The target section is strategy-generated; it has no editable card list."
         cards = section.setdefault("cards", [])
     else:
         if section_index is not None:

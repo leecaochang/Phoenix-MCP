@@ -791,7 +791,8 @@
       "lineViewShort": "逐行视图",
       "previewErrorHeadMany": "预览中有多张卡片报告了配置错误。如有需要，请复制下方的消息并粘贴给智能体，让它修复这些卡片。",
       "previewErrorCopy": "复制错误",
-      "previewErrorCopyLead": "在仪表盘预览中发现了卡片配置错误，请调查："
+      "previewErrorCopyLead": "在仪表盘预览中发现了卡片配置错误，请调查：",
+      "previewStrategySection": "此分区由运行时策略生成，没有可预览的静态卡片。"
     },
     "perms": {
       "addHint": "添加提示",

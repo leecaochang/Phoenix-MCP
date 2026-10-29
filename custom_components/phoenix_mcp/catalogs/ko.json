@@ -417,7 +417,8 @@
       "lineViewShort": "줄 보기",
       "previewErrorHeadMany": "이 미리 보기의 여러 카드에서 구성 오류가 보고되었습니다. 필요하면 아래 메시지를 복사하여 에이전트에 붙여넣어 카드를 수정하도록 하세요.",
       "previewErrorCopy": "오류 복사",
-      "previewErrorCopyLead": "대시보드 미리 보기에서 카드 구성 오류가 발견되었습니다. 조사해 주세요:"
+      "previewErrorCopyLead": "대시보드 미리 보기에서 카드 구성 오류가 발견되었습니다. 조사해 주세요:",
+      "previewStrategySection": "이 섹션은 런타임에 전략에 의해 생성되며 미리 볼 정적 카드가 없습니다."
     },
     "perms": {
       "addHint": "힌트 추가",
