@@ -266,6 +266,17 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
     if (chosenFrom) setOrder(chosenFrom);
     setRejecting(false);
   }, []);
+  /**
+   * Showing different requests takes the chosen one with it: the list has
+   * nothing chosen afterwards, so Review and Request Details must not still
+   * hold the request it had (user, 2026-10-29). A request opened from a link
+   * changes the scope itself and keeps its choice.
+   */
+  const chooseScope = useCallback((next: ApprovalsScope) => {
+    if (next !== scope) select(null);
+    onScopeChange(next);
+  }, [scope, select, onScopeChange]);
+
   const neighbour = (delta: -1 | 1): ApprovalRecord | null => {
     const at = selected ? order.indexOf(selected.id) : -1;
     const id = at >= 0 ? order[at + delta] : undefined;
@@ -452,7 +463,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   }, [selectableIds, picked, batchBusy, scope, loadPending, loadOthers, onCountChange]);
 
   const value: ApprovalsState = {
-    scope, setScope: onScopeChange, search, setSearch, shown, loading, loadingMore, error, hasMore, pendingTotal, refresh, loadMore, isClaimed,
+    scope, setScope: chooseScope, search, setSearch, shown, loading, loadingMore, error, hasMore, pendingTotal, refresh, loadMore, isClaimed,
     current, select, neighbour, step, locked,
     deciding: current && deciding?.id === current.id ? deciding.kind : null,
     decisionError: current && decisionError?.id === current.id ? decisionError.message : null,

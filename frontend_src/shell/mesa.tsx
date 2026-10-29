@@ -104,6 +104,8 @@ export interface MesaState {
   confirmSwitch: () => void;
   cancelSwitch: () => void;
   setEditorDirty: (dirty: boolean) => void;
+  /** Whether the editor holds unsaved changes, so nothing closes it behind the user's back. */
+  editorDirty: () => boolean;
 
   selectedSuggestion: string | null;
   selectSuggestion: (key: string | null) => void;
@@ -330,6 +332,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
   }, []);
   const cancelSwitch = useCallback(() => setPending(null), []);
   const setEditorDirty = useCallback((d: boolean) => { dirty.current = d; }, []);
+  const editorDirty = useCallback(() => dirty.current, []);
 
   // ---- Suggestions ---------------------------------------------------------
 
@@ -412,7 +415,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
     loaded, loading, error, refresh: () => { void refresh(); },
     rows, entityTree, canonicalTags, integrationOptions, deviceOptions, friendly, nameOf, automationName,
     issues, inspection, validation, findingIds, allDismissed, dismiss,
-    editing, open, pending, confirmSwitch, cancelSwitch, setEditorDirty,
+    editing, open, pending, confirmSwitch, cancelSwitch, setEditorDirty, editorDirty,
     selectedSuggestion, selectSuggestion, applySuggestion, dismissSuggestion, restoreSuggestions, rescan, suggestionBusy, rescanning, suggestionError,
     exporting, askExport: () => setExporting({ busy: false, error: null }), cancelExport: () => setExporting(null), doExport,
   };

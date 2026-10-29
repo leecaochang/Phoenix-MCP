@@ -68,13 +68,16 @@ function openRestore(): HTMLElement[] {
 describe("the Changes list", () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 
-  it("fuzzy-filters loaded changes, sorts names, and keeps pagination reachable", async () => {
+  it("filters loaded changes by whole words, sorts names, and keeps pagination reachable", async () => {
     vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], 3));
     const view = renderChanges();
     await view.findByText("Zebra lamp");
     fireEvent.click(view.getByRole("button", { name: "Item" }));
     expect(rowsOf(listWindow())[0]).toHaveTextContent("Alpha lamp");
+    // Letters in order are not a match; each word has to appear as it was typed (user, 2026-10-29).
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
+    expect(view.queryByText("Zebra lamp")).toBeNull();
+    fireEvent.change(view.getByRole("searchbox"), { target: { value: "lamp zebra" } });
     expect(view.queryByText("Alpha lamp")).toBeNull();
     expect(view.getByText("Zebra lamp")).toBeVisible();
     expect(view.getByText("Load More")).toBeVisible();
@@ -151,6 +154,19 @@ describe("the Changes list", () => {
 
 describe("Comparison and Restore", () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); stubMatchMedia(); });
+
+  it("empties Comparison and Item History when the list is told to show other changes", async () => {
+    const edit = version({ action: "edit", has_before: true });
+    vi.mocked(api.listVersions).mockResolvedValue(page([edit]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(edit));
+    const view = renderChanges();
+    await choose("My automation");
+    // Showing another set of changes leaves nothing chosen in the list (user, 2026-10-29).
+    fireEvent.change(view.getByLabelText("Action"), { target: { value: "delete" } });
+    await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeNull());
+    expect(within(comparisonWindow()).getByText("Select a change to compare.")).toBeVisible();
+    expect(within(historyWindow()).getByText("Select a change to see the item's other recorded changes.")).toBeVisible();
+  });
 
   it("choosing a change shows it in Comparison and keeps focus in the list", async () => {
     const edit = version({ action: "edit", has_before: true });

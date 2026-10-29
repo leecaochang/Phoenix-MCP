@@ -58,7 +58,10 @@ describe("Review and Request Details", () => {
     const view = renderApprovals();
     await view.findByText("Restart Home Assistant");
     const search = view.getByRole("searchbox");
+    // A word has to appear as it was typed; its letters in order are not enough (user, 2026-10-29).
     fireEvent.change(search, { target: { value: "rst hm" } });
+    expect(view.queryByText("Restart Home Assistant")).toBeNull();
+    fireEvent.change(search, { target: { value: "home restart" } });
     expect(view.getByText("Restart Home Assistant")).toBeVisible();
     fireEvent.change(search, { target: { value: "unmatched-value" } });
     expect(view.queryByText("Restart Home Assistant")).toBeNull();
@@ -66,6 +69,17 @@ describe("Review and Request Details", () => {
     // The list updates itself, so there is no Refresh button (user, 2026-10-29).
     expect(view.queryByRole("button", { name: "Refresh Approvals" })).toBeNull();
     expect(view.getByRole("searchbox")).toBe(search);
+  });
+
+  it("empties Review and Request Details when the list is told to show other requests", async () => {
+    const view = await open();
+    expect(reviewWindow().querySelector(".phx-review")).toBeTruthy();
+    expect(details().queryByText("Select a request to see its details.")).toBeNull();
+    // Showing another set of requests leaves nothing chosen in the list (user, 2026-10-29).
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
+    fireEvent.change(view.getByLabelText("Show"), { target: { value: "history" } });
+    await waitFor(() => expect(reviewWindow().querySelector(".phx-review")).toBeNull());
+    expect(details().getByText("Select a request to see its details.")).toBeVisible();
   });
 
   it("updates itself while it is shown, in every scope (user, 2026-10-29)", async () => {

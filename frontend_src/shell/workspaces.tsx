@@ -182,7 +182,6 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       add("requestDetails", { referencePanel: "review", direction: "below" });
       share(api, "approvals", 0.34);
     },
-    toolWindows: ["requestDetails"],
     // Until a request is chosen there is nothing to measure, so the two windows start
     // at these heights and Request Details takes the rest of the column.
     heights: { review: 420, requestDetails: 320 },

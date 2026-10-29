@@ -89,6 +89,26 @@ describe("Profiles", () => {
     expect(rowsIn("Profiles").find((r) => r.getAttribute("aria-selected") === "true")).toHaveTextContent("Hall hub");
   });
 
+  it("empties Profile Editor when the list is told to show other profiles, unless it holds changes", async () => {
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    choose("Front door");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    // Showing other profiles leaves nothing chosen in the list (user, 2026-10-29).
+    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
+    expect(await editorWindow().findByText("Select a profile to edit it, or add one.")).toBeTruthy();
+
+    // Unsaved changes are not thrown away by a filter.
+    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "" } });
+    await waitFor(() => expect(names()).toContain("Front door"));
+    choose("Front door");
+    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+    fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
+    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
+    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
+    expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
+  });
+
   it("asks before leaving unsaved changes for another profile", async () => {
     renderMesa();
     await waitFor(() => expect(names()).toContain("Front door"));

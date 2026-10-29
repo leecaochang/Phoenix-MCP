@@ -6,14 +6,13 @@
  * result. Their shared state is `shell/approvals.tsx`.
  */
 
-import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
 import { t } from "../i18n";
 import { APPROVALS_SCOPES, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
-import { ControllerContext } from "../shell/dock/TitleBar";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
@@ -230,33 +229,8 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
   );
 }
 
-const noSubscribe = () => () => {};
-const noVersion = () => 0;
-
 export function ReviewWindow() {
   const a = useApprovals();
-  const controller = useContext(ControllerContext);
-  useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
-  const detailsOpen = !!controller?.hostOf("requestDetails");
-  // Nothing to detail until a request is chosen (user, 2026-10-29).
-  const chosen = !!a?.current;
-  const groups: ToolGroup[] = controller ? [{
-    id: "review",
-    label: t("workspace.review"),
-    tools: [{
-      id: "requestDetails",
-      label: t("workspace.requestDetails"),
-      icon: "requestDetails",
-      pressed: detailsOpen,
-      disabled: !chosen,
-      onSelect: () => {
-        const group = controller.groupOf("requestDetails");
-        if (group) controller.close(group);
-        else controller.ensureOpenSplitting("requestDetails", "review");
-      },
-    }],
-  }] : [];
-  const onToolbar = useToolbarTools(groups);
   const decisions = useRef<HTMLDivElement | null>(null);
   const r = a?.current;
   if (!a || !r) return <p className="phx-window-empty">{t("workspace.reviewEmpty")}</p>;
@@ -268,8 +242,8 @@ export function ReviewWindow() {
   const summary = friendlyApprovalSummary(r.diff);
   return (
     <div className="phx-review" key={r.id}>
-      {/* Off the toolbar (a phone), Request Details opens from the window itself. */}
-      {!onToolbar && <InlineTools groups={groups} />}
+      {/* Request Details is closed and reopened from Workspace Options, like any other
+          window; Review has no tools of its own (user, 2026-10-29). */}
       <div className="phx-review-head">
         {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">

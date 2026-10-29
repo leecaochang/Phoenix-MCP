@@ -80,7 +80,13 @@ export function MesaProfilesWindow() {
   if (!m) return null;
 
   const showFilters = !onToolbar || filtersOpen;
-  const clearFilters = () => { setScope(""); setControl(""); setEnforcement(""); };
+  /**
+   * Showing other profiles leaves nothing chosen in the list, so Profile Editor
+   * does not keep the one it had (user, 2026-10-29). An editor holding unsaved
+   * changes is left alone: a filter is not a reason to lose them.
+   */
+  const forget = () => { if (m.editing && !m.editorDirty()) m.open(null, { force: true }); };
+  const clearFilters = () => { forget(); setScope(""); setControl(""); setEnforcement(""); };
   // The control-mode filter keeps the old summary's counts.
   const count = (mode: string) => m.rows.filter((r) => (mode === "enforced" ? isEnforced(r.document) : rawControlMode(r.document) === mode)).length;
 
@@ -122,15 +128,15 @@ export function MesaProfilesWindow() {
       )}
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
-          <select className="input input-auto" data-filter="scope" value={scope} onChange={(e) => setScope(e.target.value)} aria-label={t("mesa.colAppliesTo")}>
+          <select className="input input-auto" data-filter="scope" value={scope} onChange={(e) => { forget(); setScope(e.target.value); }} aria-label={t("mesa.colAppliesTo")}>
             <option value="">{t("mesa.allTypes")}</option>
             {EDITOR_SCOPES.map((s) => <option key={s} value={s}>{scopeLabel(s)}</option>)}
           </select>
-          <select className="input input-auto" data-filter="control" value={control} onChange={(e) => setControl(e.target.value)} aria-label={t("mesa.colControl")}>
+          <select className="input input-auto" data-filter="control" value={control} onChange={(e) => { forget(); setControl(e.target.value); }} aria-label={t("mesa.colControl")}>
             <option value="">{t("mesa.allControlModes")}</option>
             {CONTROL_FILTERS.map((mode) => <option key={mode} value={mode}>{controlLabel(mode)} ({localeNumber(count(mode))})</option>)}
           </select>
-          <select className="input input-auto" data-filter="enforcement" value={enforcement} onChange={(e) => setEnforcement(e.target.value)} aria-label={t("mesa.fieldEnforcement")}>
+          <select className="input input-auto" data-filter="enforcement" value={enforcement} onChange={(e) => { forget(); setEnforcement(e.target.value); }} aria-label={t("mesa.fieldEnforcement")}>
             <option value="">{t("mesa.anyEnforcement")}</option>
             <option value="enforced">{t("mesa.modeEnforced")} ({localeNumber(count("enforced"))})</option>
             <option value="advisory">{t("mesa.modeAdvisory")} ({localeNumber(m.rows.length - count("enforced"))})</option>

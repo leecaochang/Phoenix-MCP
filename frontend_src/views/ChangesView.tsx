@@ -127,7 +127,12 @@ export function ChangesListWindow() {
   const onToolbar = useToolbarTools(groups);
   if (!c) return null;
   const showFilters = !onToolbar || filtersOpen;
-  const clearFilters = () => { setType(""); setAction(""); setSearch(""); };
+  /**
+   * Showing other changes leaves nothing chosen in the list, so Comparison and
+   * Item History do not keep the change they had (user, 2026-10-29).
+   */
+  const forget = () => c?.select(null);
+  const clearFilters = () => { forget(); setType(""); setAction(""); setSearch(""); };
 
   const shown = !filtersApply ? c.feed : c.feed.filter((v) => (!type || v.resource_type === type)
     && (!action || v.action === action)
@@ -146,11 +151,11 @@ export function ChangesListWindow() {
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
-          <select className="input input-auto" data-filter="type" value={type} onChange={(e) => setType(e.target.value)} aria-label={t("changes.colType")}>
+          <select className="input input-auto" data-filter="type" value={type} onChange={(e) => { forget(); setType(e.target.value); }} aria-label={t("changes.colType")}>
             <option value="">{t("changes.allTypes")}</option>
             {Object.keys(RESOURCE_TYPE_LABEL_KEYS).map((rt) => <option key={rt} value={rt}>{resourceTypeLabel(rt)}</option>)}
           </select>
-          <select className="input input-auto" data-filter="action" value={action} onChange={(e) => setAction(e.target.value)} aria-label={t("changes.colAction")}>
+          <select className="input input-auto" data-filter="action" value={action} onChange={(e) => { forget(); setAction(e.target.value); }} aria-label={t("changes.colAction")}>
             <option value="">{t("changes.allActions")}</option>
             {Object.keys(ACTION_LABEL_KEYS).map((a) => <option key={a} value={a}>{actionLabel(a)}</option>)}
           </select>

@@ -1,8 +1,8 @@
 /**
  * Workspace Options: Notifications is shown or hidden with a check rather than
  * reopened, a window a toolbar tool opens (Log Settings in Logs) is not
- * offered there, other closed windows are offered to reopen, and the two
- * resets say what they reset.
+ * offered there, other closed windows are offered to reopen (Request Details
+ * among them), and the two resets say what they reset.
  */
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
@@ -56,6 +56,20 @@ describe("Workspace Options", () => {
     expect(item.label).toBe("Show Needs Attention");
     item.onSelect!();
     expect(shown).toEqual([c.id]);
+  });
+
+  it("offers Request Details back in Approvals, which no tool opens any more (user, 2026-10-29)", () => {
+    const windows = ["approvals", "review", "requestDetails"];
+    const parts = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
+    const c = new WorkspaceController("approvals", windows, (_, add) => {
+      add("approvals");
+      add("review", { referencePanel: "approvals", direction: "right" });
+      add("requestDetails", { referencePanel: "review", direction: "below" });
+    }, (id) => id);
+    render(<DockviewReact components={parts} onReady={(e: { api: DockviewApi }) => { c.api = e.api; c.load(undefined); }} />);
+    expect(items(c).some((i) => i.id === "reopen-requestDetails")).toBe(false);
+    c.close(c.groupOf("requestDetails")!);
+    expect(items(c).map((i) => i.id)).toContain("reopen-requestDetails");
   });
 
   it("does not offer to reopen a window a toolbar tool opens here, and offers other closed windows", () => {

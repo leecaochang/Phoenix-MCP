@@ -1114,25 +1114,6 @@ export class WorkspaceController {
     });
   }
 
-  /**
-   * Open a window under `neighbour`, sharing its height equally, unless the
-   * user has since given it a place of its own. Request Details opens as the
-   * bottom half of Review's column this way (user, 2026-10-29).
-   */
-  ensureOpenSplitting(id: string, neighbour: string): void {
-    const share = this.api && !this.hostOf(id) && !this.closed.get(id)?.height
-      ? Math.round((this.groupOf(neighbour)?.height ?? 0) / 2) : 0;
-    if (share >= MIN_WINDOW_HEIGHT) {
-      this.closed.set(id, { ...(this.closed.get(id) ?? { neighbor: neighbour, side: "bottom" }), height: share });
-    }
-    this.ensureOpen(id);
-    // Both halves are given the same height: in a workspace that fits the screen, sizing
-    // only the new one leaves the other with whatever is left, which is not half.
-    if (share >= MIN_WINDOW_HEIGHT && this.canvas && this.hostOf(id) === "main" && this.hostOf(neighbour) === "main") {
-      this.batch(() => this.canvas?.apply({ [id]: share, [neighbour]: share }));
-    }
-  }
-
   /** Make a window visible: reopen it if closed, unfold it if folded. */
   ensureOpen(id: string): void {
     if (!this.api || !this.windows.includes(id)) return;
