@@ -1889,13 +1889,23 @@ def voice_text(language: object, key: str, **params: object) -> str:
 def _localized(
     templates: dict[str, str], section: str, key: str, language: object, params: dict
 ) -> str:
-    """Resolve one backend-rendered string, falling back to its English template."""
+    """Resolve one backend-rendered string, falling back to its English template.
+
+    The same backstop panel_catalog applies: a translation is used only when it
+    names exactly the English template's placeholders and formats cleanly. These
+    strings render after an approval is saved and inside voice error handling, so
+    a hand-edited catalog must cost the translation, never raise.
+    """
     template = templates[key]
     resolved = canonical_language(language)
     if resolved != "en":
         translated = _catalog_section(resolved, section).get(key)
-        if translated:
-            template = translated
+        expected = _placeholders(template)
+        if translated and expected is not None and _placeholders(translated) == expected:
+            try:
+                return translated.format(**params)
+            except (KeyError, IndexError, ValueError, TypeError):
+                pass
     return template.format(**params)
 
 
@@ -1955,11 +1965,18 @@ def _catalog_section(language: str, section: str) -> dict[str, str]:
     return _catalog_sections.get((language, section), {})
 
 
-def _placeholders(value: str) -> frozenset[str]:
-    """The {placeholder} names in one catalog string, ignoring literal text."""
-    return frozenset(
-        field for _, field, _, _ in string.Formatter().parse(value) if field
-    )
+def _placeholders(value: str) -> frozenset[str] | None:
+    """The {placeholder} names in one catalog string, ignoring literal text.
+
+    None when the string does not parse as a format template (a stray brace), so
+    no comparison against a parseable English string treats it as a match.
+    """
+    try:
+        return frozenset(
+            field for _, field, _, _ in string.Formatter().parse(value) if field
+        )
+    except ValueError:
+        return None
 
 
 @lru_cache(maxsize=8)
@@ -1968,8 +1985,8 @@ def panel_catalog(language: str) -> dict[str, str]:
 
     English is the base and the requested language is overlaid, so an untranslated
     key resolves to English rather than rendering as a raw key. A translated
-    string whose {placeholder} set differs from English is DROPPED in favour of
-    the English one: the panel interpolates by name, so a renamed, dropped or
+    string whose {placeholder} set differs from English, or that does not parse,
+    is DROPPED in favour of the English one: the panel interpolates by name, so a renamed, dropped or
     invented placeholder would render a broken sentence or throw. A guard test
     already refuses to let a mismatched locale ship, so this is the runtime
     backstop for a hand-edited install.
@@ -1981,7 +1998,9 @@ def panel_catalog(language: str) -> dict[str, str]:
     merged = dict(english)
     for key, value in _catalog_section(resolved, "panel").items():
         base = english.get(key)
-        if base is not None and _placeholders(base) != _placeholders(value):
+        if base is not None and (
+            (names := _placeholders(value)) is None or names != _placeholders(base)
+        ):
             continue
         merged[key] = value
     return merged

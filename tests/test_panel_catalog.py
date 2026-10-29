@@ -146,6 +146,71 @@ def test_backend_rendered_strings_use_the_same_locale_mapping(tmp_path, monkeypa
     assert helpers.voice_text("zh-HK", "unavailable") == "繁體中文語音"
 
 
+class _GermanConfig:
+    language = "de-DE"
+
+
+class _GermanHass:
+    config = _GermanConfig()
+
+
+@pytest.mark.parametrize(
+    "translated",
+    [
+        "Schlüssel {name} hat sein Limit erreicht.",   # renamed the placeholder
+        "Ein Schlüssel hat sein Limit erreicht.",      # dropped it
+        "Schlüssel '{access_key}' {extra}",            # invented a second one
+        "Schlüssel '{access_key' am Limit.",           # stray brace: does not parse
+        "Schlüssel '{access_key!z}' am Limit.",        # parses, cannot format
+    ],
+)
+def test_backend_rendered_mismatch_keeps_the_english(tmp_path, monkeypatch, translated) -> None:
+    """Notification and voice text fall back like the panel, rather than raising.
+
+    These render after an approval is saved and inside voice error handling, so an
+    exception there would leave a pending approval with no notification.
+    """
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        de={
+            "notification": {"rate_limit.message": translated},
+            "voice": {"local_state": translated.replace("access_key", "state")},
+        },
+    )
+    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+        "Phoenix MCP: access key 'k1' has hit its rate limit."
+    )
+    assert helpers.voice_text("de", "local_state", state="an") == "The state is an."
+
+
+def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) -> None:
+    """The guard above must not be refusing everything."""
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        de={
+            "notification": {"rate_limit.message": "Schlüssel '{access_key}' am Limit."},
+            "voice": {"local_state": "Der Zustand ist {state}."},
+        },
+    )
+    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+        "Schlüssel 'k1' am Limit."
+    )
+    assert helpers.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
+
+
+def test_unparseable_panel_translation_keeps_the_english(tmp_path, monkeypatch) -> None:
+    """A stray brace drops that one string instead of failing the whole catalog."""
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        en={"panel": {"greet": "Hello {name}", "other": "Other"}},
+        de={"panel": {"greet": "Hallo {name", "other": "Andere"}},
+    )
+    assert helpers.panel_catalog("de-DE") == {"greet": "Hello {name}", "other": "Andere"}
+
+
 def test_only_the_panel_section_is_served() -> None:
     """notification and voice are backend-rendered and never reach the browser."""
     catalog = helpers.panel_catalog("en")
