@@ -23,7 +23,6 @@
       "cardPersona": "Persona",
       "cardPresets": "Forudindstillinger",
       "cardRateLimiting": "Hastighedsbegrænsning",
-      "cardToolAnnouncement": "Værktøjsannoncering",
       "clearAll": "Ryd alle",
       "clearPermsBody": "Dette fjerner alle tildelinger for domæner, enheder og entiteter. Adgangsnøglen har ingen entitetsadgang, før du tilføjer nye tilladelser.",
       "clearPermsFailed": "Kunne ikke rydde tilladelser.",
@@ -57,7 +56,6 @@
       "diffPermissionTree": "Tilladelsestræ: {count} node(r) forskellige",
       "diffRateLimit": "Hastighedsgrænse: {fromRequests}/min spidsbelastning {fromBurst} -> {toRequests}/min spidsbelastning {toBurst}",
       "done": "Færdig",
-      "editAria": "Redigér adgangsnøgle {name}",
       "empty": "Ingen adgangsnøgler endnu. Opret en for at komme i gang.",
       "emptyFiltered": "Ingen adgangsnøgler matcher filteret.",
       "enablePtBody": "<strong>Pass-through giver denne adgangsnøgle bred adgang til entiteter og tjenester.</strong> Konfigurationsændringer, systemhandlinger, højrisikofunktioner, adgang til systemloggen, MESA-regler, bloklisten i Phoenix MCP og fjernelse af følsomme attributter gælder stadig.",
@@ -80,8 +78,6 @@
       "hideArchived": "Skjul arkiverede",
       "hoursAgo": "{h} t siden",
       "inlineWaitAria": "Varighed af ventetid for indbygget godkendelse",
-      "inlineWaitDisabled": "Fra er standard: kaldet returnerer, så snart godkendelsen er sat i kø.",
-      "inlineWaitHelp": "Hvor længe et kald fra en ekstern MCP-klient, der kræver bekræftelse, venter på din beslutning, før det returnerer et afventende svar. Agent Chat, stemme og AI-opgaver ignorerer dette: de sætter altid i kø med det samme og venter på deres egen måde.",
       "inlineWaitLabel": "Ventetid for indbygget godkendelse",
       "inlineWaitOff": "Fra (godkendelser sættes straks i kø)",
       "justNow": "lige nu",
@@ -139,19 +135,16 @@
       "presetSwitchTo": "Skift til",
       "ptConvertBody": "Skift til afgrænset tilstand anvender det gemte tilladelsestræ med det samme. Hvis det ikke indeholder nogen tildelinger, mister denne adgangsnøgle adgangen til entiteter, indtil du tilføjer dem.",
       "ptConvertFailed": "Kunne ikke konvertere adgangsnøglen.",
-      "ptHeaderBanner": "<strong>Dette er en pass-through-adgangsnøgle.</strong> Den har bred adgang til Home Assistant-entiteter og -tjenester. Beskyttede funktioner, MESA-regler, fjernelse af følsomme attributter og Phoenix MCP-domæneblokeringen forbliver aktive.",
       "ptNoticeCaps": "Pass-through tillader læsning og hverdagslige handlinger automatisk. Konfigurationsændringer, systemhandlinger, højrisikofunktioner og adgang til systemloggen bruger stadig indstillingerne for funktioner. Bekræft kræver altid godkendelse.",
       "ptNoticeIntro": "<strong>Pass-through-adgangsnøgle.</strong> Denne adgangsnøgle omgår tilladelsestræet og har bred adgang til Home Assistant-entiteter og -tjenester. Følsomme attributter fjernes, beskyttede funktioner gælder stadig, og Phoenix MCP-domænet forbliver blokeret.",
       "ptNoticeUsage": "Pass-through kan sende oplysninger om hver enkelt entitet til modellen, hvilket øger modelforbruget. Et afgrænset tilladelsestræ holder konteksten mindre.",
       "rateBurstLabel": "Spidsbelastning pr. sekund",
-      "rateLimitingDisabled": "Hastighedsbegrænsning er deaktiveret for denne adgangsnøgle.",
       "rateRequestsLabel": "Anmodninger pr. minut (0 = deaktiveret)",
       "rateSaveFailed": "Kunne ikke gemme.",
       "rateValuesError": "Værdierne skal være ikke-negative heltal.",
       "rawAccessKeyNote": "<strong>Denne adgangsnøgle vises ikke igen.</strong> Kopiér den nu, før du lukker.",
       "reconnectBanner": "<strong>Genopret forbindelsen til din agent.</strong> Denne adgangsnøgles tilgængelige værktøjer er ændret.",
       "reconnectDismiss": "Afvis påmindelse om genopretning",
-      "refreshAria": "Opdatér adgangsnøgler",
       "renameFailed": "Kunne ikke omdøbe.",
       "revoke": "Tilbagekald",
       "revokeAccessKeyTitle": "Tilbagekald adgangsnøgle",
@@ -175,17 +168,15 @@
       "statusExpired": "Udløbet",
       "statusRevoked": "Tilbagekaldt",
       "switchToScoped": "Skift til afgrænset tilstand",
-      "switching": "Skifter...",
       "updateFailed": "Kunne ikke opdatere adgangsnøglen.",
       "waitBeforeClose": "Vent 3 sekunder, før du lukker",
-      "cardNotes": "Noter",
-      "notesCaution": "Noter er kun vejledende: De giver aldrig adgang, ændrer ikke funktioner og omgår ikke godkendelser, og en model kan ignorere dem. Tilsluttede klienter og deres modeludbydere modtager dem, og alle, der kan tale med en agent, som bruger denne adgangsnøgle, kan få den til at gentage dem. Skriv ikke adgangskoder eller andre hemmeligheder her.",
       "notesCount": "{count} / {max} tegn",
       "notesDiscard": "Kassér ændringer",
-      "notesHelp": "Vejledning til alle agenter, der bruger denne adgangsnøgle, fx hvad rum og enheder hedder, hvem der bruger den, eller hvor husstandens dokumentation ligger. Phoenix MCP tilføjer noterne til hver agents instruktioner og skjuler entitets-id'er uden for denne adgangsnøgles omfang.",
       "notesLabel": "Noter til agenter",
       "notesPlaceholder": "Eksempel: Gæsteværelset kaldes hobbyrummet. Spørg, før der ændres noget i børneværelset.",
-      "notesTooLong": "Noter må højst indeholde {max} tegn."
+      "notesTooLong": "Noter må højst indeholde {max} tegn.",
+      "cardGuidance": "Vejledning",
+      "cardAgentBehavior": "Agentadfærd"
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} skal være en streng med et adgangsnøgle-ID eller null.",
@@ -1752,9 +1743,6 @@
       "permForDevice": "Tilladelse for enheden {name}",
       "permForDomain": "Tilladelse for domænet {name}",
       "permSaveFailed": "Kunne ikke gemme tilladelse.",
-      "reload": "Genindlæs",
-      "reloadAria": "Genindlæs entiteter",
-      "reloadTitle": "Genindlæs entiteter fra Home Assistant",
       "riskDomainTitle": "Højrisikodomæne. Hvis du giver WRITE her, får du adgang til brede systemhandlinger.",
       "saveFailedShort": "Kunne ikke gemme",
       "selGreen": "Write: Læs og skriv",
@@ -1763,9 +1751,7 @@
       "selSelected": "{title}, valgt",
       "selYellow": "Read: Skrivebeskyttet",
       "simulateEntityTitle": "Simulér tilladelser for {id}",
-      "simulateTitle": "Simulér {type}-tilladelser for {id}",
       "stateDeny": "NÆGT",
-      "stateInherit": "NEDARV",
       "stateNoAccess": "INGEN ADGANG",
       "stateNotFound": "IKKE FUNDET",
       "stateRead": "LÆS",
@@ -1783,7 +1769,11 @@
       "unmatchedDevicesNote": "Disse eksplicitte tildelinger henviser til enheds-ID'er, der ikke findes i det aktuelle entitetstræ. Angiv N for at fjerne en forældet tildeling.",
       "unmatchedDevicesTitle": "Ikke matchede enhedstilladelser",
       "hintCaution": "Sendes til agenter og deres modeludbydere. Medtag aldrig adgangskoder eller koder.",
-      "removeHint": "Fjern vink"
+      "removeHint": "Fjern vink",
+      "levelInherit": "Nedarv",
+      "levelRead": "Læs",
+      "levelWrite": "Skriv",
+      "levelDeny": "Nægt"
     },
     "personas": {
       "automation_builder": {
@@ -1802,7 +1792,6 @@
         "description": "Læser ESPHome-enhedsstatus, diagnostik, logfiler og enheds-YAML og validerer og kompilerer den. Flashing af firmware kræver godkendelse. YAML-legitimationsoplysninger forbliver skjulte. Ingen enhedsstyring eller anden konfiguration.",
         "label": "ESPHome-enheder"
       },
-      "helper": "En persona fastlægger de oprindelige funktioner. Du kan justere enkelte funktioner under Avanceret. Personaen skifter til Brugerdefineret, når dine indstillinger ikke længere matcher en forudindstilling.",
       "home_admin": {
         "description": "Kan læse og administrere hele hjemmet. Genstarter, fysisk styring og følsomme konfigurationsændringer kræver godkendelse.",
         "label": "Hjemmeadministrator"
@@ -1895,7 +1884,7 @@
       "selectArea": "-- Vælg område --",
       "selectIntegration": "-- Vælg integration --",
       "selectLabel": "-- Vælg label --",
-      "menu": "Vælg efter",
+      "menu": "Filter",
       "reset": "Nulstil"
     },
     "settings": {
@@ -2410,14 +2399,16 @@
       "myEmpty": "Mit arbejdsområde er tomt. Tilføj et vindue med Tilføj til Mit arbejdsområde i dets vinduesmenu, eller Agent Chat fra dens egen menu.",
       "myEmptyPhone": "Mit arbejdsområde har ingen vinduer på denne telefon.",
       "myWorkspace": "Mit arbejdsområde",
-      "removeFromMy": "Fjern fra Mit arbejdsområde",
       "removedFromMy": "{window} fjernet fra Mit arbejdsområde",
       "safety": "Sikkerhed",
       "resetWorkspaceHint": "Flytter vinduerne i dette arbejdsområde tilbage dertil, hvor Phoenix placerer dem. Andre arbejdsområder og Min standard forbliver uændrede.",
       "resetAllHint": "Nulstiller alle arbejdsområder, værktøjslinjen, hjælpelinjen og guiden. Min standard og Phoenix-indstillingerne forbliver uændrede.",
       "toolbarOptions": "Indstillinger for værktøjslinjen",
       "vertical": "Lodret",
-      "horizontal": "Vandret"
+      "horizontal": "Vandret",
+      "alwaysLabels": "Vis altid ikoner og tekst",
+      "verticalScrolling": "Lodret rulning",
+      "resetMyHint": "Fjerner alle vinduer fra Mit arbejdsområde. Andre arbejdsområder og Min standard forbliver uændrede."
     },
     "notifications": {
       "title": "Notifikationer",
@@ -2459,7 +2450,10 @@
       "settingsVoiceDisable": "Når du slår stemmeagenten fra, fjernes også den assistent, som Phoenix MCP har oprettet i Home Assistant.",
       "settingsVoiceRemoveAssistant": "Når du slår dette fra, fjernes den assistent, som Phoenix MCP har oprettet i Home Assistant. Stemmeagenten forbliver aktiveret.",
       "wsMy": "Dit eget arbejdsområde: vinduer, du har tilføjet fra de andre arbejdsområder, og Agent Chat, hvis du har fastgjort den her.",
-      "toolbarOptions": "Vælg, hvordan værktøjslinjens knapper vises, fastgør den til en kant eller gør den flydende, stil den lodret eller vandret, eller fold den sammen."
+      "toolbarOptions": "Vælg, hvordan værktøjslinjens knapper vises, fastgør den til en kant eller gør den flydende, stil den lodret eller vandret, eller fold den sammen.",
+      "persona": "En persona fastlægger de første funktioner. Ret enkelte funktioner i vinduet Funktioner; personaen skifter til Brugerdefineret, når indstillingerne ikke længere matcher en persona.",
+      "guidance": "Vejledning til alle agenter, der bruger denne adgangsnøgle, fx hvad rum og enheder hedder, hvem der bruger den, eller hvor husstandens dokumentation ligger. Phoenix MCP tilføjer den til hver agents instruktioner og skjuler entitets-id'er uden for denne adgangsnøgles omfang. Den er kun vejledende: Den giver aldrig adgang, ændrer ikke funktioner og omgår ikke godkendelser, og en model kan ignorere den. Agenter og deres modeludbydere modtager dette, og alle, der taler med en agent, kan få det gentaget. Skriv aldrig adgangskoder eller andre hemmeligheder her.",
+      "inlineWait": "Hvor længe et kald fra en ekstern MCP-klient, der kræver bekræftelse, venter på din beslutning, før det returnerer et afventende svar. Fra, som er standard, returnerer, så snart godkendelsen er sat i kø. Agent Chat, stemme og AI-opgaver ignorerer dette: de sætter altid i kø med det samme og venter på deres egen måde."
     },
     "guide": {
       "title": "Guide",

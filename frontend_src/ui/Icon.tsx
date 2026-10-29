@@ -3,12 +3,12 @@
 import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  Archive, ArrowDownLeft, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
+  Archive, ArrowDownLeft, ArrowLeftRight, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
-  Download, Ellipsis, Eye, FileDiff, FileText, FunnelX, FilePenLine, GitBranch, GripHorizontal, GripVertical, History, Info, KeyRound, KeySquare,
+  Download, Ellipsis, Eraser, Eye, FileDiff, FileText, FunnelX, FilePenLine, GitBranch, GripHorizontal, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, Save, ScrollText, Search, SearchCheck,
-  Settings, Shield, SlidersHorizontal, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, SquareDashedMousePointer, Square, Star, Trash2, TriangleAlert, Upload,
+  Settings, Shield, SlidersHorizontal, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X,
 } from "lucide-react";
 
@@ -80,9 +80,9 @@ const ICONS = {
   previous: ChevronUp,
   next: ChevronDown,
   keyActions: KeySquare,
-  selectBy: SquareDashedMousePointer,
   clearList: ListX,
   back: ArrowLeft,
+  forward: ArrowRight,
   chatMenu: Menu,
   send: ArrowUp,
   stop: Square,
@@ -113,6 +113,8 @@ const ICONS = {
   before: StepBack,
   after: StepForward,
   lineView: FileText,
+  switchPreset: ArrowLeftRight,
+  clearPermissions: Eraser,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -7,9 +7,10 @@
  * one window taller pushes the windows below it down instead of squeezing a
  * neighbour. Width never scrolls.
  *
- * A fitted workspace (Logs) never scrolls: its windows always share the
- * visible height, a border dragged between two windows trades height between
- * them, and windows too tall for the screen are shrunk to fit.
+ * A fitted workspace (Logs, and My Workspace until set to scroll) never
+ * scrolls: its windows always share the visible height, a border dragged
+ * between two windows trades height between them, and windows too tall for
+ * the screen are shrunk to fit.
  */
 
 import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
@@ -53,6 +54,37 @@ export function leafOrder(root: unknown): string[] {
   return out;
 }
 
+/** A row of side-by-side windows: the first window of each part, and each part's share of the row's width. */
+export interface RowShares { members: string[]; shares: number[] }
+
+/** Give each row's parts their shares of the row's width again. */
+export function applyShares(api: DockviewApi, rows: readonly RowShares[]): void {
+  for (const row of rows) {
+    const groups = row.members.map((id) => api.getPanel(id)?.group);
+    if (groups.some((g) => !g || !isGrid(g) || !g.api.isVisible)) continue;
+    const total = groups.reduce((sum, g) => sum + g!.width, 0);
+    if (total <= 0) continue;
+    // Each width set takes its difference from the windows after it, so left to right leaves the earlier ones alone.
+    groups.slice(0, -1).forEach((g, i) => g!.api.setSize({ width: Math.round(row.shares[i] * total) }));
+  }
+}
+
+/** Every row of side-by-side windows in a layout. */
+export function sideBySide(grid: { root: unknown; orientation: string }): RowShares[] {
+  const out: RowShares[] = [];
+  const walk = (node: GridNode, stacks: boolean): void => {
+    const children = childrenOf(node);
+    if (!stacks && children.length > 1) {
+      const total = children.reduce((sum, c) => sum + (c.size || 0), 0);
+      const members = children.map((c) => leafOrder(c)[0]);
+      if (total > 0 && members.every(Boolean)) out.push({ members: members as string[], shares: children.map((c) => (c.size || 0) / total) });
+    }
+    for (const child of children) walk(child, !stacks);
+  };
+  walk(grid.root as GridNode, grid.orientation === "VERTICAL");
+  return out;
+}
+
 /** Height a grid node needs: stacked children add up, side-by-side children take the tallest. */
 export function requiredHeight(root: unknown, rootStacks: boolean, heightOf: (id: string) => number): number {
   const walk = (node: GridNode, stacks: boolean): number => {
@@ -90,10 +122,32 @@ export class WorkspaceCanvas {
      */
     private readonly maxHeight?: () => number,
     /** The windows always fit the visible height; the canvas never scrolls. */
-    readonly fit = false,
+    fit = false,
   ) {
+    this.fit = fit;
+    this.setFit(fit);
+  }
+
+  /** The windows always fit the visible height; the canvas never scrolls. */
+  fit: boolean;
+
+  /** Fit the windows to the visible height, or let the canvas grow and scroll; applies at the next layout. */
+  setFit(fit: boolean): void {
+    this.fit = fit;
     // Never a scrollbar, not even while an arrangement is being built: one would leave the windows narrower once it goes.
-    if (fit) host.classList.add("phx-fits");
+    this.host.classList.toggle("phx-fits", fit);
+  }
+
+  /** Whether a window is folded down to its title bar. */
+  isCollapsed(id: string): boolean { return this.collapsed(id); }
+
+  /** Windows hidden in place (Access Keys hides a key's windows while none is chosen): they take no height and keep their intended one. */
+  hidden: (id: string) => boolean = () => false;
+
+  /** The height a window takes in the layout: its title bar when folded, none when hidden. */
+  private heightOf(id: string): number {
+    if (this.hidden(id)) return 0;
+    return this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT;
   }
 
   /** The edge whose band last grew or shrank; the window nearest it takes the space left. */
@@ -112,19 +166,43 @@ export class WorkspaceCanvas {
     this.host.classList.toggle("phx-scrolls", this.height > 0);
     const element = this.host.firstElementChild as HTMLElement | null;
     const width = element?.clientWidth || this.api.width;
-    if (visible > 0 && width > 0) this.api.layout(width, this.height || visible, true);
+    if (visible > 0 && width > 0) this.layout(width, this.height || visible);
+  }
+
+  /**
+   * Lay Dockview out at this size. When the width changes, as when a scrollbar
+   * comes or goes, windows side by side keep their shares of it; Dockview
+   * alone would take the whole change from one of them.
+   */
+  private layout(width: number, height: number): void {
+    const resized = Math.abs(width - this.api.width) >= 1 && this.api.width > 0;
+    const rows = resized ? sideBySide(this.api.toJSON().grid) : [];
+    this.api.layout(width, height, true);
+    applyShares(this.api, rows);
+  }
+
+  /**
+   * Keep the workspace scrollable as far as it is now until the returned
+   * function is called. While a border is dragged up near the bottom, the
+   * browser would otherwise scroll back as the canvas shrinks, and the border
+   * would slide away from the pointer; held, the space below stays empty
+   * until the drag ends.
+   */
+  holdScrollHeight(): () => void {
+    this.host.style.setProperty("--phx-canvas-hold", `${this.host.scrollHeight}px`);
+    return () => this.host.style.removeProperty("--phx-canvas-hold");
   }
 
   /** Lay the windows out again when the canvas's width changed without a resize, as when a scrollbar comes and goes. */
   fitWidth(): void {
     const width = (this.host.firstElementChild as HTMLElement | null)?.clientWidth ?? 0;
-    if (width > 0 && this.visibleHeight() > 0 && Math.abs(width - this.api.width) >= 1) this.api.layout(width, this.api.height, true);
+    if (width > 0 && this.visibleHeight() > 0 && Math.abs(width - this.api.width) >= 1) this.layout(width, this.api.height);
   }
 
   /** Record the current height of every docked window that has no intended height yet; call it while the layout is settled. */
   capture(): void {
     for (const [id, h] of Object.entries(gridHeights(this.api))) {
-      if (this.intended[id] === undefined && !this.collapsed(id)) this.intended[id] = h;
+      if (this.intended[id] === undefined && !this.collapsed(id) && !this.hidden(id)) this.intended[id] = h;
     }
   }
 
@@ -142,7 +220,7 @@ export class WorkspaceCanvas {
     }
     const grid = api.toJSON().grid;
     const rootStacks = grid.orientation === "VERTICAL";
-    const heightOf = (id: string): number => (this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT);
+    const heightOf = (id: string): number => this.heightOf(id);
     if (this.fit && !this.maxHeight && api.panels.length) this.shrinkToFit(grid.root, rootStacks, new Set(Object.keys(targets)));
     const required = api.panels.length ? requiredHeight(grid.root, rootStacks, heightOf) : 0;
     if (this.maxHeight) {
@@ -159,13 +237,19 @@ export class WorkspaceCanvas {
     this.setCanvas(this.maxHeight ? Math.max(required, DOCKVIEW_MIN_GRID) : required);
 
     this.lastVisible = this.visibleHeight();
-    const fixed = (node: GridNode): boolean => (node.type === "leaf" ? this.collapsed(leafId(node) ?? "") : childrenOf(node).every(fixed));
+    const fixed = (node: GridNode): boolean => {
+      if (node.type !== "leaf") return childrenOf(node).every(fixed);
+      const id = leafId(node) ?? "";
+      return this.collapsed(id) || this.hidden(id);
+    };
     // Only windows with an intended height are sized; the others keep the share Dockview gave them.
     const sized = (node: GridNode): boolean => (node.type === "leaf"
       ? this.intended[leafId(node) ?? ""] !== undefined
       : childrenOf(node).every((c) => fixed(c) || sized(c)));
     const needs = (node: GridNode, stacks: boolean): number => requiredHeight(node, stacks, heightOf);
     // A stacked child's height is set through a window: the child itself, or a window directly in its row.
+    // Side-by-side columns with no window of their own directly in the row have none.
+    const settable = (node: GridNode): boolean => node.type === "leaf" || childrenOf(node).some((c) => c.type === "leaf" && !fixed(c));
     const setHeight = (node: GridNode, height: number): void => {
       const leaf = node.type === "leaf" ? node : childrenOf(node).find((c) => c.type === "leaf" && !fixed(c));
       const id = leaf && leafId(leaf);
@@ -181,7 +265,10 @@ export class WorkspaceCanvas {
         // so space a closed Help frees goes to its neighbour; a fitted workspace skips the window just sized.
         const untargeted = flexible.filter((c) => !leafOrder(c).some((id) => id in targets));
         const pool = this.fit && untargeted.length ? untargeted : flexible;
-        const absorber = this.growEdge === "top" ? pool[0] : pool[pool.length - 1];
+        // A child that cannot be sized takes the space left, or Dockview shares it out and a dragged border lags the pointer.
+        const unsized = flexible.filter((c) => !settable(c));
+        const takers = unsized.length ? unsized : pool;
+        const absorber = this.growEdge === "top" ? takers[0] : takers[takers.length - 1];
         for (const child of children) if (child !== absorber && !fixed(child) && sized(child)) setHeight(child, needs(child, false));
       }
       for (const child of children) walk(child, !stacks);
@@ -205,6 +292,7 @@ export class WorkspaceCanvas {
     const mine = new Set(leafOrder(root));
     const base = Object.fromEntries(Object.entries(this.intended).filter(([id]) => mine.has(id)));
     const scaled = (f: number, all: boolean) => (id: string): number => {
+      if (this.hidden(id)) return 0;
       if (this.collapsed(id)) return TITLE_BAR_HEIGHT;
       const h = base[id] ?? MIN_WINDOW_HEIGHT;
       return all || !keep.has(id) ? Math.max(MIN_WINDOW_HEIGHT, Math.floor(h * f)) : h;
@@ -259,7 +347,7 @@ export class WorkspaceCanvas {
   adopt(): string[] {
     const changed: string[] = [];
     for (const [id, h] of Object.entries(gridHeights(this.api))) {
-      if (this.collapsed(id)) continue;
+      if (this.collapsed(id) || this.hidden(id)) continue;
       if (Math.abs((this.intended[id] ?? 0) - h) > 1) changed.push(id);
       this.intended[id] = h;
     }
@@ -289,8 +377,7 @@ export class WorkspaceCanvas {
       return;
     }
     const grid = this.api.toJSON().grid;
-    const heightOf = (id: string): number => (this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT);
-    const required = requiredHeight(grid.root, grid.orientation === "VERTICAL", heightOf);
+    const required = requiredHeight(grid.root, grid.orientation === "VERTICAL", (id) => this.heightOf(id));
     if (this.height === 0 && this.lastVisible > 0 && required > visible && required <= this.lastVisible + 1) {
       const scale = visible / required;
       for (const id of Object.keys(this.intended)) {
@@ -301,6 +388,8 @@ export class WorkspaceCanvas {
   }
 }
 
+/** How far a border or the bottom handle must be dragged down before holding it below the visible area scrolls. */
+const ARM_DISTANCE = 8;
 /** Distance from the visible edge at which a drag starts scrolling, and the fastest scroll per frame. */
 const EDGE_ZONE = 32;
 const EDGE_STEP = 18;
@@ -364,12 +453,16 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
     const ids = above.map((g) => g.activePanel!.id);
     const minDelta = Math.max(...ids.map((id) => MIN_WINDOW_HEIGHT - start[id]));
     const startY = e.clientY;
-    const startScroll = host.scrollTop;
+    // Only the scrolling this drag does counts, in case the browser also scrolls back when the workspace gets shorter.
+    let scrolled = 0;
     let lastY = e.clientY;
     let frame = 0;
+    // A border pressed near the bottom of the visible area grows the workspace only once it is dragged down.
+    let armed = false;
+    const release = canvas.holdScrollHeight();
     host.classList.add("phx-resizing");
     const apply = () => {
-      const delta = Math.max(minDelta, lastY - startY + host.scrollTop - startScroll);
+      const delta = Math.max(minDelta, lastY - startY + scrolled);
       canvas.intended = { ...startIntended };
       const targets: Heights = {};
       for (const id of ids) targets[id] = start[id] + delta;
@@ -378,16 +471,30 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
     const tick = () => {
       const r = host.getBoundingClientRect();
       const step = edgeScrollStep(lastY, r.top, r.bottom);
-      if (step) {
+      if (step > 0 && armed) {
+        // Scrolling down always moves the border: the canvas grows first to make room.
+        scrolled += step;
+        apply();
+        host.scrollTop += step;
+      } else if (step < 0) {
+        // Up only as far as the page really went.
         const before = host.scrollTop;
         host.scrollTop += step;
-        if (host.scrollTop !== before || step > 0) apply();
+        if (host.scrollTop !== before) {
+          scrolled += host.scrollTop - before;
+          apply();
+        }
       }
       frame = requestAnimationFrame(tick);
     };
-    const move = (ev: PointerEvent) => { lastY = ev.clientY; apply(); };
+    const move = (ev: PointerEvent) => {
+      lastY = ev.clientY;
+      if (lastY > startY + ARM_DISTANCE) armed = true;
+      apply();
+    };
     const end = () => {
       cancelAnimationFrame(frame);
+      release();
       host.classList.remove("phx-resizing");
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", end, true);
@@ -442,6 +549,81 @@ export function scrollWhileDragging(api: DockviewApi, host: HTMLElement): () => 
   const a = api.onWillDragGroup(begin);
   const b = api.onWillDragPanel(begin);
   return () => { a.dispose(); b.dispose(); stop(); };
+}
+
+/**
+ * The handle along the bottom of a scrolling grid: dragging it makes the
+ * windows along the bottom taller or shorter, and the workspace grows or
+ * shrinks with them, so the last row can be stretched as any other. Held
+ * below the visible area the workspace scrolls and keeps growing; the handle
+ * itself sits at the bottom of that area once scrolled down, so the scrolling
+ * starts only after the pointer has moved down. A fitted workspace hides the
+ * handle (CSS) and ignores it.
+ */
+export function bottomEdgeResizing(api: DockviewApi, canvas: WorkspaceCanvas, edge: HTMLElement, onEnd: () => void, onResized?: (ids: string[]) => void): () => void {
+  const host = canvas.host;
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0 || canvas.fit || api.hasMaximizedGroup()) return;
+    const docked = api.groups.filter((g) => isGrid(g) && g.activePanel).map((g) => ({ id: g.activePanel!.id, rect: g.element.getBoundingClientRect() }));
+    if (!docked.length) return;
+    const bottom = Math.max(...docked.map((d) => d.rect.bottom));
+    const ids = docked.filter((d) => bottom - d.rect.bottom <= 6 && !canvas.isCollapsed(d.id)).map((d) => d.id);
+    if (!ids.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    canvas.capture();
+    const start = gridHeights(api);
+    const startIntended = { ...canvas.intended };
+    const minDelta = Math.max(...ids.map((id) => MIN_WINDOW_HEIGHT - start[id]));
+    const startY = e.clientY;
+    // Only the scrolling this drag does counts, in case the browser also scrolls back when the workspace gets shorter.
+    let scrolled = 0;
+    let lastY = e.clientY;
+    let frame = 0;
+    let armed = false;
+    const release = canvas.holdScrollHeight();
+    host.classList.add("phx-resizing");
+    edge.classList.add("is-dragging");
+    const apply = () => {
+      const delta = Math.max(minDelta, lastY - startY + scrolled);
+      canvas.intended = { ...startIntended };
+      const targets: Heights = {};
+      for (const id of ids) targets[id] = start[id] + delta;
+      canvas.apply(targets);
+    };
+    const tick = () => {
+      const r = host.getBoundingClientRect();
+      const step = edgeScrollStep(lastY, r.top, r.bottom);
+      if (armed && step > 0) {
+        scrolled += step;
+        apply();
+        host.scrollTop += step;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    const move = (ev: PointerEvent) => {
+      lastY = ev.clientY;
+      if (lastY > startY + ARM_DISTANCE) armed = true;
+      apply();
+    };
+    const end = () => {
+      cancelAnimationFrame(frame);
+      release();
+      host.classList.remove("phx-resizing");
+      edge.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      onResized?.(ids);
+      onEnd();
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+    frame = requestAnimationFrame(tick);
+  };
+  edge.addEventListener("pointerdown", onPointerDown);
+  return () => edge.removeEventListener("pointerdown", onPointerDown);
 }
 
 /**

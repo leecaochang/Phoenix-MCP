@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import type { AccessKeyRecord } from "../types";
-import { BusyButton } from "./BusyButton";
+import { ActionButton } from "../ui/ActionButton";
 
 // Mirrors ACCESS_KEY_NOTES_MAX_LENGTH in const.py. The server counts code
 // points, so the counter does too (an emoji is one character, not two).
@@ -52,11 +52,12 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
   return (
     <div className="access-key-notes">
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <p className="access-key-notes-help">{t("accessKeys.notesHelp")}</p>
-      <p className="access-key-notes-help">{t("accessKeys.notesCaution")}</p>
+      {/* What Guidance is for, and who can read it, is in Help (user, 2026-10-28). */}
       <textarea
         className={`input access-key-notes-input${tooLong ? " error" : ""}`}
         aria-label={t("accessKeys.notesLabel")}
+        aria-description={t("help.guidance")}
+        data-help="help.guidance"
         aria-invalid={tooLong || undefined}
         placeholder={t("accessKeys.notesPlaceholder")}
         rows={6}
@@ -72,12 +73,9 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
         </span>
         {dirty && (
           <span className="access-key-notes-actions">
-            <BusyButton type="button" className="btn btn-text btn-sm" busy={saving} onClick={() => setDraft(saved)}>
-              {t("accessKeys.notesDiscard")}
-            </BusyButton>
-            <BusyButton type="button" className="btn btn-primary btn-sm" busy={saving} disabled={tooLong} onClick={() => void save()}>
-              {saving ? t("common.saving") : t("common.save")}
-            </BusyButton>
+            <ActionButton icon="undo" label={t("accessKeys.notesDiscard")} className="btn btn-text btn-sm" busy={saving} onClick={() => setDraft(saved)} />
+            <ActionButton icon="save" label={saving ? t("common.saving") : t("common.save")} className="btn btn-primary btn-sm" busy={saving}
+              disabled={tooLong} onClick={() => void save()} />
           </span>
         )}
       </div>

@@ -215,12 +215,9 @@ function RestoreConfirmation({ c }: { c: ChangesState }) {
   const record = c.record!;
   const side = t(c.confirm!.side === "before" ? "common.before" : "common.after");
   return (
-    <InlineConfirm label={t("changes.restore")} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
+    <InlineConfirm label={t("changes.restore")} title={t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
       cancelLabel={t("changes.cancelRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
-      <p>
-        <strong>{t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })}</strong>{" "}
-        <span>{t("changes.restoreReplaces")}</span>
-      </p>
+      <p>{t("changes.restoreReplaces")}</p>
     </InlineConfirm>
   );
 }

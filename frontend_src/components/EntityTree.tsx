@@ -3,12 +3,14 @@ import React, { createContext, useState, useCallback, useContext, useEffect, use
 import type { EntityTree, DomainTree, IntegrationPermissionOption, PermissionTree, NodeState } from "../types";
 import { PermissionSelector } from "./PermissionSelector";
 import { MesaProfileLink, type LinkScope } from "./MesaProfileLink";
-import { api } from "../api";
+import { api, currentHass } from "../api";
 import { HIGH_RISK_DOMAINS, PERMISSION_LABEL_KEYS } from "../utils";
 import { compareStrings, t, tn } from "../i18n";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
+import { useWindowVisible } from "../shell/visibility";
+import { useClickAway } from "../ui/useClickAway";
 
 const INDIRECT_CONTROL_DOMAINS = new Set([
   "automation", "script", "scene",
@@ -222,18 +224,27 @@ interface HintEditorProps {
   onSaved: (tree: PermissionTree) => void;
   onGlobalHintsChange: (hints: Record<string, string>) => void;
   onClose: () => void;
+  /** A click elsewhere closed it: focus stays where the click put it. */
+  onDismiss: () => void;
+  /** The entity's Hint button, which opens and closes the editor itself. */
+  opener: React.RefObject<HTMLButtonElement | null>;
 }
 
-/** The hint editor, opened under its entity's row without covering the rest of the panel. */
-function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange, onClose }: HintEditorProps) {
+/**
+ * The hint editor, opened under its entity's row without covering the rest of
+ * the panel. Cancel, Escape or a click anywhere else closes it unsaved (user, 2026-10-28).
+ */
+function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange, onClose, onDismiss, opener }: HintEditorProps) {
   const [allAccessKeys, setAllAccessKeys] = useState(true);
   const [value, setValue] = useState(globalHint ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const titleId = useId();
-  const cautionId = useId();
+  const root = useRef<HTMLDivElement | null>(null);
+  useClickAway(root, onDismiss, !saving, opener);
   // The hint saved in the chosen scope, which Remove clears.
   const saved = allAccessKeys ? globalHint : currentHint;
+  const scopeHelp = allAccessKeys ? "perms.hintNoteGlobal" : "perms.hintNoteLocal";
 
   function switchScope(all: boolean) {
     setAllAccessKeys(all);
@@ -266,7 +277,7 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
   }
 
   return (
-    <div className="tree-hint-editor" role="group" aria-labelledby={titleId}
+    <div ref={root} className="tree-hint-editor" role="group" aria-labelledby={titleId}
       onKeyDown={(e) => {
         if (e.key !== "Escape" || saving) return;
         e.preventDefault();
@@ -280,7 +291,8 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
       <input
         className="input"
         aria-label={t("perms.hintAria", { id: entityId })}
-        aria-describedby={cautionId}
+        aria-description={t("perms.hintCaution")}
+        data-help="perms.hintCaution"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={t("perms.hintPlaceholder")}
@@ -288,13 +300,15 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
         onKeyDown={(e) => { if (e.key === "Enter" && !saving) void save(value.trim() || null); }}
         autoFocus
       />
-      <p className="tree-hint-caution" id={cautionId}>{t("perms.hintCaution")}</p>
-      <div className="hint-scope">
+      {/* Who receives a hint, and what each scope means, is in Help (user, 2026-10-28). */}
+      <div className="hint-scope" data-help={scopeHelp}>
         <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisAccessKey")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
             aria-label={t("perms.hintAllAria")}
+            aria-description={t(scopeHelp)}
+            data-help={scopeHelp}
             checked={allAccessKeys}
             busy={saving}
             onChange={(e) => switchScope(e.target.checked)}
@@ -303,11 +317,6 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
         </label>
         <span className={allAccessKeys ? "hint-scope-active" : ""}>{t("perms.hintAllAccessKeys")}</span>
       </div>
-      <p className="hint-scope-note">
-        {allAccessKeys
-          ? t("perms.hintNoteGlobal")
-          : t("perms.hintNoteLocal")}
-      </p>
       {saveError && <p className="tree-hint-error" role="alert">{saveError}</p>}
       <div className="tree-hint-editor-actions">
         <ActionButton icon="save" label={t("common.save")} help="help.hintSave" busy={saving}
@@ -449,6 +458,8 @@ function EntityRow({
         onSaved={onPermChange}
         onGlobalHintsChange={onGlobalHintsChange}
         onClose={() => { hintEditor.setOpenId(null); hintButton.current?.focus(); }}
+        onDismiss={() => hintEditor.setOpenId(null)}
+        opener={hintButton}
       />
     )}
     </>
@@ -1065,7 +1076,7 @@ function SelectByControls({ tree, choice, integrations, integrationsError, onCha
 
   return (
     <>
-      <MenuButton label={t("selectBy.menu")} help="help.selectBy" icon={<Icon name="selectBy" size={16} />} items={items}
+      <MenuButton label={t("selectBy.menu")} help="help.selectBy" icon={<Icon name="filter" size={16} />} items={items}
         pressed={!!choice?.value} className={`btn btn-ghost btn-sm phx-action${iconsOnly ? " is-icon-only" : ""}`}>
         {!iconsOnly && <span>{t("selectBy.menu")}</span>}
       </MenuButton>
@@ -1088,35 +1099,90 @@ function effectiveLabel(effective: string): string {
   return key ? t(key) : effective;
 }
 
+/** Home Assistant's registries whose changes the tree shows: entities, devices, areas and labels. */
+const REGISTRY_EVENTS = ["entity_registry_updated", "device_registry_updated", "area_registry_updated", "label_registry_updated"];
+/** A burst of registry changes, as when an integration is set up, is read once it settles. */
+const REGISTRY_SETTLE_MS = 1000;
+
+type Unsubscribe = () => void;
+type EventConnection = { subscribeEvents?: (cb: () => void, event: string) => Promise<Unsubscribe> };
+
+/**
+ * Call `onChange` once Home Assistant's registries change. Returns a function
+ * that stops; without a connection (outside Home Assistant) it does nothing.
+ */
+function followRegistries(onChange: () => void): Unsubscribe {
+  const conn = (currentHass() as { connection?: EventConnection } | null)?.connection;
+  if (!conn?.subscribeEvents) return () => {};
+  let active = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribers: Unsubscribe[] = [];
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { if (active) onChange(); }, REGISTRY_SETTLE_MS);
+  };
+  for (const event of REGISTRY_EVENTS) {
+    conn.subscribeEvents(later, event)
+      .then((unsubscribe) => { if (active) unsubscribers.push(unsubscribe); else unsubscribe(); })
+      .catch(() => undefined);
+  }
+  return () => {
+    active = false;
+    clearTimeout(timer);
+    for (const unsubscribe of unsubscribers) unsubscribe();
+  };
+}
+
+// The tree and hints last read, so a tree drawn for another access key starts from them
+// instead of a loading state, then reads them again behind what it shows.
+let lastTree: EntityTree | null = null;
+let lastHints: Record<string, string> = {};
+
+/** Keep a tree read elsewhere, so the first tree drawn after a pass-through key needs no loading state either. */
+export function rememberEntityTree(tree: EntityTree): void { lastTree = tree; }
+
 export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEntityClick, collapseKey, domainAllowlist, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa, selectBy = false }: Props) {
-  const [tree, setTree] = useState<EntityTree | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [tree, setTree] = useState<EntityTree | null>(lastTree);
+  const [loading, setLoading] = useState(!lastTree);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const [globalHints, setGlobalHints] = useState<Record<string, string>>({});
+  const [globalHints, setGlobalHints] = useState<Record<string, string>>(lastHints);
   const [hintOpenId, setHintOpenId] = useState<string | null>(null);
   const hintEditor = useMemo(() => ({ openId: hintOpenId, setOpenId: setHintOpenId }), [hintOpenId]);
   const [choice, setChoice] = useState<SelectByChoice | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationPermissionOption[] | null>(null);
   const [integrationsError, setIntegrationsError] = useState<string | null>(null);
 
-  const loadTree = useCallback(async (force = false) => {
-    setLoading(true);
+  // `quiet` reads the tree again behind the one shown, keeping what is expanded and the filters.
+  const loadTree = useCallback(async (force = false, quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
-    // Integration members change with the registry, so a reload reads them again too.
-    if (force) { setIntegrations(null); setIntegrationsError(null); }
+    // Integration members change with the registry, so reading the tree again reads them too.
+    setIntegrations(null);
+    setIntegrationsError(null);
     try {
       const data = await api.getEntityTree(force);
+      lastTree = data;
       setTree(data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("perms.loadTreeFailed"));
+      if (!quiet) setError(e instanceof Error ? e.message : t("perms.loadTreeFailed"));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadTree(); }, [loadTree]);
-  useEffect(() => { api.getEntityHints().then((r) => setGlobalHints(r.entity_hints)).catch(() => undefined); }, []);
+  useEffect(() => { loadTree(false, !!lastTree); }, [loadTree]);
+  // No Reload button (user, 2026-10-28): the tree follows the registries, and is built afresh each
+  // time it comes back into view, which also picks up entities that have no registry entry.
+  useEffect(() => followRegistries(() => void loadTree(false, true)), [loadTree]);
+  const visible = useWindowVisible();
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    if (visible && !wasVisible.current) void loadTree(true, true);
+    wasVisible.current = visible;
+  }, [visible, loadTree]);
+  const changeHints = useCallback((hints: Record<string, string>) => { lastHints = hints; setGlobalHints(hints); }, []);
+  useEffect(() => { api.getEntityHints().then((r) => changeHints(r.entity_hints)).catch(() => undefined); }, [changeHints]);
 
   const allEntityIds = React.useMemo(() => {
     if (!tree) return new Set<string>();
@@ -1200,9 +1266,6 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
           onChange={(e) => setFilter(e.target.value)}
           aria-label={t("perms.filterAria")}
         />
-        <button className="reload-btn" onClick={() => loadTree(true)} title={t("perms.reloadTitle")} aria-label={t("perms.reloadAria")}>
-          {t("perms.reload")}
-        </button>
       </div>
       <div aria-label={t("perms.treeAria")}>
         {domainKeys.map((domain) => (
@@ -1226,7 +1289,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
             mesaProfileDomains={mesaProfileDomains}
             onOpenMesa={onOpenMesa}
             globalHints={globalHints}
-            onGlobalHintsChange={setGlobalHints}
+            onGlobalHintsChange={changeHints}
           />
         ))}
         {visibleUnmatchedDeviceIds.length > 0 && (

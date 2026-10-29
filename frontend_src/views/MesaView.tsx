@@ -5,7 +5,6 @@
  * and import of the whole policy.
  */
 
-import { BusyButton } from "../components/BusyButton";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   EntityTree as EntityTreeData,
@@ -823,7 +822,6 @@ export function ProfileEditor({
     <InlineConfirm label={t(DELETE_CONFIRM[scope])} tone="danger" confirmLabel={t(DELETE_BUTTON[scope])} confirmIcon="delete"
       confirmClassName="btn btn-danger btn-sm" cancelLabel={t("mesa.cancel")} busy={saving}
       onConfirm={() => { void remove(); }} onCancel={() => setConfirmDelete(false)}>
-      <p><strong>{t(DELETE_CONFIRM[scope])}</strong></p>
       <p>{t(DELETE_WARN[scope], { key: target })}</p>
     </InlineConfirm>
   );
@@ -984,28 +982,25 @@ export function ProfileEditor({
 
   return (
     <>
-    <Modal titleId="mesa-editor-title" onClose={attemptClose}>
+    {/* Over the whole workspace, with UI2 buttons; Delete turns red only in its confirmation (user, 2026-10-28). */}
+    <Modal titleId="mesa-editor-title" onClose={attemptClose} overWorkspace>
       <h3 className="modal-title" id="mesa-editor-title">{titleVerb}</h3>
       {body}
       <div className="modal-actions">
         {!isNew && !confirmDelete && (
-          <BusyButton className="btn btn-danger" onClick={() => setConfirmDelete(true)} busy={saving}>
-            {t("mesa.delete")}
-          </BusyButton>
+          <ActionButton icon="delete" label={t("mesa.delete")} className="btn btn-outline btn-sm" onClick={() => setConfirmDelete(true)} busy={saving} />
         )}
-        <BusyButton className="btn btn-ghost" onClick={attemptClose} busy={saving}>{t("mesa.cancel")}</BusyButton>
-        <button className="btn btn-primary" onClick={save} disabled={!canSave}>
-          {saving ? t("mesa.saving") : t("mesa.save")}
-        </button>
+        <ActionButton icon="undo" label={t("mesa.cancel")} className="btn btn-outline btn-sm" onClick={attemptClose} busy={saving} />
+        <ActionButton icon="save" label={saving ? t("mesa.saving") : t("mesa.save")} className="btn btn-primary btn-sm" onClick={() => void save()} disabled={!canSave} />
       </div>
     </Modal>
     {confirmDiscard && (
-      <Modal titleId="mesa-discard-title" onClose={() => setConfirmDiscard(false)}>
+      <Modal titleId="mesa-discard-title" onClose={() => setConfirmDiscard(false)} overWorkspace>
         <h3 className="modal-title" id="mesa-discard-title">{t("mesa.discardTitle")}</h3>
         <p className="modal-body-text">{t("mesa.discardBody")}</p>
         <div className="modal-actions">
-          <button className="btn btn-ghost" onClick={() => setConfirmDiscard(false)}>{t("mesa.keepEditing")}</button>
-          <button className="btn btn-danger" onClick={onClose}>{t("mesa.discardChanges")}</button>
+          <ActionButton icon="undo" label={t("mesa.keepEditing")} className="btn btn-outline btn-sm" onClick={() => setConfirmDiscard(false)} />
+          <ActionButton icon="delete" label={t("mesa.discardChanges")} className="btn btn-danger btn-sm" onClick={onClose} />
         </div>
       </Modal>
     )}

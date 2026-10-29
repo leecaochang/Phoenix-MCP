@@ -110,10 +110,13 @@ describe("ConversationsView", () => {
     await view.findByText("Tool exchange; prompt unavailable", undefined, { timeout: 3000 });
     expect(view.queryByText("Clear Conversation History")).toBeNull();
     const clear = registry.latest("logs", "conversationLog", "clear");
-    expect(clear).toMatchObject({ label: "Clear Conversation History", tone: "danger", disabled: false });
+    expect(clear).toMatchObject({ label: "Clear Conversation History", disabled: false });
+    // Red only once it asks to confirm (user, 2026-10-28).
+    expect(clear!.tone).toBeUndefined();
     act(() => clear!.onSelect!());
     expect(api.clearConversations).not.toHaveBeenCalled();
     const confirm = view.getByRole("group", { name: "Clear Conversation History" });
+    expect(within(confirm).getByRole("button", { name: "Clear Conversation History" })).toHaveClass("btn-danger");
     expect(confirm.compareDocumentPosition(view.container.querySelector(".phx-table")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Icon and text, like every in-window action, and a Cancel beside it.
     const go = within(confirm).getByRole("button", { name: "Clear Conversation History" });

@@ -116,7 +116,6 @@ export function MesaProfilesWindow() {
       {m.exporting && (
         <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("mesa.cancel")}
           busy={m.exporting.busy} error={m.exporting.error} onConfirm={() => { void m.doExport(); }} onCancel={m.cancelExport}>
-          <p><strong>{t("mesa.exportTitle")}</strong></p>
           <p>{tn("mesa.exportBody", m.rows.length)}</p>
           <p>{t("mesa.exportNote")}</p>
         </InlineConfirm>
@@ -170,7 +169,6 @@ export function ProfileEditorWindow() {
   const notice = pending && (
     <InlineConfirm label={t("mesa.discardTitle")} confirmLabel={t("mesa.discardAndOpen")} confirmIcon="check" confirmClassName="btn btn-danger btn-sm"
       cancelLabel={t("mesa.keepEditing")} onConfirm={m.confirmSwitch} onCancel={m.cancelSwitch}>
-      <p><strong>{t("mesa.discardTitle")}</strong></p>
       <p>{t("mesa.discardBody")}</p>
     </InlineConfirm>
   );

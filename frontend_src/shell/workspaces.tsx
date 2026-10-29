@@ -7,7 +7,7 @@ import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncExterna
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { AccessKeyListView } from "../views/AccessKeyList";
+import { AccessKeyListView, ArchivedAccessKeysWindow } from "../views/AccessKeyList";
 import {
   AccessKeyNotices, CapabilitiesWindow, KeySettingsWindow, PermissionSummaryWindow, PermissionsWindow, PersonaWindow, PresetsWindow,
   useAccessKeyDetail, useKeyActionsTool,
@@ -35,10 +35,12 @@ import { LogDetailsContent } from "./logDetails";
 import { TableSettingsContext } from "../ui/table/settings";
 import { NotificationsWindow } from "./notifications";
 import { HELP_WINDOW, HelpWindow } from "./help";
-import { MIN_WINDOW_HEIGHT } from "./dock/fold";
+import { MIN_WINDOW_HEIGHT, TITLE_BAR_HEIGHT } from "./dock/fold";
+import { DisplayModeContext } from "../ui/ActionButton";
 
 export const WINDOW_TITLE_KEYS = {
   accessKeys: "shell.tabAccessKeys",
+  archivedAccessKeys: "accessKeys.archivedTitle",
   persona: "accessKeys.cardPersona",
   capabilities: "accessKeys.cardCapabilities",
   permissions: "accessKeys.permissionsTree",
@@ -75,6 +77,12 @@ export const windowTitle = (id: string): string =>
 /** Shown by the shell when items need checking; never saved in a layout. */
 export const ATTENTION_WINDOW = "attention";
 
+/** The selected access key's windows, hidden in place while no key is chosen (user, 2026-10-28). */
+export const KEY_WINDOWS: readonly WindowId[] = ["persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary"];
+
+/** The revoked and expired keys: closed until Show Archived opens it (user, 2026-10-28). */
+export const ARCHIVED_WINDOW = "archivedAccessKeys";
+
 type Add = (id: string, position?: AddPanelOptions["position"]) => void;
 
 export interface WorkspaceDef {
@@ -100,6 +108,8 @@ export interface WorkspaceDef {
   toolWindows?: readonly WindowId[];
   /** The windows always share the visible height; the workspace never scrolls. */
   fit?: boolean;
+  /** Docked windows are as tall as their content and never scroll inside; the workspace scrolls instead. */
+  contentHeights?: boolean;
   /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
   pairs?: Readonly<Record<string, string>>;
 }
@@ -109,8 +119,9 @@ export interface WorkspaceDef {
  * follows its setting; Orphaned Profiles and Advisory appear only while MESA
  * has findings for them that are not dismissed.
  */
-export function windowAvailable(id: string, settings: GlobalSettings | null, mesa: MesaFindings | null = null): boolean | null {
+export function windowAvailable(id: string, settings: GlobalSettings | null, mesa: MesaFindings | null = null, showArchived = false): boolean | null {
   if (id === "presets") return settings ? !!settings.access_key_presets_enabled : null;
+  if (id === ARCHIVED_WINDOW) return showArchived;
   if (id === "mesaOrphans") return mesa ? mesa.orphans : null;
   if (id === "mesaAdvisory") return mesa ? mesa.advisory : null;
   return true;
@@ -123,23 +134,27 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     labelKey: "shell.tabAccessKeys",
     helpKey: "help.wsAccessKeys",
     icon: "accessKeys",
-    windows: ["accessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
+    windows: ["accessKeys", "archivedAccessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
     // The key list across the top; the selected key's windows below it, editing on the
-    // left and the Permissions tree on the right, at the heights below. Specialized and
-    // informational windows start folded, as accepted for Access Keys.
-    arrange: (api, add) => {
+    // left and the Permissions tree on the right, in two equal columns. Every window is
+    // as tall as its content and none starts folded (user, 2026-10-28): the workspace scrolls.
+    arrange: (_, add) => {
       add("accessKeys");
       add("persona", { direction: "below" });
       add("permissions", { referencePanel: "persona", direction: "right" });
       add("capabilities", { referencePanel: "persona", direction: "below" });
       add("keySettings", { referencePanel: "capabilities", direction: "below" });
       add("permissionSummary", { referencePanel: "permissions", direction: "below" });
-      size(api, "persona", { width: Math.round(api.width * 0.45) });
     },
-    folded: ["keySettings", "presets", "permissionSummary"],
     conditional: { presets: { neighbor: "keySettings", side: "bottom" } },
-    // Comfortable heights; the workspace scrolls when the screen is shorter than they need.
-    heights: { accessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
+    // Archived Access Keys opens under the key list from Show Archived, and closes again with it.
+    closedAt: { archivedAccessKeys: { neighbor: "accessKeys", side: "bottom" } },
+    toolWindows: [ARCHIVED_WINDOW as WindowId],
+    // Heights until the content is measured.
+    heights: { accessKeys: 300, archivedAccessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
+    contentHeights: true,
+    // 2: content heights, equal columns and nothing folded replaced the folded arrangement.
+    layoutVersion: 2,
   },
   approvals: {
     labelKey: "shell.tabApprovals",
@@ -312,31 +327,53 @@ export function myWorkspaceWindows(members: readonly string[]): string[] {
   return [...members.filter((id) => canAddToMy(id) || id === CHAT_WINDOW), ...WORKSPACES.my.windows];
 }
 
-/** My Workspace's default arrangement: its windows one below another in the order they were added, then Help. */
-export function arrangeMy(members: () => readonly string[]): WorkspaceDef["arrange"] {
-  return (api, add) => {
-    members().forEach((id, i) => add(id, i ? { direction: "below" } : undefined));
-    WORKSPACES.my.arrange(api, add);
-  };
-}
+/**
+ * My Workspace's settings for the windows the user added. Its default
+ * arrangement holds only Help: the added windows then take their places in
+ * the order added (see `nextPlace`). It fits its windows to the screen until
+ * the user lets it scroll.
+ */
+export const MY_EXTRAS = { heights: MY_HEIGHTS, conditional: MY_CONDITIONAL, collect: (id: string) => canAddToMy(id) || id === CHAT_WINDOW, scrollable: true };
 
-export const MY_EXTRAS = { heights: MY_HEIGHTS, conditional: MY_CONDITIONAL, collect: (id: string) => canAddToMy(id) || id === CHAT_WINDOW };
+const noSubscribe = () => () => {};
+const noVersion = () => 0;
 
-/** A window's content frame: one error boundary per window, hidden but mounted while folded. */
+/**
+ * A window's content frame: one error boundary per window, hidden but mounted
+ * while folded. A window set to Always Show Icons and Text shows its buttons'
+ * labels whatever the toolbar's display mode.
+ */
 export function WindowBody({ id, children }: { id: string; children: ReactNode }) {
   const controller = useContext(ControllerContext);
   const workspaceVisible = useContext(WorkspaceVisibleContext);
-  useSyncExternalStore(controller?.folds.subscribe ?? (() => () => {}), controller?.folds.getVersion ?? (() => 0));
+  const mode = useContext(DisplayModeContext);
+  useSyncExternalStore(controller?.folds.subscribe ?? noSubscribe, controller?.folds.getVersion ?? noVersion);
+  useSyncExternalStore(controller?.display.subscribe ?? noSubscribe, controller?.display.getVersion ?? noVersion);
   const folded = controller?.folds.isFolded(id) ?? false;
+  const labels = controller?.display.hasLabels(id) ?? false;
   const place = useMemo(() => (controller ? { workspace: controller.id, window: id } : null), [controller, id]);
+  // In a workspace whose windows follow their content, report the height this window's content needs.
+  const body = useRef<HTMLDivElement | null>(null);
+  const followsContent = !!controller?.contentSized;
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!followsContent || !controller || !el || typeof ResizeObserver === "undefined") return undefined;
+    // The title bar and the window's frame come on top of the content.
+    // A folded window, or one in a hidden workspace, measures nothing.
+    const observer = new ResizeObserver(() => { if (el.offsetHeight) controller.contentResized(id, TITLE_BAR_HEIGHT + el.offsetHeight + 2); });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [followsContent, controller, id]);
   return (
     <WindowPlaceContext.Provider value={place}>
     <WindowVisibleContext.Provider value={workspaceVisible && !folded}>
     <TableSettingsContext.Provider value={controller?.tables ?? null}>
-      <div className="phx-window-body" data-phx-window={id} hidden={folded}>
+    <DisplayModeContext.Provider value={labels ? "icon-text" : mode}>
+      <div ref={body} className="phx-window-body" data-phx-window={id} data-labels={labels ? "" : undefined} hidden={folded}>
         <h2 className="sr-only">{windowTitle(id)}</h2>
         <ErrorBoundary>{children}</ErrorBoundary>
       </div>
+    </DisplayModeContext.Provider>
     </TableSettingsContext.Provider>
     </WindowVisibleContext.Provider>
     </WindowPlaceContext.Provider>
@@ -350,6 +387,11 @@ function AccessKeysContent() {
   const keyActions = useKeyActionsTool();
   const controller = useContext(ControllerContext);
   const wizard = view.name === "wizard";
+  // An edit to the selected key (Enable Pass-Through, rename, rotate) shows in the list at once,
+  // not at its next quiet update (user, 2026-10-28).
+  const edited = detail && !detail.stale ? detail.accessKey?.updated_at : undefined;
+  const updateList = d.updateAccessKeys;
+  useEffect(() => { if (edited) void updateList(); }, [edited, updateList]);
   // Setting up an agent needs room: the key list window fills the workspace until the wizard ends.
   useEffect(() => {
     const panel = controller?.api?.getPanel("accessKeys");
@@ -359,12 +401,15 @@ function AccessKeysContent() {
   }, [wizard, controller]);
   return (
     <ErrorBoundary key={view.name}>
-      {wizard ? <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} firstRun={!d.loadingAccessKeys && d.accessKeys.length === 0} /> : (
+      {wizard ? <OnboardingWizard onCancel={d.goBack} onFinish={d.openDetail} /> : (
         <AccessKeyListView
           accessKeys={d.accessKeys}
           loading={d.loadingAccessKeys}
           error={d.accessKeysError}
           onRefresh={d.refreshAccessKeys}
+          onUpdate={d.updateAccessKeys}
+          showArchived={d.showArchived}
+          onShowArchived={d.setShowArchived}
           onOpenDetail={d.openDetail}
           onLaunchWizard={d.openWizard}
           showCreate={d.showCreate}
@@ -372,7 +417,7 @@ function AccessKeysContent() {
           onCloseCreate={() => d.setShowCreate(false)}
           onOpenSettings={d.goToSettings}
           selectedId={view.name === "detail" ? view.accessKeyId : null}
-          renamingId={detail?.renaming ? detail.accessKeyId : null}
+          renamingId={detail?.renaming && !detail.stale ? detail.accessKeyId : null}
           onRenamed={(updated) => { detail?.applyUpdate(updated); d.refreshAccessKeys(); }}
           onRenameEnd={() => detail?.setRenaming(false)}
           selectedKeyTools={keyActions}
@@ -394,6 +439,7 @@ function AttentionContent() {
 
 export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   accessKeys: AccessKeysContent,
+  archivedAccessKeys: ArchivedAccessKeysWindow,
   persona: PersonaWindow,
   capabilities: CapabilitiesWindow,
   permissions: PermissionsWindow,

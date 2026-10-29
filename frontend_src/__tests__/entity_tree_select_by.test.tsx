@@ -1,5 +1,5 @@
 /**
- * Select By narrows the Permissions tree to an area, label or integration,
+ * The Filter menu narrows the Permissions tree to an area, label or integration,
  * keeping the devices and domains above each match. It is a filter only: it
  * never writes a permission, and it combines with the text filter.
  */
@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
   setPermissions: vi.fn(),
 }));
 
-vi.mock("../api", () => ({ api: mocks }));
+// No Home Assistant connection: the tree does not follow the registries here.
+vi.mock("../api", () => ({ api: mocks, currentHass: () => null }));
 
 import { EntityTree } from "../components/EntityTree";
 
@@ -79,7 +80,7 @@ async function renderTree(selectBy = true) {
 }
 
 function choose(grouping: "Reset" | "Area" | "Label" | "Integration") {
-  fireEvent.click(screen.getByRole("button", { name: "Select By" }));
+  fireEvent.click(screen.getByRole("button", { name: "Filter" }));
   fireEvent.click(screen.getByRole(grouping === "Reset" ? "menuitem" : "menuitemradio", { name: grouping }));
 }
 
@@ -89,7 +90,7 @@ function expectNoGrant() {
   }
 }
 
-describe("Select By in the Permissions tree", () => {
+describe("Filter in the Permissions tree", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getEntityTree.mockResolvedValue(TREE);
@@ -99,7 +100,7 @@ describe("Select By in the Permissions tree", () => {
 
   it("narrows the tree to an area with the devices and domains above it, without granting anything", async () => {
     await renderTree();
-    fireEvent.click(screen.getByRole("button", { name: "Select By" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
     expect(screen.getByRole("menuitem", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Area" }));
 
@@ -113,7 +114,7 @@ describe("Select By in the Permissions tree", () => {
     await waitFor(() => expect(shown().sort()).toEqual(["light.kitchen_ceiling", "sensor.kitchen_temp"]));
     expect(screen.getByText("Kitchen ceiling", { selector: ".tree-device-name *" })).toBeInTheDocument();
     expect(screen.queryByText("Hall strip", { selector: ".tree-device-name *" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Select By" })).toHaveClass("is-active");
+    expect(screen.getByRole("button", { name: "Filter" })).toHaveClass("is-active");
     expectNoGrant();
   });
 
@@ -172,7 +173,7 @@ describe("Select By in the Permissions tree", () => {
 
   it("is offered only where asked for, so the wizard's tree has none", async () => {
     await renderTree(false);
-    expect(screen.queryByRole("button", { name: "Select By" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
     expect(ALL.every((id) => !shown().includes(id))).toBe(true);
   });
 });

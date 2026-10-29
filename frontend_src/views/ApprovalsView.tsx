@@ -6,7 +6,7 @@
  * result. Their shared state is `shell/approvals.tsx`.
  */
 
-import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading } from "../components/common";
@@ -16,6 +16,7 @@ import { APPROVALS_SCOPES, useApprovals, type ApprovalsScope, type ApprovalsStat
 import { ControllerContext } from "../shell/dock/TitleBar";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { ActionButton } from "../ui/ActionButton";
+import { useClickAway } from "../ui/useClickAway";
 import { Icon, type IconName } from "../ui/Icon";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils";
@@ -210,11 +211,15 @@ export function ApprovalsListWindow() {
   );
 }
 
-function ReasonRow({ a, locked }: { a: ApprovalsState; locked: boolean }) {
+function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolean; decisions: RefObject<HTMLDivElement | null> }) {
   const input = useRef<HTMLInputElement | null>(null);
   useEffect(() => { input.current?.focus(); }, []);
+  // A click anywhere else cancels, as Cancel does; the reason typed so far stays as the draft (user, 2026-10-28).
+  // Approve and Reject are not "elsewhere": Reject closes the row itself, and Approve stays unavailable while it is open.
+  const row = useRef<HTMLDivElement | null>(null);
+  useClickAway(row, () => a.setRejecting(false), !locked && a.deciding === null, decisions);
   return (
-    <div className="approval-reject-row phx-review-reason">
+    <div ref={row} className="approval-reject-row phx-review-reason">
       <label htmlFor="phx-review-reason" className="approval-reason-label">{t("approvalSummary.action.optionalReason")}</label>
       <input ref={input} id="phx-review-reason" type="text" className="approval-reason-input" value={a.reason}
         placeholder={t("approvalSummary.action.reasonPlaceholder")} disabled={locked}
@@ -252,6 +257,7 @@ export function ReviewWindow() {
       },
     }],
   }] : []);
+  const decisions = useRef<HTMLDivElement | null>(null);
   const r = a?.current;
   if (!a || !r) return <p className="phx-window-empty">{t("workspace.reviewEmpty")}</p>;
 
@@ -278,12 +284,12 @@ export function ReviewWindow() {
         </p>
       </div>
       {pending && (
-        <div className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
+        <div ref={decisions} className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
           <ActionButton icon="check" label={t("approvals.approve")} busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />
           <ActionButton icon="reject" label={t("approvals.reject")} busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
         </div>
       )}
-      {pending && a.rejecting && <ReasonRow a={a} locked={locked} />}
+      {pending && a.rejecting && <ReasonRow a={a} locked={locked} decisions={decisions} />}
       {a.decisionError && <ErrorMsg msg={a.decisionError} />}
       {summary.body && <p className="phx-review-body">{summary.body}</p>}
       <div className="phx-review-change"><ApprovalChange record={r} /></div>

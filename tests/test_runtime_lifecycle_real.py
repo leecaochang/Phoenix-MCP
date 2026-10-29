@@ -148,7 +148,7 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
         ai_task_enabled=True, ai_task_access_key_id=access_key.id,
         ai_task_provider_id=account, ai_task_model="example")
     resources = len(list(hass.http.app.router.resources()))
-    watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "automation_reloaded", "homeassistant_stop")
+    watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "label_registry_updated", "automation_reloaded", "homeassistant_stop")
     expected_listeners = None
     for _ in range(3):
         previous = hass.data[DOMAIN]
@@ -180,6 +180,31 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     secrets = await _get_secret_store(hass)
     assert secrets.list_instances() == []
     assert secrets.resolve(account) is None
+
+
+async def test_registry_changes_drop_the_cached_permission_tree(hass, enable_custom_integrations):
+    """Entity, device, area and label changes each make the next tree request rebuild it."""
+    from homeassistant.helpers import area_registry as ar, label_registry as lr
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        def change_area():
+            ar.async_get(hass).async_create("Tree cache area")
+
+        def change_label():
+            lr.async_get(hass).async_create("Tree cache label")
+
+        def fire(event):
+            return lambda: hass.bus.async_fire(event, {"action": "update"})
+
+        for change in (change_area, change_label, fire("entity_registry_updated"), fire("device_registry_updated")):
+            data.entity_tree_cache = {}
+            data.entity_tree_cache_valid = True
+            change()
+            await hass.async_block_till_done()
+            assert data.entity_tree_cache_valid is False
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass, enable_custom_integrations, monkeypatch):

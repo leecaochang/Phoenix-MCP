@@ -47,9 +47,9 @@ describe("canvas geometry", () => {
 type Arrange = (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void;
 
 /** A workspace with a stubbed visible height, the way WorkspaceDock wires it. */
-function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean } = {}) {
+function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean; contentHeights?: boolean } = {}) {
   let visible = opts.visible ?? 600;
-  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit });
+  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit, contentHeights: opts.contentHeights });
   const components = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
   let hostEl: HTMLElement | null = null;
   render(
@@ -118,6 +118,35 @@ describe("scrolling workspace", () => {
     expect(w.canvas.height).toBe(200 + 800);
     expect(w.heights()).toEqual({ list: 200, p: 300, c: 500, t: 800 });
     expect(w.canvas.intended.t).toBe(400);
+  });
+
+  it("moves the border under two columns as far as the pointer, with a full-width window below keeping its height", () => {
+    const w = mount(["a", "b", "c", "d", "e"], (_, add) => {
+      add("a");
+      add("c", { referencePanel: "a", direction: "right" });
+      add("b", { referencePanel: "a", direction: "below" });
+      add("d", { referencePanel: "c", direction: "below" });
+      add("e", { direction: "below" });
+    }, { heights: { a: 300, b: 300, c: 300, d: 300, e: 300 } });
+    expect(w.heights()).toEqual({ a: 300, b: 300, c: 300, d: 300, e: 300 });
+    // Dragging the top of the bottom window down grows the columns' lowest windows.
+    w.canvas.apply({ b: 400, d: 400 });
+    expect(w.heights()).toEqual({ a: 300, b: 400, c: 300, d: 400, e: 300 });
+    expect(w.canvas.height).toBe(1000);
+    // The bottom edge grows the bottom window alone.
+    w.canvas.apply({ e: 500 });
+    expect(w.heights()).toEqual({ a: 300, b: 400, c: 300, d: 400, e: 500 });
+  });
+
+  it("keeps the workspace scrollable as far as it was while a border is dragged, and lets it go after", () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 400, b: 500 } });
+    Object.defineProperty(w.host, "scrollHeight", { configurable: true, get: () => w.canvas.height });
+    const release = w.canvas.holdScrollHeight();
+    w.canvas.apply({ b: 300 });
+    expect(w.canvas.height).toBe(700);
+    expect(w.host.style.getPropertyValue("--phx-canvas-hold")).toBe("900px");
+    release();
+    expect(w.host.style.getPropertyValue("--phx-canvas-hold")).toBe("");
   });
 
   it("folding gives the height back to the page and unfolding takes it again", () => {
@@ -247,5 +276,95 @@ describe("a fitted workspace (Logs)", () => {
     w.controller.sizeToContent("b", 360);
     expect(w.heights()).toEqual({ a: 240, b: 360 });
     expect(w.host).not.toHaveClass("phx-scrolls");
+  });
+});
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+describe("windows hidden in place (Access Keys with no key chosen)", () => {
+  const keyLayout: Arrange = (_, add) => {
+    add("list");
+    add("persona", { direction: "below" });
+    add("tree", { referencePanel: "persona", direction: "right" });
+    add("caps", { referencePanel: "persona", direction: "below" });
+  };
+
+  it("take no space, keep their places and heights, and come back when shown", () => {
+    const w = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
+    expect(w.canvas.height).toBe(300 + 900);
+    w.controller.setHiddenWindows(["persona", "tree", "caps"]);
+    expect(w.controller.isHidden("tree")).toBe(true);
+    // Only the list is left; it fills the screen.
+    expect(w.canvas.height).toBe(0);
+    expect(w.heights()).toEqual({ list: 600, persona: 0, tree: 0, caps: 0 });
+    expect(w.canvas.intended).toMatchObject({ persona: 400, tree: 700, caps: 500 });
+    w.controller.setHiddenWindows([]);
+    expect(w.heights()).toEqual({ list: 300, persona: 400, tree: 900, caps: 500 });
+    expect(w.canvas.height).toBe(1200);
+  });
+
+  it("stay hidden after a window is maximized and restored, and are never saved hidden", () => {
+    const w = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
+    w.controller.setHiddenWindows(["persona", "tree", "caps"]);
+    const list = w.controller.api!.getPanel("list")!.group;
+    w.controller.maximize(list);
+    w.controller.restoreMaximized(list);
+    w.controller.maximizedChanged();
+    expect(w.heights()).toEqual({ list: 600, persona: 0, tree: 0, caps: 0 });
+    // A saved arrangement loads with every window shown; what is hidden follows the selection.
+    const saved = w.controller.layout()!;
+    const again = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
+    again.controller.load(saved);
+    expect(again.heights().tree).toBeGreaterThan(0);
+  });
+});
+
+describe("windows that follow their content (Access Keys)", () => {
+  it("take the height their content reports, and keyboard resizing leaves them alone", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true });
+    expect(w.controller.contentSized).toBe(true);
+    w.controller.contentResized("a", 520);
+    w.controller.contentResized("b", 940);
+    await nextFrame();
+    expect(w.heights()).toEqual({ a: 520, b: 940 });
+    expect(w.canvas.height).toBe(1460);
+    w.controller.resizeHeight(w.controller.api!.getPanel("a")!.group, 40);
+    expect(w.heights().a).toBe(520);
+    // Content that shrinks makes the window shorter too.
+    w.controller.contentResized("b", 400);
+    await nextFrame();
+    expect(w.heights()).toEqual({ a: 520, b: 400 });
+  });
+
+  it("leave a folded window folded, and other workspaces ignore content sizes", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, folded: ["a"], contentHeights: true });
+    w.controller.contentResized("a", 800);
+    await nextFrame();
+    expect(w.heights().a).toBe(TITLE_BAR_HEIGHT);
+    const other = mount(["a", "b"], stacked, { heights: { a: 300, b: 400 } });
+    other.controller.contentResized("a", 800);
+    await nextFrame();
+    expect(other.heights()).toEqual({ a: 300, b: 400 });
+  });
+
+  it("a maximized window fills the screen though its frame ended at its content before (the wizard's second run)", async () => {
+    const sideBySide: Arrange = (_, add) => {
+      add("a");
+      add("b", { referencePanel: "a", direction: "right" });
+    };
+    const w = mount(["a", "b"], sideBySide, { heights: { a: 300, b: 300 }, contentHeights: true });
+    w.controller.contentResized("a", 200);
+    w.controller.contentResized("b", 500);
+    await nextFrame();
+    const a = w.controller.api!.getPanel("a")!.group;
+    const ended = a.element.style.getPropertyValue("--phx-slack");
+    expect(ended).not.toBe("");
+    // Dockview reports the maximize; nothing else lays the windows out again.
+    w.controller.maximize(a);
+    w.controller.maximizedChanged();
+    expect(a.element.style.getPropertyValue("--phx-slack")).toBe("");
+    w.controller.restoreMaximized(a);
+    w.controller.maximizedChanged();
+    expect(a.element.style.getPropertyValue("--phx-slack")).toBe(ended);
   });
 });

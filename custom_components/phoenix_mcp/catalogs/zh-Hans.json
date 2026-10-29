@@ -230,7 +230,6 @@
         "label": "语音助手",
         "description": "可读取实体、调用服务并进行语音播报。门锁、警报控制面板、卷帘和阀门需要审批。"
       },
-      "helper": "角色决定初始的能力配置。您可以在“高级”中逐项调整。当您的设置不再与任何预设匹配时，角色会自动变为“自定义”。",
       "noEsphome": "未在此系统上检测到 ESPHome",
       "home_companion": {
         "label": "Home Companion",
@@ -511,7 +510,7 @@
         "one": "{count} 个资源",
         "other": "{count} 个资源"
       },
-      "menu": "按组筛选",
+      "menu": "筛选",
       "reset": "重置"
     },
     "adminError": {
@@ -824,8 +823,6 @@
       "permForDevice": "设备 {name} 的权限",
       "permForDomain": "域 {name} 的权限",
       "permSaveFailed": "保存权限失败。",
-      "reloadAria": "重新加载实体",
-      "reloadTitle": "从 Home Assistant 重新加载实体",
       "riskDomainTitle": "高风险域。在此授予“读写”会开放大范围的系统操作权限。",
       "saveFailedShort": "保存失败",
       "selGreen": "Write：读写",
@@ -834,7 +831,6 @@
       "selSelected": "{title}，已选中",
       "selYellow": "Read：只读",
       "simulateEntityTitle": "模拟 {id} 的权限",
-      "simulateTitle": "模拟 {type} {id} 的权限",
       "treeAria": "实体权限",
       "typeDevice": "设备",
       "typeDomain": "域",
@@ -846,8 +842,6 @@
       "unmatchedDevicesTitle": "未匹配的设备权限",
       "deviceless": "无设备实体",
       "summaryEmpty": "尚未配置任何显式权限，默认拒绝全部访问。",
-      "reload": "重载",
-      "stateInherit": "继承",
       "stateRead": "只读",
       "stateWrite": "读写",
       "stateDeny": "拒绝",
@@ -857,7 +851,11 @@
       "treeCollapse": "收起 {name}",
       "treeExpand": "展开 {name}",
       "hintCaution": "提示会发送给智能体及其模型提供商。切勿在此填写密码或代码。",
-      "removeHint": "移除提示"
+      "removeHint": "移除提示",
+      "levelInherit": "继承",
+      "levelRead": "只读",
+      "levelWrite": "读写",
+      "levelDeny": "拒绝"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",
@@ -1091,7 +1089,6 @@
       "cardPersona": "角色",
       "cardPresets": "预设",
       "cardRateLimiting": "速率限制",
-      "cardToolAnnouncement": "工具声明",
       "clearAll": "全部清除",
       "clearPermsBody": "这会移除所有域、设备和实体授权。在您添加新权限之前，此访问密钥将没有任何实体访问权限。",
       "clearPermsFailed": "清除权限失败。",
@@ -1125,7 +1122,6 @@
       "diffPermissionTree": "权限树：{count} 个节点存在差异",
       "diffRateLimit": "速率限制：从每分钟 {fromRequests} 次、突发 {fromBurst} 改为每分钟 {toRequests} 次、突发 {toBurst}",
       "done": "完成",
-      "editAria": "编辑访问密钥 {name}",
       "empty": "尚无访问密钥。创建一个即可开始。",
       "emptyFiltered": "没有符合筛选条件的访问密钥。",
       "enablePtBody": "<strong>直通模式会赋予此访问密钥广泛的实体和服务访问权限。</strong>配置变更、系统操作、高风险能力、系统日志访问、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
@@ -1148,8 +1144,6 @@
       "hideArchived": "隐藏已归档",
       "hoursAgo": "{h} 小时前",
       "inlineWaitAria": "同步等待审批的时长",
-      "inlineWaitDisabled": "默认为关闭：审批一进入队列，调用就会立即返回。",
-      "inlineWaitHelp": "外部 MCP 客户端发起的 confirm 门控调用，在返回待批准响应之前等待您决定的时长。Agent Chat、语音与 AI Task 不受此设置影响：它们始终立即排入队列，并以各自的方式等待。",
       "inlineWaitLabel": "同步等待审批",
       "justNow": "刚刚",
       "loadFailed": "加载访问密钥失败。",
@@ -1206,19 +1200,16 @@
       "presetSwitchTo": "切换到",
       "ptConvertBody": "切换到限定范围模式会立即应用已保存的权限树。如果其中没有任何授权，此访问密钥将失去实体访问权限，直到您添加授权为止。",
       "ptConvertFailed": "转换访问密钥失败。",
-      "ptHeaderBanner": "<strong>这是一个直通访问密钥。</strong>它对 Home Assistant 的实体和服务拥有广泛的访问权限。受保护的能力、MESA 规则、敏感属性移除以及 Phoenix MCP 域屏蔽仍然有效。",
       "ptNoticeCaps": "直通模式会自动允许读取和日常操作。配置变更、系统操作、高风险能力和系统日志访问仍按“能力”设置执行。“确认”始终需要审批。",
       "ptNoticeIntro": "<strong>直通访问密钥。</strong>此访问密钥会绕过权限树，对 Home Assistant 的实体和服务拥有广泛的访问权限。敏感属性会被移除，受保护的能力仍然适用，Phoenix MCP 域仍被屏蔽。",
       "ptNoticeUsage": "直通模式可能会把每一个实体的信息都发送给模型，从而增加模型用量。限定范围的权限树可以让上下文更小。",
       "rateBurstLabel": "每秒突发上限",
-      "rateLimitingDisabled": "此访问密钥已禁用速率限制。",
       "rateRequestsLabel": "每分钟请求数（0 表示禁用）",
       "rateSaveFailed": "保存失败。",
       "rateValuesError": "取值必须为非负整数。",
       "rawAccessKeyNote": "<strong>此访问密钥不会再次显示。</strong>请在关闭前复制。",
       "reconnectBanner": "<strong>请重新连接您的智能体。</strong>此访问密钥可用的工具已发生变化。",
       "reconnectDismiss": "忽略重新连接提醒",
-      "refreshAria": "刷新访问密钥",
       "renameFailed": "重命名失败。",
       "revoke": "吊销",
       "revokeBody": "吊销会永久停用此访问密钥，并断开所有正在使用它的客户端。此操作无法撤销。",
@@ -1242,7 +1233,6 @@
       "statusExpired": "已过期",
       "statusRevoked": "已吊销",
       "switchToScoped": "切换到限定范围模式",
-      "switching": "切换中…",
       "accessKeyCreatedTitle": "访问密钥已创建：{name}",
       "accessKeyNameAria": "访问密钥名称（可编辑）",
       "accessKeyRenameTitle": "重命名此访问密钥；点击其他位置即可保存",
@@ -1250,14 +1240,13 @@
       "updateFailed": "更新访问密钥失败。",
       "waitBeforeClose": "请等待 3 秒后再关闭",
       "inlineWaitOff": "关闭（审批立即进入队列）",
-      "cardNotes": "备注",
-      "notesCaution": "备注仅供参考：它们不会授予访问权限、更改能力或绕过审批，模型也可能忽略它们。已连接的客户端及其模型提供商会收到备注，任何能与使用此访问密钥的智能体对话的人都可能让它复述备注。请勿在此填写密码或其他敏感信息。",
       "notesCount": "{count} / {max} 个字符",
       "notesDiscard": "放弃更改",
-      "notesHelp": "为使用此访问密钥的每个智能体提供指引，例如房间和设备的叫法、由谁使用，或家庭文档的存放位置。Phoenix MCP 会将备注添加到每个智能体的指令中，并隐藏此访问密钥范围之外的实体 ID。",
       "notesLabel": "给智能体的备注",
       "notesPlaceholder": "示例：客房称为书房。更改儿童房中的任何设备前请先询问。",
-      "notesTooLong": "备注不能超过 {max} 个字符。"
+      "notesTooLong": "备注不能超过 {max} 个字符。",
+      "cardGuidance": "指引",
+      "cardAgentBehavior": "智能体行为"
     },
     "settings": {
       "addProviderFirst": "请先在“智能体对话”中添加提供商账户。",
@@ -2405,14 +2394,16 @@
       "myEmpty": "我的工作区为空。请通过窗口菜单中的“添加到我的工作区”添加窗口，或通过 Agent Chat 自身的菜单添加 Agent Chat。",
       "myEmptyPhone": "在此手机上，我的工作区中没有窗口。",
       "myWorkspace": "我的工作区",
-      "removeFromMy": "从我的工作区移除",
       "removedFromMy": "已将{window}从我的工作区移除",
       "safety": "安全",
       "resetWorkspaceHint": "将此工作区的窗口放回 Phoenix 的默认位置。其他工作区和我的默认布局保持不变。",
       "resetAllHint": "重置所有工作区、工具栏、帮助栏和指南。我的默认布局和 Phoenix 设置保持不变。",
       "toolbarOptions": "工具栏选项",
       "vertical": "纵向",
-      "horizontal": "横向"
+      "horizontal": "横向",
+      "alwaysLabels": "始终显示图标和文字",
+      "verticalScrolling": "纵向滚动",
+      "resetMyHint": "移除我的工作区中的所有窗口。其他工作区和我的默认布局保持不变。"
     },
     "notifications": {
       "title": "通知",
@@ -2454,7 +2445,10 @@
       "settingsVoiceDisable": "关闭语音智能体也会移除 Phoenix MCP 在 Home Assistant 中创建的助手。",
       "settingsVoiceRemoveAssistant": "关闭此项会移除 Phoenix MCP 在 Home Assistant 中创建的助手。语音智能体仍保持启用。",
       "wsMy": "您自己的工作区：包含您从其他工作区添加的窗口，以及停靠到此处的 Agent Chat。",
-      "toolbarOptions": "选择工具栏按钮的显示方式，将其停靠到边缘或使其浮动，切换纵向或横向，或将其折叠。"
+      "toolbarOptions": "选择工具栏按钮的显示方式，将其停靠到边缘或使其浮动，切换纵向或横向，或将其折叠。",
+      "persona": "角色决定初始的能力配置。可在“能力”窗口中逐项修改；当设置不再与任何角色匹配时，角色会变为“自定义”。",
+      "guidance": "为使用此访问密钥的每个智能体提供指引，例如房间和设备的叫法、由谁使用，或家庭文档的存放位置。Phoenix MCP 会将其添加到每个智能体的指令中，并隐藏此访问密钥范围之外的实体 ID。指引仅供参考：它不会授予访问权限、更改能力或绕过审批，模型也可能忽略它。智能体及其模型提供商会收到这些内容，任何与智能体对话的人都可能让它复述出来。切勿在此填写密码或其他敏感信息。",
+      "inlineWait": "外部 MCP 客户端发起的 confirm 门控调用，在返回待批准响应之前等待您决定的时长。默认的“关闭”会在审批进入队列后立即返回。Agent Chat、语音与 AI Task 不受此设置影响：它们始终立即排入队列，并以各自的方式等待。"
     },
     "guide": {
       "title": "指南",

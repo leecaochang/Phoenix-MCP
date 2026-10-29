@@ -38,15 +38,17 @@ export function sanitizeLayout(raw: unknown, known: ReadonlySet<string>): Serial
       groupIds.add(data.id);
       return { ...data, views: [view], activeView: view };
     };
+    // Windows hidden in place are hidden by Phoenix, not by the saved layout: every window loads visible.
     const prune = (node: unknown, depth: number): Json | null => {
       if (!isObject(node) || depth > 32) return null;
+      const { visible: _visible, ...rest } = node;
       if (node.type === "leaf") {
         const data = leafView(node.data);
-        return data ? { ...node, data, ...(isSize(node.size) ? {} : { size: 0 }) } : null;
+        return data ? { ...rest, data, ...(isSize(node.size) ? {} : { size: 0 }) } : null;
       }
       if (node.type === "branch" && Array.isArray(node.data)) {
         const children = node.data.map((child) => prune(child, depth + 1)).filter((c): c is Json => c !== null);
-        return children.length ? { ...node, data: children, ...(isSize(node.size) ? {} : { size: 0 }) } : null;
+        return children.length ? { ...rest, data: children, ...(isSize(node.size) ? {} : { size: 0 }) } : null;
       }
       return null;
     };

@@ -108,11 +108,6 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
           />
         </div>
       </div>
-      {requestsNum === 0 && (
-        <p className="rate-limit-disabled-text">
-          {t("accessKeys.rateLimitingDisabled")}
-        </p>
-      )}
     </div>
   );
 }

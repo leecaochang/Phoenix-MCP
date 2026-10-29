@@ -232,9 +232,6 @@
       "permForDevice": "Permiso para el dispositivo {name}",
       "permForDomain": "Permiso para el dominio {name}",
       "permSaveFailed": "No se pudo guardar el permiso.",
-      "reload": "Recargar",
-      "reloadAria": "Recargar entidades",
-      "reloadTitle": "Recargar entidades desde Home Assistant",
       "riskDomainTitle": "Dominio de alto riesgo. Conceder ESCRITURA aquí da acceso a operaciones amplias del sistema.",
       "saveFailedShort": "Error al guardar",
       "selGreen": "Write: Lectura y escritura",
@@ -243,9 +240,7 @@
       "selSelected": "{title}, seleccionado",
       "selYellow": "Read: Solo lectura",
       "simulateEntityTitle": "Simular permisos para {id}",
-      "simulateTitle": "Simular permisos de {type} para {id}",
       "stateDeny": "DENEGAR",
-      "stateInherit": "HEREDAR",
       "stateNoAccess": "SIN ACCESO",
       "stateNotFound": "NO ENCONTRADO",
       "stateRead": "LECTURA",
@@ -263,7 +258,11 @@
       "unmatchedDevicesNote": "Estos permisos explícitos hacen referencia a IDs de dispositivo que no están en el árbol de entidades actual. Establezca N para eliminar un permiso obsoleto.",
       "unmatchedDevicesTitle": "Permisos de dispositivo sin coincidencia",
       "hintCaution": "Se envía a los agentes y a sus proveedores de modelos. No incluya nunca contraseñas ni códigos.",
-      "removeHint": "Eliminar sugerencia"
+      "removeHint": "Eliminar sugerencia",
+      "levelInherit": "Heredar",
+      "levelRead": "Lectura",
+      "levelWrite": "Escritura",
+      "levelDeny": "Denegar"
     },
     "changes": {
       "added": "Añadido",
@@ -366,7 +365,7 @@
         "one": "{count} recurso",
         "other": "{count} recursos"
       },
-      "menu": "Seleccionar por",
+      "menu": "Filtrar",
       "reset": "Restablecer"
     },
     "audit": {
@@ -1037,7 +1036,6 @@
       "cardPersona": "Persona",
       "cardPresets": "Preajustes",
       "cardRateLimiting": "Límite de velocidad",
-      "cardToolAnnouncement": "Anuncio de herramientas",
       "clearAll": "Borrar todo",
       "clearPermsBody": "Esto elimina todas las concesiones de dominios, dispositivos y entidades. La clave de acceso no tendrá acceso a entidades hasta que añada nuevos permisos.",
       "clearPermsFailed": "No se pudieron borrar los permisos.",
@@ -1071,7 +1069,6 @@
       "diffPermissionTree": "Árbol de permisos: {count} nodo(s) difieren",
       "diffRateLimit": "Límite de velocidad: de {fromRequests}/min ráfaga {fromBurst} a {toRequests}/min ráfaga {toBurst}",
       "done": "Hecho",
-      "editAria": "Editar clave de acceso {name}",
       "empty": "Aún no hay claves de acceso. Cree una para empezar.",
       "emptyFiltered": "Ninguna clave de acceso coincide con el filtro.",
       "enablePtBody": "<strong>El paso directo otorga a esta clave de acceso un acceso amplio a entidades y servicios.</strong> Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo, el acceso al registro del sistema, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
@@ -1094,8 +1091,6 @@
       "hideArchived": "Ocultar archivados",
       "hoursAgo": "hace {h} h",
       "inlineWaitAria": "Duración de la espera de aprobación en línea",
-      "inlineWaitDisabled": "Desactivado es el valor predeterminado: la llamada responde en cuanto la aprobación se pone en cola.",
-      "inlineWaitHelp": "Cuánto tiempo espera una llamada sujeta a confirmación de un cliente MCP externo su decisión antes de devolver una respuesta pendiente. El Chat de agente, la voz y la tarea de IA lo ignoran: siempre se ponen en cola de inmediato y esperan a su manera.",
       "inlineWaitLabel": "Espera de aprobación en línea",
       "inlineWaitOff": "Desactivado (las aprobaciones se ponen en cola de inmediato)",
       "justNow": "ahora mismo",
@@ -1153,19 +1148,16 @@
       "presetSwitchTo": "Cambiar a",
       "ptConvertBody": "Cambiar al modo con ámbito aplica el árbol de permisos guardado de inmediato. Si no tiene concesiones, esta clave de acceso perderá el acceso a las entidades hasta que las añada.",
       "ptConvertFailed": "No se pudo convertir la clave de acceso.",
-      "ptHeaderBanner": "<strong>Esta es una clave de acceso de paso directo.</strong> Tiene un acceso amplio a las entidades y los servicios de Home Assistant. Las capacidades protegidas, las reglas de MESA, la eliminación de atributos sensibles y el bloqueo del dominio de Phoenix MCP permanecen activos.",
       "ptNoticeCaps": "El paso directo permite lecturas y acciones cotidianas automáticamente. Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo y el acceso al registro del sistema siguen usando la configuración de Capacidades. Confirmar siempre requiere aprobación.",
       "ptNoticeIntro": "<strong>Clave de acceso de paso directo.</strong> Esta clave de acceso omite el árbol de permisos y tiene un acceso amplio a las entidades y los servicios de Home Assistant. Los atributos sensibles se eliminan, las capacidades protegidas siguen aplicándose y el dominio de Phoenix MCP permanece bloqueado.",
       "ptNoticeUsage": "El paso directo puede enviar información de todas las entidades al modelo, lo que aumenta el uso del modelo. Un árbol de permisos con ámbito mantiene ese contexto más reducido.",
       "rateBurstLabel": "Ráfaga por segundo",
-      "rateLimitingDisabled": "El límite de velocidad está deshabilitado para esta clave de acceso.",
       "rateRequestsLabel": "Solicitudes por minuto (0 = deshabilitado)",
       "rateSaveFailed": "Error al guardar.",
       "rateValuesError": "Los valores deben ser números enteros no negativos.",
       "rawAccessKeyNote": "<strong>Esta clave de acceso no se mostrará de nuevo.</strong> Cópielo ahora antes de cerrar.",
       "reconnectBanner": "<strong>Vuelva a conectar su agente.</strong> Las herramientas disponibles de esta clave de acceso han cambiado.",
       "reconnectDismiss": "Descartar el recordatorio de reconexión",
-      "refreshAria": "Actualizar claves de acceso",
       "renameFailed": "Error al renombrar.",
       "revoke": "Revocar",
       "revokeBody": "Revocar desactiva permanentemente esta clave de acceso y desconecta a todos los clientes que lo usan. No se puede volver a habilitar.",
@@ -1189,21 +1181,19 @@
       "statusExpired": "Expirado",
       "statusRevoked": "Revocado",
       "switchToScoped": "Cambiar al modo con ámbito",
-      "switching": "Cambiando...",
       "accessKeyCreatedTitle": "Clave de acceso creada: {name}",
       "accessKeyNameAria": "Nombre de la clave de acceso (editable)",
       "accessKeyRenameTitle": "Renombre esta clave de acceso; se guarda al hacer clic fuera",
       "accessKeyRotatedTitle": "Clave de acceso rotada: {name}",
       "updateFailed": "No se pudo actualizar la clave de acceso.",
       "waitBeforeClose": "Espere 3 segundos antes de cerrar",
-      "cardNotes": "Notas",
-      "notesCaution": "Las notas son solo orientativas: nunca conceden acceso, cambian capacidades ni omiten aprobaciones, y un modelo puede ignorarlas. Los clientes conectados y sus proveedores de modelos las reciben, y cualquiera que pueda hablar con un agente que use esta clave de acceso puede conseguir que las repita. No incluya contraseñas ni otros secretos.",
       "notesCount": "{count} / {max} caracteres",
       "notesDiscard": "Descartar cambios",
-      "notesHelp": "Indicaciones para todos los agentes que usan esta clave de acceso, como el nombre de las habitaciones y los dispositivos, quién la usa o dónde se guarda la documentación del hogar. Phoenix MCP añade las notas a las instrucciones de cada agente y oculta los ID de entidad fuera del ámbito de esta clave de acceso.",
       "notesLabel": "Notas para los agentes",
       "notesPlaceholder": "Ejemplo: La habitación de invitados se llama el estudio. Pregunte antes de cambiar algo en el cuarto del bebé.",
-      "notesTooLong": "Las notas deben tener {max} caracteres o menos."
+      "notesTooLong": "Las notas deben tener {max} caracteres o menos.",
+      "cardGuidance": "Indicaciones",
+      "cardAgentBehavior": "Comportamiento del agente"
     },
     "mesa": {
       "addAreaProfile": "Añadir perfil de área",
@@ -2040,7 +2030,6 @@
         "label": "Dispositivos ESPHome",
         "description": "Lee el estado, los diagnósticos, los registros y el YAML de los dispositivos ESPHome, y lo valida y compila. Grabar el firmware requiere aprobación. Las credenciales de YAML permanecen ocultas. Sin control de dispositivos ni otra configuración."
       },
-      "helper": "Una persona establece las capacidades iniciales. Puede ajustar cada capacidad en Avanzado. La persona cambia a Personalizado cuando la configuración deja de coincidir con un ajuste predefinido.",
       "home_admin": {
         "label": "Administrador del hogar",
         "description": "Puede leer y gestionar todo el hogar. Los reinicios, los controles físicos y los cambios de configuración confidenciales requieren aprobación."
@@ -2408,11 +2397,13 @@
       "findSettingNone": "No hay ajustes que coincidan",
       "myWorkspace": "Mi espacio de trabajo",
       "addToMy": "Añadir a Mi espacio de trabajo",
-      "removeFromMy": "Quitar de Mi espacio de trabajo",
       "addedToMy": "Se añadió {window} a Mi espacio de trabajo",
       "removedFromMy": "Se quitó {window} de Mi espacio de trabajo",
       "myEmpty": "Mi espacio de trabajo está vacío. Añada una ventana con «Añadir a Mi espacio de trabajo» en el menú de la ventana, o Agent Chat desde su propio menú.",
-      "myEmptyPhone": "Mi espacio de trabajo no tiene ventanas en este teléfono."
+      "myEmptyPhone": "Mi espacio de trabajo no tiene ventanas en este teléfono.",
+      "alwaysLabels": "Mostrar siempre iconos y texto",
+      "verticalScrolling": "Desplazamiento vertical",
+      "resetMyHint": "Quita todas las ventanas de Mi espacio de trabajo. Los demás espacios de trabajo y Mi predeterminado no cambian."
     },
     "notifications": {
       "title": "Notificaciones",
@@ -2454,7 +2445,10 @@
       "settingsVoiceClearPreferred": "Al desactivar esta opción se conserva el asistente. Home Assistant prefiere otro asistente en su lugar.",
       "settingsAiTaskDisable": "Al desactivar la tarea de IA, también deja de ser la tarea de IA predeterminada de Home Assistant.",
       "settingsAiTaskReplaceDefault": "Home Assistant tiene una sola tarea de IA predeterminada, así que esta reemplaza a la actual.",
-      "wsMy": "Su propio espacio de trabajo: las ventanas que ha añadido desde los otros espacios de trabajo y Agent Chat si lo ha acoplado aquí."
+      "wsMy": "Su propio espacio de trabajo: las ventanas que ha añadido desde los otros espacios de trabajo y Agent Chat si lo ha acoplado aquí.",
+      "persona": "Una persona establece las capacidades iniciales. Cambie capacidades sueltas en la ventana Capacidades; la persona pasa a Personalizado cuando la configuración ya no coincide con ninguna.",
+      "guidance": "Indicaciones para todos los agentes que usan esta clave de acceso, como el nombre de las habitaciones y los dispositivos, quién la usa o dónde se guarda la documentación del hogar. Phoenix MCP las añade a las instrucciones de cada agente y oculta los ID de entidad fuera del ámbito de esta clave de acceso. Son solo orientativas: nunca conceden acceso, cambian capacidades ni omiten aprobaciones, y un modelo puede ignorarlas. Los agentes y sus proveedores de modelos reciben este texto, y cualquiera que hable con un agente puede conseguir que lo repita. Nunca incluya contraseñas ni otros secretos.",
+      "inlineWait": "Cuánto tiempo espera una llamada sujeta a confirmación de un cliente MCP externo su decisión antes de devolver una respuesta pendiente. Con Desactivado, el valor predeterminado, la llamada responde en cuanto la aprobación se pone en cola. El Chat de agente, la voz y la tarea de IA lo ignoran: siempre se ponen en cola de inmediato y esperan a su manera."
     },
     "guide": {
       "title": "Guía",

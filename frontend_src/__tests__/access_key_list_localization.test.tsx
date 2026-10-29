@@ -101,7 +101,7 @@ describe("localized access key statuses", () => {
       accessKey({ id: "expired", name: "Old agent", expires_at: "2020-01-01T00:00:00Z" }),
     ]);
 
-    fireEvent.change(screen.getByRole("textbox", { name: de.panel.accessKeys.filterAria }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: de.panel.accessKeys.filterAria }), {
       target: { value: de.panel.accessKeys.statusActive },
     });
 
@@ -116,7 +116,7 @@ describe("localized access key statuses", () => {
       accessKey({ id: "revoked", name: "Revoked row", revoked: true }),
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: /Status/ }));
+    fireEvent.click(screen.getByRole("button", { name: de.panel.accessKeys.colStatus }));
     const names = screen.getAllByRole("row").slice(1).map(
       (row) => row.querySelector(".access-key-name")?.textContent,
     );

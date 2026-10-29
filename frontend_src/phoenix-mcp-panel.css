@@ -524,6 +524,8 @@
   user-select: none;
   touch-action: none;
 }
+/* Pinned beside the wizard: it cannot be moved. */
+.phx-guide.is-pinned .phx-guide-titlebar { cursor: default; padding-right: 8px; }
 .phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -612,7 +614,10 @@
 .phx-action:not(.is-icon-only) { gap: 4px; padding: 3px 7px; }
 .phx-action:not(.is-icon-only) > span { font-size: 11px; }
 .phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
-.access-key-table tr.is-selected > td { background: var(--phx-accent-lt); }
+/* Access Keys: the key list and the archived keys on the configurable table, status and mode as icon and words. */
+.access-key-status-expired { color: var(--phx-warning); }
+.access-key-status-revoked { color: var(--phx-error); }
+.access-key-mode-pass-through > svg { color: var(--phx-warning); }
 
 /* Log Details: a record's heading, compact fields, then its larger evidence. */
 .phx-log-record { display: flex; flex-direction: column; gap: 12px; }
@@ -670,14 +675,18 @@
 .change-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Inline confirmations: what the action does, an optional acknowledgement, then
    Confirm and Cancel. They wrap inside narrow windows. */
-.phx-inline-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--phx-warning); border-radius: var(--phx-radius-sm); background: var(--phx-warning-bg); }
-.phx-inline-confirm.is-danger { border-color: var(--phx-error); background: var(--phx-error-bg); }
-.phx-inline-confirm-body { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.5; }
+/* A plain UI2 box (user, 2026-10-28): the window's surface and a hairline, no coloured accents; only a danger button is red. */
+.phx-inline-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); }
+.phx-inline-confirm-body { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
+.phx-inline-confirm-body strong { color: var(--phx-text); font-weight: 600; }
 .phx-inline-confirm-body p { margin: 0; }
 .phx-inline-confirm-body > * + * { margin-top: 6px; }
 .phx-inline-confirm-ack { flex: 1 1 100%; padding: 8px 0 0; border-top: 1px solid var(--phx-divider); border-bottom: none; }
 .phx-inline-confirm > .banner { flex: 1 1 100%; margin: 0; }
 .phx-inline-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Access Keys' cautions are the same plain box. */
+.amber-block, .pass-through-header-banner { border: 1px solid var(--phx-border); background: var(--phx-surface); }
+.phx-inline-confirm-title { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
 
 /* Settings windows: native field rows, folded sections, local tabs, Find Setting. */
 .phx-settings > * + * { margin-top: 12px; }
@@ -804,7 +813,7 @@
 .phx-window-pad > .tree-header-actions { margin-bottom: 12px; }
 .phx-section-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
 .phx-key-settings-section + .phx-key-settings-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--phx-border); }
-.access-key-table .access-key-name-input { border-color: var(--phx-field-border); }
+.access-keys-list .access-key-name-input { border-color: var(--phx-field-border); }
 @media (pointer: coarse) {
   .phx-menu-item { padding: 12px 12px; }
   .phx-toolbar-button { height: 40px; }
@@ -1218,9 +1227,8 @@ select.input {
 .toggle-label small { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
 .toggle-label-master { font-weight: 700; }
 
-/* Access key notes: help copy, a resizable multiline field and a footer that
-   keeps the counter and the save actions on one line until it wraps. */
-.access-key-notes-help { margin: 0 0 8px; font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
+/* Access key Guidance: a resizable multiline field, the one-line caution under it, and a footer
+   that keeps the counter and the save actions on one line until it wraps. */
 .access-key-notes-input { display: block; min-height: 120px; resize: vertical; line-height: 1.45; }
 .access-key-notes-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .access-key-notes-count { font-size: 12px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
@@ -1308,8 +1316,8 @@ select.input {
 }
 /* Wider dialog for side-by-side diffs (approval review). */
 .modal-wide { max-width: 920px; }
-.modal-title { font-size: 18px; font-weight: 700; margin: 0 0 20px 0; color: var(--phx-text); }
-.modal-title-error { color: var(--phx-error); }
+/* The UI2 dialog heading (user, 2026-10-28): weights stay within 400 to 600, no colour. */
+.modal-title { font-size: 16px; font-weight: 600; margin: 0 0 12px 0; color: var(--phx-text); }
 .modal-body-text { margin: 0 0 16px; color: var(--phx-text-2); line-height: 1.5; }
 .modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
 
@@ -1317,22 +1325,19 @@ select.input {
    Warning / info blocks
    ============================================================ */
 .amber-block {
-  background: var(--phx-warning-bg);
-  border: 1px solid var(--phx-warning);
   border-radius: var(--phx-radius-sm);
-  padding: 14px 16px;
+  padding: 10px 12px;
   margin: 12px 0;
 }
-.amber-block p { margin: 0; font-size: 13px; line-height: 1.5; }
-.amber-block strong { color: var(--phx-warning); }
+.amber-block p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
+.amber-block strong { color: var(--phx-text); font-weight: 600; }
 .pass-through-header-banner {
-  background: var(--phx-warning-bg);
-  border: 1px solid var(--phx-warning);
   border-radius: var(--phx-radius-sm);
-  padding: 12px 16px;
-  margin-bottom: 14px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
 }
-.pass-through-header-banner p { margin: 3px 0; font-size: 13px; }
+.pass-through-header-banner p { margin: 3px 0; font-size: 13px; color: var(--phx-text-2); }
+.pass-through-header-banner strong { color: var(--phx-text); font-weight: 600; }
 
 /* ============================================================
    Banners
@@ -1460,17 +1465,6 @@ select.input {
   .tree-children { margin-left: 9px; padding-left: 6px; }
   .tree-node { gap: 6px; }
 
-  .access-key-table th:nth-child(4), .access-key-table th:nth-child(5),
-  .access-key-table th:nth-child(6), .access-key-table th:nth-child(7),
-  .access-key-table td:nth-child(4), .access-key-table td:nth-child(5),
-  .access-key-table td:nth-child(6), .access-key-table td:nth-child(7) { display: none; }
-  .access-key-table th, .access-key-table td { padding: 6px 4px; }
-  .access-key-table td:nth-child(1) { word-break: break-all; }
-
-  .archived-table th:nth-child(4), .archived-table th:nth-child(5), .archived-table th:nth-child(7),
-  .archived-table td:nth-child(4), .archived-table td:nth-child(5), .archived-table td:nth-child(7) { display: none; }
-  .archived-table th, .archived-table td { padding: 6px 4px; }
-  .archived-table td:nth-child(1) { word-break: break-all; }
 
   
 
@@ -1488,7 +1482,7 @@ select.input {
   .access-key-card-body { flex-direction: column; }
   .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
   .access-key-action-btn { flex: 1; min-width: 120px; }
-  .btn, .phx-tab, .reload-btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
+  .btn, .phx-tab, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
   .perm-btn { min-width: 36px; }
 }
 
@@ -1603,12 +1597,10 @@ select.input {
 .tree-hint-editor-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
 .tree-hint-editor-head code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
 .tree-hint-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.tree-hint-caution { font-size: 12px; color: var(--phx-text-2); margin: 0; line-height: 1.4; }
 .tree-hint-error { color: var(--phx-error); font-size: 12px; margin: 0; }
 .tree-perm-error { font-size: 11px; font-weight: 700; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
 .hint-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
-.hint-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0; }
 
 /* ============================================================
    Loading spinner
@@ -1672,30 +1664,8 @@ select.input {
 .perm-summary { font-family: "Roboto Mono", monospace; font-size: 12px; }
 .perm-summary-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--phx-divider); }
 .perm-summary-row:last-child { border-bottom: none; }
-.perm-summary-table { display: block; width: 100%; border-collapse: collapse; font-size: 12px; font-family: "Roboto Mono", monospace; }
-.perm-summary-table thead,
-.perm-summary-table tbody { display: block; width: 100%; }
-.perm-summary-table tr { display: grid; grid-template-columns: 86px minmax(0, 3fr) minmax(0, 2fr) 80px; width: 100%; }
-.perm-summary-th { min-width: 0; cursor: pointer; user-select: none; color: var(--phx-text-2); white-space: nowrap; font-size: 11px; font-weight: 700; padding: 6px 8px; border-bottom: 2px solid var(--phx-border); text-align: left; }
-.perm-summary-th.active { color: var(--phx-accent); }
-.perm-summary-arrow { font-size: 9px; opacity: 0.35; }
-.perm-summary-arrow.active { opacity: 1; }
-.perm-summary-tr { border-bottom: 1px solid var(--phx-divider); }
-.perm-summary-td         { min-width: 0; padding: 5px 8px; white-space: nowrap; }
-.perm-summary-td-name    { min-width: 0; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.perm-summary-td-id      { min-width: 0; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--phx-text-2); }
-/* The clickable class lands on the inner <button> (see PermissionSummary.tsx),
-   not the <td>, so the pointer cursor must target the button directly; native
-   <button> elements do not get cursor:pointer for free. */
-.perm-summary-name-text.clickable,
-.perm-summary-td-id button.clickable { cursor: pointer; }
 .perm-summary-empty { color: var(--phx-text-2); font-size: 13px; margin: 0; }
 
-.perm-type-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--phx-text-2); }
-.perm-type-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.perm-type-domain { color: var(--phx-accent); }
-.perm-type-device { color: var(--phx-text-2); }
-.perm-type-entity { color: var(--phx-text-2); }
 
 /* ============================================================
    Permission simulator
@@ -1759,7 +1729,8 @@ select.input {
 .access-key-list-actions { display: flex; gap: 8px; }
 .access-key-table-empty { text-align: center; color: var(--phx-text-2); padding: 24px; }
 .access-key-name { font-weight: 600; }
-.row-actions { display: flex; gap: 4px; }
+/* Only as wide as its buttons: a click beside them, even in the same cell, cancels a confirmation. */
+.row-actions { display: inline-flex; gap: 4px; vertical-align: middle; }
 
 /* Whole-row click for the access key and audit tables, kept accessible. The Name/
    Access key cell holds a real <button> (so the row is reachable by Tab and
@@ -1797,13 +1768,17 @@ select.input {
    Access key create modal
    ============================================================ */
 /* Create Access Key, in place at the top of the Access Keys window. */
-.phx-inline-form { margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); }
-.phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* Part of the window, like its other sections: no box of its own, a divider below (user, 2026-10-28). */
+.phx-inline-form { margin-bottom: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--phx-divider); }
+.phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.access-key-create-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
+.access-key-create-fields > .field { margin: 0; }
+.access-key-create-name { flex: 0 1 280px; min-width: 180px; }
+.access-key-create-number { flex: 0 1 250px; min-width: 160px; }
 .access-key-create-expiry-row { display: flex; gap: 8px; }
 .access-key-create-expiry-value { width: 80px; }
-.access-key-create-rate-section { margin-top: 14px; }
-.access-key-create-rate-fields { display: flex; gap: 12px; flex-wrap: wrap; }
-.access-key-create-rate-field { margin: 0; flex: 1; }
+.access-key-create-pt { justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 0; border-bottom: none; }
+.access-key-create-pt .toggle-label { flex: 0 1 auto; }
 
 /* ============================================================
    Access key detail - sticky layout
@@ -1901,6 +1876,7 @@ select.input {
 .preset-create-row .input { flex: 1; }
 .preset-empty { font-size: 13px; color: var(--phx-text-2); margin: 0; }
 .preset-hint { font-size: 12px; color: var(--phx-text-2); }
+.preset-state-modified { color: var(--phx-warning); }
 .preset-confirm-section p { margin: 0 0 4px; }
 .preset-diff-list {
   margin: 0;
@@ -1970,9 +1946,6 @@ select.input {
 /* ============================================================
    Pass-through notice
    ============================================================ */
-.pass-through-convert-card { margin: 0; }
-.pass-through-convert-body { margin: 0 0 12px; }
-.pass-through-actions { display: flex; gap: 8px; }
 
 /* ============================================================
    Area picker
@@ -1983,7 +1956,6 @@ select.input {
    ============================================================ */
 .rate-limit-row { display: flex; gap: 12px; }
 .rate-limit-row .field { flex: 1 1 0; margin: 0; }
-.rate-limit-disabled-text { margin: 8px 0 0; font-size: 12px; color: var(--phx-text-2); }
 
 /* ============================================================
    Settings
@@ -2020,8 +1992,6 @@ select.input {
 
 /* white-space: nowrap because a translated label is longer than "Reload" and
    the flex row was wrapping it onto two lines (live-reported in zh-Hans). */
-.reload-btn { background: none; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); cursor: pointer; padding: 4px 8px; font-size: 12px; color: var(--phx-text-2); transition: background 0.12s; white-space: nowrap; flex-shrink: 0; }
-.reload-btn:hover { background: var(--phx-surface-2); }
 
 /* ============================================================
    Persona Picker
@@ -2029,6 +1999,10 @@ select.input {
 .persona-picker { display: flex; flex-direction: column; gap: 12px; }
 .persona-helper { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px 0; }
 .persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+/* Names only, in icons-only mode: still large buttons, just shorter. */
+.persona-grid.is-compact { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.persona-grid.is-compact .persona-card { justify-content: center; min-height: 44px; }
+.persona-grid.is-compact .persona-card-label { margin-bottom: 0; }
 .persona-card {
   text-align: left; padding: 10px 12px; border: 1px solid var(--phx-border);
   border-radius: var(--phx-radius-sm); background: var(--phx-surface);
@@ -2068,7 +2042,8 @@ select.input {
 .cap-row:first-of-type { border-top: none; }
 .cap-row-label { flex: 1 1 auto; min-width: 0; }
 .cap-row-name { font-weight: 500; font-size: 13px; }
-.cap-row-badge { margin-left: 8px; vertical-align: middle; }
+.cap-row-notice { margin-inline-start: 8px; color: var(--phx-text-2); font-size: 12px; font-weight: 400; vertical-align: middle; }
+.cap-row-warning { margin-inline-start: 6px; vertical-align: -2px; color: var(--phx-warning); }
 .cap-row-desc { font-size: 11px; color: var(--phx-text-2); margin-top: 2px; line-height: 1.4; }
 .cap-row-modes { display: flex; gap: 4px; flex-shrink: 0; }
 .mode-radio {
@@ -2315,10 +2290,12 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .wizard-hero-actions { display: flex; justify-content: center; }
 
 /* Center the wizard both axes; margin:auto is scroll-safe for tall steps.
-   With the Guide beside it, the wizard moves left to leave the Guide room. */
+   With the Guide pinned beside it, room on the right is kept for the Guide, so
+   the pair is centred together: GUIDE_BESIDE_WIDTH plus its gap and margin, less
+   the 40px the card leaves empty inside its column. */
 .wizard-root { display: flex; min-height: 100%; }
 .wizard-center { margin: auto; width: 100%; max-width: 760px; }
-.wizard-root.is-guided .wizard-center { margin-left: 16px; margin-right: auto; }
+.wizard-root.is-guided { padding-right: 384px; }
 
 .wizard-stepper { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0 0 16px 0; flex-wrap: wrap; justify-content: center; }
 .wizard-step { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--phx-text-2); opacity: 0.7; }
@@ -2341,7 +2318,6 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .wizard-connect-status { margin-top: 14px; font-size: 13px; color: var(--phx-text-2); }
 .wizard-connect-status-ok { color: var(--phx-success); font-weight: 600; }
 /* Stable width so the label flip Copy -> Copied! never reflows the button. */
-.wizard-copy-btn { min-width: 78px; }
 
 .connect-field { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: nowrap; }
 .connect-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); min-width: 90px; }
@@ -2369,6 +2345,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 }
 .wizard-choice:hover { background: var(--phx-surface-2); border-color: var(--phx-accent); }
 .wizard-choice.is-chosen { border-color: var(--phx-accent); box-shadow: inset 0 0 0 1px var(--phx-accent); }
+.wizard-choice > svg { margin-bottom: 8px; color: var(--phx-text-2); }
 .wizard-choice strong { display: block; margin-bottom: 4px; }
 .wizard-choice small { color: var(--phx-text-2); line-height: 1.4; }
 @media (max-width: 600px) {
@@ -2380,19 +2357,19 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .connect-skill-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--phx-border); }
 
 .command-block { margin: 12px 0; }
-.command-block-title { font-size: 12px; font-weight: 700; color: var(--phx-text); margin-bottom: 2px; }
+.command-block-title { font-size: 12px; font-weight: 600; color: var(--phx-text); margin-bottom: 2px; }
 .command-block .wizard-hint { display: block; margin-bottom: 6px; }
 /* Every value (URL, access key, command, JSON, header field) renders as a full-width
-   box with the Copy button pinned inside at the top-right. */
+   box with its Copy button beside the value, never over it (user, 2026-10-28). */
 .command-field { margin: 8px 0; }
 .command-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin-bottom: 3px; }
-.command-block-codewrap { position: relative; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
-.command-block-code { margin: 0; padding: 10px 96px 10px 10px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--phx-text); background: transparent; }
-.command-block-input { width: 100%; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono, monospace); font-size: 12px; padding: 10px 96px 10px 10px; }
-.command-copy { position: absolute; top: 7px; right: 7px; z-index: 1; }
+.command-block-codewrap { display: flex; align-items: flex-start; gap: 8px; padding-right: 6px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
+.command-block-code { flex: 1 1 auto; min-width: 0; margin: 0; padding: 10px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--phx-text); background: transparent; }
+.command-block-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono, monospace); font-size: 12px; padding: 10px; }
+.command-copy { flex: none; margin-top: 5px; }
 
 .connect-details { margin: 12px 0; }
-.connect-details > summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--phx-accent); padding: 6px 0; }
+.connect-details > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--phx-text); padding: 6px 0; }
 
 /* MESA profile editor + previews */
 .mesa-editor-body { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
@@ -2510,14 +2487,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 }
 .mesa-link:hover { border-color: var(--phx-accent); color: var(--phx-accent); background: var(--phx-accent-lt); }
 .mesa-link-exists { border-color: var(--phx-accent); color: var(--phx-accent); }
-.perm-summary-name-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.perm-summary-name-text,
-.perm-summary-td-id button {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-  border: none; background: none; padding: 0; color: inherit; font: inherit; text-align: left;
-}
-.perm-summary-name-text:disabled,
-.perm-summary-td-id button:disabled { color: inherit; opacity: 1; }
+.perm-summary-name-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .sim-mesa-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--phx-text-2); }
 .tag-reco-chip {
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
@@ -3130,16 +3100,18 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   .agentcli-settings-model-edit > select,
   .agentcli-settings-model-row select { width: 100%; }
 }
-/* Post-create "how do you want to use this access key" choice list. */
-.post-create-choices { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+/* Post-create "how will you use this access key" choices: plain rows with an icon, in the UI2 style (user, 2026-10-28). */
+.post-create-choices { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }
 .post-create-choice {
-  display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
-  border: 1px solid var(--phx-border); background: var(--phx-surface);
-  border-radius: var(--phx-radius-sm); padding: 12px 14px; cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%;
+  border: none; border-top: 1px solid var(--phx-divider); background: var(--phx-surface); color: var(--phx-text);
+  padding: 12px 14px; cursor: pointer; font: inherit;
 }
-.post-create-choice:hover { background: var(--phx-accent-lt); border-color: var(--phx-accent); }
-.post-create-choice-title { font-size: 14px; font-weight: 600; color: var(--phx-accent); }
+.post-create-choice:first-child { border-top: none; }
+.post-create-choice:hover { background: var(--phx-hover); }
+.post-create-choice-icon { flex: none; margin-top: 1px; color: var(--phx-text-2); }
+.post-create-choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.post-create-choice-title { font-size: 14px; font-weight: 500; }
 .post-create-choice-sub { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
 
 /* Energy approval preview. Renders the preferences themselves rather than a

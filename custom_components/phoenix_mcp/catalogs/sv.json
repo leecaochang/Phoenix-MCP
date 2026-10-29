@@ -23,7 +23,6 @@
       "cardPersona": "Persona",
       "cardPresets": "Förinställningar",
       "cardRateLimiting": "Hastighetsbegränsning",
-      "cardToolAnnouncement": "Verktygsannonsering",
       "clearAll": "Rensa alla",
       "clearPermsBody": "Detta tar bort alla beviljanden för domäner, enheter och entiteter. Åtkomstnyckeln kommer inte att ha någon entitetsåtkomst förrän du lägger till nya behörigheter.",
       "clearPermsFailed": "Det gick inte att rensa behörigheterna.",
@@ -57,7 +56,6 @@
       "diffPermissionTree": "Behörighetsträd: {count} nod(er) skiljer sig",
       "diffRateLimit": "Hastighetsgräns: {fromRequests}/min burst {fromBurst} -> {toRequests}/min burst {toBurst}",
       "done": "Klar",
-      "editAria": "Redigera åtkomstnyckeln {name}",
       "empty": "Inga åtkomstnycklar ännu. Skapa en för att komma igång.",
       "emptyFiltered": "Inga åtkomstnycklar matchar filtret.",
       "enablePtBody": "<strong>Pass-through ger denna åtkomstnyckel bred åtkomst till entiteter och tjänster.</strong> Konfigurationsändringar, systemåtgärder, högriskfunktioner, åtkomst till systemloggen, MESA-regler, Phoenix MCP-blocklistan och borttagning av känsliga attribut gäller fortfarande.",
@@ -80,8 +78,6 @@
       "hideArchived": "Dölj arkiverade",
       "hoursAgo": "{h} tim sedan",
       "inlineWaitAria": "Varaktighet för väntetid på godkännande i anropet",
-      "inlineWaitDisabled": "Av är standard: anropet återkommer så snart godkännandet har köats.",
-      "inlineWaitHelp": "Hur länge ett bekräftelsebegränsat anrop från en extern MCP-klient väntar på ditt beslut innan det returnerar ett väntande svar. Agent Chat, röst och AI-uppgift ignorerar detta: de köar alltid omedelbart och väntar på sitt eget sätt.",
       "inlineWaitLabel": "Väntetid för godkännande i anropet",
       "inlineWaitOff": "Av (godkännanden köas omedelbart)",
       "justNow": "nyss",
@@ -139,19 +135,16 @@
       "presetSwitchTo": "Byt till",
       "ptConvertBody": "Om du byter till avgränsat läge tillämpas det sparade behörighetsträdet direkt. Om det inte har några beviljanden förlorar åtkomstnyckeln sin entitetsåtkomst tills du lägger till dem.",
       "ptConvertFailed": "Det gick inte att konvertera åtkomstnyckeln.",
-      "ptHeaderBanner": "<strong>Det här är en pass-through-åtkomstnyckel.</strong> Den har bred åtkomst till Home Assistant-entiteter och tjänster. Skyddade funktioner, MESA-regler, borttagning av känsliga attribut och Phoenix MCP-domänblocket är fortfarande aktiva.",
       "ptNoticeCaps": "Pass-through tillåter läsningar och vardagliga åtgärder automatiskt. Konfigurationsändringar, systemåtgärder, högriskfunktioner och åtkomst till systemloggen använder fortfarande inställningarna under Funktioner. Bekräfta kräver alltid godkännande.",
       "ptNoticeIntro": "<strong>Pass-through-åtkomstnyckel.</strong> Den här åtkomstnyckeln kringgår behörighetsträdet och har bred åtkomst till Home Assistant-entiteter och tjänster. Känsliga attribut tas bort, skyddade funktioner gäller fortfarande och Phoenix MCP-domänen är fortfarande blockerad.",
       "ptNoticeUsage": "Pass-through kan skicka information om varje entitet till modellen, vilket ökar modellanvändningen. Ett avgränsat behörighetsträd håller kontexten mindre.",
       "rateBurstLabel": "Burst per sekund",
-      "rateLimitingDisabled": "Hastighetsbegränsning är inaktiverad för den här åtkomstnyckeln.",
       "rateRequestsLabel": "Begäranden per minut (0 = inaktiverat)",
       "rateSaveFailed": "Det gick inte att spara.",
       "rateValuesError": "Värdena måste vara icke-negativa heltal.",
       "rawAccessKeyNote": "<strong>Den här åtkomstnyckeln visas inte igen.</strong> Kopiera den nu innan du stänger.",
       "reconnectBanner": "<strong>Återanslut din agent.</strong> Den här åtkomstnyckelns tillgängliga verktyg har ändrats.",
       "reconnectDismiss": "Avfärda påminnelsen om återanslutning",
-      "refreshAria": "Uppdatera åtkomstnycklar",
       "renameFailed": "Det gick inte att byta namn.",
       "revoke": "Återkalla",
       "revokeAccessKeyTitle": "Återkalla åtkomstnyckel",
@@ -175,17 +168,15 @@
       "statusExpired": "Utgången",
       "statusRevoked": "Återkallad",
       "switchToScoped": "Byt till avgränsat läge",
-      "switching": "Byter...",
       "updateFailed": "Det gick inte att uppdatera åtkomstnyckeln.",
       "waitBeforeClose": "Vänta 3 sekunder innan du stänger",
-      "cardNotes": "Anteckningar",
-      "notesCaution": "Anteckningar är endast rådgivande: de ger aldrig åtkomst, ändrar inte funktioner och kringgår inte godkännanden, och en modell kan ignorera dem. Anslutna klienter och deras modellleverantörer tar emot dem, och alla som kan prata med en agent som använder den här åtkomstnyckeln kan få den att upprepa dem. Skriv inte lösenord eller andra hemligheter här.",
       "notesCount": "{count} / {max} tecken",
       "notesDiscard": "Förkasta ändringar",
-      "notesHelp": "Vägledning för alla agenter som använder den här åtkomstnyckeln, till exempel vad rum och enheter heter, vem som använder den eller var hushållets dokumentation finns. Phoenix MCP lägger till anteckningarna i varje agents instruktioner och döljer entitets-ID:n utanför den här åtkomstnyckelns omfång.",
       "notesLabel": "Anteckningar för agenter",
       "notesPlaceholder": "Exempel: Gästrummet kallas arbetsrummet. Fråga innan du ändrar något i barnrummet.",
-      "notesTooLong": "Anteckningar får innehålla högst {max} tecken."
+      "notesTooLong": "Anteckningar får innehålla högst {max} tecken.",
+      "cardGuidance": "Vägledning",
+      "cardAgentBehavior": "Agentbeteende"
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} måste vara en åtkomstnyckel-ID-sträng eller null.",
@@ -1752,9 +1743,6 @@
       "permForDevice": "Behörighet för enheten {name}",
       "permForDomain": "Behörighet för domänen {name}",
       "permSaveFailed": "Det gick inte att spara behörigheten.",
-      "reload": "Ladda om",
-      "reloadAria": "Ladda om entiteter",
-      "reloadTitle": "Ladda om entiteter från Home Assistant",
       "riskDomainTitle": "Högriskdomän. Att bevilja SKRIV här ger åtkomst till breda systemåtgärder.",
       "saveFailedShort": "Sparandet misslyckades",
       "selGreen": "Write: läs och skriv",
@@ -1763,9 +1751,7 @@
       "selSelected": "{title}, vald",
       "selYellow": "Read: skrivskyddad",
       "simulateEntityTitle": "Simulera behörigheter för {id}",
-      "simulateTitle": "Simulera behörigheter av typen {type} för {id}",
       "stateDeny": "NEKA",
-      "stateInherit": "ÄRV",
       "stateNoAccess": "INGEN ÅTKOMST",
       "stateNotFound": "HITTADES INTE",
       "stateRead": "LÄS",
@@ -1783,7 +1769,11 @@
       "unmatchedDevicesNote": "De här uttryckliga beviljandena avser enhets-ID:n som inte finns i det aktuella entitetsträdet. Ange N för att ta bort ett inaktuellt beviljande.",
       "unmatchedDevicesTitle": "Omatchade enhetsbehörigheter",
       "hintCaution": "Skickas till agenter och deras modellleverantörer. Skriv aldrig lösenord eller koder här.",
-      "removeHint": "Ta bort tips"
+      "removeHint": "Ta bort tips",
+      "levelInherit": "Ärv",
+      "levelRead": "Läs",
+      "levelWrite": "Skriv",
+      "levelDeny": "Neka"
     },
     "personas": {
       "automation_builder": {
@@ -1802,7 +1792,6 @@
         "description": "Läser ESPHome-enheters status, diagnostik, loggar och enhets-YAML, och validerar och kompilerar den. Flashning av firmware kräver godkännande. YAML-uppgifter förblir dolda. Ingen enhetsstyrning och ingen annan konfiguration.",
         "label": "ESPHome-enheter"
       },
-      "helper": "En persona anger de inledande funktionerna. Du kan justera enskilda funktioner i Avancerat. Personan ändras till Anpassad när dina inställningar inte längre matchar en förinställning.",
       "home_admin": {
         "description": "Kan läsa och hantera hela hemmet. Omstarter, fysiska kontroller och känsliga konfigurationsändringar kräver godkännande.",
         "label": "Hemadministratör"
@@ -1895,7 +1884,7 @@
       "selectArea": "-- Välj område --",
       "selectIntegration": "-- Välj integration --",
       "selectLabel": "-- Välj etikett --",
-      "menu": "Välj efter",
+      "menu": "Filter",
       "reset": "Återställ"
     },
     "settings": {
@@ -2410,14 +2399,16 @@
       "myEmpty": "Min arbetsyta är tom. Lägg till ett fönster med Lägg till i Min arbetsyta i dess fönstermeny, eller Agent Chat från dess egen meny.",
       "myEmptyPhone": "Min arbetsyta har inga fönster på den här telefonen.",
       "myWorkspace": "Min arbetsyta",
-      "removeFromMy": "Ta bort från Min arbetsyta",
       "removedFromMy": "{window} har tagits bort från Min arbetsyta",
       "safety": "Säkerhet",
       "resetWorkspaceHint": "Flyttar tillbaka den här arbetsytans fönster dit Phoenix placerar dem. Andra arbetsytor och Min standard förblir oförändrade.",
       "resetAllHint": "Återställer alla arbetsytor, verktygsfältet, hjälpfältet och guiden. Min standard och Phoenix-inställningarna förblir oförändrade.",
       "toolbarOptions": "Alternativ för verktygsfältet",
       "vertical": "Lodrätt",
-      "horizontal": "Vågrätt"
+      "horizontal": "Vågrätt",
+      "alwaysLabels": "Visa alltid ikoner och text",
+      "verticalScrolling": "Lodrät rullning",
+      "resetMyHint": "Tar bort alla fönster från Min arbetsyta. Andra arbetsytor och Min standard förblir oförändrade."
     },
     "notifications": {
       "title": "Aviseringar",
@@ -2459,7 +2450,10 @@
       "settingsVoiceDisable": "När du stänger av röstagenten tas även assistenten som Phoenix MCP skapade i Home Assistant bort.",
       "settingsVoiceRemoveAssistant": "När du stänger av detta tas assistenten som Phoenix MCP skapade i Home Assistant bort. Röstagenten förblir aktiverad.",
       "wsMy": "Din egen arbetsyta: fönster som du har lagt till från de andra arbetsytorna, och Agent Chat om du har dockat den här.",
-      "toolbarOptions": "Välj hur verktygsfältets knappar visas, docka det vid en kant eller gör det flytande, ställ det lodrätt eller vågrätt, eller fäll ihop det."
+      "toolbarOptions": "Välj hur verktygsfältets knappar visas, docka det vid en kant eller gör det flytande, ställ det lodrätt eller vågrätt, eller fäll ihop det.",
+      "persona": "En persona anger de inledande funktionerna. Ändra enskilda funktioner i fönstret Funktioner; personan blir Anpassad när inställningarna inte längre matchar någon persona.",
+      "guidance": "Vägledning för alla agenter som använder den här åtkomstnyckeln, till exempel vad rum och enheter heter, vem som använder den eller var hushållets dokumentation finns. Phoenix MCP lägger till den i varje agents instruktioner och döljer entitets-ID:n utanför den här åtkomstnyckelns omfång. Den är endast rådgivande: den ger aldrig åtkomst, ändrar inte funktioner och kringgår inte godkännanden, och en modell kan ignorera den. Agenter och deras modellleverantörer tar emot detta, och alla som pratar med en agent kan få det upprepat. Skriv aldrig lösenord eller andra hemligheter här.",
+      "inlineWait": "Hur länge ett bekräftelsebegränsat anrop från en extern MCP-klient väntar på ditt beslut innan det returnerar ett väntande svar. Med Av, som är standard, återkommer anropet så snart godkännandet har köats. Agent Chat, röst och AI-uppgift ignorerar detta: de köar alltid omedelbart och väntar på sitt eget sätt."
     },
     "guide": {
       "title": "Guide",

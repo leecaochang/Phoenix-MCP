@@ -629,7 +629,7 @@ export function AgentCliWindow({
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
   const restoredApprovals = useRef(new Set<string>());
-  const [turns, setTurns] = useState<Turn[]>(() => restorableTurns(getSessionTurns()).map((turn) => ({
+  const [turns, setTurns] = useState<Turn[]>(() => (saved.freshConversation ? [] : restorableTurns(getSessionTurns())).map((turn) => ({
     ...turn,
     entries: turn.entries.map((entry) => {
       if (entry.kind !== "approval" || ["approved", "rejected", "cancelled", "expired", "failed", "resolved"].includes(entry.status)) return entry;
@@ -669,7 +669,7 @@ export function AgentCliWindow({
   // Provider-reported token usage for this conversation (session lifecycle,
   // like the transcript). The stream's usage events carry TURN-cumulative
   // totals, so each event is added to the session base captured at send time.
-  const [usage, setUsage] = useState<SessionUsage>(() => getSessionUsage());
+  const [usage, setUsage] = useState<SessionUsage>(() => (saved.freshConversation ? { input: 0, output: 0, context: 0, noData: false } : getSessionUsage()));
   // Screen-reader announcement of discrete chat events (completed replies,
   // approvals, errors). Deliberately NOT the streaming transcript itself:
   // a live region over token-by-token deltas would announce every chunk.
@@ -830,6 +830,13 @@ export function AgentCliWindow({
   // The prefill is one-shot: consumed into the input above, then cleared so it
   // does not reappear on a later open.
   useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }, persistenceOwner); }, [persistenceOwner, saved.prefill]);
+  // A fresh conversation is one-shot too: the cleared transcript is saved by the
+  // effect below, and the usage counters are saved here.
+  useEffect(() => {
+    if (!saved.freshConversation) return;
+    patchDurable({ freshConversation: false }, persistenceOwner);
+    setSessionUsage({ input: 0, output: 0, context: 0, noData: false }, persistenceOwner);
+  }, [persistenceOwner, saved.freshConversation]);
   // The transcript is session-only (survives remount within a page load).
   useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [persistenceOwner, turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect

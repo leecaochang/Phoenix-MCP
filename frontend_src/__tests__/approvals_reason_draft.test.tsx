@@ -84,4 +84,25 @@ describe("rejection reason draft sharing", () => {
       "appr_1", { reason: "wrong entity" }));
     await waitFor(() => expect(getReasonDraft("appr_1")).toBe(""));
   });
+
+  it("a click elsewhere cancels the rejection and keeps the reason; Approve and Reject do not count as elsewhere (user, 2026-10-28)", async () => {
+    const view = await openDetail();
+    const input = await view.findByLabelText("Optional reason");
+    fireEvent.change(input, { target: { value: "wrong entity" } });
+    fireEvent.pointerDown(view.getByRole("button", { name: "Approve and Execute" }));
+    fireEvent.pointerDown(input);
+    expect(view.getByLabelText("Optional reason")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(view.queryByLabelText("Optional reason")).toBeNull();
+    expect(api.rejectApproval).not.toHaveBeenCalled();
+    expect(api.approveApproval).not.toHaveBeenCalled();
+    expect(getReasonDraft("appr_1")).toBe("wrong entity");
+    // Reject still opens and closes the row itself.
+    const reject = view.getByRole("button", { name: "Reject" });
+    fireEvent.click(reject);
+    expect(view.getByLabelText("Optional reason")).toHaveValue("wrong entity");
+    fireEvent.pointerDown(reject);
+    fireEvent.click(reject);
+    expect(view.queryByLabelText("Optional reason")).toBeNull();
+  });
 });

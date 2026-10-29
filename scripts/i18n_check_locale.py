@@ -188,6 +188,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         "panel.mesa.colTags",  # "Tags"
         "panel.guide.title",  # "Guide", the same word in this language
@@ -238,6 +239,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.workspace.horizontal",  # "Horizontal"
         "panel.changes.typeLabel",  # "Label"
         "panel.mesa.colName",  # "Name"
@@ -317,7 +319,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.conversation",  # French cognate: Conversation.
         "panel.conversations.sourceLabel",  # Shared technical term or cognate.
         "panel.settings.agentcliSite",  # French cognate: Site.
-        "panel.accessKeys.cardNotes",  # French cognate: Notes.
         "panel.approvalSummary.named.kind.script",  # HA entity type: "script"
         "panel.changes.typeBlueprint",              # HA term: "Blueprint"
         "panel.changes.typeScript",                 # "Script"
@@ -416,6 +417,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Norwegian
@@ -450,6 +452,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.changes.colName",               # "Item", the Dutch loanword
         "panel.settings.colAccount",  # "Account"
         "panel.settings.colProvider",  # "Provider"
@@ -555,6 +558,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.

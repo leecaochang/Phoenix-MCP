@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { compileGuide, parseTopic, type GuideBundle } from "../guide/compile";
@@ -125,7 +125,7 @@ describe("the Guide window", () => {
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Access Keys");
   });
 
-  it("sits beside the wizard step, level with the part it explains, until the user moves it", async () => {
+  it("is pinned beside the wizard step, level with the part it explains, and cannot be moved, resized or closed", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: 1, language: "en", topics: {} }) })));
     const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) });
     const frame = document.createElement("div");
@@ -138,23 +138,32 @@ describe("the Guide window", () => {
     frame.getBoundingClientRect = () => box(260, 110, 1490, 940) as DOMRect;
     content.getBoundingClientRect = () => box(276, 150, 1036, 700) as DOMRect;
     part.getBoundingClientRect = () => box(296, 260, 1016, 500) as DOMRect;
-    const onMoved = vi.fn();
     const onRect = vi.fn();
-    render(<GuideWindow workspace="accessKeys" controller={null} language="en" rect={{ x: 10, y: 10, w: 400, h: 560 }}
-      onRect={onRect} onClose={() => {}} topicId="wizard.persona" follow={{ step: "persona", part, content }} onMoved={onMoved} />);
+    const view = render(<GuideWindow workspace="accessKeys" controller={null} language="en" rect={{ x: 10, y: 10, w: 360, h: 560 }}
+      onRect={onRect} onClose={() => {}} topicId="wizard.persona" follow={{ step: "persona", part, content }} />);
     const guide = screen.getByRole("region", { name: "Guide" });
+    expect(guide).toHaveClass("is-pinned");
     expect(guide.style.left).toBe("1052px");
     expect(guide.style.top).toBe("260px");
+    // Its own width beside the wizard, whatever size the user gave it elsewhere.
     expect(guide.style.width).toBe("400px");
-    // The placement is not saved; only a move by the user is.
-    expect(onRect).not.toHaveBeenCalled();
+    expect(within(guide).queryByRole("button", { name: "Close" })).toBeNull();
+    expect(guide.querySelector(".agentcli-resize")).toBeNull();
 
     const title = guide.querySelector("header")!;
     fireEvent(title, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 1100, clientY: 270 }));
     window.dispatchEvent(new MouseEvent("pointermove", { clientX: 900, clientY: 300 }));
     window.dispatchEvent(new MouseEvent("pointerup", {}));
-    expect(onMoved).toHaveBeenCalledOnce();
-    expect(onRect).toHaveBeenCalledOnce();
+    expect(guide.style.left).toBe("1052px");
+    expect(onRect).not.toHaveBeenCalled();
+
+    // After the wizard it is back where the user left it, and can be closed again.
+    view.rerender(<GuideWindow workspace="accessKeys" controller={null} language="en" rect={{ x: 10, y: 10, w: 360, h: 560 }}
+      onRect={onRect} onClose={() => {}} />);
+    expect(guide).not.toHaveClass("is-pinned");
+    expect(guide.style.left).toBe("10px");
+    expect(guide.style.width).toBe("360px");
+    expect(within(guide).getByRole("button", { name: "Close" })).toBeInTheDocument();
     frame.remove();
   });
 });
@@ -178,61 +187,15 @@ describe("placing the Guide beside the wizard", () => {
 });
 
 
-describe("the wizard's hold on the Guide", () => {
-  const step = (id: string) => ({ step: id, part: document.createElement("div"), content: document.createElement("div") });
-  function setup(open = false) {
-    const state = { open };
-    const setOpen = vi.fn((next: boolean) => { state.open = next; });
-    const hook = renderHook(() => useWizardGuide(() => state.open, setOpen));
-    return { state, setOpen, hook };
-  }
-
-  it("a first run opens the Guide, which follows the steps and closes again at the end", () => {
-    const { state, setOpen, hook } = setup();
-    act(() => hook.result.current.report(step("choose"), true));
-    expect(state.open).toBe(true);
-    expect(hook.result.current.follow?.step).toBe("choose");
-    act(() => hook.result.current.report(step("persona")));
-    expect(hook.result.current.step?.step).toBe("persona");
-    act(() => hook.result.current.report(null));
-    expect(state.open).toBe(false);
-    expect(setOpen.mock.calls).toEqual([[true], [false]]);
+describe("the wizard's step", () => {
+  it("is the step last reported, and none once the wizard ends", () => {
+    const step = (id: string) => ({ step: id, part: document.createElement("div"), content: document.createElement("div") });
+    const hook = renderHook(() => useWizardGuide());
     expect(hook.result.current.step).toBeNull();
-  });
-
-  it("leaves the Guide alone when it was not a first run, was already open, or the user set it", () => {
-    const later = setup();
-    act(() => later.hook.result.current.report(step("choose"), false));
-    act(() => later.hook.result.current.report(null));
-    expect(later.setOpen).not.toHaveBeenCalled();
-
-    const open = setup(true);
-    act(() => open.hook.result.current.report(step("choose"), true));
-    act(() => open.hook.result.current.report(null));
-    expect(open.setOpen).not.toHaveBeenCalled();
-
-    const toggled = setup();
-    act(() => toggled.hook.result.current.report(step("choose"), true));
-    act(() => { toggled.hook.result.current.userToggled(); toggled.state.open = true; });
-    act(() => toggled.hook.result.current.report(null));
-    expect(toggled.setOpen.mock.calls).toEqual([[true]]);
-    expect(toggled.state.open).toBe(true);
-  });
-
-  it("stops placing a Guide the user moved, until the next wizard", () => {
-    const { hook } = setup();
-    act(() => hook.result.current.report(step("choose"), true));
-    act(() => hook.result.current.onMoved());
+    act(() => hook.result.current.report(step("choose")));
     act(() => hook.result.current.report(step("persona")));
-    expect(hook.result.current.follow).toBeNull();
     expect(hook.result.current.step?.step).toBe("persona");
     act(() => hook.result.current.report(null));
-    act(() => hook.result.current.report(step("choose"), false));
-    expect(hook.result.current.follow?.step).toBe("choose");
-    // A move outside a wizard is just a move.
-    act(() => hook.result.current.report(null));
-    act(() => hook.result.current.onMoved());
-    act(() => hook.result.current.report(step("choose")));
-    expect(hook.result.current.follow?.step).toBe("choose");
+    expect(hook.result.current.step).toBeNull();
   });
 });

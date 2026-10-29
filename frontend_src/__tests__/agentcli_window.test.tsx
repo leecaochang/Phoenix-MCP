@@ -38,9 +38,11 @@ import {
   AGENTCLI_TEXT_SIZE_MIN_PT,
   getDurable,
   getSessionTurns,
+  getSessionUsage,
   normalizeAgentCliTextSize,
   patchDurable,
   setSessionTurns,
+  setSessionUsage,
   __resetAgentCliState,
   __reloadFromStorage,
 } from "../utils/agentcli_state";
@@ -2274,6 +2276,24 @@ describe("unsent message box survives a panel remount", () => {
     mount();
 
     await waitFor(() => expect(box().value).toBe("How many lights are in my home?"));
+  });
+
+  it("starts a new conversation once when the wizard asks for one (user, 2026-10-28)", async () => {
+    setSessionTurns([{ entries: [{ kind: "user", text: "an earlier question", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionUsage({ input: 120, output: 40, context: 120, noData: false });
+    patchDurable({ prefill: "How many lights are in my home?", freshConversation: true });
+    const first = mount();
+    await waitFor(() => expect(box().value).toBe("How many lights are in my home?"));
+    expect(screen.queryByText("an earlier question")).toBeNull();
+    expect(getSessionTurns()).toEqual([]);
+    expect(getSessionUsage().input).toBe(0);
+    expect(getDurable().freshConversation).toBe(false);
+    first.unmount();
+
+    // One-shot: a later open restores the conversation as usual.
+    setSessionTurns([{ entries: [{ kind: "user", text: "the wizard's question", ts: 2 }], messages: [], lines: 1 }]);
+    mount();
+    expect(screen.getByText("the wizard's question")).toBeInTheDocument();
   });
 });
 

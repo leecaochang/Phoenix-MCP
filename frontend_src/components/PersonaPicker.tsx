@@ -1,11 +1,12 @@
 import { BusyButton } from "./BusyButton";
-import React from "react";
+import React, { useContext } from "react";
 import type { Persona, AccessKeyRecord } from "../types";
 import { api } from "../api";
 import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
-import type { EsphomeAvailability } from "./CapabilityMatrix";
+import { CAP_NAMES, type EsphomeAvailability } from "./CapabilityMatrix";
 import { t } from "../i18n";
 import { Icon } from "../ui/Icon";
+import { DisplayModeContext } from "../ui/ActionButton";
 
 // Patch mode: applies the persona to an existing access key (Access key detail).
 // Select mode: no access key yet (onboarding wizard); reports the chosen persona to
@@ -27,11 +28,18 @@ interface SelectProps {
 }
 type Props = PatchProps | SelectProps;
 
+// Each key's Custom capabilities from before another persona was chosen, so choosing Custom
+// again brings them back (user, 2026-10-28). Kept while the panel stays open.
+const customCaps = new Map<string, Record<string, string>>();
+
 export function PersonaPicker(props: Props) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const isSelectMode = props.onSelect !== undefined;
+  // In icons-only mode the Persona window shows each persona's name alone; its description is in Help
+  // (user, 2026-10-28). The wizard keeps the descriptions, since they are how a first persona is chosen.
+  const iconsOnly = useContext(DisplayModeContext) === "icons" && !isSelectMode;
   const esphome = isSelectMode ? null : props.esphome;
   const activeKey = isSelectMode ? props.selected : props.accessKey.persona;
 
@@ -45,12 +53,14 @@ export function PersonaPicker(props: Props) {
     try {
       // Cap defaults come from a hardcoded mirror of personas.py so all caps
       // patch in one request. Backend validation stays the source of truth.
-      const caps = PERSONA_CAP_DEFAULTS[persona];
+      const key = props.accessKey;
+      const caps = persona === "custom" ? customCaps.get(key.id) : PERSONA_CAP_DEFAULTS[persona];
       const body: Record<string, unknown> = { persona };
       if (caps) {
         Object.assign(body, caps);
       }
-      const updated = await api.patchAccessKey(props.accessKey.id, body);
+      const updated = await api.patchAccessKey(key.id, body);
+      if (key.persona === "custom" && persona !== "custom") customCaps.set(key.id, Object.fromEntries(CAP_NAMES.map((c) => [c, key[c]])));
       props.onUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.personaApplyFailed"));
@@ -60,12 +70,13 @@ export function PersonaPicker(props: Props) {
   }
 
   return (
-    <div className="persona-picker">
+    <div className="persona-picker" data-help={isSelectMode ? undefined : "help.persona"}>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      {!isSelectMode && (
-        <p className="persona-helper">{t(activeKey === "home_companion" ? "personas.home_companion.setup" : "personas.helper")}</p>
+      {/* Home Companion needs setting up elsewhere: that stays in view while it is chosen. */}
+      {!isSelectMode && activeKey === "home_companion" && (
+        <p className="persona-helper">{t("personas.home_companion.setup")}</p>
       )}
-      <div className="persona-grid">
+      <div className={`persona-grid${iconsOnly ? " is-compact" : ""}`}>
         {PERSONAS.filter((p) =>
           isSelectMode
             ? p.key !== "custom"   // wizard: hide "Custom" (no matrix to configure)
@@ -80,6 +91,7 @@ export function PersonaPicker(props: Props) {
               onClick={() => !saving && !active && choose(p.key)}
               busy={saving}
               aria-pressed={active}
+              data-help={p.descriptionKey}
             >
               <div className="persona-card-label">
                 {t(p.labelKey)}
@@ -87,7 +99,9 @@ export function PersonaPicker(props: Props) {
                   <Icon name="star" className="persona-card-marker" filled />
                 )}
               </div>
-              <div className="persona-card-desc">{t(p.descriptionKey)}</div>
+              {iconsOnly
+                ? <span className="sr-only">{t(p.descriptionKey)}</span>
+                : <div className="persona-card-desc">{t(p.descriptionKey)}</div>}
               {p.key === "esphome" && esphome && !esphome.integration && !esphome.builder && (
                 <div className="persona-card-note">{t("personas.noEsphome")}</div>
               )}

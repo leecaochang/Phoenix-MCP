@@ -10,8 +10,9 @@ import { useContext, useEffect, useMemo, useRef, useSyncExternalStore, type Func
 import { createPortal } from "react-dom";
 import { DockviewReact, type DockviewApi, type DockviewOptions, type DockviewReadyEvent, type IDockviewPanelProps, type IWatermarkPanelProps } from "dockview-react";
 import { dimWhileDragging, edgeResolver, floatingMouseMove, refuseTabDrops } from "./drop";
+import { rowRules } from "./rows";
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "./fold";
-import { WorkspaceCanvas, bandEdgeResizing, pushDownResizing, scrollWhileDragging } from "./scroll";
+import { WorkspaceCanvas, bandEdgeResizing, bottomEdgeResizing, pushDownResizing, scrollWhileDragging } from "./scroll";
 import { ControllerContext, TitleTab, WindowControls, WindowGhost, WindowMenuExtrasContext, windowMenuEntries } from "./TitleBar";
 import { t } from "../../i18n";
 import { useContextMenu, type MenuEntry } from "../../ui/Menu";
@@ -132,6 +133,11 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       ];
       out.push(...subs.map((s) => () => s.dispose()));
     }
+    // A window dropped beside others shares their row by the row rules, never more than four across.
+    for (const id of ["main", "top", "bottom"] as const) {
+      const rules = rowRules(apis.current[id]!);
+      out.push(() => rules.dispose());
+    }
     // Floating windows only move; nothing docks inside the floating layer.
     const noDocking = float.onWillShowOverlay((e) => e.preventDefault());
     out.push(() => noDocking.dispose());
@@ -143,6 +149,8 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
 
     const resized = (ids: string[]) => controller.markUserSized(ids);
     out.push(pushDownResizing(main, mainCanvas, () => onChange.current(), resized));
+    const bottomEdge = mainEl.querySelector<HTMLElement>(".phx-grid-edge");
+    if (bottomEdge) out.push(bottomEdgeResizing(main, mainCanvas, bottomEdge, () => onChange.current(), resized));
     for (const band of ["top", "bottom"] as const) {
       const el = elements.current[band];
       const canvas = controller.canvasOf(band);
@@ -152,7 +160,11 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       if (edge) out.push(bandEdgeResizing(apis.current[band]!, canvas, edge, band, () => onChange.current()));
     }
     out.push(scrollWhileDragging(main, mainEl));
-    const maximized = main.onDidMaximizedGroupChange(() => controller.maximizedChanged());
+    const maximized = main.onDidMaximizedGroupChange(() => {
+      // A maximized window scrolls inside again, even where windows follow their content.
+      mainEl.classList.toggle("phx-has-maximized", main.hasMaximizedGroup());
+      controller.maximizedChanged();
+    });
     out.push(() => maximized.dispose());
     if (typeof ResizeObserver !== "undefined") {
       const refitMain = new ResizeObserver(() => mainCanvas.refit());
@@ -161,9 +173,15 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       refitBands.observe(frame.current);
       out.push(() => refitMain.disconnect(), () => refitBands.disconnect());
     }
+    // Windows that follow their content end their frames at it after every layout.
+    if (controller.contentSized) {
+      const slack = main.onDidLayoutChange(() => controller.markSlack());
+      out.push(() => slack.dispose());
+    }
     const folds = controller.folds.subscribe(() => onChange.current());
     const tables = controller.tables.subscribe(() => onChange.current());
-    out.push(folds, tables);
+    const display = controller.display.subscribe(() => onChange.current());
+    out.push(folds, tables, display);
     disposers.current = out;
   };
 
@@ -216,8 +234,10 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       <ControllerContext.Provider value={controller}>
         <div ref={(el) => { elements.current.top = el; }} className="phx-band phx-band-top phx-canvas-host phx-band-empty" data-band="top">{dock("top")}</div>
         <div className="phx-band-edge phx-band-edge-top" aria-hidden="true" />
-        <div ref={(el) => { elements.current.main = el; }} className="phx-workspace phx-canvas-host" hidden={!visible} data-workspace={controller.id}>
+        <div ref={(el) => { elements.current.main = el; }} className={`phx-workspace phx-canvas-host${controller.contentSized ? " phx-content-sized" : ""}`} hidden={!visible} data-workspace={controller.id}>
           {dock("main", { watermarkComponent: watermark })}
+          {/* Stretches the bottom row while the grid scrolls; Resize with Keyboard is the keyboard way. */}
+          <span className="phx-grid-edge" aria-hidden="true" />
         </div>
         <div className="phx-band-edge phx-band-edge-bottom" aria-hidden="true" />
         <div ref={(el) => { elements.current.bottom = el; }} className="phx-band phx-band-bottom phx-canvas-host phx-band-empty" data-band="bottom">{dock("bottom")}</div>

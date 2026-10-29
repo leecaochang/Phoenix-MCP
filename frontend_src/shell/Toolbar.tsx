@@ -35,8 +35,8 @@ export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(nu
 
 /**
  * Workspace options: reopen closed windows, save or restore My Default,
- * Reset This Workspace, and Reset All Workspaces (every arrangement plus the
- * toolbar, Help Bar and Guide).
+ * Reset This Workspace (which empties My Workspace), and Reset All Workspaces
+ * (every arrangement plus the toolbar, Help Bar and Guide).
  */
 export function workspaceMenu(controller: WorkspaceController, actions: WorkspaceActions | null): MenuEntry[] {
   const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
@@ -58,7 +58,8 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
       { id: "restore-default", label: t("workspace.restoreMyDefault"), disabled: !actions.hasMyDefault(controller), onSelect: () => actions.restoreMyDefault(controller) },
     );
   }
-  items.push({ id: "restore", label: t("workspace.restoreOriginal"), hint: t("workspace.resetWorkspaceHint"), onSelect: () => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal()) });
+  // My Workspace's reset empties it.
+  items.push({ id: "restore", label: t("workspace.restoreOriginal"), hint: t(controller.id === "my" ? "workspace.resetMyHint" : "workspace.resetWorkspaceHint"), onSelect: () => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal()) });
   if (actions) items.push("separator", { id: "panel-defaults", label: t("workspace.restorePanelDefaults"), hint: t("workspace.resetAllHint"), onSelect: actions.restorePanelDefaults });
   return items;
 }

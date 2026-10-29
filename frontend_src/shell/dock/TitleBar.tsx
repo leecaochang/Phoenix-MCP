@@ -6,6 +6,7 @@ import { t } from "../../i18n";
 import { Icon } from "../../ui/Icon";
 import { MenuButton, type MenuEntry } from "../../ui/Menu";
 import { neighbor, type Direction } from "./geometry";
+import { tooManyAcross } from "./rows";
 import type { WorkspaceController } from "./controller";
 
 export const ControllerContext = createContext<WorkspaceController | null>(null);
@@ -89,12 +90,12 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
   const floating = group.api.location.type === "floating";
   const pinned = host === "top" || host === "bottom";
   const then = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
-  const entries: MenuEntry[] = MOVES.map(([dir, key]) => ({
-    id: `move-${dir}`,
-    label: t(key),
-    disabled: floating || !hostApi || !neighbor(hostApi, group, dir),
-    onSelect: then(() => controller.move(group, dir)),
-  }));
+  const entries: MenuEntry[] = MOVES.map(([dir, key]) => {
+    const target = !floating && hostApi ? neighbor(hostApi, group, dir) : null;
+    // Moving beside a window in a row that is already four across is refused, as a drop there is.
+    const crowded = !!target && (dir === "left" || dir === "right") && tooManyAcross(hostApi!, target, group);
+    return { id: `move-${dir}`, label: t(key), disabled: !target || crowded, onSelect: then(() => controller.move(group, dir)) };
+  });
   entries.push("separator");
   entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: () => startResize(controller, windowId) });
   entries.push(floating

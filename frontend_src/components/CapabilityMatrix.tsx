@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useContext } from "react";
 import type { CapMode, CapName, CapTier, AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { DisplayModeContext } from "../ui/ActionButton";
+import { Icon } from "../ui/Icon";
 
 export interface EsphomeAvailability {
   integration: boolean;
@@ -31,6 +33,8 @@ interface CapDef {
   descriptionKey: string;
   tier: CapTier;
   confirmAvailable: boolean;
+  /** Its description warns of a risk; in icons-only mode, where descriptions are hidden, the row is marked. */
+  warns?: boolean;
 }
 
 const CAPS: CapDef[] = [
@@ -110,6 +114,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_automation_write.description",
     tier: "config_write",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_script_write",
@@ -117,6 +122,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_script_write.description",
     tier: "config_write",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_blueprint_write",
@@ -250,6 +256,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_esphome_flash.description",
     tier: "system",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_yaml_edit",
@@ -257,6 +264,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_yaml_edit.description",
     tier: "system",
     confirmAvailable: true,
+    warns: true,
   },
 ];
 
@@ -289,6 +297,8 @@ const MODE_DESC_KEYS: Record<CapMode, string> = {
 export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
   const [saving, setSaving] = React.useState<CapName | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Descriptions show in icons-and-text mode; in icons-only mode they are in Help (user, 2026-10-28).
+  const iconsOnly = useContext(DisplayModeContext) === "icons";
 
   async function setMode(cap: CapName, mode: CapMode) {
     if (saving !== null || accessKey[cap] === mode) return;
@@ -338,19 +348,20 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
                 ? esphomeNotice(esphome) : null;
               return (
                 <div key={cap.key} className="cap-row">
-                  <div className="cap-row-label">
+                  <div className="cap-row-label" data-help={cap.descriptionKey}>
                     <div className="cap-row-name">
                       {t(cap.labelKey)}
+                      {iconsOnly && cap.warns && <Icon name="warning" size={14} className="cap-row-warning" />}
                       {notice && (
-                        <span
-                          className="badge badge-amber cap-row-badge"
-                          title={t("caps.esphomeBadgeTitle")}
-                        >
+                        <span className="phx-outcome cap-row-notice" title={t("caps.esphomeBadgeTitle")}>
+                          <Icon name="info" size={14} />
                           {notice}
                         </span>
                       )}
                     </div>
-                    <div className="cap-row-desc">{t(cap.descriptionKey)}</div>
+                    {iconsOnly
+                      ? <span className="sr-only">{t(cap.descriptionKey)}</span>
+                      : <div className="cap-row-desc">{t(cap.descriptionKey)}</div>}
                   </div>
                   <div className="cap-row-modes" role="group" aria-label={t(cap.labelKey)} aria-busy={isSaving}>
                     <ModeRadio

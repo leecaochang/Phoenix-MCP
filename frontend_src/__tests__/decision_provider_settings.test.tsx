@@ -159,7 +159,7 @@ it("blocks saving when the server advertises no models", async () => {
   fireEvent.change(screen.getByLabelText("API key"), { target: { value: "key" } });
   fireEvent.click(screen.getByText("Validate"));
   await screen.findByLabelText("Select default model:");
-  expect(screen.getByText("Done")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
   expect(mocks.create).not.toHaveBeenCalled();
 });
 

@@ -7,8 +7,9 @@
  * escape-first Markdown renderer, and link to each other inside the Guide;
  * links to the website open in a new tab. On phones it heads the stack.
  *
- * While the setup wizard runs, the Guide shows the current step's topic and,
- * until the user moves it, sits beside the part of the step it explains.
+ * While the setup wizard runs, the Guide is always shown (user, 2026-10-28):
+ * pinned beside the part of the step it explains, with the step's topic, and
+ * it cannot be moved, resized or closed until the wizard ends.
  */
 
 import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
@@ -110,42 +111,26 @@ export interface WizardGuideStep {
 
 /** How the setup wizard tells the shell its step, and whether the Guide sits beside it. */
 export const WizardGuideContext = createContext<{
-  /** A step, or null when the wizard closes; `firstRun` with the first step opens the Guide. */
-  report: (step: WizardGuideStep | null, firstRun?: boolean) => void;
+  /** The step on screen, or null when the wizard closes. */
+  report: (step: WizardGuideStep | null) => void;
   guideBeside: boolean;
 } | null>(null);
 
 /**
- * The wizard's hold on the Guide in Access Keys. A first-run wizard opens the
- * Guide; the Guide follows the steps until the user moves it; a Guide the
- * wizard opened closes again when the wizard ends, unless the user opened or
- * closed it themselves in between.
+ * The wizard's step in Access Keys. While there is one, the shell shows the
+ * Guide pinned beside it, without touching the Guide's own open state, so the
+ * Guide is back as the user left it when the wizard ends.
  */
-export function useWizardGuide(isOpen: () => boolean, setOpen: (open: boolean) => void) {
+export function useWizardGuide() {
   const [step, setStep] = useState<WizardGuideStep | null>(null);
-  const [moved, setMoved] = useState(false);
-  const run = useRef<{ openedGuide: boolean } | null>(null);
-  const latest = useRef({ isOpen, setOpen });
-  latest.current = { isOpen, setOpen };
-  const report = useCallback((next: WizardGuideStep | null, firstRun = false) => {
-    if (next && !run.current) {
-      const alreadyOpen = latest.current.isOpen();
-      run.current = { openedGuide: firstRun && !alreadyOpen };
-      setMoved(false);
-      if (firstRun && !alreadyOpen) latest.current.setOpen(true);
-    } else if (!next && run.current) {
-      if (run.current.openedGuide && latest.current.isOpen()) latest.current.setOpen(false);
-      run.current = null;
-    }
-    setStep(next);
-  }, []);
-  /** The user opened or closed the Guide: the wizard leaves it as they set it. */
-  const userToggled = useCallback(() => { if (run.current) run.current.openedGuide = false; }, []);
-  const onMoved = useCallback(() => { if (run.current) setMoved(true); }, []);
-  return { step, follow: moved ? null : step, report, userToggled, onMoved };
+  const report = useCallback((next: WizardGuideStep | null) => setStep(next), []);
+  return { step, report };
 }
 
 type Box = { left: number; top: number; right: number; bottom: number };
+
+/** The Guide's width beside the wizard; the wizard's stylesheet leaves room for it (`.wizard-root.is-guided`). */
+export const GUIDE_BESIDE_WIDTH = 400;
 
 /**
  * Where the Guide sits during the wizard: to the right of the step's content,
@@ -222,7 +207,7 @@ function BackButton({ guide }: { guide: ReturnType<typeof useGuideTopic> }) {
 }
 
 /** The floating Guide for a desktop workspace. */
-export function GuideWindow({ workspace, controller, language, rect, onRect, onClose, topicId = null, follow = null, onMoved }: {
+export function GuideWindow({ workspace, controller, language, rect, onRect, onClose, topicId = null, follow = null }: {
   workspace: string;
   controller: WorkspaceController | null;
   language: string;
@@ -231,17 +216,15 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   onClose: () => void;
   /** A topic shown ahead of the focused window's, such as the wizard step's. */
   topicId?: string | null;
-  /** The wizard step to sit beside, until the user moves the Guide. */
+  /** The wizard step to sit beside: the Guide is pinned there, and cannot be moved or closed. */
   follow?: WizardGuideStep | null;
-  /** The user dragged or resized the Guide. */
-  onMoved?: () => void;
 }) {
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
   const guide = useGuideTopic(workspace, controller?.activeWindow ?? null, language, topicId);
   const [live, setLive] = useState<GuideRect>(() => rect ?? defaultGuideRect(window.innerWidth, window.innerHeight));
-  // A saved place applies unless the Guide is following the wizard.
+  // A saved place applies unless the Guide is pinned beside the wizard; after the wizard it returns there.
   const following = !!follow;
-  useEffect(() => { if (rect && !following) setLive(rect); }, [rect, following]);
+  useEffect(() => { if (!following) setLive(rect ?? defaultGuideRect(window.innerWidth, window.innerHeight)); }, [rect, following]);
   const liveRef = useRef(live);
   liveRef.current = live;
 
@@ -264,7 +247,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     const place = () => {
       const frame = follow.content.closest(".phx-workspace")?.getBoundingClientRect()
         ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-      setLive((r) => besideRect(follow.content.getBoundingClientRect(), follow.part.getBoundingClientRect(), frame, r));
+      setLive((r) => besideRect(follow.content.getBoundingClientRect(), follow.part.getBoundingClientRect(), frame, { w: GUIDE_BESIDE_WIDTH, h: r.h }));
     };
     place();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
@@ -284,7 +267,6 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
       const final = settle(latest);
       setLive(final);
       onRect(final);
-      onMoved?.();
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -292,7 +274,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
 
   // Drag by the title bar; on release an edge near the screen's side snaps to it.
   const startDrag = (e: ReactPointerEvent<HTMLElement>) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    if (following || e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     const o = liveRef.current;
     const x0 = e.clientX, y0 = e.clientY;
@@ -323,31 +305,35 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   };
 
   return (
-    <section className="phx-guide" aria-label={t("guide.title")} style={{ left: live.x, top: live.y, width: live.w, height: live.h }}>
-      <header className="phx-guide-titlebar" onPointerDown={startDrag} data-help="help.guideTitle">
+    <section className={`phx-guide${following ? " is-pinned" : ""}`} aria-label={t("guide.title")} style={{ left: live.x, top: live.y, width: live.w, height: live.h }}>
+      <header className="phx-guide-titlebar" onPointerDown={startDrag} data-help={following ? undefined : "help.guideTitle"}>
         <BackButton guide={guide} />
         <h2 className="phx-guide-title">{t("guide.title")}</h2>
-        <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}>
-          <Icon name="close" size={14} />
-        </button>
+        {!following && (
+          <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}>
+            <Icon name="close" size={14} />
+          </button>
+        )}
       </header>
       <div className="phx-guide-body"><GuideBody guide={guide} /></div>
-      {RESIZE_EDGES.map((d) => <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />)}
+      {!following && RESIZE_EDGES.map((d) => <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />)}
     </section>
   );
 }
 
-/** The phone Guide, heading the workspace's stack. */
-export function PhoneGuide({ workspace, language, onClose, topicId = null }: { workspace: string; language: string; onClose: () => void; topicId?: string | null }) {
+/** The phone Guide, heading the workspace's stack; without `onClose` (during the wizard) it cannot be closed. */
+export function PhoneGuide({ workspace, language, onClose, topicId = null }: { workspace: string; language: string; onClose?: () => void; topicId?: string | null }) {
   const guide = useGuideTopic(workspace, null, language, topicId);
   return (
     <section className="phx-phone-window phx-guide-phone" aria-label={t("guide.title")}>
       <header className="phx-phone-title">
         <BackButton guide={guide} />
         <h2 className="phx-window-title-text">{t("guide.title")}</h2>
-        <button type="button" className="phx-window-control phx-guide-phone-close" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}>
-          <Icon name="close" size={14} />
-        </button>
+        {onClose && (
+          <button type="button" className="phx-window-control phx-guide-phone-close" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}>
+            <Icon name="close" size={14} />
+          </button>
+        )}
       </header>
       <div className="phx-phone-body"><GuideBody guide={guide} /></div>
     </section>

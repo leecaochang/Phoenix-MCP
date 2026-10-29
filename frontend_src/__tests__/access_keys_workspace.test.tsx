@@ -18,6 +18,8 @@ import {
 import { AccessKeyListView } from "../views/AccessKeyList";
 
 vi.mock("../api", () => ({
+  // No Home Assistant connection: the tree does not follow the registries here.
+  currentHass: () => null,
   api: {
     getAccessKey: vi.fn(),
     patchAccessKey: vi.fn(),
@@ -112,6 +114,8 @@ function List({ selected, onSelect }: { selected: string | null; onSelect: (id: 
 }
 
 const persona = () => within(screen.getByRole("region", { name: "Persona window" }));
+/** A key's row in the list, named by the key, its mode and status. */
+const keyRow = (name: string) => screen.getByRole("row", { name: new RegExp(`^${name},`) });
 const tool = (registry: ToolRegistry, group: string, id: string) => registry.latest("accessKeys", group, id);
 
 /** Choose an entry of the selected key's Key Actions menu. */
@@ -135,16 +139,16 @@ describe("Access Keys workspace", () => {
     expect(persona().getByText("Select an access key to see its settings.")).toBeInTheDocument();
     expect(tool(registry, "selectedKey", "keyActions")).toBeUndefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit access key kitchen_agent" }));
+    fireEvent.click(keyRow("kitchen_agent"));
     await waitFor(() => expect(persona().getByRole("button", { name: /Automation Builder/, pressed: true })).toBeInTheDocument());
-    const row = screen.getByRole("button", { name: "Edit access key kitchen_agent" }).closest("tr")!;
+    const row = keyRow("kitchen_agent");
     expect(row).toHaveClass("is-selected");
     expect(row).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: "Edit access key hall_agent" })).toBeInTheDocument();
+    expect(keyRow("hall_agent")).toBeInTheDocument();
     expect(tool(registry, "selectedKey", "keyActions")?.label).toBe("Key Actions");
 
     // Another key starts from that key's own state.
-    fireEvent.click(screen.getByRole("button", { name: "Edit access key hall_agent" }));
+    fireEvent.click(keyRow("hall_agent"));
     await waitFor(() => expect(persona().getByRole("button", { name: /Read-Only Observer/, pressed: true })).toBeInTheDocument());
     expect(api.getAccessKey).toHaveBeenLastCalledWith("k2");
   });
@@ -154,7 +158,8 @@ describe("Access Keys workspace", () => {
     render(<Workspace registry={registry} />);
     expect(screen.queryByRole("button", { name: "Create Access Key" })).toBeNull();
     const labels = registry.groupsFor("accessKeys", ["accessKeys"])[0].tools.map((t) => t.label);
-    expect(labels).toEqual(["Set Up an Agent", "Show Archived", "Create Access Key", "Refresh Access Keys"]);
+    // No Refresh: the list keeps itself up to date while shown (user, 2026-10-28).
+    expect(labels).toEqual(["Set Up an Agent", "Show Archived", "Create Access Key"]);
   });
 
   it("renames in place from Key Actions: Escape cancels, Enter saves", async () => {
@@ -218,7 +223,10 @@ describe("Access Keys workspace", () => {
       const entries = tool(registry, "selectedKey", "keyActions")!.menu!().filter((e) => e !== "separator") as Array<{ id: string; disabled?: boolean }>;
       expect(entries.find((e) => e.id === "passThrough")?.disabled).toBe(true);
       expect(screen.getByText("Pass-through access keys don't use the permissions tree, so there are no rules to summarize.")).toBeInTheDocument();
-      expect(screen.getByText(/This is a pass-through access key/)).toBeInTheDocument();
+      // What pass-through means is the Mode column's Help, not a banner above the list (user, 2026-10-28).
+      expect(screen.queryByText(/This is a pass-through access key/)).toBeNull();
+      expect(document.querySelector(".access-keys-list .pass-through-header-banner")).toBeNull();
+      expect(document.querySelector('tr[data-row="k3"] [data-help="accessKeys.passThroughModeHelp"]')).not.toBeNull();
     } finally {
       KEYS.pop();
     }
@@ -229,7 +237,7 @@ describe("Access Keys workspace", () => {
     const onReveal = vi.fn();
     render(<Workspace registry={registry} initial="k1" onReveal={onReveal} />);
     const summary = within(screen.getByRole("region", { name: "Summary window" }));
-    fireEvent.click(await summary.findByRole("button", { name: "light.kitchen" }));
+    fireEvent.click(await summary.findByRole("row", { name: /light\.kitchen/ }));
     expect(onReveal).toHaveBeenCalledOnce();
   });
 
@@ -340,7 +348,7 @@ describe("Access Keys workspace", () => {
     );
     expect(screen.queryByRole("dialog")).toBeNull();
     const form = screen.getByRole("region", { name: "Create Access Key" });
-    expect(form.compareDocumentPosition(screen.getByRole("table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(form.compareDocumentPosition(screen.getByRole("grid")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const name = within(form).getByLabelText("Name (required)");
     expect(name).toHaveFocus();
     fireEvent.keyDown(name, { key: "Escape" });

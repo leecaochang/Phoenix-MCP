@@ -274,7 +274,6 @@
         "label": "ESPHome デバイス",
         "description": "ESPHome デバイスのステータス、診断、ログ、デバイス YAML を読み取り、検証とコンパイルを行います。ファームウェアの書き込みには承認が必要です。YAML の認証情報は非表示のままです。デバイスの制御やほかの設定の編集はできません。"
       },
-      "helper": "ペルソナは機能の初期設定を行います。詳細設定では個々の機能を調整できます。設定がプリセットと一致しなくなると、ペルソナはカスタムに変わります。",
       "home_admin": {
         "label": "ホーム管理者",
         "description": "ホーム全体を読み取り、管理できます。再起動、物理デバイスの制御、機密性の高い設定変更には承認が必要です。"
@@ -355,9 +354,6 @@
       "permForDevice": "デバイス {name} の権限",
       "permForDomain": "ドメイン {name} の権限",
       "permSaveFailed": "権限を保存できませんでした。",
-      "reload": "再読み込み",
-      "reloadAria": "エンティティを再読み込み",
-      "reloadTitle": "Home Assistant からエンティティを再読み込み",
       "riskDomainTitle": "高リスクのドメインです。ここで WRITE を許可すると、広範なシステム操作にアクセスできるようになります。",
       "saveFailedShort": "保存できませんでした",
       "selGreen": "Write: 読み取りと書き込み",
@@ -366,9 +362,7 @@
       "selSelected": "{title}、選択済み",
       "selYellow": "Read: 読み取り専用",
       "simulateEntityTitle": "{id} の権限をシミュレーション",
-      "simulateTitle": "{id} の {type} 権限をシミュレーション",
       "stateDeny": "拒否",
-      "stateInherit": "継承",
       "stateNoAccess": "アクセス不可",
       "stateNotFound": "見つかりません",
       "stateRead": "読み取り",
@@ -386,7 +380,11 @@
       "unmatchedDevicesNote": "これらの明示的な権限は、現在のエンティティツリーにないデバイス ID を参照しています。古い権限を削除するには N を設定してください。",
       "unmatchedDevicesTitle": "一致しないデバイス権限",
       "hintCaution": "ヒントはエージェントとそのモデルプロバイダーに送信されます。パスワードやコードは絶対に入力しないでください。",
-      "removeHint": "ヒントを削除"
+      "removeHint": "ヒントを削除",
+      "levelInherit": "継承",
+      "levelRead": "読み取り",
+      "levelWrite": "書き込み",
+      "levelDeny": "拒否"
     },
     "changes": {
       "added": "追加",
@@ -532,7 +530,6 @@
       "cardPersona": "ペルソナ",
       "cardPresets": "プリセット",
       "cardRateLimiting": "レート制限",
-      "cardToolAnnouncement": "ツール通知",
       "clearAll": "すべてクリア",
       "clearPermsBody": "すべてのドメイン、デバイス、エンティティの許可を削除します。新しい権限を追加するまで、このアクセスキーはどのエンティティにもアクセスできません。",
       "clearPermsFailed": "権限をクリアできませんでした。",
@@ -566,7 +563,6 @@
       "diffPermissionTree": "権限ツリー: {count} 個のノードに差異",
       "diffRateLimit": "レート制限: {fromRequests}/分、バースト {fromBurst} から {toRequests}/分、バースト {toBurst}",
       "done": "完了",
-      "editAria": "アクセスキー {name} を編集",
       "empty": "アクセスキーはまだありません。作成して開始してください。",
       "emptyFiltered": "フィルターに一致するアクセスキーはありません。",
       "enablePtBody": "<strong>パススルーにすると、このアクセスキーにはエンティティとサービスへの幅広いアクセス権が付与されます。</strong>設定変更、システムアクション、高リスク機能、システムログアクセス、MESA ルール、Phoenix MCP ブロックリスト、機密属性の削除は引き続き適用されます。",
@@ -589,8 +585,6 @@
       "hideArchived": "アーカイブを非表示",
       "hoursAgo": "{h}時間前",
       "inlineWaitAria": "インライン承認の待機時間",
-      "inlineWaitDisabled": "既定値はオフです。承認がキューに入るとすぐに呼び出しが返ります。",
-      "inlineWaitHelp": "外部 MCP クライアントからの確認対象の呼び出しが、承認待ちの応答を返す前に判断を待つ時間です。Agent Chat、音声、AI Task では無視され、常にすぐキューに入れて各自の方法で待機します。",
       "inlineWaitLabel": "インライン承認待機",
       "inlineWaitOff": "オフ（承認をすぐにキューへ追加）",
       "justNow": "たった今",
@@ -648,19 +642,16 @@
       "presetSwitchTo": "切り替え先",
       "ptConvertBody": "スコープ付きモードに切り替えると、保存済みの権限ツリーがすぐに適用されます。許可がない場合、新しい権限を追加するまでこのアクセスキーはエンティティにアクセスできません。",
       "ptConvertFailed": "アクセスキーを変換できませんでした。",
-      "ptHeaderBanner": "<strong>これはパススルーアクセスキーです。</strong>Home Assistant のエンティティとサービスに幅広くアクセスできます。保護対象の機能、MESA ルール、機密属性の削除、Phoenix MCP ドメインのブロックは有効なままです。",
       "ptNoticeCaps": "パススルーでは読み取りと日常的なアクションが自動的に許可されます。設定変更、システムアクション、高リスク機能、システムログアクセスには引き続き機能設定が適用されます。確認では常に承認が必要です。",
       "ptNoticeIntro": "<strong>パススルーアクセスキー。</strong>このアクセスキーは権限ツリーを迂回し、Home Assistant のエンティティとサービスに幅広くアクセスできます。機密属性は削除され、保護対象の機能は引き続き適用され、Phoenix MCP ドメインはブロックされます。",
       "ptNoticeUsage": "パススルーではすべてのエンティティの情報をモデルに送信できるため、モデルの使用量が増えます。スコープ付きの権限ツリーを使うと、そのコンテキストを小さく保てます。",
       "rateBurstLabel": "一秒あたりのバースト",
-      "rateLimitingDisabled": "このアクセスキーではレート制限が無効です。",
       "rateRequestsLabel": "一分あたりのリクエスト数（0 = 無効）",
       "rateSaveFailed": "保存できませんでした。",
       "rateValuesError": "値に負の整数は指定できません。",
       "rawAccessKeyNote": "<strong>このアクセスキーは再表示されません。</strong>閉じる前に今すぐコピーしてください。",
       "reconnectBanner": "<strong>エージェントを再接続してください。</strong>このアクセスキーで利用できるツールが変更されました。",
       "reconnectDismiss": "再接続の通知を閉じる",
-      "refreshAria": "アクセスキーを更新",
       "renameFailed": "名前を変更できませんでした。",
       "revoke": "取り消す",
       "revokeBody": "取り消すと、このアクセスキーは完全に無効化され、使用中のすべてのクライアントが切断されます。再度有効にすることはできません。",
@@ -684,21 +675,19 @@
       "statusExpired": "期限切れ",
       "statusRevoked": "取り消し済み",
       "switchToScoped": "スコープ付きモードに切り替え",
-      "switching": "切り替え中...",
       "accessKeyCreatedTitle": "アクセスキーを作成しました: {name}",
       "accessKeyNameAria": "アクセスキー名（編集可能）",
       "accessKeyRenameTitle": "このアクセスキーの名前を変更します。フォーカスを外すと保存されます",
       "accessKeyRotatedTitle": "アクセスキーをローテーションしました: {name}",
       "updateFailed": "アクセスキーを更新できませんでした。",
       "waitBeforeClose": "閉じるまで 3 秒お待ちください",
-      "cardNotes": "メモ",
-      "notesCaution": "メモは参考情報です。アクセスを許可したり、機能を変更したり、承認を回避したりすることはなく、モデルが無視する場合もあります。接続されたクライアントとそのモデルプロバイダーがメモを受け取り、このアクセスキーを使うエージェントと会話できる人は誰でも、エージェントにメモを繰り返させることができます。パスワードなどのシークレットは記入しないでください。",
       "notesCount": "{count} / {max} 文字",
       "notesDiscard": "変更を破棄",
-      "notesHelp": "このアクセスキーを使うすべてのエージェントへの案内です。部屋やデバイスの呼び方、誰が使うか、家庭のドキュメントの保存場所などを記入します。Phoenix MCP はメモを各エージェントの指示に追加し、このアクセスキーのスコープ外のエンティティ ID を隠します。",
       "notesLabel": "エージェント向けメモ",
       "notesPlaceholder": "例: 客間は「書斎」と呼びます。子ども部屋のものを変更する前に確認してください。",
-      "notesTooLong": "メモは {max} 文字以内にしてください。"
+      "notesTooLong": "メモは {max} 文字以内にしてください。",
+      "cardGuidance": "ガイダンス",
+      "cardAgentBehavior": "エージェントの動作"
     },
     "wizard": {
       "accessSub": "<code>light</code> グループを展開し、動作を確認できるライトを選びます。読み取りと書き込みを許可するには <strong>W</strong> を選択してください。デバイス全体を許可するか、展開して一つのエンティティを選べます。権限は後から追加できます。",
@@ -829,7 +818,7 @@
         "one": "{count} 個のリソース",
         "other": "{count} 個のリソース"
       },
-      "menu": "グループで絞り込む",
+      "menu": "フィルター",
       "reset": "リセット"
     },
     "version": {
@@ -2405,14 +2394,16 @@
       "myEmpty": "マイワークスペースは空です。ウィンドウメニューの「マイワークスペースに追加」でウィンドウを追加するか、Agent Chat のメニューから Agent Chat を追加してください。",
       "myEmptyPhone": "このスマートフォンでは、マイワークスペースにウィンドウがありません。",
       "myWorkspace": "マイワークスペース",
-      "removeFromMy": "マイワークスペースから削除",
       "removedFromMy": "{window} をマイワークスペースから削除しました",
       "safety": "安全性",
       "resetWorkspaceHint": "このワークスペースのウィンドウを Phoenix の既定の配置に戻します。ほかのワークスペースとマイ既定はそのままです。",
       "resetAllHint": "すべてのワークスペース、ツールバー、ヘルプバー、ガイドをリセットします。マイ既定と Phoenix の設定はそのままです。",
       "toolbarOptions": "ツールバーのオプション",
       "vertical": "縦",
-      "horizontal": "横"
+      "horizontal": "横",
+      "alwaysLabels": "常にアイコンとテキストを表示",
+      "verticalScrolling": "縦スクロール",
+      "resetMyHint": "マイワークスペースからすべてのウィンドウを削除します。ほかのワークスペースとマイ既定はそのままです。"
     },
     "notifications": {
       "title": "通知",
@@ -2454,7 +2445,10 @@
       "settingsVoiceDisable": "音声エージェントをオフにすると、Phoenix MCP が Home Assistant に作成したアシスタントも削除されます。",
       "settingsVoiceRemoveAssistant": "オフにすると、Phoenix MCP が Home Assistant に作成したアシスタントが削除されます。音声エージェントは有効のままです。",
       "wsMy": "自分専用のワークスペース: ほかのワークスペースから追加したウィンドウと、ここにドッキングした Agent Chat です。",
-      "toolbarOptions": "ツールバーのボタンの表示方法を選んだり、端へのドッキングやフローティング表示、縦向きと横向きの切り替え、折りたたみを行ったりします。"
+      "toolbarOptions": "ツールバーのボタンの表示方法を選んだり、端へのドッキングやフローティング表示、縦向きと横向きの切り替え、折りたたみを行ったりします。",
+      "persona": "ペルソナは機能の初期設定を決めます。個々の機能は「機能」ウィンドウで変更でき、設定がどのペルソナとも一致しなくなるとペルソナはカスタムになります。",
+      "guidance": "このアクセスキーを使うすべてのエージェントへの案内です。部屋やデバイスの呼び方、誰が使うか、家庭のドキュメントの保存場所などを記入します。Phoenix MCP はこれを各エージェントの指示に追加し、このアクセスキーのスコープ外のエンティティ ID を隠します。参考情報であり、アクセスを許可したり、機能を変更したり、承認を回避したりすることはなく、モデルが無視する場合もあります。エージェントとそのモデルプロバイダーがこの内容を受け取り、エージェントと会話する人は誰でもそれを繰り返させることができます。パスワードなどのシークレットは絶対に記入しないでください。",
+      "inlineWait": "外部 MCP クライアントからの確認対象の呼び出しが、承認待ちの応答を返す前に判断を待つ時間です。既定値のオフでは、承認がキューに入るとすぐに呼び出しが返ります。Agent Chat、音声、AI Task では無視され、常にすぐキューに入れて各自の方法で待機します。"
     },
     "guide": {
       "title": "ガイド",

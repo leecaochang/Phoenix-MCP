@@ -14,6 +14,7 @@ import { tRich } from "../i18n/rich";
 import { Modal } from "./Modal";
 import { ConnectInstructions, CopyCodeBox } from "./ConnectInstructions";
 import { ActionButton } from "../ui/ActionButton";
+import { Icon, type IconName } from "../ui/Icon";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -45,9 +46,7 @@ export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { 
   }
   return (
     <>
-      <button className="btn btn-primary" onClick={copy}>
-        {copied ? t("accessKeys.copied") : label}
-      </button>
+      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} className="btn btn-outline btn-sm" onClick={() => void copy()} />
       {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
       <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : ""}</span>
     </>
@@ -78,7 +77,9 @@ interface PostCreateProps {
 
 // After an access key is created, offer three ways forward instead of dumping the raw
 // access key immediately: connect an external agent, set up in-panel Agent Chat, or
-// just reveal the access key to copy.
+// just reveal the access key to copy. It is drawn over the whole workspace, not inside
+// the Access Keys window, and in the UI2 style: plain rows with icons, no coloured
+// accents (user, 2026-10-28).
 function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
   const [view, setView] = useState<"choice" | "connect" | "access-key">("choice");
 
@@ -94,54 +95,51 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
       ?.focus();
   }, [view]);
 
+  const choices: { id: string; icon: IconName; title: string; sub: string; onClick: () => void }[] = [
+    { id: "connect", icon: "popOut", title: t("accessKeys.postCreateConnectTitle"), sub: t("accessKeys.postCreateConnectSub"), onClick: () => setView("connect") },
+    { id: "chat", icon: "agentChat", title: t("accessKeys.postCreateChatTitle"), sub: t("accessKeys.postCreateChatSub"), onClick: onOpenSettings },
+    { id: "show", icon: "accessKeys", title: t("accessKeys.postCreateShowTitle"), sub: t("accessKeys.postCreateShowSub"), onClick: () => setView("access-key") },
+  ];
+  const back = <ActionButton icon="back" label={t("accessKeys.back")} className="btn btn-ghost btn-sm" onClick={() => setView("choice")} />;
+  const done = <ActionButton icon="check" label={t("accessKeys.done")} className="btn btn-primary btn-sm" onClick={onDone} />;
+
   return (
-    <Modal titleId="created-access-key-title" onClose={onDone}>
+    <Modal titleId="created-access-key-title" onClose={onDone} overWorkspace>
       <h3 className="modal-title" id="created-access-key-title">{t("accessKeys.accessKeyCreatedTitle", { name: accessKeyName })}</h3>
       <div ref={viewsRef} style={{ display: "contents" }}>
 
       {view === "choice" && (
         <>
-          <p className="wizard-sub">{t("accessKeys.postCreateQuestion")}</p>
+          <p className="modal-body-text">{t("accessKeys.postCreateQuestion")}</p>
           <div className="post-create-choices">
-            <button className="post-create-choice" onClick={() => setView("connect")}>
-              <span className="post-create-choice-title">{t("accessKeys.postCreateConnectTitle")}</span>
-              <span className="post-create-choice-sub">{t("accessKeys.postCreateConnectSub")}</span>
-            </button>
-            <button className="post-create-choice" onClick={onOpenSettings}>
-              <span className="post-create-choice-title">{t("accessKeys.postCreateChatTitle")}</span>
-              <span className="post-create-choice-sub">{t("accessKeys.postCreateChatSub")}</span>
-            </button>
-            <button className="post-create-choice" onClick={() => setView("access-key")}>
-              <span className="post-create-choice-title">{t("accessKeys.postCreateShowTitle")}</span>
-              <span className="post-create-choice-sub">{t("accessKeys.postCreateShowSub")}</span>
-            </button>
+            {choices.map((c) => (
+              <button key={c.id} type="button" className="post-create-choice" onClick={c.onClick} aria-label={c.title} aria-description={c.sub}>
+                <Icon name={c.icon} size={18} className="post-create-choice-icon" />
+                <span className="post-create-choice-text">
+                  <span className="post-create-choice-title">{c.title}</span>
+                  <span className="post-create-choice-sub">{c.sub}</span>
+                </span>
+              </button>
+            ))}
           </div>
           <div className="modal-actions">
-            <button className="btn btn-text" onClick={onDone}>{t("common.close")}</button>
+            <ActionButton icon="close" label={t("common.close")} className="btn btn-outline btn-sm" onClick={onDone} />
           </div>
         </>
       )}
 
       {view === "connect" && (
         <>
-          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("accessKeys.back")}</button>
           <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
-          <div className="modal-actions">
-            <button className="btn btn-primary" onClick={onDone}>{t("accessKeys.done")}</button>
-          </div>
+          <div className="modal-actions">{back}{done}</div>
         </>
       )}
 
       {view === "access-key" && (
         <>
-          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("accessKeys.back")}</button>
           <RawAccessKeyDisplay rawAccessKey={rawAccessKey} />
-          <div className="banner banner-info">
-            {t("accessKeys.postCreateReplaceNote")}
-          </div>
-          <div className="modal-actions">
-            <button className="btn btn-primary" onClick={onDone}>{t("accessKeys.done")}</button>
-          </div>
+          <p className="modal-body-text">{t("accessKeys.postCreateReplaceNote")}</p>
+          <div className="modal-actions">{back}{done}</div>
         </>
       )}
       </div>
@@ -237,8 +235,10 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       }}>
       <h3 className="phx-section-title" id="create-access-key-title">{t("accessKeys.createAccessKey")}</h3>
 
-      <div className="field">
-        <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
+      {/* One row of fields that wraps on narrow windows (user, 2026-10-28). */}
+      <div className="access-key-create-fields">
+        <div className="field access-key-create-name">
+          <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
           <input
             id="access-key-name-input"
             className={`input${nameError ? " error" : ""}`}
@@ -281,71 +281,71 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
           </div>
         </div>
 
-        <div className="toggle-row">
-          <div className="toggle-label">
-            <span>{t("accessKeys.passThroughMode")}</span>
-            <small>{t("accessKeys.passThroughModeHelp")}</small>
-          </div>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              aria-label={t("accessKeys.passThroughMode")}
-              checked={passThrough}
-              onChange={(e) => { setPassThrough(e.target.checked); setPtConfirmed(false); }}
-            />
-            <span className="toggle-switch-track" />
-          </label>
-        </div>
-
-        {passThrough ? (
-          <div className="amber-block">
-            <p>
-              {tRich("accessKeys.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
-            </p>
-            <div className="toggle-row mt-10">
-              <div className="toggle-label"><span>{t("accessKeys.createPtUnderstand")}</span></div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  aria-label={t("accessKeys.createPtUnderstand")}
-                  checked={ptConfirmed}
-                  onChange={(e) => setPtConfirmed(e.target.checked)}
-                />
-                <span className="toggle-switch-track" />
-              </label>
+        {!passThrough && (
+          <>
+            <div className="field access-key-create-number">
+              <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
+              <input
+                id="create-rate-requests"
+                className="input"
+                type="number"
+                min={0}
+                value={rateLimitRequests}
+                onChange={(e) => setRateLimitRequests(e.target.value)}
+              />
             </div>
-          </div>
-        ) : (
-          <div className="access-key-create-rate-section">
-            <div className="access-key-create-rate-fields">
-              <div className="field access-key-create-rate-field">
-                <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
-                <input
-                  id="create-rate-requests"
-                  className="input"
-                  type="number"
-                  min={0}
-                  value={rateLimitRequests}
-                  onChange={(e) => setRateLimitRequests(e.target.value)}
-                />
-              </div>
-              <div className="field access-key-create-rate-field">
-                <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
-                <input
-                  id="create-rate-burst"
-                  className="input"
-                  type="number"
-                  min={0}
-                  value={burstDisabled ? "0" : rateLimitBurst}
-                  disabled={burstDisabled}
-                  onChange={(e) => setRateLimitBurst(e.target.value)}
-                />
-              </div>
+            <div className="field access-key-create-number">
+              <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
+              <input
+                id="create-rate-burst"
+                className="input"
+                type="number"
+                min={0}
+                value={burstDisabled ? "0" : rateLimitBurst}
+                disabled={burstDisabled}
+                onChange={(e) => setRateLimitBurst(e.target.value)}
+              />
             </div>
-          </div>
+          </>
         )}
+      </div>
 
-        {error && <div className="banner banner-error mt-12">{error}</div>}
+      {/* What pass-through does is in Help (user, 2026-10-28). */}
+      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp">
+        <label className="toggle-switch">
+          <input
+            type="checkbox"
+            aria-label={t("accessKeys.passThroughMode")}
+            aria-description={t("accessKeys.passThroughModeHelp")}
+            checked={passThrough}
+            onChange={(e) => { setPassThrough(e.target.checked); setPtConfirmed(false); }}
+          />
+          <span className="toggle-switch-track" />
+        </label>
+        <div className="toggle-label"><span>{t("accessKeys.passThroughMode")}</span></div>
+      </div>
+
+      {passThrough && (
+        <div className="amber-block">
+          <p>
+            {tRich("accessKeys.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
+          </p>
+          <div className="toggle-row mt-10">
+            <div className="toggle-label"><span>{t("accessKeys.createPtUnderstand")}</span></div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                aria-label={t("accessKeys.createPtUnderstand")}
+                checked={ptConfirmed}
+                onChange={(e) => setPtConfirmed(e.target.checked)}
+              />
+              <span className="toggle-switch-track" />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {error && <div className="banner banner-error mt-12">{error}</div>}
 
       <div className="phx-inline-form-actions">
         <ActionButton icon="add" label={t("accessKeys.create")} busy={saving} disabled={!canSubmit}

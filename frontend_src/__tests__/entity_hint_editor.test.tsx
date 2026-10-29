@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api", () => ({
+  // No Home Assistant connection: the tree does not follow the registries here.
+  currentHass: () => null,
   api: {
     getEntityTree: mocks.getEntityTree,
     getEntityHints: mocks.getEntityHints,
@@ -61,18 +63,18 @@ describe("entity hint editor", () => {
     mocks.getEntityHints.mockResolvedValue({ entity_hints: {} });
   });
 
-  it("opens under the row without a dialog, and links the agent caution to the input", async () => {
+  it("opens under the row without a dialog, with the agent caution in Help and read out with the input", async () => {
     await renderTree();
     fireEvent.click(screen.getByRole("button", { name: "Add Hint" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
     const editor = screen.getByRole("group", { name: "Entity Hint" });
-    const caution = within(editor).getByText("Sent to agents and their model providers. Never include passwords or codes.");
     const input = within(editor).getByRole("textbox", { name: `Hint for ${DESK}` });
     expect(input).toHaveFocus();
-    expect(caution.id).not.toBe("");
-    expect(input.getAttribute("aria-describedby")).toBe(caution.id);
-    expect(input).toHaveAccessibleDescription("Sent to agents and their model providers. Never include passwords or codes.");
+    // The caution moved to Help (user, 2026-10-28).
+    expect(within(editor).queryByText("Sent to agents and their model providers. Never include passwords or codes.")).toBeNull();
+    expect(input).toHaveAttribute("data-help", "perms.hintCaution");
+    expect(input).toHaveAttribute("aria-description", "Sent to agents and their model providers. Never include passwords or codes.");
     // The rest of the tree stays usable while it is open.
     expect(screen.getByRole("button", { name: "Edit Hint" })).not.toHaveAttribute("aria-hidden");
   });
@@ -143,5 +145,32 @@ describe("entity hint editor", () => {
     expect(screen.getByRole("button", { name: "Edit Hint" })).toHaveFocus();
     expect(mocks.setEntityHint).not.toHaveBeenCalled();
     expect(mocks.patchEntityPermission).not.toHaveBeenCalled();
+  });
+
+  it("closes unsaved on a click anywhere else, while its own Hint button still opens and closes it (user, 2026-10-28)", async () => {
+    await renderTree();
+    const outside = document.createElement("input");
+    document.body.appendChild(outside);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Add Hint" }));
+      const editor = screen.getByRole("group", { name: "Entity Hint" });
+      fireEvent.change(within(editor).getByRole("textbox"), { target: { value: "Draft" } });
+      fireEvent.pointerDown(within(editor).getByRole("textbox"));
+      expect(screen.getByRole("group", { name: "Entity Hint" })).toBeInTheDocument();
+      fireEvent.pointerDown(outside);
+      expect(screen.queryByRole("group", { name: "Entity Hint" })).toBeNull();
+      expect(mocks.setEntityHint).not.toHaveBeenCalled();
+      expect(mocks.patchEntityPermission).not.toHaveBeenCalled();
+
+      // The button that opened it toggles it, rather than closing and reopening it.
+      const button = screen.getByRole("button", { name: "Add Hint" });
+      fireEvent.click(button);
+      expect(screen.getByRole("group", { name: "Entity Hint" })).toBeInTheDocument();
+      fireEvent.pointerDown(button);
+      fireEvent.click(button);
+      expect(screen.queryByRole("group", { name: "Entity Hint" })).toBeNull();
+    } finally {
+      outside.remove();
+    }
   });
 });

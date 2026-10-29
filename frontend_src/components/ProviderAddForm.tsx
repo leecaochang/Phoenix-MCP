@@ -1,4 +1,6 @@
-import { BusyButton, BusyInput, BusySelect } from "./BusyButton";
+import { BusyInput, BusySelect } from "./BusyButton";
+import { ActionButton } from "../ui/ActionButton";
+import type { IconName } from "../ui/Icon";
 import { useEffect, useRef, useState } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
@@ -35,6 +37,7 @@ export interface ProviderAddFormProps {
   allowAutomatic?: boolean;
   idPrefix?: string;
   completeLabel: string;
+  completeIcon?: IconName;
   addingLabelKey: string;
   onActiveChange?: (active: boolean) => void;
   onCreated: (instance: AgentCliInstance, probe: boolean) => Promise<void> | void;
@@ -56,7 +59,7 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 }
 
 export function ProviderAddForm({
-  providerTypes, disabled, completeLabel, addingLabelKey, onActiveChange, onCreated,
+  providerTypes, disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onCreated,
   allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add",
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
@@ -296,43 +299,17 @@ export function ProviderAddForm({
                 </label>
               </div>}
               <div className="agentcli-settings-form-actions">
-                <BusyButton
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  busy={form.saving || Boolean(disabled)} disabled={modelMissing}
-                  onClick={() => void complete()}
-                >
-                  {completeLabel}
-                </BusyButton>
-                <BusyButton
-                  type="button"
-                  className="btn btn-sm"
-                  busy={form.saving}
-                  onClick={() => reset()}
-                >
-                  {t("settings.cancel")}
-                </BusyButton>
+                <ActionButton icon={completeIcon} label={completeLabel} className="btn btn-primary btn-sm"
+                  busy={form.saving || Boolean(disabled)} disabled={modelMissing} onClick={() => void complete()} />
+                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={form.saving} onClick={() => reset()} />
               </div>
             </div>
           )}
           {!form.validated && (
             <div className="agentcli-settings-form-actions">
-              <BusyButton
-                type="button"
-                className="btn btn-primary btn-sm"
-                busy={form.validating || form.saving}
-                onClick={() => void validate()}
-              >
-                {t("settings.agentcliValidate")}
-              </BusyButton>
-              <BusyButton
-                type="button"
-                className="btn btn-sm"
-                busy={form.saving}
-                onClick={() => reset()}
-              >
-                {t("settings.cancel")}
-              </BusyButton>
+              <ActionButton icon="probe" label={t("settings.agentcliValidate")} className="btn btn-primary btn-sm"
+                busy={form.validating || form.saving} onClick={() => void validate()} />
+              <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={form.saving} onClick={() => reset()} />
             </div>
           )}
         </div>

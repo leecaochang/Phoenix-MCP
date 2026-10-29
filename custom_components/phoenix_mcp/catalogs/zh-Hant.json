@@ -1373,9 +1373,6 @@
       "permForDevice": "裝置 {name} 的權限",
       "permForDomain": "域 {name} 的權限",
       "permSaveFailed": "儲存權限失敗。",
-      "reload": "重新載入",
-      "reloadAria": "重新載入實體",
-      "reloadTitle": "從 Home Assistant 重新載入實體",
       "riskDomainTitle": "高風險域。在此授予「讀寫」會開放大範圍的系統操作權限。",
       "saveFailedShort": "儲存失敗",
       "selGreen": "Write：讀寫",
@@ -1384,9 +1381,7 @@
       "selSelected": "{title}，已選中",
       "selYellow": "Read：唯讀",
       "simulateEntityTitle": "模擬 {id} 的權限",
-      "simulateTitle": "模擬 {type} {id} 的權限",
       "stateDeny": "拒絕",
-      "stateInherit": "繼承",
       "stateNoAccess": "無存取權限",
       "stateNotFound": "未找到",
       "stateRead": "唯讀",
@@ -1404,7 +1399,11 @@
       "unmatchedDevicesNote": "這些顯式授權引用了目前實體樹中沒有的裝置 ID。選擇 N 可移除失效授權。",
       "unmatchedDevicesTitle": "未匹配的裝置權限",
       "hintCaution": "提示會傳送給智慧體及其模型提供者。切勿在此填寫密碼。",
-      "removeHint": "移除提示"
+      "removeHint": "移除提示",
+      "levelInherit": "繼承",
+      "levelRead": "唯讀",
+      "levelWrite": "讀寫",
+      "levelDeny": "拒絕"
     },
     "personas": {
       "automation_builder": {
@@ -1423,7 +1422,6 @@
         "description": "讀取 ESPHome 裝置的狀態、診斷資訊、日誌和裝置 YAML，並進行校驗和編譯。刷寫韌體需要核准。YAML 中的憑據保持隱藏。不能控制裝置，也不能修改其他設定。",
         "label": "ESPHome 裝置"
       },
-      "helper": "角色決定初始的能力設定。您可以在「高階」中逐項調整。當您的設定不再與任何預設匹配時，角色會自動變為「自定義」。",
       "home_admin": {
         "description": "可讀取並管理整個家庭。重新啟動、物理控制和敏感的設定變更需要核准。",
         "label": "家庭管理員"
@@ -1475,7 +1473,7 @@
       "selectArea": "-- 選擇分區 --",
       "selectIntegration": "-- 選擇整合 --",
       "selectLabel": "-- 選擇分類 --",
-      "menu": "按群組篩選",
+      "menu": "篩選",
       "reset": "重設"
     },
     "settings": {
@@ -1789,7 +1787,6 @@
       "cardPersona": "角色",
       "cardPresets": "預設",
       "cardRateLimiting": "速率限制",
-      "cardToolAnnouncement": "工具宣告",
       "clearAll": "全部清除",
       "clearPermsBody": "這會移除所有域、裝置和實體授權。在您新增新權限之前，此存取金鑰將沒有任何實體存取權限。",
       "clearPermsFailed": "清除權限失敗。",
@@ -1823,7 +1820,6 @@
       "diffPermissionTree": "權限樹：{count} 個節點存在差異",
       "diffRateLimit": "速率限制：從每分鐘 {fromRequests} 次、突發 {fromBurst} 改為每分鐘 {toRequests} 次、突發 {toBurst}",
       "done": "完成",
-      "editAria": "編輯存取金鑰 {name}",
       "empty": "尚無存取金鑰。建立一個即可開始。",
       "emptyFiltered": "沒有符合篩選條件的存取金鑰。",
       "enablePtBody": "<strong>直通模式會賦予此存取金鑰廣泛的實體和服務存取權限。</strong>設定變更、系統操作、高風險能力、系統日誌存取、MESA 規則、Phoenix MCP 遮蔽列表以及敏感屬性移除仍然適用。",
@@ -1846,8 +1842,6 @@
       "hideArchived": "隱藏已歸檔",
       "hoursAgo": "{h} 小時前",
       "inlineWaitAria": "同步等待核准的時長",
-      "inlineWaitDisabled": "預設為關閉：核准一進入佇列，呼叫就會立即返回。",
-      "inlineWaitHelp": "外部 MCP 用戶端發起的 confirm 門控呼叫，在返回待核准回應之前等待您決定的時長。Agent Chat、語音與 AI Task 不受此設定影響：它們始終立即排入佇列，並以各自的方式等待。",
       "inlineWaitLabel": "同步等待核准",
       "inlineWaitOff": "關閉（核准立即進入佇列）",
       "justNow": "剛剛",
@@ -1905,19 +1899,16 @@
       "presetSwitchTo": "切換到",
       "ptConvertBody": "切換到限定範圍模式會立即套用已儲存的權限樹。如果其中沒有任何授權，此存取金鑰將失去實體存取權限，直到您新增授權為止。",
       "ptConvertFailed": "轉換存取金鑰失敗。",
-      "ptHeaderBanner": "<strong>這是一個直通存取金鑰。</strong>它對 Home Assistant 的實體和服務擁有廣泛的存取權限。受保護的能力、MESA 規則、敏感屬性移除以及 Phoenix MCP 域遮蔽仍然有效。",
       "ptNoticeCaps": "直通模式會自動允許讀取和日常操作。設定變更、系統操作、高風險能力和系統日誌存取仍按「能力」設定執行。「確認」始終需要核准。",
       "ptNoticeIntro": "<strong>直通存取金鑰。</strong>此存取金鑰會繞過權限樹，對 Home Assistant 的實體和服務擁有廣泛的存取權限。敏感屬性會被移除，受保護的能力仍然適用，Phoenix MCP 域仍被遮蔽。",
       "ptNoticeUsage": "直通模式可能會把每一個實體的資訊都發送給模型，從而增加模型用量。限定範圍的權限樹可以讓上下文更小。",
       "rateBurstLabel": "每秒突發上限",
-      "rateLimitingDisabled": "此存取金鑰已停用速率限制。",
       "rateRequestsLabel": "每分鐘請求數（0 表示停用）",
       "rateSaveFailed": "儲存失敗。",
       "rateValuesError": "取值必須為非負整數。",
       "rawAccessKeyNote": "<strong>此存取金鑰不會再次顯示。</strong>請在關閉前複製。",
       "reconnectBanner": "<strong>請重新連線您的智慧體。</strong>此存取金鑰可用的工具已發生變化。",
       "reconnectDismiss": "忽略重新連線提醒",
-      "refreshAria": "重新整理存取金鑰",
       "renameFailed": "重新命名失敗。",
       "revoke": "撤銷",
       "revokeBody": "撤銷會永久停用此存取金鑰，並斷開所有正在使用它的用戶端。此操作無法撤銷。",
@@ -1941,21 +1932,19 @@
       "statusExpired": "已過期",
       "statusRevoked": "已撤銷",
       "switchToScoped": "切換到限定範圍模式",
-      "switching": "切換中…",
       "accessKeyCreatedTitle": "存取金鑰已建立：{name}",
       "accessKeyNameAria": "存取金鑰名稱（可編輯）",
       "accessKeyRenameTitle": "重新命名此存取金鑰；點選其他位置即可儲存",
       "accessKeyRotatedTitle": "存取金鑰已輪換：{name}",
       "updateFailed": "更新存取金鑰失敗。",
       "waitBeforeClose": "請等待 3 秒後再關閉",
-      "cardNotes": "備註",
-      "notesCaution": "備註僅供參考：它們不會授予存取權限、變更能力或繞過核准，模型也可能忽略它們。已連線的用戶端及其模型提供者會收到備註，任何能與使用此存取金鑰的智慧體對話的人都可能讓它複述備註。請勿在此填寫密碼或其他敏感資訊。",
       "notesCount": "{count} / {max} 個字元",
       "notesDiscard": "放棄更改",
-      "notesHelp": "為使用此存取金鑰的每個智慧體提供指引，例如房間和裝置的叫法、由誰使用，或家庭文件的存放位置。Phoenix MCP 會將備註加入每個智慧體的指令中，並隱藏此存取金鑰範圍之外的實體 ID。",
       "notesLabel": "給智慧體的備註",
       "notesPlaceholder": "範例：客房稱為書房。變更兒童房中的任何裝置前請先詢問。",
-      "notesTooLong": "備註不能超過 {max} 個字元。"
+      "notesTooLong": "備註不能超過 {max} 個字元。",
+      "cardGuidance": "指引",
+      "cardAgentBehavior": "智慧體行為"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",
@@ -2410,14 +2399,16 @@
       "myEmpty": "我的工作區是空的。請透過視窗選單中的「新增到我的工作區」新增視窗，或透過 Agent Chat 本身的選單新增 Agent Chat。",
       "myEmptyPhone": "在此手機上，我的工作區中沒有視窗。",
       "myWorkspace": "我的工作區",
-      "removeFromMy": "從我的工作區移除",
       "removedFromMy": "已將{window}從我的工作區移除",
       "safety": "安全",
       "resetWorkspaceHint": "將此工作區的視窗放回 Phoenix 的預設位置。其他工作區和我的預設佈局保持不變。",
       "resetAllHint": "重設所有工作區、工具列、說明列和指南。我的預設佈局和 Phoenix 設定保持不變。",
       "toolbarOptions": "工具列選項",
       "vertical": "縱向",
-      "horizontal": "橫向"
+      "horizontal": "橫向",
+      "alwaysLabels": "一律顯示圖示和文字",
+      "verticalScrolling": "縱向捲動",
+      "resetMyHint": "移除我的工作區中的所有視窗。其他工作區和我的預設佈局保持不變。"
     },
     "notifications": {
       "title": "通知",
@@ -2459,7 +2450,10 @@
       "settingsVoiceDisable": "關閉語音智慧體也會移除 Phoenix MCP 在 Home Assistant 中建立的助理。",
       "settingsVoiceRemoveAssistant": "關閉此項會移除 Phoenix MCP 在 Home Assistant 中建立的助理。語音智慧體仍保持啟用。",
       "wsMy": "您自己的工作區：包含您從其他工作區新增的視窗，以及停駐到此處的 Agent Chat。",
-      "toolbarOptions": "選擇工具列按鈕的顯示方式，將其停駐到邊緣或使其浮動，切換縱向或橫向，或將其摺疊。"
+      "toolbarOptions": "選擇工具列按鈕的顯示方式，將其停駐到邊緣或使其浮動，切換縱向或橫向，或將其摺疊。",
+      "persona": "角色決定初始的能力設定。可在「能力」視窗中逐項修改；當設定不再與任何角色匹配時，角色會變為「自定義」。",
+      "guidance": "為使用此存取金鑰的每個智慧體提供指引，例如房間和裝置的叫法、由誰使用，或家庭文件的存放位置。Phoenix MCP 會將其加入每個智慧體的指令中，並隱藏此存取金鑰範圍之外的實體 ID。指引僅供參考：它不會授予存取權限、變更能力或繞過核准，模型也可能忽略它。智慧體及其模型提供者會收到這些內容，任何與智慧體對話的人都可能讓它複述出來。切勿在此填寫密碼或其他敏感資訊。",
+      "inlineWait": "外部 MCP 用戶端發起的 confirm 門控呼叫，在返回待核准回應之前等待您決定的時長。預設的「關閉」會在核准進入佇列後立即返回。Agent Chat、語音與 AI Task 不受此設定影響：它們始終立即排入佇列，並以各自的方式等待。"
     },
     "guide": {
       "title": "指南",

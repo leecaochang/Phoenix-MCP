@@ -2,12 +2,11 @@
  * The setup wizard. Installing Phoenix is shown as its completed first step,
  * and it opens on the second: Agent Chat or an external app. Persona, the
  * access key and one light's access follow, then the chosen path's own steps.
- * Each step reports itself to the shell, so the Guide can show its topic
- * beside it.
+ * Each step reports itself to the shell, so the Guide shows its topic,
+ * pinned beside it. Its buttons always show an icon and text.
  */
 
 import { BusySelect } from "../components/BusyButton";
-import { BusyButton } from "../components/BusyButton";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AgentCliInstance, AgentCliProviderType, CreateAccessKeyBody, EntityTree as EntityTreeData, Persona, PermissionTree } from "../types";
 import { api, ApiError } from "../api";
@@ -24,6 +23,7 @@ import { localeNumber, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { WizardGuideContext } from "../shell/guide";
 import { Icon } from "../ui/Icon";
+import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -51,11 +51,9 @@ function addMinutes(m: number): string {
 interface Props {
   onCancel: () => void;
   onFinish: (accessKeyId: string) => void;
-  /** Setting up the first agent: the Guide opens with the wizard. */
-  firstRun?: boolean;
 }
 
-export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props) {
+export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const [step, setStep] = useState<Step>("choose");
   const [branch, setBranch] = useState<Branch | null>(null);
   const [persona, setPersona] = useState<Persona | null>("new_user");
@@ -181,13 +179,14 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
     return () => window.removeEventListener("phx-agentcli-sent", done);
   }, [step, accessKeyId, onFinish]);
 
-  // Open Agent Chat on the new access key with the chosen account/model preselected
-  // and the test prompt pre-typed. Closing any already-open global window first
-  // forces a remount, so the freshly patched durable selections are picked up.
+  // Open Agent Chat on the new access key with the chosen account/model preselected,
+  // the test prompt pre-typed and an empty conversation (user, 2026-10-28). Closing
+  // any already-open global window first forces a remount, so the freshly patched
+  // durable selections are picked up.
   const launchAgentChat = useCallback((instanceId: string, model: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__phxAgentChat?.close?.();
-    patchAgentCliDurable({ instanceId, model, prefill: t("wizard.promptChat") });
+    patchAgentCliDurable({ instanceId, model, prefill: t("wizard.promptChat"), freshConversation: true });
     window.dispatchEvent(new CustomEvent("phx-open-agentcli", { detail: { accessKeyId } }));
     setStep("try");
   }, [accessKeyId]);
@@ -199,15 +198,13 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
   const at = steps.indexOf(step);
 
   // Each step reports itself, with the part its Guide topic explains, so the
-  // Guide can follow it. The first report of a first run opens the Guide.
+  // Guide can sit beside it and show its topic.
   const guide = useContext(WizardGuideContext);
   const report = guide?.report;
-  const firstRunRef = useRef(firstRun);
   useLayoutEffect(() => {
     const content = bodyRef.current;
     if (!report || !content) return;
-    report({ step, part: content.querySelector<HTMLElement>("[data-guide-part]") ?? content, content }, firstRunRef.current);
-    firstRunRef.current = false;
+    report({ step, part: content.querySelector<HTMLElement>("[data-guide-part]") ?? content, content });
   }, [report, step]);
   useEffect(() => () => report?.(null), [report]);
 
@@ -241,16 +238,18 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             <p className="wizard-sub">{t("wizard.chooseSub")}</p>
             <div className="wizard-choice-row" data-guide-part>
               <button type="button" className={`wizard-choice${branch === "chat" ? " is-chosen" : ""}`} aria-pressed={branch === "chat"} onClick={() => { setBranch("chat"); setStep("persona"); }}>
+                <Icon name="agentChat" size={18} />
                 <strong>{t("wizard.choiceChatTitle")}</strong>
                 <small>{t("wizard.choiceChatBody")}</small>
               </button>
               <button type="button" className={`wizard-choice${branch === "app" ? " is-chosen" : ""}`} aria-pressed={branch === "app"} onClick={() => { setBranch("app"); setStep("persona"); }}>
+                <Icon name="popOut" size={18} />
                 <strong>{t("wizard.choiceAppTitle")}</strong>
                 <small>{t("wizard.choiceAppBody")}</small>
               </button>
             </div>
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={onCancel}>{t("common.cancel")}</button>
+              <ActionButton icon="undo" label={t("common.cancel")} className="btn btn-text" onClick={onCancel} />
             </div>
           </>
         );
@@ -261,8 +260,8 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             <p className="wizard-sub">{tRich("wizard.personaSub", { strong: (c) => <strong>{c}</strong> })}</p>
             <div data-guide-part><PersonaPicker selected={persona} onSelect={setPersona} /></div>
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={() => setStep("choose")}>{t("wizard.back")}</button>
-              <button className="btn btn-primary" disabled={!persona} onClick={() => setStep("accessKey")}>{t("wizard.next")}</button>
+              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("choose")} />
+              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!persona} onClick={() => setStep("accessKey")} />
             </div>
           </>
         );
@@ -296,10 +295,9 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             </div>
             {accessKeyId && <div className="banner banner-info">{t("wizard.accessKeyCreatedBanner")}</div>}
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={() => setStep("persona")}>{t("wizard.back")}</button>
-              <BusyButton className="btn btn-primary" busy={saving} onClick={createAndAdvance}>
-                {saving ? t("wizard.working") : accessKeyId ? t("wizard.next") : t("wizard.createAccessKey")}
-              </BusyButton>
+              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("persona")} />
+              <ActionButton icon={accessKeyId ? "forward" : "add"} className="btn btn-primary" busy={saving} onClick={() => void createAndAdvance()}
+                label={saving ? t("wizard.working") : accessKeyId ? t("wizard.next") : t("wizard.createAccessKey")} />
             </div>
           </>
         );
@@ -311,7 +309,7 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             {!hasLights && !showAllDomains && (
               <div className="banner banner-warn">
                 {t("wizard.noLights")}{" "}
-                <button className="btn btn-text btn-sm" onClick={() => setShowAllDomains(true)}>{t("wizard.showAllDevices")}</button>
+                <ActionButton icon="preview" label={t("wizard.showAllDevices")} className="btn btn-text btn-sm" onClick={() => setShowAllDomains(true)} />
               </div>
             )}
             {accessKeyId && (
@@ -325,8 +323,9 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
               </div>
             )}
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={() => setStep("accessKey")}>{t("wizard.back")}</button>
-              <button className="btn btn-primary" disabled={!grantedEntityId} onClick={() => setStep(branch === "chat" ? "provider" : "connect")}>{t("wizard.next")}</button>
+              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("accessKey")} />
+              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!grantedEntityId}
+                onClick={() => setStep(branch === "chat" ? "provider" : "connect")} />
             </div>
           </>
         );
@@ -343,9 +342,9 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             <h3 className="wizard-title">{t("wizard.connectAgentTitle")}</h3>
             {rawAccessKey && <div data-guide-part><ConnectInstructions accessKey={rawAccessKey} accessKeyName={name} /></div>}
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={() => setStep("access")}>{t("wizard.back")}</button>
-              <button className="btn btn-ghost" onClick={() => setStep("done")}>{t("wizard.connectLater")}</button>
-              <button className="btn btn-primary" onClick={() => setStep("test")}>{t("wizard.testConnection")}</button>
+              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("access")} />
+              <ActionButton icon="pending" label={t("wizard.connectLater")} className="btn btn-ghost" onClick={() => setStep("done")} />
+              <ActionButton icon="probe" label={t("wizard.testConnection")} className="btn btn-primary" onClick={() => setStep("test")} />
             </div>
           </>
         );
@@ -355,7 +354,7 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             <h3 className="wizard-title">{t("wizard.chatReadyTitle")}</h3>
             <p className="wizard-sub">{tRich("wizard.chatReadySub", { strong: (c) => <strong>{c}</strong> })}</p>
             <div className="wizard-actions">
-              <button className="btn btn-primary" onClick={() => accessKeyId && onFinish(accessKeyId)}>{t("wizard.goToAccessKey")}</button>
+              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
             </div>
           </>
         );
@@ -383,8 +382,8 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
               {connected ? t("wizard.connected") : t("wizard.waitingForAgent")}
             </div>
             <div className="wizard-actions">
-              <button className="btn btn-text" onClick={() => setStep("connect")}>{t("wizard.back")}</button>
-              <button className="btn btn-primary" disabled={!connected} onClick={() => setStep("done")}>{t("wizard.next")}</button>
+              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("connect")} />
+              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!connected} onClick={() => setStep("done")} />
             </div>
           </>
         );
@@ -394,7 +393,7 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
             <h3 className="wizard-title">{t("wizard.doneTitle")}</h3>
             <p className="wizard-sub">{tRich("wizard.doneSub", { code: (c) => <code>{c}</code> }, { name })}</p>
             <div className="wizard-actions">
-              <button className="btn btn-primary" onClick={() => accessKeyId && onFinish(accessKeyId)}>{t("wizard.goToAccessKey")}</button>
+              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
             </div>
           </>
         );
@@ -402,13 +401,16 @@ export function OnboardingWizard({ onCancel, onFinish, firstRun = false }: Props
   }
 
   return (
-    <div className={`view-root wizard-root${guide?.guideBeside ? " is-guided" : ""}`}>
-      <div className="wizard-center">
-        <Stepper />
-        {error && <ErrorMsg msg={error} />}
-        <div className="card wizard-body" ref={bodyRef}>{renderBody()}</div>
+    // The wizard's buttons always show their text, whatever the toolbar's display mode (user, 2026-10-28).
+    <DisplayModeContext.Provider value="icon-text">
+      <div className={`view-root wizard-root${guide?.guideBeside ? " is-guided" : ""}`}>
+        <div className="wizard-center">
+          <Stepper />
+          {error && <ErrorMsg msg={error} />}
+          <div className="card wizard-body" ref={bodyRef}>{renderBody()}</div>
+        </div>
       </div>
-    </div>
+    </DisplayModeContext.Provider>
   );
 }
 
@@ -485,6 +487,7 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
         allowAutomatic
         disabled={busy}
         completeLabel={t("wizard.tryNow")}
+        completeIcon="agentChat"
         addingLabelKey="wizard.addingProvider"
         onActiveChange={setAdding}
         onCreated={providerCreated}
@@ -493,11 +496,10 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
       {!adding && err && <div className="banner banner-error" role="alert">{err}</div>}
 
       <div className="wizard-actions">
-        <BusyButton className="btn btn-text" busy={busy} onClick={onBack}>{t("wizard.back")}</BusyButton>
+        <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" busy={busy} onClick={onBack} />
         {!adding && (
-          <BusyButton className="btn btn-primary" busy={busy} disabled={!selected} onClick={() => void tryExisting()}>
-            {busy ? t("wizard.working") : t("wizard.tryNow")}
-          </BusyButton>
+          <ActionButton icon="agentChat" label={busy ? t("wizard.working") : t("wizard.tryNow")} className="btn btn-primary" busy={busy}
+            disabled={!selected} onClick={() => void tryExisting()} />
         )}
       </div>
     </>

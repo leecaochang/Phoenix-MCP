@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api", () => ({
+  // No Home Assistant connection: the tree does not follow the registries here.
+  currentHass: () => null,
   api: {
     getEntityTree: mocks.getEntityTree,
     getEntityHints: mocks.getEntityHints,

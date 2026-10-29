@@ -1,9 +1,15 @@
-import { BusyButton } from "./BusyButton";
+/**
+ * What a pass-through key may do, shown in place of its Permissions tree, with
+ * Switch to Scoped Mode behind an inline confirmation in the calm look and
+ * buttons that follow the display mode (user, 2026-10-28).
+ */
 import React, { useState } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { ActionButton } from "../ui/ActionButton";
+import { InlineConfirm } from "../ui/InlineConfirm";
 
 interface Props {
   accessKey: AccessKeyRecord;
@@ -34,7 +40,7 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
     <div>
       <div className="pass-through-header-banner">
         <p>
-          {tRich("accessKeys.ptNoticeIntro", { strong: (c) => <strong className="text-warning">{c}</strong> })}
+          {tRich("accessKeys.ptNoticeIntro", { strong: (c) => <strong>{c}</strong> })}
         </p>
         <p className="mt-8">
           {t("accessKeys.ptNoticeCaps")}
@@ -47,30 +53,13 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
       {error && <div className="banner banner-error">{error}</div>}
 
       {!confirming ? (
-        <button
-          className="btn btn-outline"
-          onClick={() => setConfirming(true)}
-        >
-          {t("accessKeys.switchToScoped")}
-        </button>
+        <ActionButton icon="switchPreset" label={t("accessKeys.switchToScoped")} className="btn btn-outline btn-sm" onClick={() => setConfirming(true)} />
       ) : (
-        <div className="card pass-through-convert-card">
-          <p className="pass-through-convert-body">
-            {t("accessKeys.ptConvertBody")}
-          </p>
-          <div className="pass-through-actions">
-            <BusyButton
-              className="btn btn-primary"
-              onClick={convertToScoped}
-              busy={saving}
-            >
-              {saving ? t("accessKeys.switching") : t("accessKeys.switchToScoped")}
-            </BusyButton>
-            <button className="btn btn-text" onClick={() => setConfirming(false)}>
-              {t("accessKeys.cancel")}
-            </button>
-          </div>
-        </div>
+        <InlineConfirm label={t("accessKeys.switchToScoped")} confirmLabel={t("accessKeys.switchToScoped")}
+          confirmIcon="switchPreset" cancelLabel={t("accessKeys.cancel")} busy={saving}
+          onConfirm={() => void convertToScoped()} onCancel={() => setConfirming(false)}>
+          <p>{t("accessKeys.ptConvertBody")}</p>
+        </InlineConfirm>
       )}
     </div>
   );

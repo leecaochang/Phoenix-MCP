@@ -5,23 +5,27 @@ import type { AccessKeyRecord } from "../types";
 
 vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() } }));
 
-describe("Tool Announcement layout", () => {
-  it("puts Inline approval wait help above its select without stacking switches", () => {
+describe("Agent Behavior layout", () => {
+  it("puts every setting's label beside its control, with its help kept for the Help window", () => {
     const view = render(
       <ToolAnnouncementToggle
         accessKey={{
           id: "tok-1",
           announce_all_tools: false,
           use_assist_exposure: false,
-          pass_through: false,
+          pass_through: true,
           confirm_inline_wait_seconds: 0,
         } as AccessKeyRecord}
         onUpdate={() => {}}
       />,
     );
-    expect(view.container.querySelector("select")?.closest(".toggle-row"))
-      .toHaveClass("toggle-row-stacked-control");
-    expect(view.container.querySelector("input[type='checkbox']")?.closest(".toggle-row"))
-      .not.toHaveClass("toggle-row-stacked-control");
+    const rows = [...view.container.querySelectorAll(".toggle-row")];
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).not.toHaveClass("toggle-row-stacked-control");
+      expect(row.querySelector("small")).toBeNull();
+      expect(row.getAttribute("data-help")).toBeTruthy();
+    }
+    expect(view.container.querySelector("select")?.getAttribute("data-help")).toBe("help.inlineWait");
   });
 });

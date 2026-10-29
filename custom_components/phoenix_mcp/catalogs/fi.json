@@ -23,7 +23,6 @@
       "cardPersona": "Persona",
       "cardPresets": "Esiasetukset",
       "cardRateLimiting": "Pyyntörajoitus",
-      "cardToolAnnouncement": "Työkalujen ilmoitus",
       "clearAll": "Tyhjennä kaikki",
       "clearPermsBody": "Tämä poistaa kaikki verkkotunnuksille, laitteille ja entiteeteille myönnetyt oikeudet. Käyttöavaimella ei ole entiteettikäyttöoikeuksia, ennen kuin lisäät uusia oikeuksia.",
       "clearPermsFailed": "Käyttöoikeuksien tyhjennys epäonnistui.",
@@ -57,7 +56,6 @@
       "diffPermissionTree": "Käyttöoikeuspuu: eroavia solmuja {count}",
       "diffRateLimit": "Pyyntöraja: {fromRequests}/min purske {fromBurst} -> {toRequests}/min purske {toBurst}",
       "done": "Valmis",
-      "editAria": "Muokkaa käyttöavainta {name}",
       "empty": "Ei vielä käyttöavaimia. Aloita luomalla yksi.",
       "emptyFiltered": "Mikään käyttöavain ei vastaa suodatinta.",
       "enablePtBody": "<strong>Läpivienti antaa tälle käyttöavaimelle laajat oikeudet entiteetteihin ja palveluihin.</strong> Kokoonpanomuutokset, järjestelmätoiminnot, korkean riskin ominaisuudet, järjestelmälokin käyttö, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
@@ -80,8 +78,6 @@
       "hideArchived": "Piilota arkistoidut",
       "hoursAgo": "{h} t sitten",
       "inlineWaitAria": "Hyväksyntäodotuksen kesto",
-      "inlineWaitDisabled": "Oletus on Pois: kutsu palautuu heti, kun hyväksyntä on asetettu jonoon.",
-      "inlineWaitHelp": "Kuinka kauan ulkoisen MCP-asiakkaan vahvistusta edellyttävä kutsu odottaa päätöstäsi ennen kuin se palauttaa odottavan vastauksen. Agent Chat, ääniagentti ja tekoälytehtävä eivät huomioi tätä: ne asettavat aina heti jonoon ja odottavat omalla tavallaan.",
       "inlineWaitLabel": "Hyväksyntäodotus",
       "inlineWaitOff": "Pois (hyväksynnät siirtyvät heti jonoon)",
       "justNow": "juuri nyt",
@@ -139,19 +135,16 @@
       "presetSwitchTo": "Vaihda tähän",
       "ptConvertBody": "Rajattuun tilaan siirtyminen ottaa tallennetun käyttöoikeuspuun käyttöön välittömästi. Jos siinä ei ole myönnettyjä käyttöoikeuksia, tämä käyttöavain menettää entiteettien käytön, kunnes lisäät niitä.",
       "ptConvertFailed": "Käyttöavaimen muuntaminen epäonnistui.",
-      "ptHeaderBanner": "<strong>Tämä on läpivientikäyttöavain.</strong> Sillä on laaja pääsy Home Assistant -entiteetteihin ja -palveluihin. Suojatut ominaisuudet, MESA-säännöt, arkaluontoisten attribuuttien poisto ja Phoenix MCP -verkkotunnuksen esto pysyvät voimassa.",
       "ptNoticeCaps": "Läpivienti sallii lukemisen ja jokapäiväiset toiminnot automaattisesti. Kokoonpanomuutokset, järjestelmätoiminnot, korkean riskin ominaisuudet ja järjestelmälokin käyttö käyttävät edelleen Ominaisuudet-asetuksia. Vahvista-tila vaatii aina hyväksynnän.",
       "ptNoticeIntro": "<strong>Läpivientikäyttöavain.</strong> Tämä käyttöavain ohittaa käyttöoikeuspuun ja sillä on laaja pääsy Home Assistant -entiteetteihin ja -palveluihin. Arkaluontoiset attribuutit poistetaan, suojatut ominaisuudet ovat edelleen voimassa ja Phoenix MCP -verkkotunnus pysyy estettynä.",
       "ptNoticeUsage": "Läpivienti voi lähettää mallille tietoja jokaisesta entiteetistä, mikä lisää mallin käyttöä. Rajattu käyttöoikeuspuu pitää tämän kontekstin pienempänä.",
       "rateBurstLabel": "Purskeita sekunnissa",
-      "rateLimitingDisabled": "Pyyntörajoitus on poistettu käytöstä tällä käyttöavaimella.",
       "rateRequestsLabel": "Pyyntöjä minuutissa (0 = poistettu käytöstä)",
       "rateSaveFailed": "Tallennus epäonnistui.",
       "rateValuesError": "Arvojen on oltava ei-negatiivisia kokonaislukuja.",
       "rawAccessKeyNote": "<strong>Tätä käyttöavainta ei näytetä enää uudelleen.</strong> Kopioi se nyt ennen sulkemista.",
       "reconnectBanner": "<strong>Yhdistä agenttisi uudelleen.</strong> Tämän käyttöavaimen käytettävissä olevat työkalut ovat muuttuneet.",
       "reconnectDismiss": "Sivuuta uudelleenyhdistämismuistutus",
-      "refreshAria": "Päivitä käyttöavaimet",
       "renameFailed": "Uudelleennimeäminen epäonnistui.",
       "revoke": "Mitätöi",
       "revokeAccessKeyTitle": "Mitätöi käyttöavain",
@@ -175,17 +168,15 @@
       "statusExpired": "Vanhentunut",
       "statusRevoked": "Mitätöity",
       "switchToScoped": "Vaihda rajattuun tilaan",
-      "switching": "Vaihdetaan...",
       "updateFailed": "Käyttöavaimen päivitys epäonnistui.",
       "waitBeforeClose": "Odota 3 sekuntia ennen sulkemista",
-      "cardNotes": "Muistiinpanot",
-      "notesCaution": "Muistiinpanot ovat vain ohjeellisia: ne eivät koskaan myönnä käyttöoikeutta, muuta ominaisuuksia tai ohita hyväksyntöjä, ja malli voi jättää ne huomiotta. Yhdistetyt asiakkaat ja niiden mallipalveluntarjoajat saavat ne, ja kuka tahansa, joka voi keskustella tätä käyttöavainta käyttävän agentin kanssa, voi saada sen toistamaan ne. Älä kirjoita tähän salasanoja tai muita salaisuuksia.",
       "notesCount": "{count} / {max} merkkiä",
       "notesDiscard": "Kumoa muutokset",
-      "notesHelp": "Ohjeita kaikille agenteille, jotka käyttävät tätä käyttöavainta, esimerkiksi mitä huoneita ja laitteita kutsutaan miksikin, kuka avainta käyttää tai missä kodin dokumentaatio on. Phoenix MCP lisää muistiinpanot jokaisen agentin ohjeisiin ja piilottaa entiteettien tunnukset, jotka ovat tämän käyttöavaimen rajauksen ulkopuolella.",
       "notesLabel": "Muistiinpanot agenteille",
       "notesPlaceholder": "Esimerkki: Vierashuonetta kutsutaan työhuoneeksi. Kysy ennen kuin muutat mitään lastenhuoneessa.",
-      "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä."
+      "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä.",
+      "cardGuidance": "Ohjeet",
+      "cardAgentBehavior": "Agentin toiminta"
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} on oltava käyttöavaimen tunnus merkkijonona tai null.",
@@ -1752,9 +1743,6 @@
       "permForDevice": "Käyttöoikeus laitteelle {name}",
       "permForDomain": "Käyttöoikeus verkkotunnukselle {name}",
       "permSaveFailed": "Käyttöoikeuden tallennus epäonnistui.",
-      "reload": "Lataa uudelleen",
-      "reloadAria": "Lataa entiteetit uudelleen",
-      "reloadTitle": "Lataa entiteetit uudelleen Home Assistantista",
       "riskDomainTitle": "Korkean riskin verkkotunnus. WRITE-käyttöoikeuden myöntäminen tässä antaa pääsyn laajoihin järjestelmätoimintoihin.",
       "saveFailedShort": "Tallennus epäonnistui",
       "selGreen": "Write: luku ja kirjoitus",
@@ -1763,9 +1751,7 @@
       "selSelected": "{title}, valittu",
       "selYellow": "Read: vain luku",
       "simulateEntityTitle": "Simuloi käyttöoikeudet kohteelle {id}",
-      "simulateTitle": "Simuloi {type}-käyttöoikeudet kohteelle {id}",
       "stateDeny": "KIELLÄ",
-      "stateInherit": "PERI",
       "stateNoAccess": "EI PÄÄSYÄ",
       "stateNotFound": "EI LÖYDY",
       "stateRead": "LUKU",
@@ -1783,7 +1769,11 @@
       "unmatchedDevicesNote": "Nämä erilliset käyttöoikeudet viittaavat laitetunnuksiin, joita ei ole nykyisessä entiteettipuussa. Poista vanhentunut käyttöoikeus valitsemalla N.",
       "unmatchedDevicesTitle": "Laitteiden käyttöoikeudet, joilla ei ole vastaavuutta",
       "hintCaution": "Lähetetään agenteille ja niiden mallipalveluntarjoajille. Älä koskaan kirjoita salasanoja tai koodeja.",
-      "removeHint": "Poista vihje"
+      "removeHint": "Poista vihje",
+      "levelInherit": "Peri",
+      "levelRead": "Luku",
+      "levelWrite": "Kirjoitus",
+      "levelDeny": "Kiellä"
     },
     "personas": {
       "automation_builder": {
@@ -1802,7 +1792,6 @@
         "description": "Lukee ESPHome-laitteen tilan, diagnostiikan, lokit ja laitteen YAML-tiedoston sekä validoi ja kääntää sen. Laiteohjelmiston asennus vaatii hyväksynnän. YAML-tunnistetiedot pysyvät piilotettuina. Ei laiteohjausta eikä muuta kokoonpanoa.",
         "label": "ESPHome-laitteet"
       },
-      "helper": "Persona asettaa alkuperäiset ominaisuudet. Voit säätää yksittäisiä ominaisuuksia Lisäasetuksissa. Persona vaihtuu arvoon Mukautettu, kun asetuksesi eivät enää vastaa esiasetusta.",
       "home_admin": {
         "description": "Voi lukea ja hallita koko kotia. Uudelleenkäynnistykset, fyysiset ohjaukset ja arkaluonteiset kokoonpanomuutokset vaativat hyväksynnän.",
         "label": "Kodin ylläpitäjä"
@@ -1895,7 +1884,7 @@
       "selectArea": "-- Valitse huone --",
       "selectIntegration": "-- Valitse integraatio --",
       "selectLabel": "-- Valitse tunniste --",
-      "menu": "Rajaa ryhmän mukaan",
+      "menu": "Suodata",
       "reset": "Palauta"
     },
     "settings": {
@@ -2410,14 +2399,16 @@
       "myEmpty": "Oma työtila on tyhjä. Lisää ikkuna valitsemalla ikkunan valikosta Lisää Omaan työtilaan tai lisää Agent Chat sen omasta valikosta.",
       "myEmptyPhone": "Omassa työtilassa ei ole ikkunoita tässä puhelimessa.",
       "myWorkspace": "Oma työtila",
-      "removeFromMy": "Poista Omasta työtilasta",
       "removedFromMy": "{window} poistettu Omasta työtilasta",
       "safety": "Turvallisuus",
       "resetWorkspaceHint": "Palauttaa tämän työtilan ikkunat paikkoihin, joihin Phoenix ne sijoittaa. Muut työtilat ja Oma oletus pysyvät ennallaan.",
       "resetAllHint": "Nollaa kaikki työtilat, työkalurivin, ohjepalkin ja oppaan. Oma oletus ja Phoenixin asetukset pysyvät ennallaan.",
       "toolbarOptions": "Työkalurivin asetukset",
       "vertical": "Pystysuora",
-      "horizontal": "Vaakasuora"
+      "horizontal": "Vaakasuora",
+      "alwaysLabels": "Näytä aina kuvakkeet ja teksti",
+      "verticalScrolling": "Pystysuuntainen vieritys",
+      "resetMyHint": "Poistaa kaikki ikkunat Omasta työtilasta. Muut työtilat ja Oma oletus pysyvät ennallaan."
     },
     "notifications": {
       "title": "Ilmoitukset",
@@ -2459,7 +2450,10 @@
       "settingsVoiceDisable": "Kun poistat ääniagentin käytöstä, myös avustaja, jonka Phoenix MCP loi Home Assistantiin, poistetaan.",
       "settingsVoiceRemoveAssistant": "Kun kytket tämän pois päältä, avustaja, jonka Phoenix MCP loi Home Assistantiin, poistetaan. Ääniagentti pysyy käytössä.",
       "wsMy": "Oma työtilasi: ikkunat, jotka olet lisännyt muista työtiloista, sekä Agent Chat, jos olet kiinnittänyt sen tänne.",
-      "toolbarOptions": "Valitse, miten työkalurivin painikkeet näkyvät, kiinnitä se reunaan tai irrota se, aseta se pysty- tai vaakasuoraan tai pienennä se."
+      "toolbarOptions": "Valitse, miten työkalurivin painikkeet näkyvät, kiinnitä se reunaan tai irrota se, aseta se pysty- tai vaakasuoraan tai pienennä se.",
+      "persona": "Persona asettaa alkuperäiset ominaisuudet. Muuta yksittäisiä ominaisuuksia Ominaisuudet-ikkunassa; persona vaihtuu arvoon Mukautettu, kun asetukset eivät enää vastaa mitään personaa.",
+      "guidance": "Ohjeita kaikille agenteille, jotka käyttävät tätä käyttöavainta, esimerkiksi mitä huoneita ja laitteita kutsutaan miksikin, kuka avainta käyttää tai missä kodin dokumentaatio on. Phoenix MCP lisää ne jokaisen agentin ohjeisiin ja piilottaa entiteettien tunnukset, jotka ovat tämän käyttöavaimen rajauksen ulkopuolella. Ne ovat vain ohjeellisia: ne eivät koskaan myönnä käyttöoikeutta, muuta ominaisuuksia tai ohita hyväksyntöjä, ja malli voi jättää ne huomiotta. Agentit ja niiden mallipalveluntarjoajat saavat tämän, ja kuka tahansa agentin kanssa keskusteleva voi saada sen toistetuksi. Älä koskaan kirjoita tähän salasanoja tai muita salaisuuksia.",
+      "inlineWait": "Kuinka kauan ulkoisen MCP-asiakkaan vahvistusta edellyttävä kutsu odottaa päätöstäsi ennen kuin se palauttaa odottavan vastauksen. Oletusarvolla Pois kutsu palautuu heti, kun hyväksyntä on asetettu jonoon. Agent Chat, ääniagentti ja tekoälytehtävä eivät huomioi tätä: ne asettavat aina heti jonoon ja odottavat omalla tavallaan."
     },
     "guide": {
       "title": "Opas",

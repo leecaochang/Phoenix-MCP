@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import type { PermissionTree, NodeState, EntityTree } from "../types";
 import { MesaProfileLink } from "./MesaProfileLink";
-import { compareStrings, t } from "../i18n";
+import { t } from "../i18n";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 
 interface Props {
   permissions: PermissionTree;
@@ -11,11 +12,12 @@ interface Props {
   onOpenMesa?: (entityId: string) => void;
 }
 
+// The state's own words, as the Permissions tree names them (user, 2026-10-28).
 const STATE_LABEL_KEYS: Record<NodeState, string> = {
-  GREY: "perms.stateInherit",
-  YELLOW: "perms.stateRead",
-  GREEN: "perms.stateWrite",
-  RED: "perms.stateDeny",
+  GREY: "perms.levelInherit",
+  YELLOW: "perms.levelRead",
+  GREEN: "perms.levelWrite",
+  RED: "perms.levelDeny",
 };
 
 const STATE_CLASS: Record<NodeState, string> = {
@@ -26,8 +28,6 @@ const STATE_CLASS: Record<NodeState, string> = {
 };
 
 type NodeType = "domain" | "device" | "entity";
-type SortCol = "type" | "friendly" | "id" | "state";
-type SortDir = "asc" | "desc";
 
 const TYPE_ORDER: Record<NodeType, number> = { domain: 0, device: 1, entity: 2 };
 const STATE_ORDER: Record<NodeState, number> = { GREEN: 0, YELLOW: 1, RED: 2, GREY: 3 };
@@ -109,47 +109,11 @@ function resolvedState(
   return item.state;
 }
 
-function SortHeader({
-  label,
-  col,
-  current,
-  dir,
-  onSort,
-}: {
-  label: string;
-  col: SortCol;
-  current: SortCol;
-  dir: SortDir;
-  onSort: (col: SortCol) => void;
-}) {
-  const active = current === col;
-  const arrow = active ? (dir === "asc" ? " \u25B2" : " \u25BC") : " \u25B4\u25BE";
-  return (
-    <th
-      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={`perm-summary-th${active ? " active" : ""}`}
-    >
-      <button type="button" className="table-sort-btn" onClick={() => onSort(col)}>
-        {label}<span className={`perm-summary-arrow${active ? " active" : ""}`}>{arrow}</span>
-      </button>
-    </th>
-  );
-}
-
-function EffectiveCell({ permissions, item, entityToDevice, deviceDomain, deviceParent }: {
-  permissions: PermissionTree;
-  item: SummaryItem;
-  entityToDevice: Map<string, string>;
-  deviceDomain: Map<string, string>;
-  deviceParent: Map<string, string>;
-}) {
-  const eff = resolvedState(permissions, item, entityToDevice, deviceDomain, deviceParent);
-  return <td className="perm-summary-td"><span className={STATE_CLASS[eff]}>{t(STATE_LABEL_KEYS[eff])}</span></td>;
-}
+const BY_TYPE = { column: "type", dir: "asc" } as const;
+const keyOf = (item: SummaryItem) => `${item.type}:${item.id}`;
 
 export function PermissionSummary({ permissions, entityTree, onEntityClick, mesaProfileEntities, onOpenMesa }: Props) {
-  const [sortCol, setSortCol] = useState<SortCol>("type");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [chosen, setChosen] = useState<string | null>(null);
 
   const { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain, deviceParent } = useMemo(
     () => buildLookups(entityTree),
@@ -186,99 +150,52 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
     return result;
   }, [permissions, entityNames, deviceNames]);
 
-  const sorted = useMemo(() => {
-    const copy = [...items];
-    copy.sort((a, b) => {
-      let cmp = 0;
-      if (sortCol === "type") cmp = TYPE_ORDER[a.type] - TYPE_ORDER[b.type];
-      else if (sortCol === "friendly") cmp = compareStrings(a.friendlyName, b.friendlyName);
-      else if (sortCol === "id") cmp = compareStrings(a.id, b.id);
-      else if (sortCol === "state") cmp = STATE_ORDER[a.state] - STATE_ORDER[b.state];
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return copy;
-  }, [items, sortCol, sortDir]);
-
-  function handleSort(col: SortCol) {
-    if (col === sortCol) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortCol(col);
-      setSortDir("asc");
-    }
-  }
-
   if (items.length === 0) {
     return (
       <p className="perm-summary-empty">{t("perms.summaryEmpty")}</p>
     );
   }
 
+  const stateOf = (item: SummaryItem) => resolvedState(permissions, item, entityToDevice, deviceDomain, deviceParent);
+  // Choosing a rule finds it in the Permissions tree: an entity itself, or a device's or domain's first entity.
+  const target = (item: SummaryItem): { entity: string; depth: "entity" | "device" | "domain" } | null => {
+    const entity = item.type === "entity" ? item.id : item.type === "domain" ? domainFirstEntity.get(item.id) : deviceFirstEntity.get(item.id);
+    return entity ? { entity, depth: item.type } : null;
+  };
+  const nameOf = (item: SummaryItem) => (item.friendlyName !== item.id ? item.friendlyName : "");
+  // A configurable table like the other workspaces' lists (user, 2026-10-28). Name and ID stay narrow
+  // enough for all four columns to fit half the workspace; their full text is in the tooltip.
+  const columns: Column<SummaryItem>[] = [
+    { id: "type", label: t("perms.colType"), width: 100, sortValue: (item) => TYPE_ORDER[item.type], cell: (item) => t(TYPE_LABEL_KEYS[item.type]) },
+    { id: "name", label: t("perms.colName"), width: 180, maxWidth: 180, sortValue: nameOf, title: (item) => nameOf(item) || undefined,
+      cell: (item) => (
+        <span className="perm-summary-name-wrap">
+          {item.type === "entity" && onOpenMesa && (
+            <MesaProfileLink targetKey={item.id} exists={!!mesaProfileEntities?.has(item.id)} onOpen={onOpenMesa} />
+          )}
+          {nameOf(item)}
+        </span>
+      ) },
+    { id: "id", label: t("perms.colId"), width: 180, maxWidth: 180, sortValue: (item) => item.id, title: (item) => item.id, cell: (item) => item.id, className: "phx-cell-mono" },
+    { id: "state", label: t("perms.colState"), width: 100, sortValue: (item) => STATE_ORDER[stateOf(item)],
+      cell: (item) => <span className={STATE_CLASS[stateOf(item)]}>{t(STATE_LABEL_KEYS[stateOf(item)])}</span> },
+  ];
+
   return (
-    <table className="perm-summary-table">
-      <thead>
-        <tr>
-          <SortHeader label={t("perms.colType")} col="type" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colName")} col="friendly" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colId")} col="id" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colState")} col="state" current={sortCol} dir={sortDir} onSort={handleSort} />
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((item) => {
-          let targetEntity: string | undefined;
-          let depth: "entity" | "device" | "domain" = "entity";
-          if (item.type === "entity") { targetEntity = item.id; depth = "entity"; }
-          else if (item.type === "domain") { targetEntity = domainFirstEntity.get(item.id); depth = "domain"; }
-          else if (item.type === "device") { targetEntity = deviceFirstEntity.get(item.id); depth = "device"; }
-          const isClickable = !!onEntityClick && !!targetEntity;
-          const handleClick = isClickable ? () => onEntityClick!(targetEntity!, depth) : undefined;
-          const title = isClickable
-            ? t("perms.simulateTitle", { type: t(TYPE_LABEL_KEYS[item.type]).toLowerCase(), id: item.id })
-            : undefined;
-          return (
-            <tr key={`${item.type}:${item.id}`} className="perm-summary-tr">
-              <td className="perm-summary-td">
-                <span className={`perm-type-badge perm-type-${item.type}`}>
-                  {t(TYPE_LABEL_KEYS[item.type])}
-                </span>
-              </td>
-              <td className="perm-summary-td-name">
-                <div className="perm-summary-name-wrap">
-                  {item.type === "entity" && onOpenMesa && (
-                    <MesaProfileLink
-                      targetKey={item.id}
-                      exists={!!mesaProfileEntities?.has(item.id)}
-                      onOpen={onOpenMesa}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className={`perm-summary-name-text${isClickable ? " clickable" : ""}`}
-                    onClick={handleClick}
-                    title={title}
-                    disabled={!isClickable}
-                  >
-                    {item.friendlyName !== item.id ? item.friendlyName : <span className="state-GREY">-</span>}
-                  </button>
-                </div>
-              </td>
-              <td className="perm-summary-td-id">
-                <button
-                  type="button"
-                  className={isClickable ? "clickable" : ""}
-                  onClick={handleClick}
-                  title={title}
-                  disabled={!isClickable}
-                >
-                  {item.id}
-                </button>
-              </td>
-              <EffectiveCell permissions={permissions} item={item} entityToDevice={entityToDevice} deviceDomain={deviceDomain} deviceParent={deviceParent} />
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <ConfigTable
+      id="permissionSummary"
+      label={t("accessKeys.permissionSummary")}
+      defaultSort={BY_TYPE}
+      columns={columns}
+      rows={items}
+      rowKey={keyOf}
+      selectedKey={chosen}
+      onSelect={(item) => {
+        setChosen(keyOf(item));
+        const found = target(item);
+        if (found) onEntityClick?.(found.entity, found.depth);
+      }}
+      rowLabel={(item) => [t(TYPE_LABEL_KEYS[item.type]), nameOf(item), item.id, t(STATE_LABEL_KEYS[stateOf(item)])].filter(Boolean).join(", ")}
+    />
   );
 }

@@ -41,8 +41,10 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention, settings, mesa = null, myWindows = [], guide }: {
+export function PhoneStack({ workspace, showAttention, settings, mesa = null, showArchived = false, myWindows = [], guide }: {
   workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; mesa?: MesaFindings | null;
+  /** Whether Show Archived is on: the archived keys head no stack until it is.  */
+  showArchived?: boolean;
   /** The windows added to My Workspace on phones. */
   myWindows?: readonly string[];
   guide?: ReactNode;
@@ -50,7 +52,7 @@ export function PhoneStack({ workspace, showAttention, settings, mesa = null, my
   const def = WORKSPACES[workspace];
   // My Workspace stacks the windows added to it; phones add them once their windows have menus.
   const ids: WindowId[] = workspace === "my" ? [...myWindows.filter(canAddToMy) as WindowId[], ATTENTION_WINDOW as WindowId] : def.windows;
-  const windows = ids.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings, mesa) === true));
+  const windows = ids.filter((id) => !SHARED_WINDOWS.includes(id) && (id === ATTENTION_WINDOW ? showAttention : windowAvailable(id, settings, mesa, showArchived) === true));
   // Needs Attention leads the stack when it is shown.
   windows.sort((a, b) => Number(b === ATTENTION_WINDOW) - Number(a === ATTENTION_WINDOW));
   return (

@@ -1,9 +1,10 @@
 /**
  * My Workspace in the real panel: Add to My Workspace from a window's menu,
- * the second copy beside the original, Remove and Close, the empty hint, and
+ * the second copy beside the original, Close taking a window out for good,
+ * Reset This Workspace emptying it, Vertical Scrolling, the empty hint, and
  * Agent Chat docking, both the panel's own Chat and the global one through its
  * bridge. Chat floats while My Workspace is not shown and returns to its
- * window when it is.
+ * window when it is. Also Always Show Icons and Text in any window's menu.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, waitFor } from "@testing-library/react";
@@ -130,27 +131,76 @@ describe("My Workspace", () => {
     await waitFor(() => expect(stored().myWindows).toEqual(["accessKeys"]), { timeout: 4000 });
   });
 
-  it("hides a closed window until Workspace Options reopens it, and Remove takes it away", async () => {
+  it("takes a closed window out for good: nothing offers it again until it is added again", async () => {
     seed({ lastWorkspace: "my", myWindows: ["accessKeys"] });
     const el = mountPanel();
     await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
-    act(() => { titleControl(el, "Access Keys", '[aria-label="Close"]').click(); });
-    await waitFor(() => expect(visible(el, "accessKeys")).toBeNull());
-    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
-    const reopen = [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role="menuitem"]')].find((i) => i.textContent?.includes("Access Keys"));
-    expect(reopen).toBeTruthy();
-    act(() => { reopen!.click(); });
-    await waitFor(() => expect(visible(el, "accessKeys")).toBeTruthy());
     openWindowMenu(el, "Access Keys");
-    act(() => { menuItem(el, "Remove from My Workspace")!.click(); });
+    expect(menuItem(el, "Remove from My Workspace")).toBeUndefined();
+    act(() => { fireEvent.keyDown(sr(el).querySelector(".phx-menu")!, { key: "Escape" }); });
+    act(() => { titleControl(el, "Access Keys", '[aria-label="Close"]').click(); });
     expect(toast(el)).toBe("Access Keys removed from My Workspace");
     await waitFor(() => expect(visible(el, "accessKeys")).toBeNull());
+    // Neither Workspace Options nor the empty workspace offers to show it again.
     act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
     expect([...sr(el).querySelectorAll('.phx-menu [role="menuitem"]')].some((i) => i.textContent?.includes("Access Keys"))).toBe(false);
+    expect(frame(el)!.querySelector(".phx-workspace-empty")?.textContent ?? "").not.toContain("Access Keys");
     await waitFor(() => expect(stored().myWindows).toEqual([]), { timeout: 4000 });
-    // The original stays in Access Keys.
+    // The original stays in Access Keys, and adding it again brings it back.
     act(() => { toolbarButton(el, "Access Keys").click(); });
     await waitFor(() => expect(visible(el, "accessKeys")).toBeTruthy());
+    openWindowMenu(el, "Access Keys");
+    expect(menuItem(el, "Add to My Workspace")).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("empties My Workspace on Reset This Workspace", async () => {
+    seed({ lastWorkspace: "my", myWindows: ["accessKeys", "approvals"] });
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "approvals")).toBeTruthy());
+    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
+    expect(menuItem(el, "Reset This Workspace")).toHaveAttribute("title", expect.stringContaining("Removes every window from My Workspace"));
+    act(() => { menuItem(el, "Reset This Workspace")!.click(); });
+    await waitFor(() => expect(visible(el, "accessKeys")).toBeNull());
+    expect(visible(el, "approvals")).toBeNull();
+    expect([...frame(el)!.querySelectorAll(".phx-window-title-text")].map((e) => e.textContent)).toEqual(["Help"]);
+    await waitFor(() => expect(frame(el)!.querySelector(".phx-workspace-empty")?.textContent ?? "").toContain("Add a window with Add to My Workspace"));
+    expect(stored().myWindows).toEqual([]);
+  });
+
+  it("empties My Workspace on Reset All Workspaces too", async () => {
+    seed({ lastWorkspace: "my", myWindows: ["accessKeys"] });
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")).toBeTruthy());
+    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
+    act(() => { menuItem(el, "Reset All Workspaces")!.click(); });
+    await waitFor(() => expect(visible(el, "accessKeys")).toBeNull());
+    expect(stored().myWindows).toEqual([]);
+  });
+
+  it("offers Vertical Scrolling in every window's menu there, fitting the windows to the screen until it is on", async () => {
+    seed({ lastWorkspace: "my", myWindows: ["accessKeys", "approvals"] });
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "approvals")).toBeTruthy());
+    const grid = () => frame(el)!.querySelector(".phx-workspace")!;
+    expect(grid()).toHaveClass("phx-fits");
+    for (const title of ["Access Keys", "Approvals"]) {
+      openWindowMenu(el, title);
+      expect(menuItem(el, "Vertical Scrolling")).toHaveAttribute("aria-checked", "false");
+      act(() => { fireEvent.keyDown(sr(el).querySelector(".phx-menu")!, { key: "Escape" }); });
+    }
+    openWindowMenu(el, "Approvals");
+    act(() => { menuItem(el, "Vertical Scrolling")!.click(); });
+    expect(grid()).not.toHaveClass("phx-fits");
+    openWindowMenu(el, "Access Keys");
+    expect(menuItem(el, "Vertical Scrolling")).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect((JSON.parse(localStorage.getItem("phx-ui:u1:desktop") ?? "{}") as { workspaces?: Record<string, { scrolls?: boolean }> }).workspaces?.my?.scrolls).toBe(true), { timeout: 4000 });
+    act(() => { menuItem(el, "Vertical Scrolling")!.click(); });
+    expect(grid()).toHaveClass("phx-fits");
+    // Other workspaces do not offer it.
+    act(() => { toolbarButton(el, "Access Keys").click(); });
+    await waitFor(() => expect(visible(el, "accessKeys")).toBeTruthy());
+    openWindowMenu(el, "Access Keys");
+    expect(menuItem(el, "Vertical Scrolling")).toBeUndefined();
   });
 });
 
@@ -168,11 +218,29 @@ describe("Window menu", () => {
     act(() => { fireEvent.contextMenu(titleControl(el, "Access Keys", ".phx-window-title-text"), { clientX: 40, clientY: 40 }); });
     const fromRightClick = labels(el);
     expect(fromRightClick).toEqual(fromButton);
-    expect(fromButton).toEqual(expect.arrayContaining(["Resize with Keyboard", "Add to My Workspace", "Fold", "Close"]));
+    expect(fromButton).toEqual(expect.arrayContaining(["Resize with Keyboard", "Add to My Workspace", "Always Show Icons and Text", "Fold", "Close"]));
     // Resize with Keyboard from the right-click menu starts resizing on the window's menu button.
     act(() => { menuItem(el, "Resize with Keyboard")!.click(); });
     await waitFor(() => expect(titleControl(el, "Access Keys", ".phx-window-resize-hint")).toBeTruthy());
     expect(sr(el).activeElement).toBe(titleControl(el, "Access Keys", "[data-phx-window-menu]"));
+  });
+
+  it("lets one window show icons and text while the toolbar shows icons only, and remembers it", async () => {
+    seed({ lastWorkspace: "approvals", toolbar: { dock: "top", x: 0, y: 0, collapsed: false, toolsShown: true, mode: "icons", vertical: false } });
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "approvals")).toBeTruthy());
+    const iconOnly = (id: string) => visible(el, id)!.querySelectorAll(".phx-action.is-icon-only").length;
+    const withText = (id: string) => visible(el, id)!.querySelectorAll(".phx-action:not(.is-icon-only)").length;
+    await waitFor(() => expect(iconOnly("approvals")).toBeGreaterThan(0));
+    expect(withText("approvals")).toBe(0);
+    openWindowMenu(el, "Approvals");
+    expect(menuItem(el, "Always Show Icons and Text")).toHaveAttribute("aria-checked", "false");
+    act(() => { menuItem(el, "Always Show Icons and Text")!.click(); });
+    await waitFor(() => expect(iconOnly("approvals")).toBe(0));
+    expect(withText("approvals")).toBeGreaterThan(0);
+    openWindowMenu(el, "Approvals");
+    expect(menuItem(el, "Always Show Icons and Text")).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect((JSON.parse(localStorage.getItem("phx-ui:u1:desktop") ?? "{}") as { workspaces?: Record<string, { labels?: string[] }> }).workspaces?.approvals?.labels).toEqual(["approvals"]), { timeout: 4000 });
   });
 });
 
@@ -213,17 +281,15 @@ describe("Agent Chat in My Workspace", () => {
     await waitFor(() => expect(stored().myWindows).toEqual([]), { timeout: 4000 });
   });
 
-  it("closing its window in My Workspace closes Chat, and the window offers to open it again", async () => {
+  it("closing its window in My Workspace closes Chat and takes it out of My Workspace", async () => {
     seed({ lastWorkspace: "my", myWindows: ["agentChat"] });
     const el = mountPanel();
     await waitFor(() => expect(chat(el)).toHaveClass("agentcli-docked"));
     act(() => { titleControl(el, "Agent Chat", '[aria-label="Close"]').click(); });
     await waitFor(() => expect(chat(el)).toBeNull());
     act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
-    const reopen = [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role="menuitem"]')].find((i) => i.textContent?.includes("Agent Chat"));
-    act(() => { reopen!.click(); });
-    // Reopened: the window shows Chat again.
-    await waitFor(() => expect(chat(el)).toHaveClass("agentcli-docked"));
+    expect([...sr(el).querySelectorAll('.phx-menu [role="menuitem"]')].some((i) => i.textContent?.includes("Agent Chat"))).toBe(false);
+    await waitFor(() => expect(stored().myWindows).toEqual([]), { timeout: 4000 });
   });
 
   it("offers Chat no slot while the kill switch is on", async () => {
@@ -262,9 +328,11 @@ describe("Agent Chat in My Workspace", () => {
     await waitFor(() => expect(setDock.mock.lastCall![0].slot).toBeInstanceOf(HTMLElement));
     act(() => { titleControl(el, "Agent Chat", '[aria-label="Close"]').click(); });
     expect(close).toHaveBeenCalled();
-    // The toggle the bridge passes to Chat's menu floats it for good.
-    act(() => { (setDock.mock.lastCall![0].toggle as () => void)(); });
+    // Closed in My Workspace, Chat is no longer docked there.
     await waitFor(() => expect(setDock).toHaveBeenLastCalledWith(expect.objectContaining({ docked: false, slot: null })));
+    // The toggle the bridge passes to Chat's menu docks it again.
+    act(() => { (setDock.mock.lastCall![0].toggle as () => void)(); });
+    await waitFor(() => expect(setDock).toHaveBeenLastCalledWith(expect.objectContaining({ docked: true })));
     el.remove();
     expect(setDock).toHaveBeenLastCalledWith(null);
   });

@@ -89,6 +89,8 @@ export interface PanelData {
   loadingAccessKeys: boolean;
   accessKeysError: string | null;
   refreshAccessKeys: () => Promise<void>;
+  /** Read the list again without a loading state, keeping what is shown if that fails. */
+  updateAccessKeys: () => Promise<void>;
   accessKeyView: AccessKeyView;
   openDetail: (id: string) => void;
   openWizard: () => void;
@@ -96,6 +98,9 @@ export interface PanelData {
   goToSettings: () => void;
   showCreate: boolean;
   setShowCreate: (open: boolean) => void;
+  /** Whether the key list shows the archived keys; Reset This Workspace hides them again. */
+  showArchived: boolean;
+  setShowArchived: (show: boolean) => void;
 
   settings: GlobalSettings | null;
   setSettings: (settings: GlobalSettings) => void;
@@ -149,6 +154,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   const [loadingAccessKeys, setLoadingAccessKeys] = useState(true);
   const [accessKeysError, setAccessKeysError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
   // Bumped on each HA approval event so the Approvals list can refresh instantly.
   const [approvalSignal, setApprovalSignal] = useState<number>(0);
@@ -267,18 +273,24 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     try { localStorage.setItem(APPROVALS_TAB_STORAGE_KEY, approvalsTab); } catch { /* storage blocked: skip */ }
   }, [approvalsTab]);
 
-  const refreshAccessKeys = useCallback(async () => {
-    setLoadingAccessKeys(true);
-    setAccessKeysError(null);
+  // `quiet` reads the list again behind the one shown: a failure keeps what is shown, for the next update to retry.
+  const loadAccessKeys = useCallback(async (quiet: boolean) => {
+    if (!quiet) {
+      setLoadingAccessKeys(true);
+      setAccessKeysError(null);
+    }
     try {
       const data = await api.listAccessKeys();
       setAccessKeys(data);
+      setAccessKeysError(null);
     } catch (e: unknown) {
-      setAccessKeysError(e instanceof Error ? e.message : t("shell.loadAccessKeysFailed"));
+      if (!quiet) setAccessKeysError(e instanceof Error ? e.message : t("shell.loadAccessKeysFailed"));
     } finally {
-      setLoadingAccessKeys(false);
+      if (!quiet) setLoadingAccessKeys(false);
     }
   }, []);
+  const refreshAccessKeys = useCallback(() => loadAccessKeys(false), [loadAccessKeys]);
+  const updateAccessKeys = useCallback(() => loadAccessKeys(true), [loadAccessKeys]);
 
   // Load configured agentCLI providers, open the floating chat window when a
   // "connect" surface requests it, and refresh the provider list whenever it
@@ -511,10 +523,8 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
       setApprovalsTab("pending");
     }
     setWorkspace(next);
-    if (next === "accessKeys") {
-      setView({ name: "list" });
-      void refreshAccessKeys();
-    }
+    // Coming back to Access Keys keeps the chosen key (user, 2026-10-28); the list is read again.
+    if (next === "accessKeys") void refreshAccessKeys();
   }, [refreshAccessKeys, approvalsTab, pendingCount]);
 
   const dismissAttentionRequest = useCallback(() => setAttentionRequested(false), []);
@@ -522,8 +532,8 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   const value: PanelData = {
     hass, narrow, theme, onThemeChange, language, onLanguageChange,
     workspace, navigate,
-    accessKeys, loadingAccessKeys, accessKeysError, refreshAccessKeys,
-    accessKeyView, openDetail, openWizard, goBack, goToSettings, showCreate, setShowCreate,
+    accessKeys, loadingAccessKeys, accessKeysError, refreshAccessKeys, updateAccessKeys,
+    accessKeyView, openDetail, openWizard, goBack, goToSettings, showCreate, setShowCreate, showArchived, setShowArchived,
     settings, setSettings,
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,

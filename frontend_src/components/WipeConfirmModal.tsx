@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BusyButton } from "./BusyButton";
+import { ActionButton } from "../ui/ActionButton";
 import { api } from "../api";
 import { Modal } from "./Modal";
 import { t } from "../i18n";
@@ -47,13 +47,12 @@ export function WipeConfirmModal({ scopes, onWiped, onClose }: Props) {
   }
 
   return (
-    <Modal titleId="wipe-title" onClose={wiping ? undefined : onClose}>
-      <h3 className="modal-title modal-title-error" id="wipe-title">
+    // Over the whole workspace, plain UI2 dialog: no coloured title or banner; only Wipe is red (user, 2026-10-28).
+    <Modal titleId="wipe-title" onClose={wiping ? undefined : onClose} overWorkspace>
+      <h3 className="modal-title" id="wipe-title">
         {t("settings.wipeTitle")}
       </h3>
-      <div className="banner banner-error mb-16">
-        {t("settings.wipeWarningSelected")}
-      </div>
+      <p className="modal-body-text"><strong>{t("settings.wipeWarningSelected")}</strong></p>
       <ul className="phx-wipe-scopes">
         {WIPE_SCOPES.filter((scope) => scopes[scope.key]).map((scope) => <li key={scope.key}>{t(scope.labelKey)}</li>)}
       </ul>
@@ -71,15 +70,9 @@ export function WipeConfirmModal({ scopes, onWiped, onClose }: Props) {
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="modal-actions">
-        <BusyButton
-          className="btn btn-danger"
-          onClick={doWipe}
-          disabled={typed !== "WIPE" || nothingSelected}
-          busy={wiping}
-        >
-          {wiping ? t("settings.wipeBusy") : t("settings.wipeSubmit")}
-        </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={wiping}>{t("settings.cancel")}</BusyButton>
+        <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" onClick={onClose} busy={wiping} />
+        <ActionButton icon="delete" label={wiping ? t("settings.wipeBusy") : t("settings.wipeSubmit")} className="btn btn-danger btn-sm"
+          onClick={() => void doWipe()} disabled={typed !== "WIPE" || nothingSelected} busy={wiping} />
       </div>
     </Modal>
   );

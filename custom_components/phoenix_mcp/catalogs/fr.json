@@ -274,7 +274,6 @@
         "label": "Appareils ESPHome",
         "description": "Lit l'état, les diagnostics, les journaux et le YAML des appareils ESPHome, et le valide et le compile. Le flashage du micrologiciel nécessite une approbation. Les identifiants du YAML restent masqués. Aucun contrôle d'appareil ni autre configuration."
       },
-      "helper": "Une personnalité définit les capacités initiales. Vous pouvez ajuster chaque capacité dans Avancé. La personnalité devient Personnalisé lorsque vos paramètres ne correspondent plus à un préréglage.",
       "home_admin": {
         "label": "Administrateur du foyer",
         "description": "Peut lire et gérer l'ensemble du foyer. Les redémarrages, les contrôles physiques et les modifications de configuration sensibles nécessitent une approbation."
@@ -320,7 +319,6 @@
       "cardPersona": "Personnalité",
       "cardPresets": "Préréglages",
       "cardRateLimiting": "Limite de débit",
-      "cardToolAnnouncement": "Annonce des outils",
       "clearAll": "Tout effacer",
       "clearPermsBody": "Cela supprime chaque autorisation de domaine, d'appareil et d'entité. La clé d’accès n'aura aucun accès aux entités tant que vous n'aurez pas ajouté de nouvelles autorisations.",
       "clearPermsFailed": "Échec de l'effacement des autorisations.",
@@ -354,7 +352,6 @@
       "diffPermissionTree": "Arbre des autorisations : {count} nœud(s) différent(s)",
       "diffRateLimit": "Limite de débit : {fromRequests}/min rafale {fromBurst} -> {toRequests}/min rafale {toBurst}",
       "done": "Terminé",
-      "editAria": "Modifier la clé d’accès {name}",
       "empty": "Aucune clé d’accès pour l'instant. Créez-en une pour commencer.",
       "emptyFiltered": "Aucune clé d’accès ne correspond au filtre.",
       "enablePtBody": "<strong>La transmission directe donne à cette clé d’accès un large accès aux entités et aux services.</strong> Les modifications de configuration, les actions système, les capacités à risque élevé, l'accès au journal système, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
@@ -377,8 +374,6 @@
       "hideArchived": "Masquer les archivés",
       "hoursAgo": "il y a {h} h",
       "inlineWaitAria": "Durée d'attente d'approbation en ligne",
-      "inlineWaitDisabled": "Désactivé est la valeur par défaut : l'appel revient dès que l'approbation est mise en file.",
-      "inlineWaitHelp": "Combien de temps un appel soumis à confirmation provenant d'un client MCP externe attend votre décision avant de renvoyer une réponse en attente. Agent Chat, la voix et AI Task l'ignorent : ils se mettent toujours immédiatement en file et attendent à leur manière.",
       "inlineWaitLabel": "Attente d'approbation en ligne",
       "inlineWaitOff": "Désactivé (les approbations se mettent immédiatement en file)",
       "justNow": "à l'instant",
@@ -436,19 +431,16 @@
       "presetSwitchTo": "Changer pour",
       "ptConvertBody": "Le passage en mode limité applique immédiatement l'arbre des autorisations enregistré. S'il n'a aucune autorisation, cette clé d’accès perdra l'accès aux entités jusqu'à ce que vous en ajoutiez.",
       "ptConvertFailed": "Échec de la conversion de la clé d’accès.",
-      "ptHeaderBanner": "<strong>Ceci est une clé d’accès en transmission directe.</strong> Elle a un large accès aux entités et aux services de Home Assistant. Les capacités protégées, les règles MESA, la suppression des attributs sensibles et le blocage du domaine Phoenix MCP restent actifs.",
       "ptNoticeCaps": "La transmission directe autorise automatiquement les lectures et les actions quotidiennes. Les modifications de configuration, les actions système, les capacités à risque élevé et l'accès au journal système utilisent toujours les paramètres de capacités. Confirmer nécessite toujours une approbation.",
       "ptNoticeIntro": "<strong>Clé d’accès en transmission directe.</strong> Cette clé d’accès contourne l'arbre des autorisations et a un large accès aux entités et aux services de Home Assistant. Les attributs sensibles sont supprimés, les capacités protégées s'appliquent toujours et le domaine Phoenix MCP reste bloqué.",
       "ptNoticeUsage": "La transmission directe peut envoyer des informations sur chaque entité au modèle, ce qui augmente son utilisation. Un arbre des autorisations limité garde ce contexte plus petit.",
       "rateBurstLabel": "Rafale par seconde",
-      "rateLimitingDisabled": "La limite de débit est désactivée pour cette clé d’accès.",
       "rateRequestsLabel": "Requêtes par minute (0 = désactivé)",
       "rateSaveFailed": "Échec de l'enregistrement.",
       "rateValuesError": "Les valeurs doivent être des entiers non négatifs.",
       "rawAccessKeyNote": "<strong>Cette clé d’accès ne sera plus affichée.</strong> Copiez-le maintenant avant de fermer.",
       "reconnectBanner": "<strong>Reconnectez votre agent.</strong> Les outils disponibles de cette clé d’accès ont changé.",
       "reconnectDismiss": "Ignorer le rappel de reconnexion",
-      "refreshAria": "Actualiser les clés d’accès",
       "renameFailed": "Échec du renommage.",
       "revoke": "Révoquer",
       "revokeBody": "La révocation désactive définitivement cette clé d’accès et déconnecte chaque client qui l'utilise. Elle ne peut pas être réactivée.",
@@ -472,21 +464,19 @@
       "statusExpired": "Expiré",
       "statusRevoked": "Révoqué",
       "switchToScoped": "Passer en mode limité",
-      "switching": "Changement...",
       "accessKeyCreatedTitle": "Clé d’accès créée : {name}",
       "accessKeyNameAria": "Nom de la clé d’accès (modifiable)",
       "accessKeyRenameTitle": "Renommer cette clé d’accès ; enregistré lorsque vous cliquez ailleurs",
       "accessKeyRotatedTitle": "Clé d’accès renouvelée : {name}",
       "updateFailed": "Échec de la mise à jour de la clé d’accès.",
       "waitBeforeClose": "Attendez 3 secondes avant de fermer",
-      "cardNotes": "Notes",
-      "notesCaution": "Les notes sont uniquement indicatives : elles n’accordent jamais d’accès, ne modifient pas les capacités et ne contournent pas les approbations, et un modèle peut les ignorer. Les clients connectés et leurs fournisseurs de modèle les reçoivent, et toute personne pouvant parler à un agent qui utilise cette clé d’accès peut l’amener à les répéter. N’y mettez ni mots de passe ni autres secrets.",
       "notesCount": "{count} / {max} caractères",
       "notesDiscard": "Ignorer les modifications",
-      "notesHelp": "Indications pour chaque agent qui utilise cette clé d’accès, par exemple le nom des pièces et des appareils, qui l’utilise ou l’emplacement de la documentation du domicile. Phoenix MCP ajoute les notes aux instructions de chaque agent et masque les ID d'entité situés hors du périmètre de cette clé d’accès.",
       "notesLabel": "Notes pour les agents",
       "notesPlaceholder": "Exemple : La chambre d’amis s’appelle le bureau. Demandez avant de modifier quoi que ce soit dans la chambre du bébé.",
-      "notesTooLong": "Les notes doivent contenir {max} caractères ou moins."
+      "notesTooLong": "Les notes doivent contenir {max} caractères ou moins.",
+      "cardGuidance": "Indications",
+      "cardAgentBehavior": "Comportement de l’agent"
     },
     "shell": {
       "tabAccessKeys": "Clés d’accès",
@@ -537,9 +527,6 @@
       "permForDevice": "Autorisation pour l'appareil {name}",
       "permForDomain": "Autorisation pour le domaine {name}",
       "permSaveFailed": "Échec de l'enregistrement de l'autorisation.",
-      "reload": "Recharger",
-      "reloadAria": "Recharger les entités",
-      "reloadTitle": "Recharger les entités depuis Home Assistant",
       "riskDomainTitle": "Domaine à risque élevé. Accorder un accès en écriture ici donne accès à de vastes opérations système.",
       "saveFailedShort": "Échec de l'enregistrement",
       "selGreen": "Write: Lecture et écriture",
@@ -548,9 +535,7 @@
       "selSelected": "{title}, sélectionné",
       "selYellow": "Read: Lecture seule",
       "simulateEntityTitle": "Simuler les autorisations pour {id}",
-      "simulateTitle": "Simuler les autorisations de type {type} pour {id}",
       "stateDeny": "REFUSER",
-      "stateInherit": "HÉRITER",
       "stateNoAccess": "AUCUN ACCÈS",
       "stateNotFound": "INTROUVABLE",
       "stateRead": "LECTURE",
@@ -568,7 +553,11 @@
       "unmatchedDevicesNote": "Ces autorisations explicites font référence à des ID d'appareil absents de l'arbre des entités actuel. Appuyez sur N pour supprimer une autorisation obsolète.",
       "unmatchedDevicesTitle": "Autorisations d'appareil non associées",
       "hintCaution": "Cette indication est envoyée aux agents et à leurs fournisseurs de modèle. N’y mettez jamais de mots de passe ni de codes.",
-      "removeHint": "Supprimer l’indication"
+      "removeHint": "Supprimer l’indication",
+      "levelInherit": "Hériter",
+      "levelRead": "Lecture",
+      "levelWrite": "Écriture",
+      "levelDeny": "Refuser"
     },
     "changes": {
       "added": "Ajouté",
@@ -1076,7 +1065,7 @@
         "one": "{count} ressource",
         "other": "{count} ressources"
       },
-      "menu": "Sélectionner par",
+      "menu": "Filtrer",
       "reset": "Réinitialiser"
     },
     "settings": {
@@ -2405,14 +2394,16 @@
       "myEmpty": "Mon espace de travail est vide. Ajoutez une fenêtre avec « Ajouter à Mon espace de travail » dans le menu de la fenêtre, ou Agent Chat depuis son propre menu.",
       "myEmptyPhone": "Mon espace de travail ne contient aucune fenêtre sur ce téléphone.",
       "myWorkspace": "Mon espace de travail",
-      "removeFromMy": "Retirer de Mon espace de travail",
       "removedFromMy": "Fenêtre {window} retirée de Mon espace de travail",
       "safety": "Sécurité",
       "resetWorkspaceHint": "Replace les fenêtres de cet espace de travail là où Phoenix les dispose. Les autres espaces de travail et Ma disposition par défaut ne changent pas.",
       "resetAllHint": "Réinitialise tous les espaces de travail, la barre d’outils, la barre d’aide et le guide. Ma disposition par défaut et les réglages de Phoenix ne changent pas.",
       "toolbarOptions": "Options de la barre d’outils",
       "vertical": "Verticale",
-      "horizontal": "Horizontale"
+      "horizontal": "Horizontale",
+      "alwaysLabels": "Toujours afficher icônes et texte",
+      "verticalScrolling": "Défilement vertical",
+      "resetMyHint": "Retire toutes les fenêtres de Mon espace de travail. Les autres espaces de travail et Ma disposition par défaut ne changent pas."
     },
     "notifications": {
       "title": "Notifications",
@@ -2454,7 +2445,10 @@
       "settingsVoiceDisable": "Désactiver l'agent vocal supprime aussi l'assistant que Phoenix MCP a créé dans Home Assistant.",
       "settingsVoiceRemoveAssistant": "Désactiver cette option supprime l'assistant que Phoenix MCP a créé dans Home Assistant. L'agent vocal reste activé.",
       "wsMy": "Votre propre espace de travail : les fenêtres que vous avez ajoutées depuis les autres espaces de travail, et Agent Chat si vous l’y avez ancré.",
-      "toolbarOptions": "Choisissez l’affichage des boutons de la barre d’outils, ancrez-la à un bord ou rendez-la flottante, placez-la à la verticale ou à l’horizontale, ou réduisez-la."
+      "toolbarOptions": "Choisissez l’affichage des boutons de la barre d’outils, ancrez-la à un bord ou rendez-la flottante, placez-la à la verticale ou à l’horizontale, ou réduisez-la.",
+      "persona": "Une personnalité définit les capacités de départ. Modifiez des capacités individuelles dans la fenêtre Capacités ; la personnalité devient Personnalisé lorsque les paramètres ne correspondent plus à aucune.",
+      "guidance": "Indications pour chaque agent qui utilise cette clé d’accès, par exemple le nom des pièces et des appareils, qui l’utilise ou l’emplacement de la documentation du domicile. Phoenix MCP les ajoute aux instructions de chaque agent et masque les ID d'entité situés hors du périmètre de cette clé d’accès. Elles sont uniquement indicatives : elles n’accordent jamais d’accès, ne modifient pas les capacités et ne contournent pas les approbations, et un modèle peut les ignorer. Les agents et leurs fournisseurs de modèle reçoivent ce texte, et toute personne qui parle à un agent peut le lui faire répéter. N’y mettez jamais de mots de passe ni d’autres secrets.",
+      "inlineWait": "Combien de temps un appel soumis à confirmation provenant d'un client MCP externe attend votre décision avant de renvoyer une réponse en attente. Avec Désactivé, la valeur par défaut, l'appel revient dès que l'approbation est mise en file. Agent Chat, la voix et AI Task l'ignorent : ils se mettent toujours immédiatement en file et attendent à leur manière."
     },
     "guide": {
       "title": "Guide",

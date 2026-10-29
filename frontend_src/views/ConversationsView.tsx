@@ -113,7 +113,8 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh" as const,
         shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } }] : []),
       ...logSettings,
-      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", tone: "danger", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
+      // Neutral until it asks to confirm, like the other destructive buttons (user, 2026-10-28).
+      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;

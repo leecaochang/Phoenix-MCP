@@ -1,53 +1,28 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ArchivedAccessKeyRecord } from "../types";
 import { api } from "../api";
-import { formatDate, accessKeyStatusLabel } from "../utils";
+import { formatDate } from "../utils";
 import { t } from "../i18n";
-
-type SortKey = "name" | "status" | "created" | "archived" | "last_used";
-type SortDir = "asc" | "desc";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { ActionButton } from "../ui/ActionButton";
+import { useClickAway } from "../ui/useClickAway";
+import { AccessKeyStatus } from "./AccessKeyStatus";
 
 interface Props {
   accessKeys: ArchivedAccessKeyRecord[];
   onDeleted: (id: string) => void;
 }
 
-function SortArrow({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  const active = col === sortKey;
-  return <span className={`sort-arrow${active ? " active" : ""}`}>{active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}</span>;
-}
+const NEWEST_ARCHIVED = { column: "archived", dir: "desc" } as const;
 
+/** Revoked and expired keys, on the same configurable table as the key list, each with Delete Permanently. */
 export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("archived");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-
-  function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
-  }
-
-  function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
-    if (sortKey !== key) return "none";
-    return sortDir === "asc" ? "ascending" : "descending";
-  }
-
-  const sorted = [...accessKeys].sort((a, b) => {
-    let va: string = "";
-    let vb: string = "";
-    switch (sortKey) {
-      case "name":      va = a.name.toLowerCase();         vb = b.name.toLowerCase(); break;
-      case "status":    va = a.revoked ? "revoked" : "expired"; vb = b.revoked ? "revoked" : "expired"; break;
-      case "created":   va = a.created_at ?? "";            vb = b.created_at ?? ""; break;
-      case "archived":  va = a.revoked_at ?? "";            vb = b.revoked_at ?? ""; break;
-      case "last_used": va = a.last_used_at ?? "";          vb = b.last_used_at ?? ""; break;
-    }
-    if (va < vb) return sortDir === "asc" ? -1 : 1;
-    if (va > vb) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  // A click anywhere else cancels a delete waiting for its confirmation.
+  const confirming = useRef<HTMLSpanElement | null>(null);
+  useClickAway(confirming, () => setConfirmId(null), !!confirmId && !deleting);
 
   async function deletePermanently(id: string) {
     setDeleting(id);
@@ -67,75 +42,38 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
     return <p className="archived-empty">{t("accessKeys.archivedEmpty")}</p>;
   }
 
-  function th(key: SortKey, label: string) {
-    return (
-      <th className={`sortable${sortKey === key ? " sort-active" : ""}`} aria-sort={ariaSort(key)}>
-        <button type="button" className="table-sort-btn" onClick={() => handleSort(key)}>
-          {label} <SortArrow col={key} sortKey={sortKey} sortDir={sortDir} />
-        </button>
-      </th>
-    );
-  }
+  const statusOf = (k: ArchivedAccessKeyRecord) => (k.revoked ? "Revoked" : "Expired");
+  const columns: Column<ArchivedAccessKeyRecord>[] = [
+    { id: "name", label: t("accessKeys.colName"), width: 200, maxWidth: 320, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name, cell: (k) => k.name },
+    { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: statusOf, cell: (k) => <AccessKeyStatus status={statusOf(k)} /> },
+    { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "", cell: (k) => formatDate(k.created_at) },
+    { id: "archived", label: t("accessKeys.colArchivedOn"), width: 120, sortValue: (k) => k.revoked_at ?? "", cell: (k) => formatDate(k.revoked_at) },
+    { id: "lastUsed", label: t("accessKeys.colLastUsed"), width: 120, sortValue: (k) => k.last_used_at ?? "", cell: (k) => formatDate(k.last_used_at) },
+    // Delete Permanently turns red to confirm, in place, with Cancel beside it (user, 2026-10-28).
+    { id: "actions", label: t("accessKeys.colActions"), width: 200, maxWidth: 320,
+      cell: (k) => (
+        <span className="row-actions" ref={confirmId === k.id ? confirming : undefined}>
+          <ActionButton icon="delete" label={confirmId === k.id ? t("accessKeys.confirmDelete") : t("accessKeys.deletePermanently")}
+            className={confirmId === k.id ? "btn btn-danger btn-sm" : "btn btn-ghost btn-sm"} busy={deleting === k.id}
+            onClick={() => (confirmId === k.id ? void deletePermanently(k.id) : setConfirmId(k.id))} />
+          {confirmId === k.id && (
+            <ActionButton icon="undo" label={t("accessKeys.cancel")} className="btn btn-outline btn-sm" busy={deleting === k.id} onClick={() => setConfirmId(null)} />
+          )}
+        </span>
+      ) },
+  ];
 
   return (
     <div>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <table className="data-table archived-table">
-        <thead>
-          <tr>
-            {th("name", t("accessKeys.colName"))}
-            {th("status", t("accessKeys.colStatus"))}
-            {th("created", t("accessKeys.colCreated"))}
-            {th("archived", t("accessKeys.colArchivedOn"))}
-            {th("last_used", t("accessKeys.colLastUsed"))}
-            <th>{t("accessKeys.colActions")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((tok) => {
-            const status = tok.revoked ? "Revoked" : "Expired";
-            return (
-              <tr key={tok.id}>
-                <td>{tok.name}</td>
-                <td>
-                  <span className={`badge ${status === "Revoked" ? "badge-red" : "badge-grey"}`}>
-                    {accessKeyStatusLabel(status)}
-                  </span>
-                </td>
-                <td>{formatDate(tok.created_at)}</td>
-                <td>{formatDate(tok.revoked_at)}</td>
-                <td>{formatDate(tok.last_used_at)}</td>
-                <td>
-                  {confirmId === tok.id ? (
-                    <span className="row-actions">
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => deletePermanently(tok.id)}
-                        disabled={deleting === tok.id}
-                      >
-                        {deleting === tok.id ? "..." : t("accessKeys.confirmDelete")}
-                      </button>
-                      <button
-                        className="btn btn-text btn-sm"
-                        onClick={() => setConfirmId(null)}
-                      >
-                        {t("accessKeys.cancel")}
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => setConfirmId(tok.id)}
-                    >
-                      {t("accessKeys.deletePermanently")}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <ConfigTable
+        id="archivedAccessKeys"
+        label={t("accessKeys.archivedTitle")}
+        defaultSort={NEWEST_ARCHIVED}
+        columns={columns}
+        rows={accessKeys}
+        rowKey={(k) => k.id}
+      />
     </div>
   );
 }

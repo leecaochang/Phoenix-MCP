@@ -411,7 +411,6 @@
         "label": "ESPHome-Geräte",
         "description": "Liest ESPHome-Gerätestatus, Diagnose, Protokolle und Geräte-YAML und validiert und kompiliert es. Das Flashen von Firmware erfordert eine Genehmigung. YAML-Anmeldedaten bleiben verborgen. Keine Gerätesteuerung oder sonstige Konfiguration."
       },
-      "helper": "Eine Persona legt die anfänglichen Fähigkeiten fest. Sie können einzelne Fähigkeiten unter Erweitert anpassen. Die Persona wechselt zu Benutzerdefiniert, wenn Ihre Einstellungen keiner Voreinstellung mehr entsprechen.",
       "home_admin": {
         "label": "Heimadministrator",
         "description": "Kann das gesamte Zuhause lesen und verwalten. Neustarts, physische Steuerungen und sensible Konfigurationsänderungen erfordern eine Genehmigung."
@@ -566,7 +565,6 @@
       "cardPersona": "Persona",
       "cardPresets": "Voreinstellungen",
       "cardRateLimiting": "Ratenlimit",
-      "cardToolAnnouncement": "Tool-Ankündigung",
       "clearAll": "Alle entfernen",
       "clearPermsBody": "Dies entfernt jede Domänen-, Geräte- und Entitätsfreigabe. Der Zugriffsschlüssel hat keinen Entitätszugriff, bis Sie neue Berechtigungen hinzufügen.",
       "clearPermsFailed": "Berechtigungen konnten nicht entfernt werden.",
@@ -600,7 +598,6 @@
       "diffPermissionTree": "Berechtigungsbaum: {count} Knoten weichen ab",
       "diffRateLimit": "Ratenlimit: von {fromRequests}/min Burst {fromBurst} zu {toRequests}/min Burst {toBurst}",
       "done": "Fertig",
-      "editAria": "Zugriffsschlüssel {name} bearbeiten",
       "empty": "Noch keine Zugriffsschlüssel. Erstellen Sie einen, um zu beginnen.",
       "emptyFiltered": "Keine Zugriffsschlüssel entsprechen dem Filter.",
       "enablePtBody": "<strong>Durchreichung gewährt diesem Zugriffsschlüssel umfassenden Zugriff auf Entitäten und Dienste.</strong> Konfigurationsänderungen, Systemaktionen, risikoreiche Fähigkeiten, der Zugriff auf das Systemprotokoll, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
@@ -623,8 +620,6 @@
       "hideArchived": "Archivierte ausblenden",
       "hoursAgo": "vor {h} Stunden",
       "inlineWaitAria": "Dauer der Wartezeit auf Genehmigung",
-      "inlineWaitDisabled": "Aus ist die Standardeinstellung: Der Aufruf wird zurückgegeben, sobald die Genehmigung in die Warteschlange gestellt wurde.",
-      "inlineWaitHelp": "Wie lange ein bestätigungspflichtiger Aufruf eines externen MCP-Clients auf Ihre Entscheidung wartet, bevor eine ausstehende Antwort zurückgegeben wird. Agent Chat, Sprachassistent und AI Task ignorieren dies: Sie stellen immer sofort in die Warteschlange und warten auf ihre eigene Weise.",
       "inlineWaitLabel": "Wartezeit auf Genehmigung",
       "inlineWaitOff": "Aus (Genehmigungen werden sofort in die Warteschlange gestellt)",
       "justNow": "gerade eben",
@@ -682,19 +677,16 @@
       "presetSwitchTo": "Wechseln zu",
       "ptConvertBody": "Beim Wechseln in den beschränkten Modus wird der gespeicherte Berechtigungsbaum sofort angewendet. Wenn er keine Freigaben enthält, verliert dieser Zugriffsschlüssel den Entitätszugriff, bis Sie diese hinzufügen.",
       "ptConvertFailed": "Zugriffsschlüssel konnte nicht konvertiert werden.",
-      "ptHeaderBanner": "<strong>Dies ist ein Durchreichungs-Zugriffsschlüssel.</strong> Er hat umfassenden Zugriff auf Entitäten und Dienste von Home Assistant. Geschützte Fähigkeiten, MESA-Regeln, das Entfernen sensibler Attribute und die Phoenix MCP-Domänensperre bleiben aktiv.",
       "ptNoticeCaps": "Durchreichung erlaubt Lesezugriffe und alltägliche Aktionen automatisch. Konfigurationsänderungen, Systemaktionen, risikoreiche Fähigkeiten und der Zugriff auf das Systemprotokoll unterliegen weiterhin den Fähigkeitseinstellungen. Bestätigen erfordert immer eine Genehmigung.",
       "ptNoticeIntro": "<strong>Durchreichungs-Zugriffsschlüssel.</strong> Dieser Zugriffsschlüssel umgeht den Berechtigungsbaum und hat umfassenden Zugriff auf Entitäten und Dienste von Home Assistant. Sensible Attribute werden entfernt, geschützte Fähigkeiten gelten weiterhin und die Phoenix MCP-Domäne bleibt gesperrt.",
       "ptNoticeUsage": "Durchreichung kann Informationen über jede Entität an das Modell senden, was die Modellnutzung erhöht. Ein beschränkter Berechtigungsbaum hält diesen Kontext kleiner.",
       "rateBurstLabel": "Burst pro Sekunde",
-      "rateLimitingDisabled": "Das Ratenlimit ist für diesen Zugriffsschlüssel deaktiviert.",
       "rateRequestsLabel": "Anfragen pro Minute (0 = deaktiviert)",
       "rateSaveFailed": "Speichern fehlgeschlagen.",
       "rateValuesError": "Die Werte müssen nicht negative ganze Zahlen sein.",
       "rawAccessKeyNote": "<strong>Dieser Zugriffsschlüssel wird nicht erneut angezeigt.</strong> Kopieren Sie ihn jetzt, bevor Sie schließen.",
       "reconnectBanner": "<strong>Verbinden Sie Ihren Agenten erneut.</strong> Die verfügbaren Tools dieses Zugriffsschlüssels haben sich geändert.",
       "reconnectDismiss": "Erinnerung zum erneuten Verbinden verwerfen",
-      "refreshAria": "Zugriffsschlüssel aktualisieren",
       "renameFailed": "Umbenennen fehlgeschlagen.",
       "revoke": "Widerrufen",
       "revokeBody": "Durch den Widerruf wird dieser Zugriffsschlüssel endgültig deaktiviert und jeder Client, der ihn verwendet, getrennt. Er kann nicht erneut aktiviert werden.",
@@ -718,21 +710,19 @@
       "statusExpired": "Abgelaufen",
       "statusRevoked": "Widerrufen",
       "switchToScoped": "Zum beschränkten Modus wechseln",
-      "switching": "Wird gewechselt...",
       "accessKeyCreatedTitle": "Zugriffsschlüssel erstellt: {name}",
       "accessKeyNameAria": "Zugriffsschlüssel-Name (bearbeitbar)",
       "accessKeyRenameTitle": "Diesen Zugriffsschlüssel umbenennen; wird beim Wegklicken gespeichert",
       "accessKeyRotatedTitle": "Zugriffsschlüssel rotiert: {name}",
       "updateFailed": "Zugriffsschlüssel konnte nicht aktualisiert werden.",
       "waitBeforeClose": "Warten Sie 3 Sekunden, bevor Sie schließen",
-      "cardNotes": "Notizen",
-      "notesCaution": "Notizen sind nur Hinweise: Sie gewähren nie Zugriff, ändern keine Fähigkeiten und umgehen keine Genehmigungen, und ein Modell kann sie ignorieren. Verbundene Clients und deren Modellanbieter erhalten sie, und wer mit einem Agenten sprechen kann, der diesen Zugriffsschlüssel verwendet, kann ihn dazu bringen, sie wiederzugeben. Tragen Sie hier keine Passwörter oder anderen Geheimnisse ein.",
       "notesCount": "{count} / {max} Zeichen",
       "notesDiscard": "Änderungen verwerfen",
-      "notesHelp": "Hinweise für jeden Agenten, der diesen Zugriffsschlüssel verwendet, etwa wie Räume und Geräte heißen, wer ihn nutzt oder wo die Dokumentation des Haushalts liegt. Phoenix MCP fügt die Notizen den Anweisungen jedes Agenten hinzu und blendet Entitäts-IDs außerhalb des Geltungsbereichs dieses Zugriffsschlüssels aus.",
       "notesLabel": "Notizen für Agenten",
       "notesPlaceholder": "Beispiel: Das Gästezimmer heißt Hobbyraum. Vor Änderungen im Kinderzimmer bitte nachfragen.",
-      "notesTooLong": "Notizen dürfen höchstens {max} Zeichen lang sein."
+      "notesTooLong": "Notizen dürfen höchstens {max} Zeichen lang sein.",
+      "cardGuidance": "Hinweise",
+      "cardAgentBehavior": "Agentenverhalten"
     },
     "mesa": {
       "addAreaProfile": "Bereichsprofil hinzufügen",
@@ -1862,9 +1852,6 @@
       "permForDevice": "Berechtigung für Gerät {name}",
       "permForDomain": "Berechtigung für Domäne {name}",
       "permSaveFailed": "Berechtigung konnte nicht gespeichert werden.",
-      "reload": "Neu laden",
-      "reloadAria": "Entitäten neu laden",
-      "reloadTitle": "Entitäten aus Home Assistant neu laden",
       "riskDomainTitle": "Risikoreiche Domäne. Das Gewähren von Schreibzugriff ermöglicht hier den Zugriff auf umfassende Systemoperationen.",
       "saveFailedShort": "Speichern fehlgeschlagen",
       "selGreen": "Write: Lesen und Schreiben",
@@ -1873,9 +1860,7 @@
       "selSelected": "{title}, ausgewählt",
       "selYellow": "Read: Nur Lesen",
       "simulateEntityTitle": "Berechtigungen für {id} simulieren",
-      "simulateTitle": "{type}-Berechtigungen für {id} simulieren",
       "stateDeny": "Verweigern",
-      "stateInherit": "Erben",
       "stateNoAccess": "Kein Zugriff",
       "stateNotFound": "Nicht gefunden",
       "stateRead": "Lesen",
@@ -1893,7 +1878,11 @@
       "unmatchedDevicesNote": "Diese expliziten Berechtigungen verweisen auf Geräte-IDs, die sich nicht im aktuellen Entitätsbaum befinden. Setzen Sie N, um eine veraltete Berechtigung zu entfernen.",
       "unmatchedDevicesTitle": "Nicht zugeordnete Geräteberechtigungen",
       "hintCaution": "Wird an Agenten und deren Modellanbieter gesendet. Tragen Sie niemals Passwörter oder Codes ein.",
-      "removeHint": "Hinweis entfernen"
+      "removeHint": "Hinweis entfernen",
+      "levelInherit": "Erben",
+      "levelRead": "Lesen",
+      "levelWrite": "Schreiben",
+      "levelDeny": "Verweigern"
     },
     "changes": {
       "added": "Hinzugefügt",
@@ -2039,7 +2028,7 @@
         "one": "{count} Ressource",
         "other": "{count} Ressourcen"
       },
-      "menu": "Auswählen nach",
+      "menu": "Filter",
       "reset": "Zurücksetzen"
     },
     "version": {
@@ -2408,11 +2397,13 @@
       "findSettingNone": "Keine passenden Einstellungen",
       "myWorkspace": "Mein Arbeitsbereich",
       "addToMy": "Zu Meinem Arbeitsbereich hinzufügen",
-      "removeFromMy": "Aus Meinem Arbeitsbereich entfernen",
       "addedToMy": "{window} zu Meinem Arbeitsbereich hinzugefügt",
       "removedFromMy": "{window} aus Meinem Arbeitsbereich entfernt",
       "myEmpty": "Mein Arbeitsbereich ist leer. Fügen Sie ein Fenster über „Zu Meinem Arbeitsbereich hinzufügen“ in seinem Fenstermenü hinzu oder Agent Chat über sein eigenes Menü.",
-      "myEmptyPhone": "Mein Arbeitsbereich enthält auf diesem Telefon keine Fenster."
+      "myEmptyPhone": "Mein Arbeitsbereich enthält auf diesem Telefon keine Fenster.",
+      "alwaysLabels": "Immer Symbole und Text anzeigen",
+      "verticalScrolling": "Vertikales Scrollen",
+      "resetMyHint": "Entfernt alle Fenster aus Meinem Arbeitsbereich. Andere Arbeitsbereiche und Mein Standard bleiben unverändert."
     },
     "notifications": {
       "title": "Benachrichtigungen",
@@ -2454,7 +2445,10 @@
       "settingsVoiceClearPreferred": "Wenn Sie dies ausschalten, bleibt der Assistent erhalten. Home Assistant bevorzugt dann einen anderen Assistenten.",
       "settingsAiTaskDisable": "Wenn Sie die KI-Aufgabe ausschalten, ist sie auch nicht mehr die Standard-KI-Aufgabe von Home Assistant.",
       "settingsAiTaskReplaceDefault": "Home Assistant hat nur eine Standard-KI-Aufgabe, daher wird die aktuelle ersetzt.",
-      "wsMy": "Ihr eigener Arbeitsbereich: Fenster, die Sie aus den anderen Arbeitsbereichen hinzugefügt haben, und Agent Chat, wenn Sie es hier angedockt haben."
+      "wsMy": "Ihr eigener Arbeitsbereich: Fenster, die Sie aus den anderen Arbeitsbereichen hinzugefügt haben, und Agent Chat, wenn Sie es hier angedockt haben.",
+      "persona": "Eine Persona legt die anfänglichen Fähigkeiten fest. Einzelne Fähigkeiten ändern Sie im Fenster Fähigkeiten; die Persona wird zu Benutzerdefiniert, sobald die Einstellungen keiner Persona mehr entsprechen.",
+      "guidance": "Hinweise für jeden Agenten, der diesen Zugriffsschlüssel verwendet, etwa wie Räume und Geräte heißen, wer ihn nutzt oder wo die Dokumentation des Haushalts liegt. Phoenix MCP fügt sie den Anweisungen jedes Agenten hinzu und blendet Entitäts-IDs außerhalb des Geltungsbereichs dieses Zugriffsschlüssels aus. Sie sind nur Hinweise: Sie gewähren nie Zugriff, ändern keine Fähigkeiten und umgehen keine Genehmigungen, und ein Modell kann sie ignorieren. Agenten und ihre Modellanbieter erhalten diesen Text, und wer mit einem Agenten spricht, kann ihn sich wiedergeben lassen. Tragen Sie hier niemals Passwörter oder andere Geheimnisse ein.",
+      "inlineWait": "Wie lange ein bestätigungspflichtiger Aufruf eines externen MCP-Clients auf Ihre Entscheidung wartet, bevor eine ausstehende Antwort zurückgegeben wird. Bei Aus, der Standardeinstellung, kehrt der Aufruf zurück, sobald die Genehmigung in die Warteschlange gestellt ist. Agent Chat, Sprachassistent und AI Task ignorieren dies: Sie stellen immer sofort in die Warteschlange und warten auf ihre eigene Weise."
     },
     "guide": {
       "title": "Leitfaden",

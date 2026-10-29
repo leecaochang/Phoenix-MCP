@@ -31,7 +31,7 @@ import { SettingsProvider } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
 import { DOCS_BASE_URL } from "../components/common";
 import {
-  ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, MY_EXTRAS, SHARED_PAIRS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, arrangeMy, canAddToMy, myWorkspaceWindows,
+  ARCHIVED_WINDOW, ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, KEY_WINDOWS, MY_EXTRAS, SHARED_PAIRS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, canAddToMy, myWorkspaceWindows,
   renderWindow, windowAvailable, windowTitle, type WindowId,
 } from "./workspaces";
 import { CHAT_WINDOW, ChatDockContext, type ChatDock } from "./chatDock";
@@ -97,6 +97,7 @@ function WorkspaceArea({ menu, children }: { menu: (() => MenuEntry[]) | null; c
 
 export function Shell() {
   const d = usePanelData();
+  const setShowArchived = d.setShowArchived;
   const root = useRef<HTMLDivElement | null>(null);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   // Stable, so React never detaches the root between renders: an inline callback left root.current
@@ -131,6 +132,8 @@ export function Shell() {
   myWindowsRef.current = myWindows;
   /** Close Agent Chat, whichever window shows it; set once the chat state below is known. */
   const closeChatRef = useRef<() => void>(() => {});
+  /** Take a window out of My Workspace; set once My Workspace's actions below are known. */
+  const removeFromMyRef = useRef<(id: string) => void>(() => {});
 
   // The height the user gave Log Details for each kind of record, per workspace, and the kind it shows now:
   // an audit entry and a conversation each come back at their own size.
@@ -144,15 +147,16 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, pairs: { ...SHARED_PAIRS, ...def.pairs } };
+      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, contentHeights: def.contentHeights, pairs: { ...SHARED_PAIRS, ...def.pairs } };
       // My Workspace holds the windows the user added, laid out in the order added.
       controller = id === "my"
-        ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), arrangeMy(() => myWindowsRef.current), windowTitle,
+        ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), def.arrange, windowTitle,
           { ...extras, ...MY_EXTRAS, heights: { ...def.heights, ...MY_EXTRAS.heights } })
         : new WorkspaceController(id, def.windows, def.arrange, windowTitle, extras);
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
       // Closing or reopening Help in one workspace overrides Show Help Bar there only.
-      // Closing Agent Chat's window in My Workspace closes Chat.
+      // Closing Agent Chat's window in My Workspace closes Chat. Closing an added window there takes it out of
+      // My Workspace (user, 2026-10-27): it comes back only by adding it again from its own workspace.
       controller.onUserSized = (windowId) => {
         const kind = detailsKind.current.get(id);
         // Only a height under or over a log is a choice; beside the logs Log Details just fills its column.
@@ -162,11 +166,18 @@ export function Shell() {
       controller.onWindowToggle = (windowId, open) => {
         if (windowId === HELP_WINDOW) setHelp((prev) => withHelpIn(prev, id, open));
         if (windowId === CHAT_WINDOW && !open) closeChatRef.current();
+        // Closing the archived keys from their title bar turns Show Archived off, so the tool agrees with the window.
+        if (windowId === ARCHIVED_WINDOW && !open) setShowArchived(false);
+        if (id === "my" && !open && myWindowsRef.current.includes(windowId)) removeFromMyRef.current(windowId);
       };
       controllers.set(id, controller);
     }
     return controller;
-  }, [controllers]);
+  }, [controllers, setShowArchived]);
+
+  // While no key is chosen Access Keys shows only its list; the key's windows keep their places for the next one.
+  const keyChosen = d.accessKeyView.name === "detail";
+  useEffect(() => { controllerFor("accessKeys").setHiddenWindows(keyChosen ? [] : KEY_WINDOWS); }, [keyChosen, controllerFor]);
 
   const registry = useMemo(() => new ToolRegistry(), []);
   // Open (or unfold) a window and bring it into view: in My Workspace when it is shown there and holds it,
@@ -376,14 +387,12 @@ export function Shell() {
     setGuide((prev) => ({ ...prev, [id]: { open: false, ...prev[id], ...next } }));
   }, []);
 
-  // The setup wizard runs in Access Keys and may open the Guide there; see useWizardGuide.
-  const wizard = useWizardGuide(() => !!guideRef.current.accessKeys?.open, (open) => setGuideIn("accessKeys", { open }));
+  // The setup wizard runs in Access Keys and shows the Guide there while it runs; see useWizardGuide.
+  const wizard = useWizardGuide();
   const wizardStep = wizard.step;
-  const { userToggled: wizardUserToggled } = wizard;
-  const userSetGuide = useCallback((id: WorkspaceId, open: boolean) => {
-    if (id === "accessKeys") wizardUserToggled();
-    setGuideIn(id, { open });
-  }, [setGuideIn, wizardUserToggled]);
+  const wizardRef = useRef(wizardStep);
+  wizardRef.current = wizardStep;
+  const userSetGuide = useCallback((id: WorkspaceId, open: boolean) => setGuideIn(id, { open }), [setGuideIn]);
   const lastSeenWorkspace = useRef(d.workspace);
   useEffect(() => {
     if (lastSeenWorkspace.current === d.workspace) return;
@@ -409,15 +418,32 @@ export function Shell() {
     setMyWindows((prev) => prev.filter((w) => w !== windowId));
     if (windowId !== CHAT_WINDOW) notify(t("workspace.removedFromMy", { window: windowTitle(windowId) }));
   }, [notify]);
-  // Adding happens on a desktop; phones show their own My Workspace until they have window menus.
+  removeFromMyRef.current = removeFromMy;
+  // Empty My Workspace at once, so a reset that follows arranges no window.
+  const clearMy = useCallback(() => {
+    myWindowsRef.current = [];
+    setMyWindows([]);
+    controllers.get("my")?.setWindows(myWorkspaceWindows([]));
+  }, [controllers]);
+  // Every window's menu: Add to My Workspace (Float Chat for a docked Chat) and Always Show Icons and Text;
+  // in My Workspace, Vertical Scrolling. Desktop only: phones show their own My Workspace until they have window menus.
   const menuExtras = useCallback<WindowMenuExtras>((controller, windowId) => {
     if (env !== "desktop") return [];
-    if (controller.id === "my") {
-      if (windowId === CHAT_WINDOW) return [{ id: "float-chat", label: t("agentchat.floatChat"), onSelect: () => removeFromMy(CHAT_WINDOW) }];
-      return myWindowsRef.current.includes(windowId) ? [{ id: "remove-my", label: t("workspace.removeFromMy"), onSelect: () => removeFromMy(windowId) }] : [];
+    const items: MenuEntry[] = [];
+    if (windowId === CHAT_WINDOW) {
+      if (controller.id === "my") items.push({ id: "float-chat", label: t("agentchat.floatChat"), onSelect: () => removeFromMy(CHAT_WINDOW) });
+    } else {
+      if (controller.id !== "my" && canAddToMy(windowId)) {
+        items.push({ id: "add-my", label: t("workspace.addToMy"), disabled: myWindowsRef.current.includes(windowId), onSelect: () => addToMy(windowId) });
+      }
+      const labels = controller.display.hasLabels(windowId);
+      items.push({ id: "labels", label: t("workspace.alwaysLabels"), checked: labels, toggle: true, onSelect: () => controller.display.setLabels(windowId, !labels) });
     }
-    if (!canAddToMy(windowId)) return [];
-    return [{ id: "add-my", label: t("workspace.addToMy"), disabled: myWindowsRef.current.includes(windowId), onSelect: () => addToMy(windowId) }];
+    if (controller.scrollable) {
+      const scrolls = controller.display.scrolls;
+      items.push({ id: "scrolling", label: t("workspace.verticalScrolling"), checked: scrolls, toggle: true, onSelect: () => controller.setScrolls(!scrolls) });
+    }
+    return items;
   }, [env, addToMy, removeFromMy]);
 
   // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (this workspace) and the website.
@@ -429,8 +455,10 @@ export function Shell() {
       items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
     }
     const here = workspaceRef.current;
-    const guideOpen = !!guideRef.current[here]?.open;
-    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, onSelect: () => userSetGuide(here, !guideOpen) });
+    // The wizard keeps the Guide shown in Access Keys until it ends.
+    const pinned = here === "accessKeys" && !!wizardRef.current;
+    const guideOpen = pinned || !!guideRef.current[here]?.open;
+    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, disabled: pinned, onSelect: () => userSetGuide(here, !guideOpen) });
     items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
     return items;
   }, [env, userSetGuide]);
@@ -443,11 +471,14 @@ export function Shell() {
     helpRef.current = DEFAULT_HELP;
     setGuide({});
     guideRef.current = {};
+    // My Workspace goes back to empty, as Reset This Workspace leaves it.
+    clearMy();
+    setShowArchived(false);
     for (const controller of controllers.values()) {
       controller.want(HELP_WINDOW, true);
       controller.restoreOriginal();
     }
-    const sections: Section[] = ["toolbar", "help", "guide"];
+    const sections: Section[] = ["toolbar", "help", "guide", "myWindows"];
     for (const id of WORKSPACE_IDS) {
       sections.push(`ws:${id}`);
       if (rec && !controllers.has(id)) delete rec.workspaces[id];
@@ -456,7 +487,7 @@ export function Shell() {
     markChanged(sections, true);
     if (rec) commit(WORKSPACE_IDS.filter((id) => !controllers.has(id)).map((id) => `ws:${id}` as Section), true);
     notify(t("workspace.panelDefaultsRestored"));
-  }, [commit, controllers, markChanged, notify]);
+  }, [clearMy, commit, controllers, markChanged, notify, setShowArchived]);
 
   const actions = useMemo<WorkspaceActions>(() => ({
     saveMyDefault: (controller) => {
@@ -478,11 +509,16 @@ export function Shell() {
       notify(t("workspace.myDefaultRestored"));
     },
     restoreOriginal: (controller) => {
+      // My Workspace goes back to its original, empty state (user, 2026-10-27).
+      const mine = controller.id === "my";
+      if (mine) clearMy();
+      // The key list's Show Archived is part of how the workspace looks (user, 2026-10-28).
+      if (controller.id === "accessKeys") setShowArchived(false);
       controller.restoreOriginal();
-      markChanged([`ws:${controller.id as WorkspaceId}`], true);
+      markChanged([`ws:${controller.id as WorkspaceId}`, ...(mine ? ["myWindows" as const] : [])], true);
     },
     restorePanelDefaults,
-  }), [commit, markChanged, notify, restorePanelDefaults]);
+  }), [clearMy, commit, markChanged, notify, restorePanelDefaults, setShowArchived]);
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
@@ -500,15 +536,20 @@ export function Shell() {
   // Orphaned Profiles and Advisory show only while MESA has undismissed findings for them.
   const [mesaFindings, setMesaFindings] = useState<MesaFindings | null>(null);
   const settings = d.settings;
+  const showArchived = d.showArchived;
   useEffect(() => {
     for (const [id, controller] of controllers) {
       // Presets appears only while its setting is on.
-      controller.availability = (w) => windowAvailable(w, settings, mesaFindings);
+      controller.availability = (w) => windowAvailable(w, settings, mesaFindings, showArchived);
       controller.syncAvailable();
       controller.onTransientClose = () => { setDismissedAt(attentionCount); dismissAttention(); };
       if (env === "desktop" && id === d.workspace && showAttention) controller.showTransient(ATTENTION_WINDOW);
       else controller.hideTransient(ATTENTION_WINDOW);
     }
+    // Show Archived opens and closes the archived keys' own window (user, 2026-10-28). Asked for only
+    // when the two disagree: `want` lays the workspace out again, which every render must not do.
+    const keys = controllers.get("accessKeys");
+    if (keys && !!keys.hostOf(ARCHIVED_WINDOW) !== showArchived) keys.want(ARCHIVED_WINDOW, showArchived);
   });
 
   const s = d.settings;
@@ -563,8 +604,10 @@ export function Shell() {
     openChat,
   }), [openChat]);
   const dock = env === "mobile" ? "top" : toolbar.dock;
-  // The wizard makes room for the Guide beside it on a desktop, while the Guide is open in Access Keys.
-  const guideBeside = env === "desktop" && active === "accessKeys" && !!guide.accessKeys?.open;
+  // The wizard's Guide: shown in Access Keys while the wizard runs, and on a desktop the wizard makes room for it.
+  const wizardGuideShown = active === "accessKeys" && !!wizardStep;
+  const guideShown = wizardGuideShown || !!guide[active]?.open;
+  const guideBeside = env === "desktop" && wizardGuideShown;
   const wizardGuide = useMemo(() => ({ report: wizard.report, guideBeside }), [wizard.report, guideBeside]);
   return (
     <MenuRootContext.Provider value={rootEl}>
@@ -623,9 +666,9 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings} myWindows={myWindows}
-              guide={guide[active]?.open ? <PhoneGuide workspace={active} language={language} onClose={() => userSetGuide(active, false)}
-                topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null} /> : null} />}
+            : <PhoneStack workspace={active} showAttention={showAttention} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
+              guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => userSetGuide(active, false)}
+                topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
@@ -647,12 +690,11 @@ export function Shell() {
             />
           </ErrorBoundary>
         )}
-        {env === "desktop" && guide[active]?.open && (
+        {env === "desktop" && guideShown && (
           <GuideWindow key={active} workspace={active} controller={visited.has(active) ? controllerFor(active) : null} language={language}
             rect={guide[active]?.rect} onRect={(rect) => setGuideIn(active, { rect })} onClose={() => userSetGuide(active, false)}
-            topicId={active === "accessKeys" && wizardStep ? `wizard.${wizardStep.step}` : null}
-            follow={active === "accessKeys" ? wizard.follow : null}
-            onMoved={wizard.onMoved} />
+            topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null}
+            follow={wizardGuideShown ? wizardStep : null} />
         )}
         <Toasts center={notifications} />
       </div>

@@ -28,6 +28,9 @@ export interface AgentCliDurable {
   // One-shot text seeded into the message box on the next window mount (used by
   // the onboarding wizard's test prompt); the window clears it after reading.
   prefill: string;
+  // One-shot: the next window mount starts a new conversation instead of
+  // restoring the saved one (the wizard's test run); the window clears it.
+  freshConversation: boolean;
   // Footer visibility (gear toggle). The footer owns both text-size controls
   // and provider-reported token usage. Default on.
   showFooter: boolean;
@@ -95,6 +98,7 @@ export function defaultDurable(): AgentCliDurable {
     model: "",
     options: { thinking: true, effort: "high", temperature: "", verbose: false },
     prefill: "",
+    freshConversation: false,
     showFooter: true,
     showTimestamps: false,
     textSizePt: AGENTCLI_TEXT_SIZE_DEFAULT_PT,

@@ -15,6 +15,7 @@ import type { EntityTree, MesaProfileScope } from "../types";
 import { api } from "../api";
 import { ProfileEditor } from "../views/MesaView";
 import { Modal } from "../components/Modal";
+import { ActionButton } from "../ui/ActionButton";
 import { Loading, ErrorMsg } from "../components/common";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
@@ -118,7 +119,7 @@ export function QuickAddApp({
         <h3 className="modal-title" id="phx-qa-title">{t("inject.mesaProfile")}</h3>
         <ErrorMsg msg={error} />
         <div className="modal-actions">
-          <button className="btn btn-ghost" onClick={onClose}>{t("common.close")}</button>
+          <ActionButton icon="close" label={t("common.close")} className="btn btn-outline btn-sm" onClick={onClose} />
         </div>
       </Modal>
     );

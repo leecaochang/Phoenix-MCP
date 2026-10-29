@@ -14,9 +14,11 @@ export type DisplayMode = "icons" | "icon-text";
 /** The toolbar's display mode, provided by the shell. */
 export const DisplayModeContext = createContext<DisplayMode>("icon-text");
 
-export function ActionButton({ icon, label, title, help, onClick, busy = false, disabled, pressed, className = "btn btn-ghost btn-sm" }: {
+export function ActionButton({ icon, label, name, title, help, onClick, busy = false, disabled, pressed, className = "btn btn-ghost btn-sm" }: {
   icon: IconName;
   label: string;
+  /** A fuller accessible name than the label, such as one naming the item it acts on. */
+  name?: string;
   /** A longer tooltip than the label, such as when the action last ran. */
   title?: string;
   /** Catalog key of the longer help shown in the Help window; otherwise Help shows the label. */
@@ -32,7 +34,7 @@ export function ActionButton({ icon, label, title, help, onClick, busy = false, 
   const iconsOnly = useContext(DisplayModeContext) === "icons";
   return (
     <BusyButton type="button" className={`${className} phx-action${iconsOnly ? " is-icon-only" : ""}`} busy={busy} disabled={disabled}
-      aria-label={iconsOnly ? label : undefined} aria-pressed={pressed} title={title ?? label} data-help={help} onClick={onClick}>
+      aria-label={name ?? (iconsOnly ? label : undefined)} aria-pressed={pressed} title={title ?? label} data-help={help} onClick={onClick}>
       <Icon name={icon} size={16} />
       {!iconsOnly && <span>{label}</span>}
     </BusyButton>

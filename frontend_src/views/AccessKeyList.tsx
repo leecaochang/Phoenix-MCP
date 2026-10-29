@@ -1,15 +1,22 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
 import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
-import { Loading, ErrorMsg, RefreshIcon } from "../components/common";
+import { Loading, ErrorMsg } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
-import { compareStrings, localeDateTime, t } from "../i18n";
+import { localeDateTime, t } from "../i18n";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
+import { InlineTools } from "../shell/windowTools";
+import { useWindowVisible } from "../shell/visibility";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { Icon } from "../ui/Icon";
+import { AccessKeyStatus } from "../components/AccessKeyStatus";
 import { EditableAccessKeyName } from "./AccessKeyDetail";
 
 const MAX_ACTIVE_ACCESS_KEYS_WARNING = 50;
+/** How often the list is read again while it is on screen, so Last Used and keys made elsewhere stay current. */
+const UPDATE_MS = 30_000;
 
 function relativeTime(iso: string | null): string {
   if (!iso) return t("common.never");
@@ -23,13 +30,37 @@ function relativeTime(iso: string | null): string {
   return t("accessKeys.daysAgo", { d: Math.floor(h / 24) });
 }
 
+/** Scoped in plain words; Pass-Through marked, since it skips the Permissions tree. */
+function AccessKeyMode({ passThrough }: { passThrough: boolean }) {
+  if (!passThrough) return <>{t("accessKeys.scoped")}</>;
+  return (
+    <span className="phx-outcome access-key-mode-pass-through" data-help="accessKeys.passThroughModeHelp">
+      <Icon name="warning" size={14} />
+      {t("accessKeys.passThrough")}
+    </span>
+  );
+}
 
-type SortKey = "name" | "mode" | "status" | "created" | "updated" | "expires" | "last_used";
-type SortDir = "asc" | "desc";
+const BY_NAME = { column: "name", dir: "asc" } as const;
 
-function SortArrow({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  const active = col === sortKey;
-  return <span className={`sort-arrow${active ? " active" : ""}`}>{active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}</span>;
+/**
+ * The revoked and expired keys, in a window of its own that Show Archived
+ * opens below the key list (user, 2026-10-28). It is closed by default and
+ * reads the archived keys when it opens.
+ */
+export function ArchivedAccessKeysWindow() {
+  const [archived, setArchived] = useState<ArchivedAccessKeyRecord[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.listArchivedAccessKeys().then((keys) => { if (live) setArchived(keys); }).catch(() => { if (live) setArchived([]); });
+    return () => { live = false; };
+  }, []);
+  if (!archived) return <Loading />;
+  return (
+    <div className="phx-list-view access-keys-archived">
+      <ArchivedAccessKeyTable accessKeys={archived} onDeleted={(id) => setArchived((prev) => prev?.filter((k) => k.id !== id) ?? null)} />
+    </div>
+  );
 }
 
 interface Props {
@@ -37,6 +68,11 @@ interface Props {
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  /** Read the list again without a loading state; there is no Refresh button (user, 2026-10-28). */
+  onUpdate?: () => void;
+  /** Whether the Archived Access Keys window is open; the workspace keeps it so a reset can close it. */
+  showArchived?: boolean;
+  onShowArchived?: (show: boolean) => void;
   onOpenDetail: (id: string) => void;
   onLaunchWizard: () => void;
   showCreate: boolean;
@@ -56,82 +92,61 @@ interface Props {
 }
 
 export function AccessKeyListView({
-  accessKeys, loading, error, onRefresh, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings,
+  accessKeys, loading, error, onRefresh, onUpdate, showArchived: keptArchived, onShowArchived, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings,
   selectedId = null, renamingId = null, onRenamed, onRenameEnd, selectedKeyTools = null, notices = null,
 }: Props) {
   const [filter, setFilter] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
-  const [archived, setArchived] = useState<ArchivedAccessKeyRecord[] | null>(null);
-  const [archivedLoading, setArchivedLoading] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [ownArchived, setOwnArchived] = useState(false);
+  const showArchived = keptArchived ?? ownArchived;
+  const setShowArchived = onShowArchived ?? setOwnArchived;
 
-  const refreshArchived = useCallback(async () => {
-    setArchivedLoading(true);
-    try {
-      setArchived(await api.listArchivedAccessKeys());
-    } catch {
-      setArchived([]);
-    } finally {
-      setArchivedLoading(false);
-    }
-  }, []);
-
+  const visible = useWindowVisible();
   useEffect(() => {
-    if (showArchived) refreshArchived();
-  }, [showArchived, refreshArchived]);
+    if (!visible || !onUpdate) return;
+    const timer = window.setInterval(() => { if (!document.hidden) onUpdate(); }, UPDATE_MS);
+    return () => clearInterval(timer);
+  }, [visible, onUpdate]);
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
-  }
-
-  function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
-    if (sortKey !== key) return "none";
-    return sortDir === "asc" ? "ascending" : "descending";
-  }
-
-  const filtered = accessKeys.filter((t) => {
+  const filtered = accessKeys.filter((k) => {
     const q = filter.toLowerCase();
     if (!q) return true;
-    const status = accessKeyStatus(t);
-    return [t.name, status, accessKeyStatusLabel(status)]
+    const status = accessKeyStatus(k);
+    return [k.name, status, accessKeyStatusLabel(status)]
       .some((value) => value.toLowerCase().includes(q));
   });
 
-  const sorted = [...filtered].sort((a, b) => {
-    let va: string | number = "";
-    let vb: string | number = "";
-    switch (sortKey) {
-      case "name":     va = a.name.toLowerCase();   vb = b.name.toLowerCase(); break;
-      case "mode":     va = a.pass_through ? "1" : "0"; vb = b.pass_through ? "1" : "0"; break;
-      case "status":   va = accessKeyStatusLabel(accessKeyStatus(a)); vb = accessKeyStatusLabel(accessKeyStatus(b)); break;
-      case "created":  va = a.created_at ?? "";      vb = b.created_at ?? ""; break;
-      case "updated":  va = a.updated_at ?? "";      vb = b.updated_at ?? ""; break;
-      case "expires":  va = a.expires_at ?? "9999";  vb = b.expires_at ?? "9999"; break;
-      case "last_used": va = a.last_used_at ?? "";   vb = b.last_used_at ?? ""; break;
-    }
-    const comparison = sortKey === "status"
-      ? compareStrings(String(va), String(vb))
-      : va < vb ? -1 : va > vb ? 1 : 0;
-    return sortDir === "asc" ? comparison : -comparison;
-  });
+  // The list as a configurable table like the other workspaces' lists (user, 2026-10-28).
+  const columns: Column<AccessKeyRecord>[] = [
+    { id: "name", label: t("accessKeys.colName"), width: 200, maxWidth: 320, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name,
+      cell: (k) => (k.id === renamingId && onRenamed
+        ? <EditableAccessKeyName accessKey={k} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} />
+        : <span className="access-key-name">{k.name}</span>) },
+    { id: "mode", label: t("accessKeys.colMode"), width: 130, sortValue: (k) => (k.pass_through ? 1 : 0), cell: (k) => <AccessKeyMode passThrough={k.pass_through} /> },
+    { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: (k) => accessKeyStatusLabel(accessKeyStatus(k)), cell: (k) => <AccessKeyStatus status={accessKeyStatus(k)} /> },
+    { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "",
+      title: (k) => (k.created_at ? localeDateTime(k.created_at) : undefined), cell: (k) => formatDate(k.created_at) },
+    { id: "updated", label: t("accessKeys.colUpdated"), width: 130, sortValue: (k) => k.updated_at ?? "",
+      title: (k) => (k.updated_at ? localeDateTime(k.updated_at) : undefined), cell: (k) => relativeTime(k.updated_at) },
+    { id: "expires", label: t("accessKeys.colExpires"), width: 120, sortValue: (k) => k.expires_at ?? "9999", cell: (k) => formatDate(k.expires_at) },
+    { id: "lastUsed", label: t("accessKeys.colLastUsed"), width: 120, sortValue: (k) => k.last_used_at ?? "",
+      title: (k) => (k.last_used_at ? localeDateTime(k.last_used_at) : undefined), cell: (k) => relativeTime(k.last_used_at) },
+  ];
 
   // In the workspace shell the list's buttons and the selected key's actions sit on the toolbar.
-  const onToolbar = useToolbarTools([
+  const groups: ToolGroup[] = [
     {
       id: "accessKeys",
       label: t("shell.tabAccessKeys"),
       tools: [
         { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
-        { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived((v) => !v) },
+        { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived(!showArchived) },
         // Not a toggle: closing the form from here while a key is being created would lose its one-time secret.
         { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", onSelect: onOpenCreate },
-        { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAccessKeys") }), short: t("common.refresh"), icon: "refresh", onSelect: onRefresh },
       ],
     },
     ...(selectedKeyTools ? [selectedKeyTools] : []),
-  ]);
+  ];
+  const onToolbar = useToolbarTools(groups);
 
   function handleCreated(record: AccessKeyRecord) {
     onRefresh();
@@ -139,27 +154,10 @@ export function AccessKeyListView({
     onOpenDetail(record.id);
   }
 
-  function handleArchivedDeleted(id: string) {
-    setArchived((prev) => prev?.filter((t) => t.id !== id) ?? null);
-  }
-
-  function th(label: string, key: SortKey, className?: string) {
-    return (
-      <th
-        className={`sortable${sortKey === key ? " sort-active" : ""}${className ? ` ${className}` : ""}`}
-        aria-sort={ariaSort(key)}
-      >
-        <button type="button" className="table-sort-btn" onClick={() => handleSort(key)}>
-          {label}<SortArrow col={key} sortKey={sortKey} sortDir={sortDir} />
-        </button>
-      </th>
-    );
-  }
-
   // Create Access Key opens its form in place, at the top of the window.
   const createForm = showCreate && (
     <AccessKeyCreateForm
-      existingNames={accessKeys.map((t) => t.name)}
+      existingNames={accessKeys.map((k) => k.name)}
       onCreated={handleCreated}
       onClose={onCloseCreate}
       onOpenSettings={onOpenSettings}
@@ -169,7 +167,7 @@ export function AccessKeyListView({
   // First run: no access keys and no filter. Show an onboarding hero that launches
   // the wizard instead of the empty table. The create form still opens here so
   // the Create Access Key tool works in the empty state.
-  if (!loading && !error && accessKeys.length === 0 && !filter && !showArchived) {
+  if (!loading && !error && accessKeys.length === 0 && !filter) {
     return (
       <div className="view-root">
         {createForm}
@@ -187,7 +185,8 @@ export function AccessKeyListView({
   }
 
   return (
-    <div className="view-root">
+    <div className="phx-list-view access-keys-list">
+      {!onToolbar && <InlineTools groups={groups} />}
       {accessKeys.length >= MAX_ACTIVE_ACCESS_KEYS_WARNING && (
         <div className="banner banner-warn">
           {t("accessKeys.maxWarning", { max: MAX_ACTIVE_ACCESS_KEYS_WARNING })}
@@ -197,138 +196,26 @@ export function AccessKeyListView({
       {notices}
       {createForm}
 
-      <div className="card">
-        <div className="filter-row">
-          <input
-            className="input"
-            aria-label={t("accessKeys.filterAria")}
-            placeholder={t("accessKeys.filterPlaceholder")}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          {!onToolbar && <>
-          <div className="filter-row-right">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={onLaunchWizard}
-            >
-              {t("accessKeys.setUpAgent")}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setShowArchived((v) => !v)}
-            >
-              {showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived")}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={onOpenCreate}
-            >
-              {t("accessKeys.createAccessKey")}
-            </button>
-          </div>
-          {/* Own flex item (not nested in filter-row-right) so mobile CSS can
-              pull it up next to the filter input via order, without changing
-              desktop's DOM/tab order (same trick as the tab bar's row split). */}
-          <button
-            className="btn btn-ghost btn-sm btn-icon filter-row-refresh"
-            onClick={onRefresh}
-            title={t("common.refresh")}
-            aria-label={t("accessKeys.refreshAria")}
-          >
-            <RefreshIcon />
-          </button>
-          </>}
-        </div>
-
-        {loading ? (
-          <Loading />
-        ) : error ? (
-          <ErrorMsg msg={error} />
-        ) : (
-          <table className="data-table access-key-table">
-            <thead>
-              <tr>
-                {th(t("accessKeys.colName"), "name")}
-                {th(t("accessKeys.colMode"), "mode")}
-                {th(t("accessKeys.colStatus"), "status")}
-                {th(t("accessKeys.colCreated"), "created")}
-                {th(t("accessKeys.colUpdated"), "updated")}
-                {th(t("accessKeys.colExpires"), "expires")}
-                {th(t("accessKeys.colLastUsed"), "last_used")}
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="access-key-table-empty">
-                    {filter ? t("accessKeys.emptyFiltered") : t("accessKeys.empty")}
-                  </td>
-                </tr>
-              )}
-              {sorted.map((tok) => {
-                const status = accessKeyStatus(tok);
-                const statusClass = status === "Active" ? "badge-green" : status === "Expired" ? "badge-grey" : "badge-red";
-                const selected = tok.id === selectedId;
-                return (
-                  <tr
-                    key={tok.id}
-                    className={`clickable${selected ? " is-selected" : ""}`}
-                    aria-selected={onToolbar ? selected : undefined}
-                    onClick={() => onOpenDetail(tok.id)}
-                  >
-                    <td className="access-key-name">
-                      {tok.id === renamingId && onRenamed ? (
-                        <EditableAccessKeyName accessKey={tok} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} />
-                      ) : (<>
-                      {/* The row's own onClick (above) makes the whole row
-                          clickable for the mouse; this button keeps it
-                          keyboard- and screen-reader-accessible (tab to it,
-                          Enter/Space to open the access key). stopPropagation so
-                          activating it does not also re-fire the row's
-                          handler. */}
-                      <button
-                        type="button"
-                        className="row-open"
-                        onClick={(e) => { e.stopPropagation(); onOpenDetail(tok.id); }}
-                        aria-label={t("accessKeys.editAria", { name: tok.name })}
-                      >
-                        {tok.name}
-                      </button>
-                      </>)}
-                    </td>
-                    <td>
-                      {tok.pass_through
-                        ? <span className="badge badge-amber">{t("accessKeys.passThrough")}</span>
-                        : <span className="badge badge-blue">{t("accessKeys.scoped")}</span>}
-                    </td>
-                    <td><span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span></td>
-                    <td title={tok.created_at ? localeDateTime(tok.created_at) : undefined}>{formatDate(tok.created_at)}</td>
-                    <td title={tok.updated_at ? localeDateTime(tok.updated_at) : undefined}>{relativeTime(tok.updated_at)}</td>
-                    <td>{formatDate(tok.expires_at)}</td>
-                    <td>{relativeTime(tok.last_used_at)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+      <div className="approvals-filter-row">
+        <input type="search" className="input" aria-label={t("accessKeys.filterAria")} placeholder={t("accessKeys.filterPlaceholder")}
+          value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
-
-      {showArchived && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-header-title">{t("accessKeys.archivedTitle")}</h3>
-          </div>
-          {archivedLoading ? (
-            <Loading />
-          ) : (
-            <ArchivedAccessKeyTable
-              accessKeys={archived ?? []}
-              onDeleted={handleArchivedDeleted}
-            />
-          )}
-        </div>
+      {/* Reading the list again keeps the table in place; only a first load shows the loading state. */}
+      {error && accessKeys.length > 0 && <ErrorMsg msg={error} />}
+      {loading && accessKeys.length === 0 ? <Loading /> : error && accessKeys.length === 0 ? <ErrorMsg msg={error} /> : (
+        <ConfigTable
+          id="accessKeys"
+          label={t("shell.tabAccessKeys")}
+          defaultSort={BY_NAME}
+          columns={columns}
+          rows={filtered}
+          rowKey={(k) => k.id}
+          selectedKey={selectedId}
+          // Choosing an active key hides the archived ones (user, 2026-10-28).
+          onSelect={(k) => { setShowArchived(false); onOpenDetail(k.id); }}
+          rowLabel={(k) => `${k.name}, ${k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")}, ${accessKeyStatusLabel(accessKeyStatus(k))}`}
+          empty={<p className="audit-empty">{filter ? t("accessKeys.emptyFiltered") : t("accessKeys.empty")}</p>}
+        />
       )}
 
     </div>

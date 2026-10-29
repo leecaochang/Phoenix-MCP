@@ -13,6 +13,7 @@ from homeassistant.core import CoreState, HomeAssistant, Event, EventType, callb
 from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
 from homeassistant.helpers import entity_registry as er_mod
+from homeassistant.helpers import label_registry as lr_mod
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
@@ -762,9 +763,11 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             er_mod.EVENT_ENTITY_REGISTRY_UPDATED, _on_entity_registry_updated  # type: ignore[arg-type]
         )
     )
+    # Labels too: the permission tree's Filter menu narrows the tree by label.
     for _registry_event in (
         dr_mod.EVENT_DEVICE_REGISTRY_UPDATED,
         ar_mod.EVENT_AREA_REGISTRY_UPDATED,
+        lr_mod.EVENT_LABEL_REGISTRY_UPDATED,
     ):
         entry.async_on_unload(
             hass.bus.async_listen(_registry_event, _invalidate_entity_tree)  # type: ignore[misc]  # loop var erases the event's typed payload

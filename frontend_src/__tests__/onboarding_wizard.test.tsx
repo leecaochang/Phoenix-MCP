@@ -32,6 +32,8 @@ vi.mock("../components/ConnectInstructions", () => ({
 
 import { OnboardingWizard } from "../views/OnboardingWizard";
 import { WizardGuideContext, type WizardGuideStep } from "../shell/guide";
+import { DisplayModeContext } from "../ui/ActionButton";
+import { getDurable, setSessionTurns, __resetAgentCliState } from "../utils/agentcli_state";
 
 const RECORD = { id: "k1", name: "my_access_key", permissions: { domains: {}, devices: {}, entities: {} } };
 
@@ -131,26 +133,65 @@ describe("the setup wizard", () => {
     expect(heading()).toBe("Grant Access to One Light");
   });
 
-  it("reports each step with the part its Guide topic explains, the first one with the first run, and its end", async () => {
-    const report = vi.fn<(step: WizardGuideStep | null, firstRun?: boolean) => void>();
+  it("shows every button's icon and text, even with the toolbar showing icons only (user, 2026-10-28)", async () => {
+    mocks.getAgentCliProviders.mockResolvedValue({ instances: [{ id: "inst1", name: "My Claude", model: "claude" }], provider_types: [] });
+    render(<DisplayModeContext.Provider value="icons"><OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} /></DisplayModeContext.Provider>);
+    const allLabelled = () => {
+      for (const b of document.querySelectorAll<HTMLButtonElement>(".wizard-actions button, .wizard-choice, .agentcli-settings-form-actions button")) {
+        expect(b.querySelector("svg"), b.textContent ?? "").not.toBeNull();
+        expect(b.textContent?.trim(), b.outerHTML).not.toBe("");
+      }
+    };
+    allLabelled();
+    await toAccess("Agent Chat Using HA (Recommended)");
+    allLabelled();
+    press("Grant desk");
+    press("Next");
+    await screen.findByRole("button", { name: "Try Now" });
+    allLabelled();
+  });
+
+  it("opens Agent Chat for the test with an empty conversation (user, 2026-10-28)", async () => {
+    __resetAgentCliState();
+    setSessionTurns([{ entries: [{ kind: "user", text: "old", ts: 1 }], messages: [], lines: 1 }]);
+    mocks.getAgentCliProviders.mockResolvedValue({ instances: [{ id: "inst1", name: "My Claude", model: "claude" }], provider_types: [] });
+    const opened = vi.fn();
+    window.addEventListener("phx-open-agentcli", opened);
+    try {
+      render(<OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />);
+      await toAccess("Agent Chat Using HA (Recommended)");
+      press("Grant desk");
+      press("Next");
+      fireEvent.click(await screen.findByRole("button", { name: "Try Now" }));
+      expect(opened).toHaveBeenCalledOnce();
+      const durable = getDurable();
+      expect(durable.freshConversation).toBe(true);
+      expect(durable.prefill).toBe("How many lights are in my home?");
+      expect(durable.instanceId).toBe("inst1");
+    } finally {
+      window.removeEventListener("phx-open-agentcli", opened);
+      __resetAgentCliState();
+    }
+  });
+
+  it("reports each step with the part its Guide topic explains, and its end", async () => {
+    const report = vi.fn<(step: WizardGuideStep | null) => void>();
     const view = render(
       <WizardGuideContext.Provider value={{ report, guideBeside: true }}>
-        <OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} firstRun />
+        <OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />
       </WizardGuideContext.Provider>,
     );
     expect(report).toHaveBeenCalledTimes(1);
-    const [first, firstRun] = report.mock.calls[0];
+    const [first] = report.mock.calls[0];
     expect(first?.step).toBe("choose");
-    expect(firstRun).toBe(true);
     expect(first?.part).toHaveClass("wizard-choice-row");
     expect(first?.content).toHaveClass("wizard-body");
     // The wizard makes room for the Guide beside it.
     expect(document.querySelector(".wizard-root")).toHaveClass("is-guided");
 
     press(/^Connect an External App/);
-    const [second, again] = report.mock.calls[1];
+    const [second] = report.mock.calls[1];
     expect(second?.step).toBe("persona");
-    expect(again).toBe(false);
     expect(second?.part.querySelector(".persona-picker, [class*=persona]")).not.toBeNull();
 
     act(() => view.unmount());
