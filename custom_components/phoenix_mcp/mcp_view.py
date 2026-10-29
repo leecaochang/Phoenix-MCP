@@ -241,7 +241,7 @@ from .tools.dashboard_resources import (
     _tool_set_dashboard_resource,
 )
 from .tools.camera import _tool_get_camera_image
-from .tools.esphome import _ESPHOME_DOMAIN, _execute_install_esphome_firmware, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
+from .tools.esphome import _ESPHOME_DOMAIN, _execute_install_esphome_firmware, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_analyze_esphome_memory, _tool_check_esphome_connectivity, _tool_decode_esphome_backtrace, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_history, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
 # in tool_defs.py; this module reads it to answer tools/list, build the
 # per-access-key gate map, and compute the catalog fingerprint. The names are
@@ -11418,6 +11418,9 @@ _register_tool("wait_for_esphome_job", _tool_wait_for_esphome_job)
 _register_tool("cancel_esphome_job", _tool_cancel_esphome_job)
 _register_tool("get_esphome_device_logs", _tool_get_esphome_device_logs)
 _register_tool("decode_esphome_backtrace", _tool_decode_esphome_backtrace)
+_register_tool("get_esphome_history", _tool_get_esphome_history)
+_register_tool("check_esphome_connectivity", _tool_check_esphome_connectivity)
+_register_tool("analyze_esphome_memory", _tool_analyze_esphome_memory)
 _register_tool("check_ha_config", _tool_check_config)
 _register_tool("get_relationships", _tool_get_relationships)
 _register_tool("describe_entity", _tool_describe_entity)

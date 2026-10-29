@@ -450,13 +450,13 @@ async def test_current_handshake_reports_both_versions_without_a_note(
     fake = FakeDeviceBuilder(replies={"firmware/get_job": {"message_id": "1", "result": None}})
     url = await connect(fake, aiohttp_client, monkeypatch)
     res = await async_builder_command(hass, url, "firmware/get_job", {"job_id": "x"}, timeout_seconds=5)
-    assert (res.server_version, res.esphome_version) == ("1.25.0", "2026.10.0")
+    assert (res.server_version, res.esphome_version) == ("1.25.0", "2026.10.1")
     assert res.result is None
     assert version_mismatch_note("firmware/get_job", res.server_version, res.esphome_version) is None
 
 
 def test_version_diagnostics_keep_builder_and_compiler_separate():
-    assert version_mismatch_note("x", "1.25.0", "2026.10.0") is None
+    assert version_mismatch_note("x", "1.25.0", "2026.10.1") is None
     note = version_mismatch_note("x", "1.25.0", "2099.1.0")
     assert "ESPHome compiler 2099.1.0" in note
     assert "Device Builder 1.25.0" not in note
@@ -538,10 +538,19 @@ async def test_capture_bounds_its_output(hass, aiohttp_client, monkeypatch, sock
     # argument, cancels every in-flight job on both lanes, and wipes the shared
     # environment for every device.
     "firmware/reset_build_env",
-    # Added in Device Builder 1.25.0: compiles and prints a memory report. Not
-    # requested, and a compile reachable outside the job tools' in-flight guard.
-    "firmware/analyze_memory",
     "devices/get_encryption_key",
+    # Writes, creates, renames or restores device YAML: Phoenix MCP authors none.
+    "devices/update_config",
+    "devices/add_component",
+    "devices/create",
+    "devices/rename",
+    "devices/unarchive",
+    "automations/upsert",
+    "automations/delete",
+    "version_history/restore",
+    # Return raw lines that no span mask can reach.
+    "version_history/get_diff",
+    "yaml/search",
     "firmware/compile_bulk",
     "firmware/install_bulk",
     "remote_build/start",
@@ -586,8 +595,13 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
     - firmware/clean takes a configuration and discards only that build, unlike
       reset_build_env (no argument, cancels every in-flight job, wipes the shared
       environment), which stays out.
-    - Commands that write or rename a device's YAML stay out: device YAML is
-      the operator's own configuration.
+    - Commands that write, rename or restore a device's YAML stay out: device
+      YAML is the operator's own configuration.
+    - automations/parse, editor/migrate_config and the three version_history
+      reads return raw YAML or take raw text; the tools mask whole texts
+      themselves and relay none of it. devices/troubleshoot returns addresses,
+      projected away. firmware/analyze_memory supersedes the device's job, so its
+      tool refuses while one is in flight.
     """
     assert ESPHOME_BUILDER_ALLOWED_COMMANDS == {
         # Reads.
@@ -599,7 +613,14 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
         "components/get_components",
         "components/get_categories",
         "automations/get_available",
+        "automations/parse",
+        "automations/get_bodies",
+        "editor/migrate_config",
+        "version_history/list_versions",
+        "version_history/get_version",
+        "version_history/list_deleted",
         "devices/logs",
+        "devices/troubleshoot",
         "devices/stop_stream",
         "devices/decode_backtrace",
         # Firmware job model.
@@ -610,6 +631,7 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
         "firmware/follow_job",
         "firmware/cancel",
         "firmware/clean",
+        "firmware/analyze_memory",
     }
 
 
@@ -676,3 +698,16 @@ async def test_a_failed_stream_stop_never_fails_the_capture(
     with pytest.raises(RuntimeError):
         await esphome_builder.async_builder_capture(
             hass, url, "devices/logs", {"configuration": "a.yaml"}, capture_seconds=0.3)
+
+
+async def test_head_ratio_zero_keeps_only_the_tail(hass, aiohttp_client, monkeypatch, socket_enabled):
+    """A memory report prints at the end, so its follow keeps the tail rather than the banner."""
+    fake = FakeDeviceBuilder(replies={"firmware/follow_job": stream("BANNER " * 40, "middle", "REPORT END")})
+    url = await connect(fake, aiohttp_client, monkeypatch)
+    res = await async_builder_command(hass, url, "firmware/follow_job", {"job_id": "x"},
+                                      timeout_seconds=5, collect_output=True, max_chars=40, head_ratio=0.0)
+    assert res.output_truncated is True
+    # Nothing is kept from the start: the marker leads, and the tail ends the text.
+    assert res.output.startswith("\n... [output truncated] ...\n")
+    assert res.output.endswith("REPORT END\n")
+    assert len(res.output) <= 40 + len("\n... [output truncated] ...\n")

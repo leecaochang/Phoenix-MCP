@@ -1098,10 +1098,11 @@ Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 # Version-sensitive surface: the frame shapes and command names are the add-on's,
 # with no stability promise, so re-verify them on add-on upgrades.
 # Source-qualified protocol targets. The compiler and Device Builder use
-# independent version families; ESPHome 2026.10.0 bundles Device Builder 1.25.0.
-# Used only to add context to failures, never as an upgrade warning on success.
+# independent version families; ESPHome 2026.10.0 and 2026.10.1 both bundle Device
+# Builder 1.25.0. Used only to add context to failures, never as an upgrade
+# warning on success.
 ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
-ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.0"
+ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.1"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
 # Validation runs the config through ESPHome itself (no compile), which is
 # seconds on a small file but can pull external_components on a large one.
@@ -1161,6 +1162,31 @@ ESPHOME_BUILDER_MAX_BACKTRACE_LINES = 200
 # long it runs.
 ESPHOME_BUILDER_LOG_CAPTURE_SECONDS = 15
 ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS = 60
+# Automation building-block docs. The add-on pages a large request through
+# `remaining`; the page cap bounds a reply that never makes progress.
+ESPHOME_BUILDER_MAX_AUTOMATION_REFS = 20
+ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES = 5
+# The add-on's AUTOMATION_TYPES (controllers/automations/catalog.py).
+ESPHOME_AUTOMATION_REF_TYPES = frozenset({
+    "triggers", "actions", "conditions", "light_effects", "filters",
+})
+# One existing automation's masked YAML, and all of them together.
+ESPHOME_AUTOMATION_YAML_MAX_CHARS = 4_000
+ESPHOME_AUTOMATION_LIST_MAX_CHARS = 32_768
+# Masked unified diffs (migration preview, version history).
+ESPHOME_DIFF_MAX_CHARS = 16_384
+# The git author the Device Builder commits as. Rows report only whether a
+# version came from the Builder; an adopted repository can carry real names.
+ESPHOME_BUILDER_HISTORY_AUTHOR = "ESPHome Device Builder"
+ESPHOME_BUILDER_LOADED_COMPONENTS_MAX = 500
+# devices/troubleshoot carries no budget of its own (its legs self-bound) and
+# the add-on's own dialog waits 35 s. A headless surface cannot hold that long.
+ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS = 40.0
+ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS = 8.0
+# Memory analysis is followed in the call that starts it: the add-on drops the
+# job once it ends, so there is nothing to poll afterwards.
+ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS = ESPHOME_BUILDER_JOB_WAIT_SECONDS
+ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS = 24_576
 
 # Pending-approval queue limits.
 MAX_PENDING_APPROVALS_PER_ACCESS_KEY = 100
@@ -1196,9 +1222,10 @@ PERSONA_DASHBOARD_DESIGNER = "dashboard_designer"
 # Routine upkeep: full reads + diagnostics + backups; restart gated to confirm.
 # No config authoring or device control.
 PERSONA_MAINTENANCE = "maintenance"
-# ESPHome device work: diagnostic reads plus device-YAML editing gated to
-# confirm. No entity control, no HA config authoring. Seeds caps only, so the
-# admin still scopes the entity tree to the ESPHome devices.
+# ESPHome device work: diagnostic reads, device-YAML reads and Device Builder
+# work, with flashing gated to confirm. No entity control, no configuration
+# authoring. Seeds caps only, so the admin still scopes the entity tree to the
+# ESPHome devices.
 PERSONA_ESPHOME = "esphome"
 PERSONA_NAMES = frozenset({
     PERSONA_HOME_COMPANION,

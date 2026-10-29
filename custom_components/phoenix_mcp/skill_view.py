@@ -147,6 +147,10 @@ grain of the model gives the smoothest results and avoids dead ends.
   edited in the ESPHome dashboard. When a change is needed, show the operator
   the exact lines to add or change, then validate, compile and install from the
   file once they have saved it.
+- `get_esphome_history` answers "what changed?" from the Device Builder's saved
+  versions: list a file's versions, then pass a `sha` for a masked diff against
+  the current file. With no `file` it lists deleted configurations that history
+  still holds. It never restores anything.
 
 ### Checking ESPHome work, and looking things up
 
@@ -157,16 +161,23 @@ at what they would have told you.
 - `validate_esphome_yaml` checks one file for configuration errors. It reads the
   file **from disk**, so it checks what the operator saved. It does not compile
   or flash anything, and a failure leaves the device untouched. Run it after any
-  non-trivial edit rather than declaring the change good.
+  non-trivial edit rather than declaring the change good. Its `migration` block
+  lists keys and actions the installed ESPHome would respell, with a masked
+  diff; pass that to the operator, who applies it in the dashboard.
 - `get_esphome_board` gives a board's real pin map, including which pins are
   already taken and which carry warnings. Look the board up before choosing
   pins; a plausible-looking GPIO can be strapping or input-only.
 - `get_esphome_component` returns a component's actual configuration schema.
   Use it instead of recalling key names, which is where invented options come
-  from.
+  from. Advanced options are left out unless you pass `include_advanced`. With
+  `file` it lists the components one device uses instead.
 - `get_esphome_automations` lists the triggers, actions, and conditions that
   one device's own configuration supports, so `on_...` blocks are built from
-  what that device really has.
+  what that device really has. `existing: true` lists the automations the file
+  already defines; `refs` (without `file`) returns a building block's fields.
+- `check_esphome_connectivity` asks the Device Builder whether it can resolve
+  and ping a device that shows offline. It reports a verdict and counts, never
+  an address.
 
 ### Building and flashing ESPHome firmware
 
@@ -198,6 +209,10 @@ config is good on the strength of validation alone if you can compile it.
   build cache is the usual culprit: `clean_esphome_build` discards it so the
   next build starts fresh. Stop a running build first, it will not interrupt
   one.
+- `analyze_esphome_memory` reports flash and RAM use per component when a
+  device is running out of room. Unlike compiling it waits for the result,
+  so compile first and the analysis reuses the build. It is refused while
+  another build for the file runs, and on voice, Assist and AI Task.
 - On a voice assistant or Assist, `wait_for_esphome_job` returns almost at once
   and says so: that surface cannot hold a request open for minutes, and it
   allows only a limited number of tool calls per turn. When you see that, **end

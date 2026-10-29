@@ -157,7 +157,9 @@ class TestValidate:
 
         ESPHome evaluates config at validation time and external_components can
         fetch and execute remote code, so accepting arbitrary content here would
-        be an unreviewed code-execution path.
+        be an unreviewed code-execution path. The migration check that follows
+        does send text, because editor/migrate_config takes text: exactly the
+        file on disk, and never anything the caller supplied.
         """
         command = _builder()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
@@ -168,10 +170,13 @@ class TestValidate:
         command.assert_not_awaited()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, command):
             await _call("validate_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
-        _hass_arg, _url, cmd, payload = command.await_args.args
-        assert cmd == "devices/validate"
-        assert payload == {"configuration": "rf-blaster1.yaml"}
-        assert "content" not in payload and "yaml" not in payload
+        (_h, _u, validate_cmd, validate_payload), (_h2, _u2, migrate_cmd, migrate_payload) = (
+            call.args for call in command.await_args_list)
+        assert validate_cmd == "devices/validate"
+        assert validate_payload == {"configuration": "rf-blaster1.yaml", "show_secrets": False}
+        on_disk = (esphome_dir / "rf-blaster1.yaml").read_text()
+        assert migrate_cmd == "editor/migrate_config"
+        assert migrate_payload == {"content": on_disk}
 
     async def test_output_scrubs_inline_and_secrets_yaml_credentials(self, hass, esphome_dir):
         """The validator quotes offending lines back, which can carry a credential."""
@@ -457,4 +462,4 @@ class TestFullStack:
         assert body["device_builder_version"] == fake_versions["server_version"]
         # The credential the validator echoed back never reaches the agent.
         assert REAL_API_KEY not in content["content"][0]["text"]
-        assert fake.received[0]["args"] == {"configuration": "rf-blaster1.yaml"}
+        assert fake.received[0]["args"] == {"configuration": "rf-blaster1.yaml", "show_secrets": False}

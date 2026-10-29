@@ -1,9 +1,10 @@
 """Minimal client for the ESPHome Device Builder WebSocket API.
 
 The Device Builder add-on exposes the WebSocket API its own frontend speaks.
-Phoenix MCP uses a bounded slice: config validation, board / component /
-automation reference data, the firmware job model (compile, install, poll,
-cancel), device logs and backtrace decoding. It targets the host and port HA's
+Phoenix MCP uses a bounded slice: config validation and migration checks, board /
+component / automation reference data, version history reads, the firmware job
+model (compile, install, poll, cancel, memory analysis), device logs, connectivity
+checks and backtrace decoding. It targets the host and port HA's
 ESPHome dashboard coordinator uses, over HA's shared aiohttp session, with no credentials.
 
 SECURITY: the Device Builder has no permission model. An authenticated client can
@@ -59,10 +60,13 @@ _LOGGER = logging.getLogger(__name__)
 #   *_bulk variants                                 one configuration at a time
 #   devices/get_config                              returns raw unredacted YAML
 #   devices/get_api_key                             returns the native API key
+#   devices/update_config, devices/add_component,   write, create, rename or
+#   devices/create, devices/rename, automations/    restore device YAML
+#   upsert|delete, version_history/restore
+#   version_history/get_diff, yaml/search           return raw lines no mask can reach
 # Phoenix MCP reads device YAML itself, through its own jail and credential
-# masking, so a server-side raw read would only be a way around that. Deleting is
-# Phoenix MCP's own tool rather than the add-on's, so the file is snapshotted into
-# version history first and a mistaken delete stays recoverable.
+# masking, so a server-side raw read would only be a way around that. No command
+# that writes device YAML is reachable at all: Phoenix MCP does not author it.
 ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     # Reads.
     "devices/list",
@@ -73,7 +77,25 @@ ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     "components/get_components",
     "components/get_categories",
     "automations/get_available",
+    # Returns each automation's raw YAML. Callers relay none of it: the text they
+    # return is cut from Phoenix MCP's own masked read of the same file.
+    "automations/parse",
+    "automations/get_bodies",
+    # Takes TEXT rather than a filename and is pure: no file, job or device is
+    # touched. Callers send only the persisted file they read themselves, never a
+    # caller's draft, and mask both sides before diffing.
+    "editor/migrate_config",
+    # Read-only git. Old versions can hold credentials since rotated out of every
+    # current file, so callers mask each version whole and diff locally; get_diff
+    # (raw hunks) and restore (a write) stay off.
+    "version_history/list_versions",
+    "version_history/get_version",
+    "version_history/list_deleted",
     "devices/logs",
+    # DNS, mDNS and ping probe. Not inert (it refreshes the Builder's own
+    # reachability verdict) and its reply is full of LAN addresses, so callers
+    # project booleans and counts only.
+    "devices/troubleshoot",
     # Ends a stream this connection itself opened, and nothing else: one
     # connection per request means there is never another stream to hit.
     "devices/stop_stream",
@@ -93,6 +115,11 @@ ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     # contained: it also drops the shared PlatformIO cache, so every device's next
     # build slows; the caller states that cost.
     "firmware/clean",
+    # Compiles on the local lane and SUPERSEDES the device's queued or running
+    # job, which could be an install, so callers refuse while one is in flight.
+    # The add-on drops the job once it ends, so the report exists only on a follow
+    # that is already attached.
+    "firmware/analyze_memory",
 })
 
 # The Device Builder colorizes its process output and sends the escape as the
@@ -338,12 +365,13 @@ async def async_builder_command(
     timeout_seconds: float,
     collect_output: bool = False,
     max_chars: int | None = None,
+    head_ratio: float = 0.75,
 ) -> BuilderResult:
     """Run one allowlisted Device Builder command and return its outcome.
 
     `url` is the dashboard coordinator's base URL; the caller resolves the
     coordinator, which keeps this module free of any import back into the view
-    layer.
+    layer. head_ratio is the share of a bounded output kept from its start.
 
     Raises BuilderUnavailable when the add-on cannot be reached, BuilderAuthRequired
     when it wants credentials, and BuilderCommandError when it refuses the command.
@@ -353,7 +381,7 @@ async def async_builder_command(
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
     session = async_get_clientsession(hass)
-    collector = _OutputCollector(_max_chars(max_chars)) if collect_output else None
+    collector = _OutputCollector(_max_chars(max_chars), head_ratio) if collect_output else None
     endpoint = f"{url.rstrip('/')}/ws"
 
     try:

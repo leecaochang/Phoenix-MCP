@@ -524,7 +524,7 @@ class TestDeviceYamlRead:
         # A fully denied access key must learn nothing about the file or its payload.
         assert "rf-blaster1" not in content["content"][0]["text"]
 
-    async def test_credentials_masked_and_hash_is_of_raw_bytes(self, hass, esphome_dir):
+    async def test_credentials_masked_and_hash_is_of_the_masked_text(self, hass, esphome_dir):
         content, outcome, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
@@ -532,7 +532,10 @@ class TestDeviceYamlRead:
         assert "REALAPIKEY123456=" not in content["content"][0]["text"]
         assert "realotapassword" not in content["content"][0]["text"]
         assert body["redacted_paths"] == ["api.encryption.key", "ota[0].password"]
-        assert body["content_hash"] == content_hash(DEVICE_YAML)
+        # A hash of the raw bytes beside text that differs only in its
+        # credentials would let a weak inline password be guessed offline.
+        assert body["content_hash"] == content_hash(body["content"])
+        assert body["content_hash"] != content_hash(DEVICE_YAML)
         # Formatting and tag references survive, so the masked text still reads
         # as the operator wrote it.
         assert "# Enable Home Assistant API" in body["content"]
@@ -753,7 +756,7 @@ class TestDeviceYamlHistory:
         read, outcome, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
-        assert _json(read)["content_hash"] == content_hash(DEVICE_YAML)
+        assert _json(read)["content_hash"] == content_hash(_json(read)["content"])
         assert "REALAPIKEY123456=" not in read["content"][0]["text"]
 
 

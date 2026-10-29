@@ -16,6 +16,7 @@ readable through any tool; it is parsed here only to know what NOT to emit.
 
 from __future__ import annotations
 
+import difflib
 import re
 from collections.abc import Iterator
 from typing import Any
@@ -223,6 +224,156 @@ def redact_esphome_text(
     for start, end, dotted in spans:
         out = out[:start] + placeholder_for(dotted) + out[end:]
     return out, sorted(dotted for _, _, dotted in spans)
+
+
+def _line_offsets(text: str, first_line: int, last_line: int) -> tuple[int, int]:
+    """Character offsets of 1-indexed lines first..last (inclusive) in `text`.
+
+    Lines are counted with splitlines, the way the Device Builder numbers them,
+    so a CRLF or a lone CR ends a line here exactly as it does there.
+    """
+    lines = text.splitlines(keepends=True)
+    if first_line < 1 or last_line < first_line or last_line > len(lines):
+        raise ValueError(f"lines {first_line}..{last_line} are outside {len(lines)} lines")
+    start = sum(len(line) for line in lines[:first_line - 1])
+    return start, start + sum(len(line) for line in lines[first_line - 1:last_line])
+
+
+def redact_esphome_slice(
+    text: str, secret_values: set[str] | None, first_line: int, last_line: int
+) -> str:
+    """Lines first..last of a device file, with every credential in them masked.
+
+    Spans are found over the WHOLE document, so a credential's path and the
+    layer-3 cross-check read the same as in a full masked read. Every span that
+    touches the slice is replaced by its placeholder, clipped to the slice: a
+    block-scalar credential that begins above the first line still leaves none of
+    its characters behind. Raises YamlParseError (fail closed) and ValueError for
+    a range outside the file.
+    """
+    start, end = _line_offsets(text, first_line, last_line)
+    spans = _secret_spans(text, secret_values or set())
+    out = text[start:end]
+    for span_start, span_end, dotted in spans:
+        if span_end <= start or span_start >= end:
+            continue
+        cut_start, cut_end = max(span_start, start) - start, min(span_end, end) - start
+        out = out[:cut_start] + placeholder_for(dotted) + out[cut_end:]
+    return out
+
+
+# Component and platform names as ESPHome spells them. Anything else in a key
+# position is not reported: names only ever describe the file, never its values.
+_COMPONENT_NAME_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+
+
+def _uses_include(node: Any, depth: int = 0) -> bool:
+    """Whether any node carries an !include-style tag (packages pulled from elsewhere)."""
+    if depth > 64:
+        return True
+    tag = getattr(node, "tag", None)
+    if isinstance(tag, str) and tag.startswith("!include"):
+        return True
+    if isinstance(node, yaml.MappingNode):
+        return any(_uses_include(k, depth + 1) or _uses_include(v, depth + 1) for k, v in node.value)
+    if isinstance(node, yaml.SequenceNode):
+        return any(_uses_include(item, depth + 1) for item in node.value)
+    return False
+
+
+def _platform_names(node: Any) -> list[str]:
+    """The `platform:` scalars of a component block: a list of entries or one mapping."""
+    entries = node.value if isinstance(node, yaml.SequenceNode) else [node]
+    names = []
+    for entry in entries:
+        if not isinstance(entry, yaml.MappingNode):
+            continue
+        for key_node, value_node in entry.value:
+            if (getattr(key_node, "value", None) == "platform"
+                    and isinstance(value_node, yaml.ScalarNode) and not _is_tagged(value_node)
+                    and isinstance(value_node.value, str)
+                    and _COMPONENT_NAME_RE.fullmatch(value_node.value)):
+                names.append(value_node.value)
+    return names
+
+
+def declared_components(text: str) -> dict[str, Any]:
+    """The components and platforms a device file declares itself, by name only.
+
+    Read from the file's own top level, so what `packages:` or an `!include`
+    brings in is not seen; uses_includes says when that is the case. Composition
+    only: no constructor runs and no value is ever returned. Raises
+    YamlParseError for a file that does not parse.
+    """
+    root = _compose(text)
+    components: list[str] = []
+    platforms: dict[str, list[str]] = {}
+    if isinstance(root, yaml.MappingNode):
+        for key_node, value_node in root.value:
+            key = getattr(key_node, "value", None)
+            if not isinstance(key, str) or not _COMPONENT_NAME_RE.fullmatch(key):
+                continue
+            components.append(key)
+            names = _platform_names(value_node)
+            if names:
+                platforms[key] = sorted(set(names))
+    return {
+        "components": sorted(set(components)),
+        "platforms": platforms,
+        "uses_includes": "packages" in components or (root is not None and _uses_include(root)),
+    }
+
+
+def apply_line_splice(text: str, from_line: int, to_line: int, replacement: str) -> str:
+    """Apply a Device Builder YamlDiff to `text`.
+
+    Same rules as the add-on's own apply_yaml_diff: lines are 1-indexed and
+    inclusive in the OLD text, `to_line == from_line - 1` is a pure insert before
+    `from_line`, and the replacement's final terminator is implied, so a splice
+    reaching an unterminated last line leaves the text unterminated. Raises
+    ValueError for a range outside the text.
+    """
+    lines = text.splitlines(keepends=True)
+    if to_line < from_line - 1:
+        raise ValueError(f"splice {from_line}..{to_line} is inverted")
+    if from_line < 1 or to_line > len(lines):
+        raise ValueError(f"splice {from_line}..{to_line} is outside {len(lines)} lines")
+    head, tail = "".join(lines[:from_line - 1]), "".join(lines[to_line:])
+    newline = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
+    body = replacement.removesuffix("\n").removesuffix("\r")
+    open_ended = not tail and bool(lines) and len(f"{lines[-1][-1]}x".splitlines()) != 2
+    if not body:
+        if open_ended:
+            head = head.removesuffix("\n").removesuffix("\r")
+    else:
+        if head and len(f"{head[-1]}x".splitlines()) != 2:
+            head += newline
+        if not open_ended:
+            body += replacement[len(body):] or newline
+    return head + body + tail
+
+
+def masked_unified_diff(
+    before: str, after: str, before_label: str, after_label: str, max_chars: int
+) -> tuple[str, bool]:
+    """A unified diff of two already-masked texts, bounded to max_chars.
+
+    Only ever fed masked text: the inputs come from redact_esphome_text, so the
+    diff can show where a credential sits but never what it is.
+    """
+    def lines(text: str) -> list[str]:
+        # A last line without a terminator would run into the next diff line.
+        out = text.splitlines(keepends=True)
+        if out and not out[-1].endswith(("\n", "\r")):
+            out[-1] += "\n"
+        return out
+
+    diff = "".join(difflib.unified_diff(
+        lines(before), lines(after), fromfile=before_label, tofile=after_label, n=2,
+    ))
+    if len(diff) <= max_chars:
+        return diff, False
+    return diff[:max_chars], True
 
 
 def inline_secret_values(text: str, secret_values: set[str] | None = None) -> set[str]:

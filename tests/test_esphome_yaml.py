@@ -230,3 +230,86 @@ wifi:
     def test_unparseable_file_raises_so_callers_decide(self):
         with pytest.raises(YamlParseError):
             inline_secret_values("esphome:\n  name: [unclosed\n")
+
+
+class TestSliceMasking:
+    """redact_esphome_slice cuts lines from a whole-document mask, never a partial parse."""
+
+    TEXT = (
+        "esphome:\n  name: dev\n"
+        "ota:\n  - platform: esphome\n    password: \"slicepassword1\"\n"
+        "web_server:\n  auth:\n    password: |\n      blockline-one\n      blockline-two\n"
+        "uart:\n  baud_rate: 9600\n"
+    )
+
+    def test_a_credential_inside_the_slice_is_masked(self):
+        from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_slice
+
+        out = redact_esphome_slice(self.TEXT, set(), 3, 5)
+        assert "slicepassword1" not in out and "__PHOENIX_REDACTED__ota[0].password__" in out
+        assert out.startswith("ota:\n")
+
+    def test_a_block_scalar_that_starts_above_the_slice_leaves_nothing(self):
+        from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_slice
+
+        out = redact_esphome_slice(self.TEXT, set(), 9, 10)
+        assert "blockline" not in out
+        assert "__PHOENIX_REDACTED__web_server.auth.password__" in out
+
+    def test_lines_without_credentials_are_returned_verbatim(self):
+        from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_slice
+
+        assert redact_esphome_slice(self.TEXT, set(), 11, 12) == "uart:\n  baud_rate: 9600\n"
+
+    def test_fails_closed_and_refuses_ranges_outside_the_file(self):
+        from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_slice
+
+        with pytest.raises(YamlParseError):
+            redact_esphome_slice("a: [x\n", set(), 1, 1)
+        with pytest.raises(ValueError):
+            redact_esphome_slice(self.TEXT, set(), 0, 2)
+        with pytest.raises(ValueError):
+            redact_esphome_slice(self.TEXT, set(), 12, 13)
+
+
+class TestDeclaredComponents:
+    def test_names_only_with_platforms_and_the_include_flag(self):
+        from custom_components.phoenix_mcp.esphome_yaml import declared_components
+
+        text = (
+            "esphome:\n  name: dev\npackages:\n  base: !include base.yaml\n"
+            "sensor:\n  - platform: dht\n    pin: GPIO4\n  - platform: !lambda x\n"
+            "wifi:\n  password: \"declaredpass1\"\n"
+        )
+        out = declared_components(text)
+        assert out == {"components": ["esphome", "packages", "sensor", "wifi"],
+                       "platforms": {"sensor": ["dht"]}, "uses_includes": True}
+        assert "declaredpass1" not in repr(out) and "GPIO4" not in repr(out)
+
+    def test_a_plain_file_uses_no_includes(self):
+        from custom_components.phoenix_mcp.esphome_yaml import declared_components
+
+        assert declared_components("ota:\n  platform: esphome\n")["uses_includes"] is False
+
+
+class TestLineSplice:
+    """apply_line_splice mirrors the add-on's own apply_yaml_diff."""
+
+    def test_replace_insert_and_bounds(self):
+        from custom_components.phoenix_mcp.esphome_yaml import apply_line_splice
+
+        text = "a\nb\nc\n"
+        assert apply_line_splice(text, 2, 2, "B\n") == "a\nB\nc\n"
+        assert apply_line_splice(text, 2, 1, "x\n") == "a\nx\nb\nc\n"
+        assert apply_line_splice("a\nb", 2, 2, "B\n") == "a\nB"
+        with pytest.raises(ValueError):
+            apply_line_splice(text, 3, 1, "x")
+        with pytest.raises(ValueError):
+            apply_line_splice(text, 1, 4, "x")
+
+
+def test_masked_diff_keeps_an_unterminated_last_line_apart():
+    from custom_components.phoenix_mcp.esphome_yaml import masked_unified_diff
+
+    diff, truncated = masked_unified_diff("x", "a: 1\n", "old", "new", 10_000)
+    assert "-x\n+a: 1\n" in diff and truncated is False

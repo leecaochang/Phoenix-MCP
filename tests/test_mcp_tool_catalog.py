@@ -203,14 +203,14 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
             "openai_bytes": 119688,
         },
         "announce_all": {
-            "tool_count": 165,
-            "canonical_bytes": 194234,
-            "claude_bytes": 176630,
-            "openai_bytes": 181415,
+            "tool_count": 168,
+            "canonical_bytes": 199041,
+            "claude_bytes": 181125,
+            "openai_bytes": 185997,
         },
     }
-    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 165
-    assert mcp_view.tool_catalog_counts()["total"] == 171
+    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
+    assert mcp_view.tool_catalog_counts()["total"] == 174
 
 
 def test_every_public_parameter_has_a_description():
@@ -300,6 +300,34 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     assert not (bucketed & (builder_tools if not builder else set())), (
         "a hidden tool must never be bucketed as usable"
     )
+
+
+def test_esphome_persona_fits_the_provider_tool_cap():
+    """An ESPHome persona key with write scope stays within the tools-array cap.
+
+    OpenAI, Groq, Mistral and Z.ai refuse a turn above AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    and every ESPHome tool lands in this persona's list once the Device Builder is
+    present. A new ESPHome tool that pushes it over would make the persona built
+    for ESPHome work unusable on those providers.
+    """
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp.personas import get_persona_caps
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+
+    access_key, _ = _make_access_key()
+    for cap, mode in (get_persona_caps(const.PERSONA_ESPHOME) or {}).items():
+        setattr(access_key, cap, mode)
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+    hass.config.components = {"esphome"}
+    data.hass = hass
+    with patch("custom_components.phoenix_mcp.tools.esphome._esphome_dashboard", return_value=object()), \
+            patch.object(hass.config_entries, "async_entries", return_value=[]):
+        names = {t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)}
+    assert {"get_esphome_history", "analyze_esphome_memory", "check_esphome_connectivity"} <= names
+    assert len(names) <= const.AGENTCLI_MAX_TOOLS_PER_REQUEST
 
 
 # ---------------------------------------------------------------------------

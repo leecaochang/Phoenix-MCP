@@ -2298,10 +2298,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "List the ESPHome device YAML files this access key can see, or read one. Credentials "
             "(API encryption keys, wifi/OTA/MQTT passwords, and anything matching the ESPHome "
-            "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders; leave "
-            "them exactly as they are when editing and they are restored on write. "
-            "content_hash is the hash of the real file, so it still works with expected_hash. "
-            "defined_secrets lists the secret NAMES available for !secret references."
+            "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders. Read-only: "
+            "the operator edits device YAML in the ESPHome dashboard. content_hash changes "
+            "whenever the visible content does. defined_secrets lists the secret NAMES available "
+            "for !secret references."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2320,7 +2320,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_esphome_yaml",
         "requires": "esphome",
-        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml before editing.",
+        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml to read a whole file.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -2354,7 +2354,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_esphome_devices",
         "requires": "esphome_builder",
-        "description": "List configured ESPHome Device Builder devices this access key may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
+        "description": "List configured ESPHome Device Builder devices this access key may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Configured rows carry the firmware the device runs (deployed_version), whether a build would update it (update_available), whether ESPHome would respell its top-level file (migration_available; see validate_esphome_yaml), and whether an update is armed for its next wake. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -2440,7 +2440,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Check one ESPHome device YAML file for configuration errors, using the ESPHome "
             "Device Builder. This validates the file AS IT IS ON DISK. It does not compile or "
             "flash anything, and the device is untouched either way. Returns whether the config is "
-            "valid plus the validator's output, with any credentials removed."
+            "valid plus the validator's output, with any credentials removed. Also reports "
+            "migration: the renamed keys and actions the installed ESPHome would respell in this "
+            "file, with a masked diff. Nothing is migrated; the operator applies it in the ESPHome "
+            "dashboard."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2479,7 +2482,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Look up ESPHome component documentation: pass component_ids for the full "
             "configuration schema of specific components (use this instead of guessing config "
             "keys), a query or category to search the catalog, or neither to list the "
-            "categories. Components not found are simply omitted from the response."
+            "categories. Components not found are simply omitted from the response. Advanced "
+            "and YAML-only options are left out unless include_advanced is true. Pass file "
+            "instead to list the components one device uses: declared (read from the file, "
+            "names only) and loaded (what its last build compiled, including packages)."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2489,6 +2495,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "array", "items": {"type": "string"},
                     "description": "Component ids to fetch in full, e.g. [\"dht\", \"bme280\"]. Max 10.",
                 },
+                "include_advanced": {"type": "boolean", "description": "With component_ids, also return advanced and YAML-only options (default false)."},
+                "file": {"type": "string", "description": "Device YAML filename: list the components that configuration uses instead of looking any up."},
                 "query": {"type": "string", "description": "Search text."},
                 "category": {"type": "string", "description": "Filter by category."},
                 "exclude_category": {"type": "string", "description": "Exclude a category from a search."},
@@ -2505,16 +2513,33 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "The triggers, actions and conditions available inside one ESPHome device's YAML, "
             "scoped to the components that device actually loads, plus its declared scripts and "
-            "component ids. Use this when writing on_... automations for a device so you build "
-            "them from what that device really supports."
+            "component ids. Use this when explaining or planning on_... automations for a device "
+            "so they are built from what that device really supports. With existing true, lists "
+            "the automations the file already defines instead, each with its line range and "
+            "masked YAML. With refs and no file, returns the documentation (fields and allowed "
+            "values) of specific building blocks."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml. Required unless refs is given."},
+                "existing": {"type": "boolean", "description": "With file, list the automations the file already defines (default false)."},
+                "refs": {
+                    "type": "array", "maxItems": 20,
+                    "description": "Building blocks to document, without file. Max 20.",
+                    "items": {
+                        "type": "object", "additionalProperties": False,
+                        "description": "One building block.",
+                        "properties": {
+                            "type": {"type": "string", "enum": ["triggers", "actions", "conditions", "light_effects", "filters"], "description": "The building block kind."},
+                            "id": {"type": "string", "description": "Its id as get_esphome_automations lists it, e.g. light.turn_on."},
+                        },
+                        "required": ["type", "id"],
+                    },
+                },
+                "include_advanced": {"type": "boolean", "description": "With refs, also return advanced and YAML-only fields (default false)."},
             },
-            "required": ["file"],
         },
     },
     {
@@ -2691,6 +2716,69 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 },
             },
             "required": ["file", "lines"],
+        },
+    },
+    {
+        "name": "get_esphome_history",
+        "requires": "esphome_builder",
+        "description": (
+            "The ESPHome Device Builder's saved versions of a device YAML file, with "
+            "credentials masked, to answer 'what changed?'. With file only, lists its versions "
+            "newest first. With sha, returns that version as a diff against the current file "
+            "(or against compare_to), or with view content as the whole masked file. Without "
+            "file, lists deleted configurations that history still holds. Read-only: nothing is "
+            "restored. Empty when the Builder's version history is turned off."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, including a deleted one; omit to list deleted configurations."},
+                "sha": {"type": "string", "description": "A version's sha from the version list."},
+                "view": {"type": "string", "enum": ["diff", "content"], "description": "With sha: a masked diff (default) or the whole masked version."},
+                "compare_to": {"type": "string", "description": "With sha and view diff: another version's sha to diff against instead of the current file."},
+                "offset": {"type": "integer", "description": "Offset into the version or deleted-file list."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Page size (default 20, max 50)."},
+            },
+        },
+    },
+    {
+        "name": "check_esphome_connectivity",
+        "requires": "esphome_builder",
+        "description": (
+            "Ask the ESPHome Device Builder whether it can find and reach one device right now: "
+            "DNS and mDNS resolution, a ping and its reply time, and a one-word verdict. Use it "
+            "when a device shows offline or an install cannot reach it. Addresses are withheld; "
+            "only counts and the kind of address are reported. It refreshes the Builder's own "
+            "reachability state and changes nothing on the device. Can take up to 40 seconds."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+            },
+            "required": ["file"],
+        },
+    },
+    {
+        "name": "analyze_esphome_memory",
+        "requires": "esphome_builder",
+        "description": (
+            "Build one ESPHome device and report how much flash and RAM each component uses, "
+            "to find what is filling a device up. Touches no device. Unlike "
+            "compile_esphome_firmware this waits for the result, up to 5 minutes, because the "
+            "Device Builder keeps no report afterwards; compile first so the analysis can reuse "
+            "the build. Refused while another build for the same file runs, since starting it "
+            "would cancel that build. Refused on voice, Assist and AI Task."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+            },
+            "required": ["file"],
         },
     },
     {
@@ -4096,14 +4184,20 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     # Destructive: it discards work (a warm build cache), even though nothing it
     # can reach is a device or a configuration file.
     "clean_esphome_build": _annot(False, True, True),
-    # Not idempotent: running it twice renames twice, and the second call
-    # addresses the device by its old name, which matches nothing.
+    # Not idempotent: each call enqueues a fresh build and flash.
     "install_esphome_firmware": _annot(False, True, False),
     "get_esphome_job": _annot(True, False, True),
     "wait_for_esphome_job": _annot(True, False, True),
     "cancel_esphome_job": _annot(False, False, True),
     "get_esphome_device_logs": _annot(True, False, True),
     "decode_esphome_backtrace": _annot(True, False, True),
+    "get_esphome_history": _annot(True, False, True),
+    # Not read-only: it refreshes the Device Builder's own DNS cache and
+    # reachability verdict, though nothing on the device changes.
+    "check_esphome_connectivity": _annot(False, False, True),
+    # A build like compile, and not idempotent: each call compiles again and
+    # supersedes nothing only because it refuses while a job is in flight.
+    "analyze_esphome_memory": _annot(False, False, False),
     "check_ha_config": _annot(True, False, True),
     "get_relationships": _annot(True, False, True),
     "describe_entity": _annot(True, False, True),

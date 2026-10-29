@@ -2,11 +2,12 @@
 
 The whole ESPHome surface: get/search device YAML behind the config/esphome path
 jail and the credential masking in esphome_yaml.py, the Device Builder lookups
-(validate, boards, components, automations, devices), the firmware job tier
-(compile, install, list/poll/wait/cancel, device logs, backtrace), cleaning a
-build and the fleet status read. Device YAML is the operator's own configuration,
-so no tool here edits or deletes it. Compiling rides cap_esphome_yaml; only
-putting an image on hardware (install) needs cap_esphome_flash.
+(validate with its migration check, boards, components, automations, devices,
+version history, connectivity), the firmware job tier (compile, install, memory
+analysis, list/poll/wait/cancel, device logs, backtrace), cleaning a build and the
+fleet status read. Device YAML is the operator's own configuration, so no tool here
+edits, deletes or restores it. Compiling rides cap_esphome_yaml; only putting an
+image on hardware (install) needs cap_esphome_flash.
 
 mcp_view registers these tools and this module never imports it. Shared
 primitives come from ..tool_common.
@@ -14,10 +15,13 @@ primitives come from ..tool_common.
 
 
 import asyncio
+import ipaddress
 import json
 import logging
+import math
 import os
 import re
+import textwrap
 from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant
@@ -28,6 +32,18 @@ from ..const import (
     AI_TASK_CLIENT_IP,
     ASSIST_CLIENT_IP,
     CAP_DENY,
+    ESPHOME_AUTOMATION_LIST_MAX_CHARS,
+    ESPHOME_AUTOMATION_REF_TYPES,
+    ESPHOME_AUTOMATION_YAML_MAX_CHARS,
+    ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS,
+    ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS,
+    ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES,
+    ESPHOME_BUILDER_HISTORY_AUTHOR,
+    ESPHOME_BUILDER_LOADED_COMPONENTS_MAX,
+    ESPHOME_BUILDER_MAX_AUTOMATION_REFS,
+    ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS,
+    ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS,
+    ESPHOME_DIFF_MAX_CHARS,
     ESPHOME_BUILDER_DECODE_TIMEOUT_SECONDS,
     ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
     ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
@@ -54,6 +70,7 @@ from ..const import (
     ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS,
     ESPHOME_YAML_SEARCH_MAX_MATCHES,
     ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
+    MAX_FILE_BYTES,
     VOICE_AGENT_CLIENT_IP,
 )
 from ..data import PhoenixData
@@ -73,13 +90,18 @@ from ..esphome_builder import (
     BuilderAuthRequired,
     BuilderCommandError,
     BuilderError,
+    BuilderUnavailable,
     async_builder_capture,
     async_builder_command,
     collect_output_lines,
 )
 from ..esphome_yaml import (
+    apply_line_splice,
+    declared_components,
     esphome_rel_path_ok,
     inline_secret_values,
+    masked_unified_diff,
+    redact_esphome_slice,
     redact_esphome_text,
     scrub_secret_values,
     secret_keys_from_text,
@@ -749,9 +771,10 @@ async def _tool_get_esphome_yaml(
     body = {
         "file": rel,
         "content": redacted,
-        # Hash of the RAW bytes on disk, so it changes whenever the file does even
-        # though the caller only ever sees the masked text.
-        "content_hash": content_hash(raw),
+        # Hash of the MASKED text. A hash of the raw bytes beside a text that
+        # differs from them only in its credentials would be an offline-guessing
+        # oracle for a weak inline password.
+        "content_hash": content_hash(redacted),
         "redacted_paths": redacted_paths,
         "device": getattr(device_info, "name", None),
     }
@@ -880,17 +903,17 @@ async def _tool_validate_esphome_yaml(
     if refusal is not None:
         return refusal
 
-    values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+    raw, secret_values, values = await hass.async_add_executor_job(_esphome_read_for_migration, hass, path)
     try:
         res = await async_builder_command(
-            hass, url, "devices/validate", {"configuration": rel},
+            hass, url, "devices/validate", {"configuration": rel, "show_secrets": False},
             timeout_seconds=ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS,
             collect_output=True,
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
 
-    body = {
+    body: dict[str, Any] = {
         "file": rel,
         "valid": res.success,
         "exit_code": res.exit_code,
@@ -906,7 +929,112 @@ async def _tool_validate_esphome_yaml(
         body["esphome_version"] = res.esphome_version
     if res.server_version:
         body["device_builder_version"] = res.server_version
+    if raw is None:
+        body["migration_unavailable"] = "The file could not be read and parsed, so it was not checked for migrations."
+    else:
+        body.update(await _esphome_migration_check(hass, url, rel, raw, secret_values, values))
     return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
+
+
+def _esphome_read_for_migration(hass: HomeAssistant, path: str) -> tuple[str | None, set[str], set[str]]:
+    """(raw text or None, secrets.yaml values, every scrub value) for one file. Executor only.
+
+    The raw text is returned only when the file reads within the size cap AND
+    parses, because the migration check sends exactly that text and masks both
+    sides of its diff; a file whose credentials cannot be located is not sent.
+    """
+    secret_values, _keys = _read_esphome_secrets(hass)
+    secret_values = set(secret_values or set())
+    values = set(secret_values)
+    try:
+        raw = _read_text_capped(path)
+    except (OSError, ValueError):
+        return None, secret_values, values
+    try:
+        values |= inline_secret_values(raw, secret_values)
+    except yaml_includes.YamlParseError:
+        return None, secret_values, values
+    return raw, secret_values, values
+
+
+# Rule names in a migration change: key and action spellings and versions, never values.
+_ESPHOME_MIGRATION_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+_ESPHOME_MIGRATION_FIELDS = ("kind", "scope", "old", "new", "since", "removed_in")
+
+
+def _esphome_migration_changes(raw_changes: Any) -> list[dict]:
+    """Project the add-on's migration rules to bounded identifier fields."""
+    changes = []
+    for change in raw_changes if isinstance(raw_changes, list) else []:
+        if not isinstance(change, dict):
+            continue
+        row: dict[str, Any] = {}
+        for key in _ESPHOME_MIGRATION_FIELDS:
+            value = change.get(key)
+            if isinstance(value, str) and _ESPHOME_MIGRATION_TOKEN_RE.fullmatch(value):
+                row[key] = value
+        if isinstance(change.get("required"), bool):
+            row["required"] = change["required"]
+        if row:
+            changes.append(row)
+    return changes
+
+
+def _esphome_migration_diff(
+    raw: str, yaml_diff: dict, secret_values: set[str], rel: str
+) -> tuple[str, bool] | None:
+    """Masked unified diff of the migration, or None when it cannot be shown safely. Executor only.
+
+    The add-on's own replacement is never returned: it is applied here and both
+    whole texts are masked. A migration that leaves fewer credentials maskable than
+    the original (a credential key respelled to a name the mask does not know) is
+    withheld rather than risk showing its value.
+    """
+    try:
+        migrated = apply_line_splice(
+            raw, int(yaml_diff["fromLine"]), int(yaml_diff["toLine"]), str(yaml_diff["replacement"]))
+        before, before_paths = redact_esphome_text(raw, secret_values)
+        known = secret_values | inline_secret_values(raw, secret_values)
+        after, after_paths = redact_esphome_text(migrated, known)
+    except (KeyError, TypeError, ValueError, yaml_includes.YamlParseError):
+        return None
+    if len(after_paths) < len(before_paths):
+        return None
+    return masked_unified_diff(before, after, rel, f"{rel} (migrated)", ESPHOME_DIFF_MAX_CHARS)
+
+
+async def _esphome_migration_check(
+    hass: HomeAssistant, url: str, rel: str, raw: str, secret_values: set[str], values: set[str]
+) -> dict:
+    """The validate reply's migration block: rules that would respell this file, and a masked diff.
+
+    Sends the persisted file Phoenix MCP just read, never caller-supplied text.
+    Any failure degrades to migration_unavailable; it never fails the validation.
+    """
+    try:
+        res = await async_builder_command(
+            hass, url, "editor/migrate_config", {"content": raw},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderError:
+        _LOGGER.debug("ESPHome migration check failed", exc_info=True)
+        return {"migration_unavailable": "The Device Builder could not check this file for migrations."}
+    result = res.result if isinstance(res.result, dict) else {}
+    yaml_diff = result.get("yaml_diff")
+    changes = _esphome_migration_changes(result.get("changes"))
+    if not isinstance(yaml_diff, dict):
+        return {"migration": {"needed": False}}
+    migration: dict[str, Any] = {"needed": True, "changes": changes}
+    shown = await hass.async_add_executor_job(_esphome_migration_diff, raw, yaml_diff, secret_values, rel)
+    if shown is None:
+        migration["diff_withheld"] = "The migrated text could not be masked reliably; review it in the ESPHome dashboard."
+    else:
+        migration["diff"] = scrub_secret_values(shown[0], values)
+        if shown[1]:
+            migration["diff_truncated"] = True
+    migration["note"] = ("Nothing was changed. Apply the migration in the ESPHome dashboard, "
+                         "which is where this file is edited.")
+    return {"migration": migration}
 
 
 async def _tool_get_esphome_board(
@@ -958,7 +1086,16 @@ async def _tool_get_esphome_component(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_component"
 
+    include_advanced = args.get("include_advanced", False)
+    if not isinstance(include_advanced, bool):
+        return _tool_error("include_advanced must be a boolean."), "invalid_request", "get_esphome_component"
     ids = args.get("component_ids")
+    file_arg = args.get("file")
+    if file_arg is not None and not (isinstance(file_arg, str) and not file_arg.strip()):
+        if isinstance(ids, list) and ids:
+            return (_tool_error("Ask for a file's components and for component_ids in separate calls."),
+                    "invalid_request", "get_esphome_component")
+        return await _esphome_config_components(hass, access_key, url, args)
     if isinstance(ids, list) and ids:
         wanted = [i.strip() for i in ids if isinstance(i, str) and i.strip()]
         if len(wanted) > ESPHOME_BUILDER_MAX_COMPONENT_IDS:
@@ -996,10 +1133,96 @@ async def _tool_get_esphome_component(
     except BuilderError as err:
         return _builder_refusal(err, "get_esphome_component")
 
+    result = res.result
+    if command == "components/get_component_bodies" and not include_advanced:
+        result = _esphome_without_advanced(result)
     return (
-        _tool_success(json.dumps({key: res.result}, default=str)),
+        _tool_success(json.dumps({key: result}, default=str)),
         "allowed", "get_esphome_component",
     )
+
+
+def _esphome_without_advanced(value: Any) -> Any:
+    """Drop advanced and YAML-only config entries at every depth.
+
+    The same filter as the Device Builder's own MCP get_component: an entry with
+    a truthy `advanced` or `hidden` flag leaves its `config_entries` list. Most
+    configs never set them, and they are a large share of a component body.
+    """
+    if isinstance(value, list):
+        return [_esphome_without_advanced(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if isinstance(value.get("config_entries"), list):
+        value = value | {"config_entries": [
+            entry for entry in value["config_entries"]
+            if not (isinstance(entry, dict) and (entry.get("hidden") or entry.get("advanced")))
+        ]}
+    return {k: _esphome_without_advanced(v) for k, v in value.items()}
+
+
+# Integration and platform ids as the add-on reports a build's loaded set.
+_ESPHOME_LOADED_NAME_RE = re.compile(r"^[a-z0-9_.]{1,64}$")
+
+
+def _esphome_declared_for_file(path: str) -> dict | None:
+    """The components a file declares at its own top level, or None if it will not parse. Executor only."""
+    try:
+        return declared_components(_read_text_capped(path))
+    except (OSError, ValueError, yaml_includes.YamlParseError):
+        return None
+
+
+async def _esphome_config_components(
+    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict
+) -> tuple[dict, str, str]:
+    """get_esphome_component with a file: the components that configuration uses.
+
+    Two views, because neither alone is the whole answer: `declared` is read from
+    the file itself (names only, never values) and misses what packages bring in;
+    `loaded` is what the device's last build actually compiled, and is empty
+    until the first compile.
+    """
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "get_esphome_component")
+    if refusal is not None:
+        return refusal
+    body: dict[str, Any] = {"file": rel}
+    notes = []
+    declared = await hass.async_add_executor_job(_esphome_declared_for_file, path)
+    if declared is None:
+        notes.append("The file could not be parsed, so its declared components are not listed.")
+    else:
+        body["declared"] = declared
+        if declared.get("uses_includes"):
+            notes.append("Components pulled in through packages or !include appear only under loaded.")
+    try:
+        res = await async_builder_command(hass, url, "devices/list", {},
+                                          timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
+        configured = res.result.get("configured") if isinstance(res.result, dict) else None
+    except BuilderError:
+        _LOGGER.debug("ESPHome device list for loaded components failed", exc_info=True)
+        configured = None
+    if not isinstance(configured, list):
+        notes.append("The Device Builder did not report this device's last build.")
+    else:
+        rows = [d for d in configured if isinstance(d, dict)]
+        located = await hass.async_add_executor_job(
+            _locate_esphome_files, hass, [d.get("configuration") for d in rows])
+        own = next((d for d in rows if isinstance(d.get("configuration"), str)
+                    and located.get(d["configuration"], ("", ""))[1] == rel), None)
+        if own is not None:
+            loaded: dict[str, list[str]] = {}
+            for key, field in (("integrations", "loaded_integrations"), ("platforms", "loaded_platforms")):
+                names = own.get(field)
+                loaded[key] = sorted({name for name in (names if isinstance(names, list) else [])
+                                      if isinstance(name, str) and _ESPHOME_LOADED_NAME_RE.fullmatch(name)}
+                                     )[:ESPHOME_BUILDER_LOADED_COMPONENTS_MAX]
+            body["loaded"] = loaded
+            if not body["loaded"]["integrations"]:
+                notes.append("loaded is empty until the device has been compiled once.")
+    if notes:
+        body["notes"] = notes
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
 
 
 # Fields kept from the Device Builder's automation catalog, per section. An
@@ -1048,7 +1271,7 @@ def _project_esphome_automations(result: Any) -> Any:
 async def _tool_get_esphome_automations(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: the trigger/action/condition catalog a device's own config supports."""
+    """MCP tool: a device's automation catalog, its existing automations, or building-block docs."""
     if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_automations"
 
@@ -1056,9 +1279,24 @@ async def _tool_get_esphome_automations(
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_automations"
 
+    existing = args.get("existing", False)
+    include_advanced = args.get("include_advanced", False)
+    if not isinstance(existing, bool) or not isinstance(include_advanced, bool):
+        return (_tool_error("existing and include_advanced must be booleans."),
+                "invalid_request", "get_esphome_automations")
+    if args.get("refs") is not None:
+        if args.get("file") is not None or existing:
+            return (_tool_error("refs looks up the catalog; ask about a file's automations in a separate call."),
+                    "invalid_request", "get_esphome_automations")
+        return await _esphome_automation_docs(hass, url, args.get("refs"), include_advanced)
+    if args.get("file") is None:
+        return _tool_error("file is required unless refs is given."), "invalid_request", "get_esphome_automations"
+
     refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, "get_esphome_automations")
     if refusal is not None:
         return refusal
+    if existing:
+        return await _esphome_existing_automations(hass, access_key, url, path, rel)
 
     values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
     try:
@@ -1077,6 +1315,208 @@ async def _tool_get_esphome_automations(
         {"file": rel, "automations": _project_esphome_automations(res.result)},
         default=str,
     )
+    return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
+
+
+# Catalog ids as the add-on spells them, e.g. light.turn_on or on_press.
+_ESPHOME_REF_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+async def _esphome_automation_docs(
+    hass: HomeAssistant, url: str, refs: Any, include_advanced: bool
+) -> tuple[dict, str, str]:
+    """get_esphome_automations with refs: the fields each building block takes.
+
+    Catalog metadata, the same for every device, so it is scoped like the
+    component catalog rather than to a file. The add-on answers a large request in
+    pages and lists what is left in `remaining`; a page that makes no progress
+    ends the loop rather than spinning on it.
+    """
+    resource = "get_esphome_automations"
+    if not isinstance(refs, list) or not refs:
+        return _tool_error("refs must be a nonempty list of {type, id} objects."), "invalid_request", resource
+    wanted: list[dict[str, str]] = []
+    for ref in refs:
+        if (not isinstance(ref, dict) or set(ref) - {"type", "id"}
+                or ref.get("type") not in ESPHOME_AUTOMATION_REF_TYPES
+                or not isinstance(ref.get("id"), str) or not _ESPHOME_REF_ID_RE.fullmatch(ref["id"])):
+            return (_tool_error("Each ref needs a type of " + ", ".join(sorted(ESPHOME_AUTOMATION_REF_TYPES))
+                                + " and an id from get_esphome_automations."), "invalid_request", resource)
+        if {"type": ref["type"], "id": ref["id"]} not in wanted:
+            wanted.append({"type": ref["type"], "id": ref["id"]})
+    if len(wanted) > ESPHOME_BUILDER_MAX_AUTOMATION_REFS:
+        return (_tool_error(f"Ask for at most {ESPHOME_BUILDER_MAX_AUTOMATION_REFS} refs at a time."),
+                "invalid_request", resource)
+
+    bodies: dict[str, Any] = {}
+    remaining = wanted
+    for _page in range(ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES):
+        try:
+            res = await async_builder_command(
+                hass, url, "automations/get_bodies", {"refs": remaining},
+                timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+            )
+        except BuilderError as err:
+            return _builder_refusal(err, resource)
+        result = res.result if isinstance(res.result, dict) else {}
+        page = result.get("bodies")
+        if isinstance(page, dict):
+            bodies.update({k: v for k, v in page.items() if isinstance(k, str)})
+        reported = result.get("remaining")
+        left = [ref for ref in ({"type": r.get("type"), "id": r.get("id")}
+                                for r in (reported if isinstance(reported, list) else []) if isinstance(r, dict))
+                if ref in remaining]
+        if not left or len(left) >= len(remaining):
+            remaining = left
+            break
+        remaining = left
+
+    out: dict[str, Any] = {}
+    not_listed = [f"{r['type']}/{r['id']}" for r in remaining]
+    size = 0
+    for ref in wanted:
+        key = f"{ref['type']}/{ref['id']}"
+        if key not in bodies or key in not_listed:
+            continue
+        doc = bodies[key] if include_advanced else _esphome_without_advanced(bodies[key])
+        size += len(json.dumps(doc, default=str))
+        if size > ESPHOME_BUILDER_OUTPUT_MAX_CHARS:
+            not_listed.append(key)
+            continue
+        out[key] = doc
+    body: dict[str, Any] = {"bodies": out}
+    missing = [f"{r['type']}/{r['id']}" for r in wanted
+               if f"{r['type']}/{r['id']}" not in bodies and f"{r['type']}/{r['id']}" not in not_listed]
+    if missing:
+        body["not_found"] = missing
+    if not_listed:
+        body["not_listed"] = not_listed
+        body["note"] = "Ask for the refs under not_listed in another call."
+    return _tool_success(json.dumps(body, default=str)), "allowed", resource
+
+
+def _esphome_read_with_secrets(hass: HomeAssistant, path: str) -> tuple[str, set[str], set[str]]:
+    """(raw text, secrets.yaml values, scrub values) for one device file. Executor only."""
+    secret_values, _keys = _read_esphome_secrets(hass)
+    secret_values = set(secret_values or set())
+    raw = _read_text_capped(path)
+    values = set(secret_values)
+    try:
+        values |= inline_secret_values(raw, secret_values)
+    except yaml_includes.YamlParseError:
+        pass
+    return raw, secret_values, values
+
+
+_ESPHOME_LOCATION_KEYS = ("kind", "component_id", "trigger", "index", "id", "field", "action_name")
+
+
+def _esphome_same_slice(local: str, reported: str) -> bool:
+    """Whether the add-on's raw_yaml holds the same data as the lines Phoenix MCP read.
+
+    raw_yaml is not a verbatim slice: the add-on re-dumps the parsed value, so its
+    quoting and indentation differ from the file. Both are loaded and compared as
+    data; anything that will not load counts as a mismatch.
+    """
+    try:
+        return (yaml_includes.load_tagged_lenient(textwrap.dedent(local))
+                == yaml_includes.load_tagged_lenient(reported))
+    except (yaml_includes.YamlParseError, ValueError, TypeError):
+        return False
+
+
+def _esphome_automation_rows(raw: str, secret_values: set[str], parsed: Any) -> tuple[list[dict], list[str]]:
+    """Project automations/parse rows, with YAML cut from Phoenix MCP's own masked read. Executor only.
+
+    The add-on's raw_yaml is used only to check that both read the same file; it
+    is never relayed. A row whose lines no longer match is listed without its
+    YAML, and a file that will not parse withholds every row's YAML (fail closed).
+    """
+    rows: list[dict] = []
+    warnings: list[str] = []
+    parse_failed = False
+    for item in parsed if isinstance(parsed, list) else []:
+        if not isinstance(item, dict):
+            continue
+        row: dict[str, Any] = {}
+        location = item.get("location")
+        if isinstance(location, dict):
+            row["location"] = {
+                k: (v[:ESPHOME_BUILDER_METADATA_MAX_CHARS] if isinstance(v, str) else v)
+                for k, v in location.items()
+                if k in _ESPHOME_LOCATION_KEYS and (isinstance(v, str) or (isinstance(v, int) and not isinstance(v, bool)))
+            }
+        for key in ("label", "error"):
+            if isinstance(item.get(key), str) and item[key]:
+                row[key] = item[key][:ESPHOME_BUILDER_METADATA_MAX_CHARS]
+        if item.get("unsupported") is True:
+            row["unsupported"] = True
+        first, last = item.get("from_line"), item.get("to_line")
+        if not (isinstance(first, int) and isinstance(last, int)
+                and not isinstance(first, bool) and not isinstance(last, bool)):
+            rows.append(row)
+            continue
+        row["from_line"], row["to_line"] = first, last
+        reported = item.get("raw_yaml")
+        try:
+            lines = raw.splitlines(keepends=True)
+            local = "".join(lines[first - 1:last]) if 1 <= first <= last <= len(lines) else None
+            if local is None or not isinstance(reported, str) or not _esphome_same_slice(local, reported):
+                row["yaml_withheld"] = "The file changed while it was being read; ask again."
+            elif not parse_failed:
+                masked = redact_esphome_slice(raw, secret_values, first, last)
+                if len(masked) > ESPHOME_AUTOMATION_YAML_MAX_CHARS:
+                    masked = masked[:ESPHOME_AUTOMATION_YAML_MAX_CHARS]
+                    row["yaml_truncated"] = True
+                row["yaml"] = masked
+        except yaml_includes.YamlParseError:
+            parse_failed = True
+        except ValueError:
+            row["yaml_withheld"] = "The file changed while it was being read; ask again."
+        rows.append(row)
+    if parse_failed:
+        for row in rows:
+            row.pop("yaml", None)
+            row.pop("yaml_truncated", None)
+        warnings.append("The file could not be parsed, so its credentials cannot be masked and no YAML is shown.")
+    return rows, warnings
+
+
+async def _esphome_existing_automations(
+    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, path: str, rel: str
+) -> tuple[dict, str, str]:
+    """get_esphome_automations with existing: the automations the file already defines."""
+    try:
+        raw, secret_values, values = await hass.async_add_executor_job(_esphome_read_with_secrets, hass, path)
+    except (OSError, ValueError):
+        return _tool_error("Failed to read the ESPHome configuration file."), "invalid_request", f"esphome:{rel}"
+    try:
+        # Exactly the filename, never the API's optional draft `yaml` body.
+        res = await async_builder_command(
+            hass, url, "automations/parse", {"configuration": rel},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderError as err:
+        return _builder_refusal(err, f"esphome:{rel}")
+    rows, warnings = await hass.async_add_executor_job(_esphome_automation_rows, raw, secret_values, res.result)
+    for row in rows:
+        for key in ("label", "error"):
+            if key in row:
+                row[key] = redact_diagnostics(redact_inaccessible_entity_ids_in_text(row[key], access_key, hass))
+    listed: list[dict] = []
+    size = 0
+    for row in rows:
+        size += len(json.dumps(row, default=str))
+        if size > ESPHOME_AUTOMATION_LIST_MAX_CHARS:
+            break
+        listed.append(row)
+    body: dict[str, Any] = {"file": rel, "count": len(rows), "automations": listed}
+    if len(listed) < len(rows):
+        body["not_listed"] = [row.get("label") or row.get("location") for row in rows[len(listed):]]
+        warnings.append("The result is full; read the rest of the file with get_esphome_yaml.")
+    if warnings:
+        body["warnings"] = warnings
+    rendered = json.dumps(body, default=str)
     return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
 
 
@@ -1196,6 +1636,32 @@ async def _tool_list_esphome_jobs(
     return _tool_success(json.dumps(_esphome_paged(rows, args, "jobs"))), "allowed", resource
 
 
+# ESPHome version strings as the add-on reports them (2026.10.1, 2026.11.0b2).
+_ESPHOME_VERSION_RE = re.compile(r"^[0-9][0-9A-Za-z.+\-]{0,31}$")
+
+
+def _esphome_device_firmware(device: dict, runtime: Any) -> dict:
+    """What a configured row says about its firmware: deployed, update, migration, armed.
+
+    deployed_version lives in the nested runtime_state on the WebSocket wire; the
+    flat field is read only as a fallback for an older add-on. The update rule is
+    the one HA's own ESPHome update entity applies: deployed against current.
+    """
+    state = runtime if isinstance(runtime, dict) else {}
+    out: dict[str, Any] = {}
+    deployed = state.get("deployed_version", device.get("deployed_version"))
+    if isinstance(deployed, str) and _ESPHOME_VERSION_RE.fullmatch(deployed):
+        out["deployed_version"] = deployed
+        current = device.get("current_version")
+        if isinstance(current, str) and _ESPHOME_VERSION_RE.fullmatch(current):
+            out["update_available"] = deployed != current
+    if isinstance(device.get("migration_available"), bool):
+        out["migration_available"] = device["migration_available"]
+    if state.get("queued_update") is True:
+        out["update_armed_for_next_boot"] = True
+    return out
+
+
 async def _tool_list_esphome_devices(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -1260,6 +1726,8 @@ async def _tool_list_esphome_devices(
                 if isinstance(value, str):
                     row[key] = redact_diagnostics(
                         redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
+            if kind == "configured":
+                row.update(_esphome_device_firmware(device, runtime))
             if query.casefold() not in json.dumps(row).casefold():
                 continue
             rows.append(row)
@@ -1391,15 +1859,27 @@ async def _esphome_job_precheck(
     return None, job
 
 
+class _EsphomeJobOutput(NamedTuple):
+    """A job's log as read back, plus what the read itself revealed."""
+
+    text: str
+    truncated: bool
+    # False when a finished job's log could not be replayed at all.
+    available: bool = True
+    # The follow's terminal frame says the update is armed for the next wake.
+    armed: bool = False
+
+
 async def _esphome_job_output(
     hass: HomeAssistant, url: str, job: dict, values: set[str]
-) -> tuple[str, bool]:
+) -> _EsphomeJobOutput:
     """The job's log, fetched whichever way this job's state stores it.
 
     A running job holds its output in memory and get_job returns it. A finished
     job does NOT: the add-on writes the log to a sidecar file and empties the
     record's own output list, so the only way back to it is to follow the
-    already-finished job, which replays the sidecar and closes immediately.
+    already-finished job, which replays the sidecar and closes immediately. That
+    replay ends on a frame carrying queued_update_armed, kept here.
     """
     if job.get("status") not in _ESPHOME_JOB_TERMINAL:
         # Through the same collector the streaming path uses, never a second
@@ -1409,7 +1889,7 @@ async def _esphome_job_output(
         text, truncated = collect_output_lines(
             job.get("output"), ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, head_ratio=0.0
         )
-        return scrub_secret_values(text, values), truncated
+        return _EsphomeJobOutput(scrub_secret_values(text, values), truncated)
 
     try:
         res = await async_builder_command(
@@ -1422,8 +1902,9 @@ async def _esphome_job_output(
         # The status is the answer the caller actually needs; a missing log is
         # worth degrading over rather than failing the whole poll.
         _LOGGER.debug("ESPHome job log replay failed", exc_info=True)
-        return "", False
-    return scrub_secret_values(res.output, values), res.output_truncated
+        return _EsphomeJobOutput("", False, available=False)
+    armed = isinstance(res.result, dict) and res.result.get("queued_update_armed") is True
+    return _EsphomeJobOutput(scrub_secret_values(res.output, values), res.output_truncated, armed=armed)
 
 
 async def _esphome_dependent_job(
@@ -1455,11 +1936,11 @@ async def _tool_compile_esphome_firmware(
 ) -> tuple[dict, str, str]:
     """MCP tool: start a firmware build for one device file.
 
-    Never approval-gated even when cap_esphome_yaml is set to confirm. Compiling
-    writes no file and touches no device: it is validate_esphome_yaml with a
-    longer runtime, and validate already runs the same config-time evaluation. So
-    it adds build time rather than authority, and gating it would put an admin
-    click in the middle of every iteration of an authoring loop.
+    Never approval-gated: cap_esphome_yaml offers only allow or deny. Compiling
+    writes no configuration file and touches no device: it is validate_esphome_yaml
+    with a longer runtime, and validate already runs the same config-time
+    evaluation. So it adds build time rather than authority, and gating it would put
+    an admin click in the middle of every iteration of a build loop.
     """
     if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "compile_esphome_firmware"
@@ -1508,8 +1989,8 @@ async def _tool_clean_esphome_build(
 ) -> tuple[dict, str, str]:
     """MCP tool: discard one configuration's build artifacts (a stale cache).
 
-    Never approval-gated, and cap-only for the same reason as compile: it writes
-    no configuration file and cannot reach a device. Wider than the add-on's
+    Never approval-gated (cap_esphome_yaml offers only allow or deny), for the same
+    reason as compile: it writes no configuration file and cannot reach a device. Wider than the add-on's
     docs suggest: it also drops the shared PlatformIO cache, so every device's
     next build is slower (the tool description says so). firmware/reset_build_env
     stays unreachable: it takes no configuration and CANCELS EVERY in-flight job.
@@ -1806,24 +2287,35 @@ async def _esphome_job_result(
     gave up waiting can say why and what to do next.
     """
     rel = job["configuration"]
-    path = os.path.join(hass.config.config_dir, _ESPHOME_DIR, rel)
-    values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
-    output, truncated = await _esphome_job_output(hass, url, job, values)
-
     status = job.get("status")
     finished = status in _ESPHOME_JOB_TERMINAL
+    if job.get("job_type") == "analyze_memory":
+        # The add-on keeps no memory analysis once it ends, and its report goes
+        # only to the follow attached by the call that started it. Replaying the
+        # log here would race the record's removal.
+        body_analysis = {"job_id": job.get("job_id"), "file": rel, "status": status,
+                         "finished": finished, "note": _ESPHOME_ANALYZE_JOB_NOTE}
+        return _tool_success(json.dumps(body_analysis, default=str)), "allowed", f"esphome:{rel}"
+    path = os.path.join(hass.config.config_dir, _ESPHOME_DIR, rel)
+    values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+    out = await _esphome_job_output(hass, url, job, values)
+
     body: dict[str, Any] = {
         "job_id": job.get("job_id"),
         "file": rel,
         "status": status,
         "finished": finished,
-        "output": output,
+        "output": out.text,
     }
-    if truncated:
+    if out.truncated:
         body["output_truncated"] = True
+    if not out.available:
+        body["output_available"] = False
     for key in ("progress", "exit_code"):
         if job.get(key) is not None:
             body[key] = job[key]
+    if isinstance(job.get("failure_reason"), str) and _ESPHOME_FAILURE_REASON_RE.fullmatch(job["failure_reason"]):
+        body["failure_reason"] = job["failure_reason"]
     # The add-on's own failure text, from the same process that wrote the log,
     # so it gets the same scrub.
     if isinstance(job.get("error"), str) and job["error"]:
@@ -1854,7 +2346,7 @@ async def _esphome_job_result(
         # only appears on a follow's terminal frame, never on a job record.
         armed = (
             (upload is None or upload_status == "cancelled")
-            and bool(job.get("is_deferred_install") or job.get("queued_update_armed"))
+            and bool(job.get("is_deferred_install") or job.get("queued_update_armed") or out.armed)
         ) or (upload is not None and upload_status == "failed"
               and bool(upload.get("is_deferred_install")))
         if armed:
@@ -1953,6 +2445,10 @@ async def _tool_wait_for_esphome_job(
     refusal, job = await _esphome_job_precheck(hass, access_key, url, args, "wait_for_esphome_job")
     if refusal is not None:
         return refusal
+    if job.get("job_type") == "analyze_memory":
+        # Nothing to wait for: the add-on drops the job and its report the moment
+        # it ends, so a wait would only ever end on a vanished record.
+        return await _esphome_job_result(hass, url, job)
 
     started = job
     rel = job["configuration"]
@@ -2186,3 +2682,399 @@ async def _tool_decode_esphome_backtrace(
         body["unavailable_reason"] = payload["unavailable_reason"]
     rendered = json.dumps(body, default=str)
     return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
+
+
+# The add-on's own failure classification ("" or "provision" in 1.25.0).
+_ESPHOME_FAILURE_REASON_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+
+
+_ESPHOME_ANALYZE_JOB_NOTE = (
+    "This is a memory analysis. The Device Builder does not keep it once it ends, "
+    "and its report goes only to the analyze_esphome_memory call that started it."
+)
+
+
+# Git commit ids, short or full.
+_ESPHOME_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+async def _esphome_history_precheck(
+    hass: HomeAssistant, access_key: AccessKeyRecord, args: dict, tool_name: str
+) -> tuple[tuple[dict, str, str] | None, str, str, bool]:
+    """Resolve and authorize a device file that may no longer exist.
+
+    The jail and name rules are the ones every ESPHome read uses; only existence
+    is not required, since history is how a deleted file is found again. Scope
+    follows device ownership by name, so a deleted file whose device is still
+    adopted keeps that device's scope, and a true orphan follows the capability.
+    """
+    located = await hass.async_add_executor_job(_locate_esphome_file, hass, args.get("file"))
+    if located is None:
+        return (_tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", tool_name), "", "", False
+    path, rel, is_file = located
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
+        return (_tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"), path, rel, is_file
+    return None, path, rel, is_file
+
+
+def _esphome_history_names(hass: HomeAssistant, names: list[Any]) -> list[str]:
+    """Builder-reported deleted names that pass the jail, as esphome-relative paths. Executor only."""
+    out = []
+    for name in names:
+        resolved = _resolve_esphome_path(hass, name)
+        if resolved is not None and resolved[1] not in out:
+            out.append(resolved[1])
+    return out
+
+
+def _esphome_mask_version(hass: HomeAssistant, text: str) -> tuple[str, list[str]]:
+    """Mask one historical version whole. Executor only; raises on oversize or unparseable text.
+
+    A scrub alone would not do: an old version can carry a credential that has
+    since been rotated out of secrets.yaml and every current file.
+    """
+    if len(text.encode("utf-8")) > MAX_FILE_BYTES:
+        raise ValueError("version too large")
+    secret_values, _keys = _read_esphome_secrets(hass)
+    return redact_esphome_text(text, set(secret_values or set()))
+
+
+def _esphome_mask_current(hass: HomeAssistant, path: str) -> str:
+    """The current file, masked; "" when it no longer exists. Executor only."""
+    if not os.path.isfile(path):
+        return ""
+    return _esphome_mask_version(hass, _read_text_capped(path))[0]
+
+
+async def _esphome_versions(hass: HomeAssistant, url: str, rel: str) -> list[dict] | None:
+    """The file's commits, newest first, or None when the Builder cannot be reached."""
+    try:
+        res = await async_builder_command(
+            hass, url, "version_history/list_versions", {"configuration": rel},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderCommandError:
+        return []
+    except BuilderError:
+        return None
+    return [c for c in res.result if isinstance(c, dict)] if isinstance(res.result, list) else []
+
+
+async def _esphome_version_text(hass: HomeAssistant, url: str, rel: str, sha: str) -> str | None:
+    """The file's raw text at one commit, or None when the file is absent there."""
+    try:
+        res = await async_builder_command(
+            hass, url, "version_history/get_version", {"configuration": rel, "sha": sha},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderCommandError:
+        return None
+    content = res.result.get("content") if isinstance(res.result, dict) else None
+    return content if isinstance(content, str) else None
+
+
+async def _tool_get_esphome_history(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """MCP tool: the Device Builder's version history of a device file, masked.
+
+    Lists deleted configurations, a file's versions, or one version as masked
+    content or a masked diff. Only read commands are used: no raw diff from the
+    add-on (its hunks cannot be span-masked) and no restore (a write). Every
+    version is masked whole and diffs are computed here from masked text.
+    """
+    resource = "get_esphome_history"
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    url = _esphome_builder_url(hass)
+    if url is None:
+        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
+
+    sha, compare_to, view = args.get("sha"), args.get("compare_to"), args.get("view", "diff")
+    if (any(v is not None and (not isinstance(v, str) or not _ESPHOME_SHA_RE.fullmatch(v))
+            for v in (sha, compare_to))
+            or view not in ("diff", "content")
+            or (sha is None and (compare_to is not None or "view" in args))
+            or (compare_to is not None and view != "diff")):
+        return (_tool_error("sha and compare_to are hex commit ids from this tool's version list; view "
+                            "(diff or content) and compare_to need sha, and compare_to needs view diff."),
+                "invalid_request", resource)
+
+    file_arg = args.get("file")
+    if file_arg is None or (isinstance(file_arg, str) and not file_arg.strip()):
+        if sha is not None:
+            return _tool_error("sha needs file."), "invalid_request", resource
+        return await _esphome_deleted_files(hass, access_key, url, args)
+
+    refusal, path, rel, exists = await _esphome_history_precheck(hass, access_key, args, resource)
+    if refusal is not None:
+        return refusal
+    versions = await _esphome_versions(hass, url, rel)
+    if versions is None:
+        return _tool_error(_ESPHOME_BUILDER_UNREACHABLE), "invalid_request", f"esphome:{rel}"
+    if not versions and not exists:
+        # Byte-identical to the out-of-scope refusal.
+        return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
+    values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+
+    if sha is None:
+        rows = []
+        for commit in versions:
+            full = commit.get("sha")
+            if not isinstance(full, str) or not _ESPHOME_SHA_RE.fullmatch(full):
+                continue
+            row: dict[str, Any] = {"sha": full, "short_sha": full[:7]}
+            if isinstance(commit.get("timestamp"), int) and not isinstance(commit.get("timestamp"), bool):
+                row["timestamp"] = commit["timestamp"]
+            if isinstance(commit.get("message"), str):
+                # The file's own name reads like an entity id (porch-light.yaml holds
+                # "light.yaml"), so it is kept whole and only the text around it is redacted.
+                parts = scrub_secret_values(commit["message"][:ESPHOME_BUILDER_METADATA_MAX_CHARS], values).split(rel)
+                row["message"] = rel.join(
+                    redact_diagnostics(redact_inaccessible_entity_ids_in_text(part, access_key, hass)) for part in parts)
+            # Whether the Builder made it; the author name itself is never returned.
+            row["origin"] = "device_builder" if commit.get("author") == ESPHOME_BUILDER_HISTORY_AUTHOR else "other"
+            rows.append(row)
+        body = _esphome_paged(rows, args, "versions")
+        body.update(file=rel, exists=exists)
+        if not rows:
+            body["note"] = ("No saved versions. The Device Builder's version history may be turned off, "
+                            "or the file has not changed since history began.")
+        return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
+
+    old = await _esphome_version_text(hass, url, rel, sha)
+    if old is None:
+        return (_tool_error("The file does not exist at that version, which may be the one that deleted "
+                            "it; read the version before it."), "not_found", f"esphome:{rel}")
+    try:
+        masked_old, paths = await hass.async_add_executor_job(_esphome_mask_version, hass, old)
+        if view == "content":
+            body = {"file": rel, "sha": sha, "content": masked_old, "redacted_paths": paths}
+            return _tool_success(scrub_secret_values(json.dumps(body, default=str), values)), "allowed", f"esphome:{rel}"
+        if compare_to is not None:
+            newer = await _esphome_version_text(hass, url, rel, compare_to)
+            if newer is None:
+                return (_tool_error("The file does not exist at the compare_to version."),
+                        "not_found", f"esphome:{rel}")
+            masked_new = (await hass.async_add_executor_job(_esphome_mask_version, hass, newer))[0]
+            label = f"{rel}@{compare_to[:7]}"
+        else:
+            masked_new = await hass.async_add_executor_job(_esphome_mask_current, hass, path)
+            label = f"{rel} (current)" if exists else f"{rel} (deleted)"
+    except (OSError, ValueError, yaml_includes.YamlParseError):
+        return (_tool_error("That version could not be parsed, so its credentials cannot be masked; "
+                            "it is not shown."), "invalid_request", f"esphome:{rel}")
+    diff, truncated = masked_unified_diff(masked_old, masked_new, f"{rel}@{sha[:7]}", label, ESPHOME_DIFF_MAX_CHARS)
+    body = {"file": rel, "sha": sha, "compared_to": compare_to or ("current" if exists else "deleted"),
+            "diff": diff}
+    if truncated:
+        body["diff_truncated"] = True
+    if not diff:
+        body["note"] = "No differences."
+    elif not exists and compare_to is None:
+        body["note"] = "The file no longer exists, so the diff shows the whole version as removed."
+    return _tool_success(scrub_secret_values(json.dumps(body, default=str), values)), "allowed", f"esphome:{rel}"
+
+
+async def _esphome_deleted_files(
+    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict
+) -> tuple[dict, str, str]:
+    """get_esphome_history without a file: deleted configurations this access key may see."""
+    resource = "get_esphome_history"
+    try:
+        res = await async_builder_command(
+            hass, url, "version_history/list_deleted", {},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderError as err:
+        return _builder_refusal(err, resource)
+    names = [r.get("configuration") for r in res.result if isinstance(r, dict)] if isinstance(res.result, list) else []
+    located = await hass.async_add_executor_job(_esphome_history_names, hass, names)
+    rows = [{"file": rel} for rel in sorted(located)
+            if _esphome_file_in_scope(hass, access_key, rel, write=False)]
+    return _tool_success(json.dumps(_esphome_paged(rows, args, "deleted"))), "allowed", resource
+
+
+_ESPHOME_TROUBLESHOOT_FLAGS = (
+    "icmp_available", "zeroconf_running", "dns_resolved", "dns_had_cached_failure",
+    "dns_inconclusive", "mdns_inconclusive", "mdns_has_cached_trace",
+    "mdns_has_live_anchor_ptr", "ping_attempted",
+)
+_ESPHOME_PING_SOURCES = frozenset({"", "dns", "mdns", "runtime", "persisted"})
+
+
+def _esphome_address_kind(address: Any) -> str:
+    """What sort of address the device is reached at, without the address itself."""
+    if not isinstance(address, str) or not address:
+        return "none"
+    try:
+        ipaddress.ip_address(address.split("%", 1)[0])
+    except ValueError:
+        return "mdns" if address.lower().endswith(".local") else "hostname"
+    return "ip"
+
+
+def _esphome_connectivity_projection(payload: dict) -> dict:
+    """Booleans, counts and the reply time from devices/troubleshoot; never an address.
+
+    An allowlist, so a field the add-on adds later stays out until it is reviewed.
+    """
+    body: dict[str, Any] = {}
+    for key in _ESPHOME_TROUBLESHOOT_FLAGS:
+        value = payload.get(key)
+        if isinstance(value, bool) or (key == "icmp_available" and value is None and key in payload):
+            body[key] = value
+    for key, field in (("dns_address_count", "dns_addresses"), ("mdns_address_count", "mdns_addresses")):
+        if isinstance(payload.get(field), list):
+            body[key] = len(payload[field])
+    source = payload.get("ping_target_source")
+    if source in _ESPHOME_PING_SOURCES:
+        body["ping_target_source"] = source or "none"
+    raw_rtt = payload.get("ping_rtt_ms")
+    rtt = float(raw_rtt) if isinstance(raw_rtt, (int, float)) and not isinstance(raw_rtt, bool) else None
+    replied = rtt is not None and math.isfinite(rtt)
+    if body.get("ping_attempted"):
+        body["ping_replied"] = replied
+        if rtt is not None and replied:
+            body["ping_rtt_ms"] = round(rtt, 1)
+    body["address_kind"] = _esphome_address_kind(payload.get("address"))
+    if replied and source != "persisted":
+        body["verdict"] = "reachable"
+    elif replied:
+        body["verdict"] = "answers_only_at_last_known_address"
+    elif body.get("dns_resolved") or body.get("mdns_address_count"):
+        body["verdict"] = "resolves_but_no_reply" if body.get("ping_attempted") else "resolves"
+    else:
+        body["verdict"] = "not_found_on_network"
+    return body
+
+
+async def _tool_check_esphome_connectivity(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, client_ip: str | None = None
+) -> tuple[dict, str, str]:
+    """MCP tool: ask the Device Builder whether it can find and reach one device.
+
+    Read scope, like device logs: it observes the device rather than acting on it.
+    It does refresh the Builder's own DNS cache and reachability verdict, which the
+    description says. The reply is a projection: the add-on's answer is full of LAN
+    addresses, which Phoenix MCP withholds from agents on every surface.
+    """
+    resource = "check_esphome_connectivity"
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    url = _esphome_builder_url(hass)
+    if url is None:
+        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
+    refusal, _path, rel = await _esphome_file_precheck(hass, access_key, args, resource)
+    if refusal is not None:
+        return refusal
+    timeout = (ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS
+               else ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS)
+    check_request_authority()
+    try:
+        res = await async_builder_command(
+            hass, url, "devices/troubleshoot", {"configuration": rel}, timeout_seconds=timeout,
+        )
+    except BuilderUnavailable:
+        return (_tool_error(f"The connectivity check did not finish within {timeout:.0f} s, or the Device "
+                            "Builder could not be reached. It does not change the device, so asking "
+                            "again is safe."), "invalid_request", f"esphome:{rel}")
+    except BuilderError as err:
+        return _builder_refusal(err, f"esphome:{rel}")
+    body = {"file": rel, **_esphome_connectivity_projection(res.result if isinstance(res.result, dict) else {})}
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
+
+
+async def _esphome_cancel_quietly(hass: HomeAssistant, url: str, job_id: str) -> None:
+    """Best-effort cancel of a job whose result can no longer be collected."""
+    try:
+        await async_builder_command(hass, url, "firmware/cancel", {"job_id": job_id},
+                                    timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
+    except BuilderError:
+        _LOGGER.debug("ESPHome analysis cancel failed", exc_info=True)
+
+
+async def _tool_analyze_esphome_memory(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, client_ip: str | None = None
+) -> tuple[dict, str, str]:
+    """MCP tool: build one device and report its flash and RAM use per component.
+
+    Synchronous, unlike compile: the add-on drops the job and its report the
+    moment it ends, so the report is collected by a follow attached here and
+    nowhere else. Write scope like compile (it builds for the device), never
+    approval-gated. It supersedes any queued or running job for the device, which
+    could be an install, so it refuses while one is in flight, and that check runs
+    last so the gap before the start is one round trip.
+    """
+    resource = "analyze_esphome_memory"
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS:
+        return (_tool_error("Memory analysis holds the request for a whole build, which this conversation "
+                            "surface cannot do. Run it from Agent Chat or an MCP client."),
+                "invalid_request", resource)
+    url = _esphome_builder_url(hass)
+    if url is None:
+        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, resource, write=True)
+    if refusal is not None:
+        return refusal
+    check_request_authority()
+    refusal, path, rel = await _esphome_file_precheck(hass, access_key, args, resource, write=True)
+    if refusal is not None:
+        return refusal
+    values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+    active = await _esphome_active_job(hass, url, rel)
+    if active is not None:
+        return (_tool_error(f"A firmware job for this file is {active.get('status')} (job_id "
+                            f"{active.get('job_id')}). Memory analysis would cancel it; wait for it with "
+                            "wait_for_esphome_job first."), "invalid_request", f"esphome:{rel}")
+    try:
+        start = await async_builder_command(
+            hass, url, "firmware/analyze_memory", {"configuration": rel},
+            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+        )
+    except BuilderError as err:
+        return _builder_refusal(err, f"esphome:{rel}")
+    job_id = start.result.get("job_id") if isinstance(start.result, dict) else None
+    if not isinstance(job_id, str) or not job_id:
+        return _tool_error("The ESPHome Device Builder did not return a job."), "invalid_request", f"esphome:{rel}"
+
+    _set_progress_status(f"Compiling {rel}", total=float(ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS),
+                         key="agentchat.progress.esphomeCompiling", params={"file": rel, "progress": ""})
+    try:
+        res = await async_builder_command(
+            hass, url, "firmware/follow_job", {"job_id": job_id},
+            timeout_seconds=ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS,
+            # The per-component summary prints first and the per-symbol detail runs on
+            # for tens of thousands of lines, so the head is kept and the tail trimmed.
+            collect_output=True, max_chars=ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS, head_ratio=0.75,
+        )
+    except BuilderCommandError:
+        return (_tool_error("The analysis ended before it could be followed, and the Device Builder keeps "
+                            "no report once it ends. Run it again."), "invalid_request", f"esphome:{rel}")
+    except BuilderUnavailable:
+        await _esphome_cancel_quietly(hass, url, job_id)
+        return (_tool_error(f"The analysis did not finish within {ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS} s "
+                            "and was cancelled, since its report cannot be collected later. Compile the "
+                            "device first so the analysis can reuse the build."), "invalid_request", f"esphome:{rel}")
+    except asyncio.CancelledError:
+        await asyncio.shield(_esphome_cancel_quietly(hass, url, job_id))
+        raise
+    finally:
+        _set_progress_status(None)
+
+    payload = res.result if isinstance(res.result, dict) else {}
+    status = payload.get("status")
+    body: dict[str, Any] = {"file": rel, "job_id": job_id, "status": status,
+                            "exit_code": res.exit_code, "report": scrub_secret_values(res.output, values)}
+    if res.output_truncated:
+        body["report_truncated"] = True
+    if isinstance(payload.get("error"), str) and payload["error"]:
+        body["error"] = scrub_secret_values(payload["error"], values)
+    if status == "cancelled":
+        body["note"] = ("Another build for this device started, and the Device Builder cancelled the "
+                        "analysis to run it.")
+    elif status == "failed":
+        body["note"] = "The analysis failed; the report holds ESPHome's output."
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
