@@ -3148,6 +3148,10 @@ class OpenAICompatProvider:
                 body["temperature"] = float(temp)
             except (TypeError, ValueError):
                 pass
+            # Mistral treats temperature 0 as greedy sampling and refuses it unless
+            # top_p is 1; the refusal names only top_p, so it cannot be learned.
+            if self._mistral_content and body.get("temperature") == 0:
+                body["top_p"] = 1
         show_thinking = bool(options.get("show_thinking"))
         try:
             for attempt in range(2):

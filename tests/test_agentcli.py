@@ -435,6 +435,26 @@ async def test_mistral_reasoning_is_preserved_when_verbose_output_is_hidden():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "model", "temperature", "top_p"), [
+    ("mistral", "mistral-small-latest", 0, 1), ("opencode", "mistral-large-4", 0, 1),
+    ("opencode", "mistral-large-4", 0.7, None), ("opencode", "glm-5.3", 0, None),
+])
+async def test_mistral_greedy_temperature_sends_top_p_one(kind, model, temperature, top_p):
+    """Mistral refuses temperature 0 unless top_p is 1, naming only top_p.
+
+    Phoenix cannot learn that refusal as a temperature one, so every Agent Chat
+    turn at temperature 0 on a Mistral model failed until the user changed it.
+    """
+    session = _FakeSession(_FakeResp(200, _sse("data: [DONE]")))
+    cfg = ProviderConfig(kind=kind, model=model, base_url="https://h", api_key="k")
+    await _collect(OpenAICompatProvider(cfg).stream_turn(
+        session, system_prompt="s", messages=[], tools=[], options={"temperature": temperature}))
+    sent = session.calls[0][1]["json"]
+    assert sent["temperature"] == temperature
+    assert sent.get("top_p") == top_p
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("model", "mistral_shape"), [("mistral-large-4", True), ("glm-5.3", False)])
 async def test_opencode_accepts_mistral_content_parts_only_for_mistral_models(model, mistral_shape):
     """OpenCode forwards a Mistral model's replies in Mistral's typed content shape.
