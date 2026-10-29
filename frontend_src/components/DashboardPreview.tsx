@@ -21,7 +21,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { currentHass } from "../api";
 import { copyToClipboard } from "../utils";
 import { loadLovelaceResources } from "../utils/card_harvest";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 
@@ -405,7 +405,7 @@ function CardErrorPanel({ errors }: { errors: { label: string; message: string }
   return (
     <div className="dash-preview-error-panel">
       <div className="dash-preview-error-top">
-        <p className="dash-preview-error-head">{t(errors.length === 1 ? "changes.previewErrorHead" : "changes.previewErrorHeadMany")}</p>
+        <p className="dash-preview-error-head">{tn("changes.previewErrorHead", errors.length)}</p>
         <button type="button" className="btn btn-icon conversation-copy" aria-label={t("changes.previewErrorCopy")} title={feedback || t("changes.previewErrorCopy")} onClick={async () => {
           setCopyState("");
           try { await copyToClipboard(text); setCopyState("copied"); }

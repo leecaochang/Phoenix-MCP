@@ -130,6 +130,12 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.caps.cap_service_response.description": ("conversation.process",),
     "panel.caps.cap_esphome_yaml.description": ("esphome/",),
     "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
+    # YAML tags and setup values the operator has to recognize or type exactly.
+    "panel.adminError.restoreYamlTags": ("!secret", "!include"),
+    "panel.adminError.providerOllamaUnreachable": ("Ollama", "OLLAMA_HOST=0.0.0.0", "11434", "localhost", "HA"),
+    "panel.adminError.providerOllamaCloudUnreachable": ("Ollama Cloud",),
+    "panel.adminError.providerFireworksInactive": ("Fireworks",),
+    "panel.adminError.providerQwenWrongEndpoint": ("Qwen", "404", "/apps/anthropic"),
     # These echo an API field name back at the caller; translating it would name
     # a field that does not exist in the request body.
     "panel.adminError.expiresImmutable": ("expires_at",),
@@ -148,6 +154,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # else that matches English exactly is almost certainly a copy that was never
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
+    "panel.settings.modelWithMode",   # "{model} ({mode})": placeholders and brackets only
     "panel.perms.colId",              # "ID"
     "panel.mesa.colId",               # "ID"
     "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
@@ -188,6 +195,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.changes.typeLabel",  # "Label", Home Assistant's Danish term
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         "panel.mesa.colTags",  # "Tags"
@@ -233,12 +241,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",  # "Persona"
         "panel.wizard.stepTest",  # "Test"
         "panel.accessKeys.cardPersona",  # "Persona"
-        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.workspace.horizontal",  # "Horizontal"
         "panel.changes.typeLabel",  # "Label"
@@ -305,6 +313,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.mesa.roleCondition",  # "condition", Home Assistant's French term
+        "panel.mesa.roleAction",  # "action", Home Assistant's French term
         "panel.caps.cap_notify.label",  # "Notifications"
         "panel.mesa.colSignal",  # "Signal"
         "panel.mesa.colSource",  # "Source"
@@ -333,6 +344,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.workspace.general",  # "General"
         "panel.workspace.horizontal",  # "Horizontal"
         "panel.workspace.vertical",  # "Vertical"
@@ -365,6 +377,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.changes.typeArea",  # "Area", Home Assistant's Italian term
+        "panel.agentchat.provider",  # "Provider", the Italian UI term
+        "panel.wizard.stepProvider",  # "Provider", the Italian UI term
         "panel.settings.colAccount",  # "Account"
         "panel.settings.colProvider",  # "Provider"
         "panel.settings.privacySection",  # "Privacy"
@@ -401,6 +416,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "ja": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -409,6 +425,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "ko": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -452,6 +469,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.mesa.roleTrigger",  # "trigger", Home Assistant's Dutch term
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.changes.colName",               # "Item", the Dutch loanword
         "panel.settings.colAccount",  # "Account"
@@ -508,16 +526,15 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",               # "Agent Chat", a product name
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
-        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
         "panel.accessKeys.secondsShort",           # "{n}s", the seconds unit is "s" in Dutch
         "panel.version.size.was",              # "{size} (was {before})", "was" is a cognate
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepProvider",           # "Provider"
         "panel.wizard.stepTest",               # "Test"
-        "voice.provider_error",                # "Sorry, {reason}.", "Sorry" is a cognate
     }),
     "pl": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -540,12 +557,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.themeAuto",            # "Auto"
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
-        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
     }),
     "ru": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -589,13 +606,13 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.agentcliRegionGlobal",  # "Global"
         "panel.wizard.agentTablist",  # "Agent"
         "panel.wizard.stepPersona",  # "Persona"
-        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "zh-Hans": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -604,6 +621,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "zh-Hant": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -619,6 +637,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
 # glue between fragments and losing it is a real defect.
 WHITESPACE_EXEMPT = frozenset({
     "panel.common.listSeparator",   # ", " becomes the ideographic comma
+    "panel.common.sentenceSeparator",   # " " disappears after a full-width full stop
     "panel.agentchat.approvalReason",  # leading " - " becomes a full-width comma
     # Appended after a sentence: English needs the separating space, Chinese
     # does not, because the preceding full stop is already full-width.
@@ -628,7 +647,11 @@ WHITESPACE_EXEMPT = frozenset({
 # The house style forbids these everywhere, catalog values included. The
 # ideographic characters that look similar in Chinese text are different code
 # points and are fine.
-FORBIDDEN = re.compile(r"[—–→]|[\U0001F300-\U0001FAFF☀-➿]")
+FORBIDDEN = re.compile(r"[—–→]|->|<-|=>|[\U0001F300-\U0001FAFF☀-➿]")
+
+# Korean separates sentences with a space after the full stop, as English does;
+# a full stop running straight into the next Hangul word is a joining defect.
+KOREAN_RUN_ON = re.compile(r"[.!?][\uac00-\ud7af]")
 
 TAG = re.compile(r"<(/?)(\w+)>")
 CODE_SPAN = re.compile(r"<code>(.*?)</code>", re.DOTALL)
@@ -944,6 +967,9 @@ def check(language: str) -> int:
                 " (forbidden dash, arrow, or emoji)"
             )
 
+        if language == "ko" and KOREAN_RUN_ON.search(value):
+            problems.append(f"{key}: a sentence runs into the next without a space")
+
         # An untranslated copy renders English inside a translated screen and is
         # invisible to every other check, since it is a perfectly valid string.
         if key not in allow_identical and value.strip() == source.strip() and any(
@@ -988,5 +1014,31 @@ def check(language: str) -> int:
     return 0
 
 
+def consistency_report(language: str) -> int:
+    """List English values that one locale translates in more than one way.
+
+    Advisory, never a failure: a different translation is sometimes right (a
+    plural filter beside a singular status, a noun beside a verb). The
+    terminology policy asks for one target term per concept, so review each
+    group and either align it or confirm the difference is deliberate.
+    """
+    en_flat = flatten(load("en"))
+    other = flatten(load(language))
+    groups: dict[str, dict[str, list[str]]] = {}
+    for key, source in en_flat.items():
+        value = other.get(key)
+        if value is not None and key not in KEEP_ENGLISH_KEYS:
+            groups.setdefault(source, {}).setdefault(value, []).append(key)
+    split = {source: variants for source, variants in groups.items() if len(variants) > 1}
+    for source, variants in sorted(split.items(), key=lambda item: (len(item[0]), item[0])):
+        print(f"{source!r}")
+        for value, keys in variants.items():
+            print(f"    {value!r}: {', '.join(keys)}")
+    print(f"\n{len(split)} English value(s) translated more than one way in {language}")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--consistency":
+        sys.exit(consistency_report(sys.argv[2]))
     sys.exit(check(sys.argv[1] if len(sys.argv) > 1 else "zh-Hans"))

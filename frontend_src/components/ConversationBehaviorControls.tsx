@@ -79,7 +79,7 @@ export function ConversationBehaviorControls({
           <span>{t("settings.detailLevel")}</span>
           <small>
             {t(DETAIL_HELP[detail])}
-            {aiTaskFreeTextOnly ? ` ${t("settings.aiTaskBehaviorFreeTextOnly")}` : ""}
+            {aiTaskFreeTextOnly ? `${t("common.sentenceSeparator")}${t("settings.aiTaskBehaviorFreeTextOnly")}` : ""}
           </small>
         </div>
         <BusySelect

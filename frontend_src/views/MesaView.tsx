@@ -214,6 +214,13 @@ const LEVEL_LABEL: Record<string, string> = {
   built_in_baseline: "mesa.levelBuiltInBaseline",
 };
 
+/** Where an entity appears in an automation, as mesa-core reports it. */
+const MESA_ROLE_KEYS: Readonly<Record<string, string>> = {
+  trigger: "mesa.roleTrigger",
+  condition: "mesa.roleCondition",
+  action: "mesa.roleAction",
+};
+
 function levelText(level: string): string {
   const key = LEVEL_LABEL[level];
   return key ? t(key) : level;
@@ -905,7 +912,7 @@ export function ProfileEditor({
                 <strong>{t("mesa.savedWithWarnings")}</strong>
                 <ul>
                   {warnings.map((w, i) => (
-                    <li key={i}>{t("mesa.warningRow", { recommendation: w.recommendation, automationId: w.automation_id, role: w.role })}</li>
+                    <li key={i}>{t("mesa.warningRow", { recommendation: w.recommendation, automationId: w.automation_id, role: MESA_ROLE_KEYS[w.role] ? t(MESA_ROLE_KEYS[w.role]) : w.role })}</li>
                   ))}
                 </ul>
                 <button className="btn btn-sm" onClick={() => { onSaved(); finish(); }}>{t("mesa.dismiss")}</button>
@@ -1166,7 +1173,7 @@ export function MesaImport({ onImported }: { onImported: () => void }) {
           </p>
           {invalidEntries.length > 0 && (
             <div className="banner banner-warn">
-              <strong>{t("mesa.importInvalid", { count: invalidEntries.length })}</strong>
+              <strong>{tn("mesa.importInvalid", invalidEntries.length)}</strong>
               <ul>
                 {invalidEntries.map(([key, msg]) => <li key={key}><code>{key}</code>: {msg}</li>)}
               </ul>

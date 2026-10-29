@@ -456,7 +456,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
       else await loadOthers(0);
       onCountChange?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : t("approvals.approveFailed"));
     } finally {
       setBatchBusy(false);
     }

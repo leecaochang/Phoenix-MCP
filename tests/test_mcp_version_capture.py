@@ -1086,9 +1086,9 @@ class TestVersionChangeSummary:
             {"cards": [{"type": "a"}, {"type": "x"}]},
             {"sections": [{"cards": [{"type": "b"}, {"type": "c"}]}]},
         ]}
-        assert _summary_text(_version_change_summary("dashboard", before, after)) == "4 cards (was 3)"
+        assert _summary_text(_version_change_summary("dashboard", before, after)) == "cards: 4 (was 3)"
         assert _version_change_summary("dashboard", before, after)["summary_key"] == "version.cards.was"
-        assert _summary_text(_version_change_summary("dashboard", after, after)) == "4 cards"
+        assert _summary_text(_version_change_summary("dashboard", after, after)) == "cards: 4"
         assert _version_change_summary("dashboard", None, {"strategy": {}}) is None
 
     def test_raw_content_size_movement(self):

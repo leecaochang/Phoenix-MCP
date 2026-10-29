@@ -72,11 +72,11 @@ export function ariaText([key, params]: AriaName): string {
 
 /** What Find Setting lists for an entry: the setting, then where it lives. */
 export function entryLabel(entry: SettingEntry): string {
-  return entry.aria && entry.aria[0] === entry.labelKey ? ariaText(entry.aria) : t(entry.labelKey).replace(/:$/, "");
+  return entry.aria && entry.aria[0] === entry.labelKey ? ariaText(entry.aria) : t(entry.labelKey).replace(/[:：]\s*$/, "");
 }
 export function entryPlace(entry: SettingEntry): string {
   const window = t(SETTINGS_WINDOW_TITLE_KEYS[entry.window]);
-  return entry.tab ? `${window}, ${t(HOME_TAB_LABEL_KEYS[entry.tab])}` : window;
+  return entry.tab ? [window, t(HOME_TAB_LABEL_KEYS[entry.tab])].join(t("common.listSeparator")) : window;
 }
 
 /** The control an entry points at, inside its window's content; null while it is not drawn yet. */

@@ -319,3 +319,21 @@ def test_whitespace_manifest_must_remain_used(
     code, out = run(checker, capsys)
     assert code == 1
     assert "WHITESPACE_EXEMPT panel.prefix is no longer used" in out
+
+
+def test_ascii_arrow_is_rejected(checker, catalogs, capsys):
+    """The house style forbids arrows, the ASCII spelling included."""
+    catalogs({"diff": "Pass-through: {from}, now {to}"}, {"diff": "Durchleitung: {from} -> {to}"})
+    code, out = run(checker, capsys)
+    assert code == 1
+    assert "forbidden dash, arrow, or emoji" in out
+
+
+def test_korean_sentences_need_a_space_after_the_full_stop(checker, catalogs, capsys, tmp_path):
+    catalogs({}, {})
+    (tmp_path / "en.json").write_text(json.dumps({"panel": {"m": "It failed. Nothing ran."}}), encoding="utf-8")
+    (tmp_path / "ko.json").write_text(json.dumps({"panel": {"m": "실패했습니다.아무것도 실행되지 않았습니다."}}), encoding="utf-8")
+    assert checker.check("ko") == 1
+    assert "runs into the next" in capsys.readouterr().out
+    (tmp_path / "ko.json").write_text(json.dumps({"panel": {"m": "실패했습니다. 아무것도 실행되지 않았습니다."}}), encoding="utf-8")
+    assert checker.check("ko") == 0

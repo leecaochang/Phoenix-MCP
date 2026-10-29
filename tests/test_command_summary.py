@@ -79,7 +79,7 @@ async def test_real_local_count_and_dispatch(hass, summary_home):
     with patch('custom_components.phoenix_mcp.agentcli.build_provider') as provider:
         reply=await async_execute_chat_command(hass,data,access_key,result['proposal'],RoutingAuthority.capture(data,access_key),'http://test','test',asyncio.Event())
     assert reply.allows_local_followup
-    assert '1 of 3' in reply.text and '1 have unknown' in reply.text
+    assert '1 of 3' in reply.text and 'Unknown or unavailable: 1' in reply.text
     provider.assert_not_called()
     assert [hass.states.get(eid).state for eid in ids]==['on','off','unavailable']
 
@@ -124,7 +124,7 @@ async def test_zero_and_incomplete_results(hass,summary_home):
     p['summary_mode']='breakdown'
     assert 'off: 3' in summary_text(p,rows,'en')
     p['summary_mode']='total'
-    assert '3 entities' in summary_text(p,rows,'en')
+    assert 'I can access: 3.' in summary_text(p,rows,'en')
 
 
 async def test_scope_denial_does_not_disclose_count(hass,summary_home):
@@ -185,7 +185,7 @@ async def test_unknown_members_stay_in_denominator_and_state_changes_remain_fres
     hass.states.async_set(ids[0],'unknown',{'friendly_name':'one'})
     assert plan_is_current(plan,hass,data,access_key)
     reply=await async_execute_chat_command(hass,data,access_key,p,RoutingAuthority.capture(data,access_key),'http://test','test',asyncio.Event())
-    assert '0 of 3' in reply.text and '2 have unknown' in reply.text
+    assert '0 of 3' in reply.text and 'Unknown or unavailable: 2' in reply.text
 
 
 async def test_context_review_contains_complete_summary_candidate(hass,summary_home):

@@ -9,7 +9,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { api, setHass } from "../api";
-import { loadTranslations, resolveLanguage, syncTranslations } from "../i18n";
+import { loadTranslations, registerLanguageRoot, resolveLanguage, syncTranslations } from "../i18n";
 import { AgentCliWindow, focusAgentCliPopup } from "../components/AgentCliWindow";
 import type { AgentCliInstance, AccessKeyRecord } from "../types";
 import { JS_BUILD } from "../version";
@@ -298,6 +298,7 @@ export function showAgentChat(accessKeyId?: string): void {
   const mount = document.createElement("div");
   mount.style.pointerEvents = "none";
   shadow.appendChild(mount);
+  registerLanguageRoot(mount);
   document.body.appendChild(host);
   root = createRoot(mount);
   paintAgentChat();

@@ -109,6 +109,11 @@ class TestAddDashboardCard:
         # The full-layout snapshot cannot say which card moved, so the record's
         # summary carries the op context for the Changes list.
         assert hist[0].summary == f"added {NEW_CARD['type']} (view 0)"
+        # The panel rebuilds that location in the reader's language from these,
+        # rather than showing the English "view 0".
+        assert hist[0].summary_params["view_index"] == 0
+        assert hist[0].summary_params["card_type"] == NEW_CARD["type"]
+        assert "card_index" not in hist[0].summary_params
 
     async def test_position_inserts(self, hass, lovelace_env):
         h, _light = lovelace_env

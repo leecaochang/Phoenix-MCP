@@ -70,7 +70,8 @@ describe("HA date and time preferences", () => {
     expect(getFormatLocale()).toBe("en-US");
     expect(localeClock(ISO)).toMatch(/^\d{2}:\d{2}$/);
     for (const format of [localeDate, localeDateTime, localeDateTimeShort, localeClock]) {
-      expect(format("not a date")).toBe("Invalid Date");
+      // The raw value, not an English sentinel, in a translated panel.
+      expect(format("not a date")).toBe("not a date");
     }
   });
 

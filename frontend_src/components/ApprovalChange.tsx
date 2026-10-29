@@ -11,6 +11,7 @@ import { BeforeAfter, RemovedPane } from "./DiffView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, useHuiCardReady, wrapCardPreviewConfig } from "./DashboardPreview";
 import { YamlView, toYaml } from "./YamlView";
 import { diffSummary } from "../utils/approval_text";
+import { ENERGY_SOURCE_LABEL_KEYS } from "../utils/approval_summary";
 import { t } from "../i18n";
 
 const CARD_OP_TOOLS = new Set(["add_dashboard_card", "edit_dashboard_card", "delete_dashboard_card"]);
@@ -209,14 +210,6 @@ type EnergyRows = { sources?: EnergySourceRow[]; devices?: EnergyDeviceRow[] };
 
 // A raw slug interpolated into the UI stays English in every locale, so the type
 // resolves through the catalog like every other server-side enum in this panel.
-const ENERGY_SOURCE_LABEL_KEYS: Record<string, string> = {
-  grid: "approvals.energyGrid",
-  solar: "approvals.energySolar",
-  battery: "approvals.energyBattery",
-  gas: "approvals.energyGas",
-  water: "approvals.energyWater",
-};
-
 type EnergyRow = { key: string; state: "added" | "removed" | "changed" | "same"; title: string; line: string };
 
 /** Pair before/after rows into one ordered, diffed list.

@@ -1325,17 +1325,27 @@ async def _execute_dashboard_card(
     raw_card = args.get("card")
     # None, not {}: a delete op has no card, and the diff must show no `after`.
     card = raw_card if isinstance(raw_card, dict) else None
-    subject = (card or prior or {}).get("type") or "card"
+    card_type = (card or prior or {}).get("type")
+    subject = card_type or "card"
+    # The English `where` and `subject` are the stored record. The indices and
+    # card type travel as their own params so the panel can rebuild the location
+    # from the translated loc.* parts instead of showing this English.
+    location: dict[str, Any] = {"view_index": args.get("view_index")}
     parts = [_version_summary("loc.view", index=args.get("view_index"))["summary"]]
     if args.get("section_index") is not None:
+        location["section_index"] = args.get("section_index")
         parts.append(_version_summary("loc.section", index=args.get("section_index"))["summary"])
     if op != "add":
+        location["card_index"] = args.get("card_index")
         parts.append(_version_summary("loc.card", index=args.get("card_index"))["summary"])
+    if isinstance(card_type, str) and card_type:
+        location["card_type"] = card_type
     await _record_version(
         data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit", before=current, after=new_config, alias=url_path or "(default)",
         summary=_version_summary(
             _CARD_OP_VERSION_KEYS[op], subject=subject, where=", ".join(str(x) for x in parts),
+            **location,
         ),
     )
     body: dict[str, Any] = {

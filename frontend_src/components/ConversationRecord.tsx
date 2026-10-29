@@ -9,8 +9,9 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
 import type { ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
-import { hasMessage, t } from "../i18n";
+import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
+import { chatNoticeText } from "../utils/chat_notice";
 import { Icon, type IconName } from "../ui/Icon";
 
 const LABEL_KEYS: Record<string, Record<string, string>> = {
@@ -83,6 +84,17 @@ export function label(group: string, value: string): string {
   return hasMessage(key) ? t(key) : t("conversations.unknown");
 }
 
+/**
+ * A stored error event in the reader's language. Agent Chat errors keep the
+ * code and params they were streamed with; a rejected tool call's reason is an
+ * agent-facing validation message, so Summary says what happened and Details
+ * keeps the reason itself.
+ */
+function storedErrorText(payload: Record<string, unknown>): string {
+  if (payload.code === "tool_call_rejected") return t("conversations.toolCallRejected");
+  return chatNoticeText(payload.code, String(payload.message ?? ""), payload.message_params);
+}
+
 function raw(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
@@ -93,7 +105,7 @@ function TextEvidence({ value, code = false }: { value: unknown; code?: boolean 
   const feedback = copyState ? t(copyState === "copied" ? "conversations.copied" : "conversations.copyFailed") : "";
   const body = code ? <pre>{text}</pre> : <div className="conversation-prose">{text}</div>;
   return <div className="conversation-evidence">
-    <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary>{t("conversations.fullText", { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
+    <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary>{tn("conversations.fullText", text.length, { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
     <button type="button" className="btn btn-icon conversation-copy" aria-label={t("conversations.copy")} title={feedback || t("conversations.copy")} onClick={async () => {
       setCopyState("");
       try { await copyToClipboard(text); setCopyState("copied"); }
@@ -239,7 +251,7 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
     {responseStatus && <p className="conversation-secondary">{label("responseStatus", responseStatus)}</p>}
     {event.omission && <p className="conversation-secondary">{label("omission", event.omission)}</p>}
     {outcome && <p className={`conversation-outcome conversation-signal-${signal}`}>{event.kind === "routing" && ["provider", "decision_provider"].includes(String(payload?.route)) && outcome === "completed" ? t("conversations.routing.requestCompleted") : label("outcome", outcome)}</p>}
-    {event.kind === "error" && typeof payload?.message === "string" && <div className="conversation-prose conversation-error-message">{payload.message}</div>}
+    {event.kind === "error" && typeof payload?.message === "string" && <div className="conversation-prose conversation-error-message">{storedErrorText(payload)}</div>}
     {event.kind === "error" && typeof payload?.provider_detail === "string" && payload.provider_detail
       && <div className="conversation-prose conversation-error-message">{t("agentchat.providerDetail", { detail: payload.provider_detail })}</div>}
     {event.payload !== null && event.payload !== undefined
@@ -327,7 +339,7 @@ export function EntryDetail({ id, revision, accessKeyNames }: { id: string; revi
       {entry.events.length ? <ol className="conversation-timeline">{timeline(entry.events).map(item => <TimelineRow key={item.index} item={item} finalIndex={finalTextIndex} running={entry.status === "running"} responseStatus={entry.response_status} />)}</ol>
         : <p className="conversation-secondary">{t("conversations.noActivity")}</p>}
     </section>
-    {!!entry.omitted_events && <p className="banner banner-warning">{t("conversations.omittedEvents", { count: localeNumber(entry.omitted_events) })}</p>}
+    {!!entry.omitted_events && <p className="banner banner-warning">{tn("conversations.omittedEvents", entry.omitted_events, { count: localeNumber(entry.omitted_events) })}</p>}
     {finalTextIndex < 0 && <section aria-label={t("conversations.response")}>
       <h3><SignalIcon name="outgoing" signal={outcomeSignal(entry.response_status)} />{t("conversations.response")}</h3>
       <p className={`conversation-response-status conversation-signal-${outcomeSignal(entry.response_status)}`}><SignalIcon name={outcomeIcon(entry.response_status)} signal={outcomeSignal(entry.response_status)} />{label("responseStatus", entry.response_status)}</p>

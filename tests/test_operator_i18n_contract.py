@@ -75,15 +75,10 @@ def test_every_admin_error_is_keyed_or_explicit_upstream_passthrough() -> None:
                 continue
 
             key = _literal_string(kwargs["key"])
-            # The only dynamic key is a ProbeConfigError instance. Its
-            # constructors are checked separately below.
+            # The only dynamic keys are a ProbeConfigError or LocalizedReason
+            # instance's. Their constructors are checked separately below.
             if key is None:
-                if not (
-                    isinstance(kwargs["key"], ast.Attribute)
-                    and isinstance(kwargs["key"].value, ast.Name)
-                    and kwargs["key"].value.id == "probe"
-                    and kwargs["key"].attr == "key"
-                ):
+                if not _is_checked_dynamic_key(kwargs["key"]):
                     findings.append(f"{path.name}:{call.lineno} has an uncheckable dynamic key")
                 continue
             for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
@@ -91,6 +86,41 @@ def test_every_admin_error_is_keyed_or_explicit_upstream_passthrough() -> None:
                     findings.append(f"{path.name}:{call.lineno} adminError.{key} missing from {catalog_path.name}")
 
     assert findings == []
+
+
+def _is_checked_dynamic_key(node: ast.AST | None) -> bool:
+    """`probe.key` or `reason.key`: keys whose constructors this file checks."""
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in {"probe", "reason"}
+        and node.attr == "key"
+    )
+
+
+def test_localized_reasons_have_catalog_keys() -> None:
+    """Every LocalizedReason names an adminError key present in every catalog."""
+    catalogs = [_panel_catalog(path)["adminError"] for path in CATALOG_FILES]
+    found = 0
+    for path in sorted((ROOT / "custom_components/phoenix_mcp").glob("*.py")):
+        for call in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                    and call.func.id == "LocalizedReason"):
+                continue
+            key_node = call.args[1] if len(call.args) > 1 else None
+            if path.name == "decision_provider.py" and isinstance(key_node, ast.Name):
+                continue  # decision_error_reason's table, checked in full below
+            key = _literal_string(key_node)
+            assert key is not None, f"{path.name}:{call.lineno} LocalizedReason key must be literal"
+            found += 1
+            for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
+                assert key in catalog, f"{path.name}:{call.lineno} adminError.{key} missing from {catalog_path.name}"
+    # Not vacuous: provider checks and decision provider reasons use it.
+    assert found >= 10
+    from custom_components.phoenix_mcp.decision_provider import _DECISION_ERROR_REASONS
+    for _text, key in _DECISION_ERROR_REASONS.values():
+        for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
+            assert key in catalog, f"decision reason adminError.{key} missing from {catalog_path.name}"
 
 
 def test_probe_config_errors_have_catalog_keys() -> None:
@@ -105,7 +135,10 @@ def test_probe_config_errors_have_catalog_keys() -> None:
             and call.func.id == "ProbeConfigError"
         ):
             continue
-        key = _literal_string(call.args[1] if len(call.args) > 1 else None)
+        key_node = call.args[1] if len(call.args) > 1 else None
+        if _is_checked_dynamic_key(key_node):
+            continue
+        key = _literal_string(key_node)
         assert key is not None, f"agentcli.py:{call.lineno} ProbeConfigError key must be literal"
         keys.append((call.lineno, key))
 

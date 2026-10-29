@@ -49,12 +49,11 @@
       "daysAgo": "{d} pv sitten",
       "delete": "Poista",
       "deletePermanently": "Poista pysyvästi",
-      "diffAnnounceAll": "Ilmoita kaikki työkalut: {from} -> {to}",
-      "diffAssistExposure": "Assist-näkyvyyssuodatin: {from} -> {to}",
-      "diffInlineWait": "Hyväksyntäodotus: {from} -> {to}",
-      "diffPassThrough": "Läpivienti: {from} -> {to}",
-      "diffPermissionTree": "Käyttöoikeuspuu: eroavia solmuja {count}",
-      "diffRateLimit": "Pyyntöraja: {fromRequests}/min purske {fromBurst} -> {toRequests}/min purske {toBurst}",
+      "diffAnnounceAll": "Ilmoita kaikki työkalut: {from}, nyt {to}",
+      "diffAssistExposure": "Assist-näkyvyyssuodatin: {from}, nyt {to}",
+      "diffInlineWait": "Hyväksyntäodotus: {from}, nyt {to}",
+      "diffPassThrough": "Läpivienti: {from}, nyt {to}",
+      "diffRateLimit": "Pyyntöraja: {fromRequests}/min purske {fromBurst}, nyt {toRequests}/min purske {toBurst}",
       "done": "Valmis",
       "empty": "Ei vielä käyttöavaimia. Aloita luomalla yksi.",
       "emptyFiltered": "Mikään käyttöavain ei vastaa suodatinta.",
@@ -170,13 +169,20 @@
       "switchToScoped": "Vaihda rajattuun tilaan",
       "updateFailed": "Käyttöavaimen päivitys epäonnistui.",
       "waitBeforeClose": "Odota 3 sekuntia ennen sulkemista",
-      "notesCount": "{count} / {max} merkkiä",
       "notesDiscard": "Kumoa muutokset",
       "notesLabel": "Muistiinpanot agenteille",
       "notesPlaceholder": "Esimerkki: Vierashuonetta kutsutaan työhuoneeksi. Kysy ennen kuin muutat mitään lastenhuoneessa.",
       "notesTooLong": "Muistiinpanot saavat olla enintään {max} merkkiä.",
       "cardGuidance": "Ohjeet",
-      "cardAgentBehavior": "Agentin toiminta"
+      "cardAgentBehavior": "Agentin toiminta",
+      "diffPermissionTree": {
+        "one": "Käyttöoikeuspuu: {count} solmu eroaa",
+        "other": "Käyttöoikeuspuu: {count} solmua eroaa"
+      },
+      "notesCount": {
+        "one": "{count} / {max} merkkiä",
+        "other": "{count} / {max} merkkiä"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} on oltava käyttöavaimen tunnus merkkijonona tai null.",
@@ -332,7 +338,24 @@
       "attachmentDimensions": "Liitetty kuva on jollakin sivulla suurempi kuin {max} pikseliä.",
       "attachmentsContinue": "Kuvia voi liittää vain uuteen viestiin.",
       "attachmentsCompanion": "Home Companion ottaa vastaan vain tekstikomentoja, joten kuvia ei voi liittää.",
-      "attachmentsVisionUnsupported": "Tämä malli ei hyväksy kuvia."
+      "attachmentsVisionUnsupported": "Tämä malli ei hyväksy kuvia.",
+      "providerKeyRejected": "API-avain hylättiin.",
+      "providerHttpStatus": "Palveluntarjoaja palautti HTTP-tilakoodin {status}.",
+      "providerNamedHttpStatus": "{provider} palautti HTTP-tilakoodin {status}.",
+      "providerSettingsInvalid": "Palveluntarjoajan yhteysasetukset ovat virheelliset.",
+      "providerUnreachable": "Palveluntarjoajaan ei saatu yhteyttä: {detail}",
+      "providerOllamaUnreachable": "Ollamaan ei saatu yhteyttä osoitteessa {url}.\n({detail})\n\nPhoenix MCP muodostaa yhteyden Home Assistant -palvelimelta, ei selaimestasi, joten Ollaman on oltava tavoitettavissa kyseiseltä isännältä:\n- Ollama on käynnissä ja sidottu tavoitettavaan verkkoliitäntään (OLLAMA_HOST=0.0.0.0).\n- Palomuuri sallii Ollaman portin (oletus 11434).\n- 'localhost' tarkoittaa tässä HA-palvelinta, ei tietokonettasi.",
+      "providerOllamaCloudUnreachable": "Ollama Cloudiin ei saatu yhteyttä osoitteessa {url}. ({detail})",
+      "providerFireworksInactive": "Fireworks ilmoittaa, että tämä tili ei ole aktiivinen API-päättelyä varten. Tarkista tilin tila ja varmista, että laskutus tai ilmaisen kokeilujakson krediitit on aktivoitu.",
+      "providerQwenWrongEndpoint": "Qwen palautti HTTP-tilakoodin 404. Phoenix käyttää OpenAI-yhteensopivaa Chat Completions -päätepistettä; anna sen perus-URL, ei Anthropic-yhteensopivaa URL-osoitetta /apps/anthropic.",
+      "decisionProviderRateLimited": "Päätöstarjoaja rajoittaa pyyntöjä. Yritä myöhemmin uudelleen.",
+      "decisionProviderTimeout": "Päätöstarjoaja ei vastannut ajoissa.",
+      "decisionProviderUnreachable": "Päätöstarjoajaan ei saatu yhteyttä.",
+      "decisionProviderUnreadable": "Päätöstarjoaja palautti vastauksen, jota Phoenix ei pystynyt lukemaan.",
+      "decisionProviderCheckFailed": "Päätöstarjoajan tarkistus epäonnistui ({detail}).",
+      "restoreNoConfigSide": "Tässä versiossa ei ole kyseisellä puolella kokoonpanoa, jonka voisi palauttaa.",
+      "restoreYamlTags": "Tämä versio sisältää YAML-tageja, kuten !secret tai !include, eikä sitä voi palauttaa automaattisesti. Luo se uudelleen käsin.",
+      "restoreToolReported": "Palautusta ei voitu toteuttaa. Työkalu ilmoitti: {detail}"
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -420,7 +443,6 @@
         "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä."
       },
       "options": "Asetukset",
-      "pausedAfter": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?",
       "popIn": "Palauta takaisin Home Assistantiin",
       "popOut": "Avaa erillisessä ikkunassa",
       "popOutBlocked": "Selaimesi esti ponnahdusikkunan. Salli ponnahdusikkunat Home Assistantille ja yritä uudelleen.",
@@ -489,7 +511,11 @@
       "verbose": "Näytä yksityiskohtainen tuloste",
       "verboseHint": "Näytä agentin työkalukutsut, työkalutulokset ja miettiminen. Pois päältä näytetään vain lopullinen vastaus.",
       "workingOn": "Työn alla: {name}",
-      "workingSpinner": "Työskennellään…"
+      "workingSpinner": "Työskennellään…",
+      "pausedAfter": {
+        "one": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?",
+        "other": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko tutkimista?"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",
@@ -497,12 +523,12 @@
       "blueprint.create.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön.",
       "blueprint.create.title": "Luo {domain}-mallipohja '{rel}'",
       "blueprint.delete.body": "Tämä poistaa pysyvästi {domain}-mallipohjan {rel}.",
-      "blueprint.delete.consumers.body": "Tämä poistaa pysyvästi kohteen {rel}, vaikka {count} automaatiota tai skriptiä käyttää sitä edelleen.",
-      "blueprint.delete.consumers.title": "Poista {domain}-mallipohja '{rel}' ({count} käyttää sitä edelleen)",
+      "blueprint.delete.consumers.body": "Tämä poistaa pysyvästi kohteen {rel}. Sitä edelleen käyttävät automaatiot ja skriptit: {count}.",
+      "blueprint.delete.consumers.title": "Poista {domain}-mallipohja '{rel}' (edelleen käytössä: {count})",
       "blueprint.delete.title": "Poista {domain}-mallipohja '{rel}'",
       "blueprint.edit.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön.",
       "blueprint.edit.consumers.body": "Tämä ottaa ehdotetun kokoonpanomuutoksen käyttöön.",
-      "blueprint.edit.consumers.title": "Korvaa {domain}-mallipohja '{rel}' ({count} ladataan uudelleen)",
+      "blueprint.edit.consumers.title": "Korvaa {domain}-mallipohja '{rel}' (ladataan uudelleen: {count})",
       "blueprint.edit.title": "Korvaa {domain}-mallipohja '{rel}'",
       "call_service.body": "Tämä suorittaa ehdotetun Home Assistant -palvelutoiminnon.",
       "call_service.mesa.body": "Tämä suorittaa ehdotetun Home Assistant -palvelutoiminnon.",
@@ -712,12 +738,8 @@
       "update_calendar_event.body": "Tämä ottaa ehdotetun toiminnon käyttöön.",
       "update_calendar_event.title": "Päivitä kalenteritapahtuma",
       "zigbee_binding.body": "Tämä muuttaa suoraa ohjausta kahden Zigbee-laitteen välillä. Avaa Yksityiskohdat ja tarkista molemmat laitteet ja valitut klusterit.",
-      "zigbee_binding.devices.body": "Tämä {operation} suoraa Zigbee-ohjausta laitteesta {source} laitteeseen {target}. Avaa Yksityiskohdat ja tarkista täsmällinen suhde.",
-      "zigbee_binding.devices.title": "{operation} Zigbee-sidonta laitteesta {source} laitteeseen {target}",
       "zigbee_binding.title": "Muuta Zigbee-laitteen sidontaa",
       "zigbee_group.body": "Tämä muuttaa sitä, mitä laitteita ohjataan yhdessä Zigbee-ryhmänä. Avaa Yksityiskohdat ja tarkista jäsenyys.",
-      "zigbee_group.named.body": "Tämä {operation} Zigbee-ryhmän {name}. Avaa Yksityiskohdat ja tarkista täsmällinen jäsenyysmuutos.",
-      "zigbee_group.named.title": "{operation} Zigbee-ryhmä {name}",
       "zigbee_group.title": "Muuta Zigbee-ryhmää",
       "zigbee_options.body": "Tämä muuttaa Zigbee2MQTT-laitteen asetuksia. Avaa Yksityiskohdat ja tarkista ehdotetut arvot.",
       "zigbee_options.device.body": "Tämä muuttaa Zigbee2MQTT-laitteen asetuksia kohteelle {label}. Avaa Yksityiskohdat ja tarkista ehdotetut arvot.",
@@ -754,7 +776,33 @@
       "dashboard_resource.delete.title": "Poista kojelaudan resurssi {url}",
       "dashboard_resource.create.body": "Jokainen selain, joka avaa kojelaudan, lataa tiedoston {url}. JavaScript-tiedosto suoritetaan kyseisen henkilön Home Assistant -käyttöoikeuksilla, joten hyväksy vain tiedosto, johon luotat.",
       "dashboard_resource.update.body": "Tämä muuttaa tiedostoa, jonka jokainen selain lataa avatessaan kojelaudan. Avaa Yksityiskohdat ja vertaa nykyistä ja ehdotettua tiedostoa.",
-      "dashboard_resource.delete.body": "Kojelaudat lakkaavat lataamasta tiedostoa {url}. Siitä peräisin olevat kortit näyttävät virheen, kunnes se lisätään takaisin."
+      "dashboard_resource.delete.body": "Kojelaudat lakkaavat lataamasta tiedostoa {url}. Siitä peräisin olevat kortit näyttävät virheen, kunnes se lisätään takaisin.",
+      "edit_energy_config.fallback.body": "Tämä päivittää Home Assistantin kojelaudan kokoonpanon.",
+      "edit_energy_config.fallback.title": "Muuta energiakojelaudan kokoonpanoa",
+      "restore.blueprint.body": "Tämä palauttaa mallipohjan lähdekoodin valitusta muutoksesta. Avaa Yksityiskohdat ja vertaa sitä nykyiseen lähdekoodiin.",
+      "restore.blueprint.title": "Palauta mallipohjan lähdekoodi '{label}'",
+      "restore.dashboard_layout.body": "Tämä palauttaa kojelaudan asettelun valitusta muutoksesta. Avaa Yksityiskohdat ja vertaa sitä nykyiseen asetteluun.",
+      "restore.dashboard_layout.title": "Palauta kojelaudan '{label}' asettelu",
+      "restore.dashboard_registry.body": "Tämä palauttaa kojelaudan rekisteriasetukset valitusta muutoksesta. Avaa Yksityiskohdat ja vertaa niitä nykyisiin asetuksiin.",
+      "restore.dashboard_registry.title": "Palauta kojelaudan '{label}' rekisterimerkintä",
+      "restore.dashboard_resource.body": "Tämä palauttaa kojelaudan resurssin valitusta muutoksesta. Jokainen selain lataa sen avatessaan kojelaudan.",
+      "restore.dashboard_resource.title": "Palauta kojelaudan resurssi {url}",
+      "restore.energy.body": "Tämä palauttaa energiakojelaudan asetukset valitusta muutoksesta. Avaa Yksityiskohdat ja vertaa niitä nykyisiin asetuksiin.",
+      "restore.energy.title": "Palauta energiakojelaudan asetukset",
+      "restore.template_helper.body": "Tämä palauttaa malliapurin kokoonpanon valitusta muutoksesta. Avaa Yksityiskohdat ja vertaa sitä nykyiseen kokoonpanoon.",
+      "restore.template_helper.title": "Palauta malliapurin kokoonpano",
+      "zigbee_binding.devices.bind.body": "Tämä antaa laitteen {source} ohjata laitetta {target} suoraan Zigbeen kautta. Avaa Yksityiskohdat ja tarkista täsmällinen suhde.",
+      "zigbee_binding.devices.bind.title": "Sido Zigbee-laite {source} laitteeseen {target}",
+      "zigbee_binding.devices.unbind.body": "Tämä estää laitetta {source} ohjaamasta laitetta {target} suoraan Zigbeen kautta. Avaa Yksityiskohdat ja tarkista täsmällinen suhde.",
+      "zigbee_binding.devices.unbind.title": "Pura Zigbee-laitteen {source} sidonta laitteeseen {target}",
+      "zigbee_group.named.add_members.body": "Tämä lisää laitteita Zigbee-ryhmään {name}. Avaa Yksityiskohdat ja tarkista täsmällinen jäsenyysmuutos.",
+      "zigbee_group.named.add_members.title": "Lisää laitteita Zigbee-ryhmään {name}",
+      "zigbee_group.named.create.body": "Tämä luo Zigbee-ryhmän {name}. Avaa Yksityiskohdat ja tarkista sen jäsenet.",
+      "zigbee_group.named.create.title": "Luo Zigbee-ryhmä {name}",
+      "zigbee_group.named.delete.body": "Tämä poistaa Zigbee-ryhmän {name}. Sen laitteet pysyvät pariliitettyinä, mutta niitä ei enää ohjata yhdessä.",
+      "zigbee_group.named.delete.title": "Poista Zigbee-ryhmä {name}",
+      "zigbee_group.named.remove_members.body": "Tämä poistaa laitteita Zigbee-ryhmästä {name}. Avaa Yksityiskohdat ja tarkista täsmällinen jäsenyysmuutos.",
+      "zigbee_group.named.remove_members.title": "Poista laitteita Zigbee-ryhmästä {name}"
     },
     "approvals": {
       "approve": "Hyväksy",
@@ -944,8 +992,8 @@
         "label": "Diagnostiikka"
       },
       "cap_energy_write": {
-        "description": "Vaihda, mitkä tilastot syöttävät Energia-kojelautaa: sähköverkko, aurinko, akku, kaasu, vesi ja yksittäiset laitteet.",
-        "label": "Hallitse Energia-kojelautaa"
+        "description": "Vaihda, mitkä tilastot syöttävät energiakojelautaa: sähköverkko, aurinko, akku, kaasu, vesi ja yksittäiset laitteet.",
+        "label": "Hallitse energiakojelautaa"
       },
       "cap_esphome_flash": {
         "description": "Asenna koottu laiteohjelmisto ESPHome-laitteeseen langattomasti ja korvaa sen nykyinen ohjelmisto. Virheellinen laiteohjelmistokuva voi jättää laitteen tavoittamattomiin, kunnes se asennetaan uudelleen kaapelilla, joten Vahvista-tila on erittäin suositeltava.",
@@ -1097,7 +1145,7 @@
       "typeConfigEntry": "Integraation / apurin asetukset",
       "typeDashboard": "Kojelauta",
       "typeDevice": "Laite",
-      "typeEnergy": "Energian kojelauta",
+      "typeEnergy": "Energiakojelauta",
       "typeEntity": "Entiteetti",
       "typeEsphomeYaml": "ESPHome YAML",
       "typeFile": "Tiedosto",
@@ -1109,7 +1157,6 @@
       "typeScript": "Skripti",
       "typeYamlConfig": "YAML-kokoonpano",
       "previewCardFallbackLabel": "kortti",
-      "previewErrorHead": "Tämän esikatselun kortti ilmoitti kokoonpanovirheestä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortin.",
       "previewNotReady": "Kojelaudan esikatselu ei ole käytettävissä tässä istunnossa. Avaa mikä tahansa kojelauta kerran ja palaa sitten tänne.",
       "restore": "Palauta",
       "restoreBefore": "Palauta ”Ennen”",
@@ -1130,10 +1177,16 @@
       "stackedShort": "Päällekkäin",
       "sideBySideShort": "Rinnakkain",
       "lineViewShort": "Rivinäkymä",
-      "previewErrorHeadMany": "Tämän esikatselun kortit ilmoittivat kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit.",
       "previewErrorCopy": "Kopioi virheet",
       "previewErrorCopyLead": "Kojelaudan esikatselusta löytyi korttien kokoonpanovirheitä, tutki ne:",
-      "previewStrategySection": "Tämä osio luodaan strategialla suorituksen aikana; esikatseltavia staattisia kortteja ei ole."
+      "previewStrategySection": "Tämä osio luodaan strategialla suorituksen aikana; esikatseltavia staattisia kortteja ei ole.",
+      "defaultDashboard": "Oletuskojelauta",
+      "energyDashboard": "Energiakojelauta",
+      "cardNoun": "kortti",
+      "previewErrorHead": {
+        "one": "Tämän esikatselun kortti ilmoitti kokoonpanovirheestä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortin.",
+        "other": "Tämän esikatselun kortit ilmoittivat kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit."
+      }
     },
     "common": {
       "after": "Jälkeen",
@@ -1158,7 +1211,10 @@
       "preview": "Esikatselu",
       "refresh": "Päivitä",
       "save": "Tallenna",
-      "saving": "Tallennetaan..."
+      "saving": "Tallennetaan...",
+      "serverUnreachable": "Home Assistantiin ei saatu yhteyttä. Tarkista yhteys ja yritä uudelleen.",
+      "httpStatus": "Palvelin vastasi HTTP-tilakoodilla {status}. Päivitä ja yritä uudelleen.",
+      "sentenceSeparator": " "
     },
     "conversations": {
       "accessKeyLabel": "Käyttöavain",
@@ -1209,7 +1265,6 @@
       },
       "execution": "Työkalut: {outcome}",
       "executionUnknown": "Tulosta ei vahvistettu: toiminto on saatettu suorittaa. Tarkista Home Assistant ennen uudelleenyritystä.",
-      "fullText": "Näytä koko teksti ({count} merkkiä)",
       "groupingUnavailable": "Käyttäjän vuoron rajaa ei annettu, joten jokainen työkalun vuorovaikutus näytetään erikseen. Jaettu istunto ei muodosta jaettua kehotetta.",
       "historyMissing": "Aiemmat vuorot eivät ole saatavilla. Ne voivat olla tallennuksen aloittamista edeltävältä ajalta tai poistettu säilytysrajojen vuoksi.",
       "identityUnavailable": "Ei Phoenixin käytettävissä",
@@ -1229,7 +1284,6 @@
         "sanitization": "Osaa sisällöstä ei voitu siivota turvallisesti, joten se jätettiin pois.",
         "size_limit": "Joitakin yksityiskohtia lyhennettiin tai jätettiin pois tallennusrajojen noudattamiseksi."
       },
-      "omittedEvents": "Tapahtumien raja saavutettu: {count} tapahtumaa ei näytetä. Tallennetut tulokset säilytetään erikseen.",
       "operation": {
         "action": "Pyysi laitetta koskevaa toimintoa",
         "delegate": "Pyysi delegoitua apua",
@@ -1337,14 +1391,23 @@
       "unknown": "Tuntematon",
       "week": "Viimeinen viikko",
       "clearShort": "Tyhjennä keskustelut",
-      "retention": "Säilytys"
+      "retention": "Säilytys",
+      "fullText": {
+        "one": "Näytä koko teksti ({count} merkki)",
+        "other": "Näytä koko teksti ({count} merkkiä)"
+      },
+      "omittedEvents": {
+        "one": "Tapahtumien raja saavutettu: {count} tapahtuma ei näy. Tallennetut tulokset säilytetään erikseen.",
+        "other": "Tapahtumien raja saavutettu: {count} tapahtumaa ei näy. Tallennetut tulokset säilytetään erikseen."
+      },
+      "toolCallRejected": "Työkalukutsu hylättiin ennen sen suorittamista. Yksityiskohdat näyttävät syyn, joka agentille annettiin."
     },
     "diff": {
       "blueprint.create": "Luo {domain}-mallipohja '{rel}'",
       "blueprint.delete": "Poista {domain}-mallipohja '{rel}'",
-      "blueprint.delete.consumers": "Poista {domain}-mallipohja '{rel}' ({count} käyttää sitä edelleen)",
+      "blueprint.delete.consumers": "Poista {domain}-mallipohja '{rel}' (edelleen käytössä: {count})",
       "blueprint.edit": "Korvaa {domain}-mallipohja '{rel}'",
-      "blueprint.edit.consumers": "Korvaa {domain}-mallipohja '{rel}' ({count} ladataan uudelleen)",
+      "blueprint.edit.consumers": "Korvaa {domain}-mallipohja '{rel}' (ladataan uudelleen: {count})",
       "call_service": "Kutsu {domain}/{service}",
       "call_service.mesa": "Kutsu {domain}/{service} (sisältää MESA-vahvistuksen)",
       "config_entry.options": "Muuta {keys} apurissa '{label}'",
@@ -1422,9 +1485,7 @@
       "set_entity": "Päivitä rekisterin metatiedot ({fields}) entiteetille {entity_id}",
       "update_calendar_event": "Päivitä kalenteritapahtuma",
       "zigbee_binding": "Muuta Zigbee-laitteen sidontaa",
-      "zigbee_binding.devices": "{operation} Zigbee-sidonta laitteesta {source} laitteeseen {target}",
       "zigbee_group": "Muuta Zigbee-ryhmää",
-      "zigbee_group.named": "{operation} Zigbee-ryhmä {name}",
       "zigbee_options": "Muuta Zigbee2MQTT-laitteen asetuksia",
       "zigbee_options.device": "Muuta Zigbee2MQTT-asetuksia ({keys}) kohteelle {label}",
       "zigbee_permit": "Avaa Zigbee-verkko liittymiselle",
@@ -1442,7 +1503,20 @@
       "zigbee_topology.backend": "Skannaa {backend}-naapuritaulukot rajattua Zigbee-karttaa varten",
       "dashboard_resource.create": "Lisää kojelaudan resurssi {url}",
       "dashboard_resource.update": "Muuta kojelaudan resurssia {url}",
-      "dashboard_resource.delete": "Poista kojelaudan resurssi {url}"
+      "dashboard_resource.delete": "Poista kojelaudan resurssi {url}",
+      "edit_energy_config.fallback": "Muuta energiakojelaudan kokoonpanoa",
+      "restore.blueprint": "Palauta mallipohjan lähdekoodi '{label}'",
+      "restore.dashboard_layout": "Palauta kojelaudan '{label}' asettelu",
+      "restore.dashboard_registry": "Palauta kojelaudan '{label}' rekisterimerkintä",
+      "restore.dashboard_resource": "Palauta kojelaudan resurssi {url}",
+      "restore.energy": "Palauta energiakojelaudan asetukset",
+      "restore.template_helper": "Palauta malliapurin kokoonpano",
+      "zigbee_binding.devices.bind": "Sido Zigbee-laite {source} laitteeseen {target}",
+      "zigbee_binding.devices.unbind": "Pura Zigbee-laitteen {source} sidonta laitteeseen {target}",
+      "zigbee_group.named.add_members": "Lisää laitteita Zigbee-ryhmään {name}",
+      "zigbee_group.named.create": "Luo Zigbee-ryhmä {name}",
+      "zigbee_group.named.delete": "Poista Zigbee-ryhmä {name}",
+      "zigbee_group.named.remove_members": "Poista laitteita Zigbee-ryhmästä {name}"
     },
     "inject": {
       "mesaProfile": "MESA-profiili",
@@ -1459,8 +1533,8 @@
       "advisoryOnly": "Tämä on vain neuvo; toimenpiteitä ei tarvita.",
       "apply": "Käytä",
       "applySuggestionFailed": "Ehdotuksen käyttäminen epäonnistui.",
-      "archiveContains": "Arkiston profiilit: {summary}.",
-      "archiveContainsDefaults": "Arkiston profiilit: {summary} sekä käyttöönoton oletukset.",
+      "archiveContains": "Arkisto sisältää profiileja kohteille: {summary}.",
+      "archiveContainsDefaults": "Arkisto sisältää profiileja kohteille: {summary} sekä käyttöönoton oletukset.",
       "archiveFileAria": "Profiilin arkistotiedosto",
       "archiveNone": "ei mitään",
       "cancel": "Peruuta",
@@ -1570,7 +1644,6 @@
       "importComplete": "Tuonti valmis",
       "importFailed": "Tuonti epäonnistui.",
       "importIntro": "Tuo profiileja MESA JSON -arkistosta. Virheelliset profiilit ohitetaan ja niistä ilmoitetaan. Kelvolliset profiilit tulevat voimaan heti.",
-      "importInvalid": "Asiakirjoja, jotka eivät läpäisseet validointia ja jätettiin tuomatta ({count}):",
       "importNotArchive": "Ei MESA-profiilien vienti (mesa_export-juuri puuttuu).",
       "importNotJson": "Tiedostoa ei voitu lukea JSON-muodossa.",
       "importResult": {
@@ -1599,10 +1672,6 @@
       "noMatchingEntity": "Ei täsmäävää entiteettiä. Valitse yksi luettelosta.",
       "noMatchingIntegration": "Ei täsmäävää integraatiota. Valitse yksi luettelosta.",
       "noOpenSuggestions": "Ei avoimia ehdotuksia.",
-      "orphanAreas": "<strong>Orpoja huoneprofiileja: {count}</strong> (huonetta ei enää ole): {list}",
-      "orphanDevices": "<strong>Orpoja laiteprofiileja: {count}</strong> (laitetta ei enää ole): {list}",
-      "orphanEntities": "<strong>Orpoja entiteettiprofiileja: {count}</strong> (entiteettiä ei enää ole): {list}",
-      "orphanIntegrations": "<strong>Orpoja integraatioprofiileja: {count}</strong> (integraatiota ei ole ladattu): {list}",
       "partialInspection": {
         "one": "{count} automaatio voitiin tarkastaa vain osittain, koska se sisältää malleja tai käyttää mallipohjaa.",
         "other": "{count} automaatiota voitiin tarkastaa vain osittain, koska ne sisältävät malleja tai käyttävät mallipohjia."
@@ -1695,11 +1764,34 @@
       "deleteEntityConfirm": "Poistetaanko tämä entiteettiprofiili?",
       "deleteEntityProfile": "Poista entiteettiprofiili",
       "deleteEntityWarn": "Entiteetti \"{key}\" palautuu sitä koskeviin profiileihin (laite, huone, integraatio, verkkotunnus, käyttöönoton oletukset ja lopuksi sisäänrakennettu turvataso). Itse entiteetti säilyy Home Assistantissa.",
-      "discardAndOpen": "Kumoa ja avaa"
+      "discardAndOpen": "Kumoa ja avaa",
+      "importInvalid": {
+        "one": "{count} asiakirja ei läpäissyt validointia, eikä sitä tuotu:",
+        "other": "{count} asiakirjaa ei läpäissyt validointia, eikä niitä tuotu:"
+      },
+      "orphanAreas": {
+        "one": "<strong>{count} orvoksi jäänyt huoneprofiili</strong> (huonetta ei enää ole):",
+        "other": "<strong>{count} orvoksi jäänyttä huoneprofiilia</strong> (huonetta ei enää ole):"
+      },
+      "orphanDevices": {
+        "one": "<strong>{count} orvoksi jäänyt laiteprofiili</strong> (laitetta ei enää ole):",
+        "other": "<strong>{count} orvoksi jäänyttä laiteprofiilia</strong> (laitetta ei enää ole):"
+      },
+      "orphanEntities": {
+        "one": "<strong>{count} orvoksi jäänyt entiteettiprofiili</strong> (entiteettiä ei enää ole):",
+        "other": "<strong>{count} orvoksi jäänyttä entiteettiprofiilia</strong> (entiteettiä ei enää ole):"
+      },
+      "orphanIntegrations": {
+        "one": "<strong>{count} orvoksi jäänyt integraatioprofiili</strong> (integraatiota ei ole ladattu):",
+        "other": "<strong>{count} orvoksi jäänyttä integraatioprofiilia</strong> (integraatiota ei ole ladattu):"
+      },
+      "roleTrigger": "laukaisin",
+      "roleCondition": "ehto",
+      "roleAction": "toiminto"
     },
     "mesaSuggestion": {
       "baseline_note": " Estetty vastaa tämän verkkotunnuksen sisäänrakennettua turvatasoa, joten laadittu profiili tekee tarkoituksesta eksplisiittisen; valitse Tarkista-vaiheessa Vahvista, jos haluat sallia agentin ohjauksen hyväksyntöjen takana.",
-      "blast_radius.fanout": "Tämä {noun} viittaa {count} entiteettiin, eikä sillä ole omaa MESA-profiilia; yhdellä laukaisimella on laaja vaikutusalue.",
+      "blast_radius.fanout": "Tämä {noun} viittaa moniin entiteetteihin ({count}), eikä sillä ole omaa MESA-profiilia; yhdellä laukaisimella on laaja vaikutusalue.",
       "blast_radius.risky.one": "Tämä {noun} koskee {count} riskialtista entiteettiä ({shown}), eikä sillä ole omaa MESA-profiilia; agentti, joka saa laukaista sen, ohjaa sitä epäsuorasti ohittaen sen oman profiilin.",
       "blast_radius.risky.other": "Tämä {noun} koskee {count} riskialtista entiteettiä ({shown}), eikä sillä ole omaa MESA-profiilia; agentti, joka saa laukaista sen, ohjaa näitä entiteettejä epäsuorasti ohittaen niiden omat profiilit.",
       "concern.alarm_control_panel": "kytkee kodin turvajärjestelmän päälle ja pois; äänetön poiskytkentä tekee siitä hyödyttömän",
@@ -1709,7 +1801,7 @@
       "concern.update": "vastaanottaa laiteohjelmistopäivityksiä, jotka ovat käytännössä peruuttamattomia ja voivat tehdä laitteesta käyttökelvottoman",
       "concern.valve": "ohjaa veden tai kaasun virtausta; väärä tila voi aiheuttaa tulvan tai vuodon ilman valvontaa",
       "concern.water_heater": "saavuttaa palovammoja aiheuttavia lämpötiloja ja kuluttaa energiaa; palautuminen on hidasta",
-      "naked_risky.domain": "{count} {domain}-entiteetillä ei ole MESA-profiilia millään tasolla. Tämä verkkotunnus {concern}. Verkkotunnustason profiili kattaa ne kaikki kerralla.{baseline_note}",
+      "naked_risky.domain": "{domain}-entiteetit, joilla ei ole MESA-profiilia millään tasolla: {count}. Tämä verkkotunnus {concern}. Verkkotunnustason profiili kattaa ne kaikki kerralla.{baseline_note}",
       "naked_risky.entity": "Mikään MESA-profiili ei kata tätä entiteettiä millään tasolla, ja se {concern}.{baseline_note}",
       "noun.automation": "automaatio",
       "noun.scene": "tilanne",
@@ -1804,7 +1896,7 @@
       "home_companion": {
         "description": "Suunniteltu Agent Chat -toiminnolle ja ääniagentille: yksi tehtävätyökalu kodin tietojen lukemiseen ja laitteiden ohjaukseen. Käyttää ääniagentin keskustelumallia.",
         "label": "Home Companion",
-        "setup": "Valitse tarjoaja ja malli ääniagentin asetuksista. Myönnä READ- tai WRITE-käyttöoikeus tavallisen käyttöoikeuspuun kautta. Ominaisuudet ottavat käyttöön tai poistavat käytöstä pääsyn kotitalouden luettelon sisällä; kokoonpano- ja sisällöntuotantotyökalut pysyvät poissa käytöstä. Läpivienti ja kaikkien työkalujen ilmoittaminen on poistettu käytöstä."
+        "setup": "Valitse palveluntarjoaja ja malli ääniagentin asetuksista. Myönnä READ- tai WRITE-käyttöoikeus tavallisen käyttöoikeuspuun kautta. Ominaisuudet ottavat käyttöön tai poistavat käytöstä pääsyn kotitalouden luettelon sisällä; kokoonpano- ja sisällöntuotantotyökalut pysyvät poissa käytöstä. Läpivienti ja kaikkien työkalujen ilmoittaminen on poistettu käytöstä."
       },
       "maintenance": {
         "description": "Voi suorittaa diagnostiikkaa ja luoda varmuuskopioita. Uudelleenkäynnistykset ja entiteettirekisterin muutokset vaativat hyväksynnän. Ei voi ohjata laitteita tai muokata kokoonpanoa ja kojelautoja.",
@@ -1830,7 +1922,7 @@
     },
     "routing": {
       "accountModel": "Kohteen {name} malli",
-      "commandHelp": "Kokeile ensin paikallisia intentioita ja sitten valinnaista päätöstarjoajaa. Muut pyynnöt ohjataan tavanomaiselle tekoälytarjoajallesi. Käyttöoikeudet ja hyväksynnät ovat edelleen voimassa.",
+      "commandHelp": "Kokeile ensin paikallisia intentioita ja sitten valinnaista päätöstarjoajaa. Muut pyynnöt ohjataan tavanomaiselle tekoälypalveluntarjoajallesi. Käyttöoikeudet ja hyväksynnät ovat edelleen voimassa.",
       "connectionSettings": "Yhteysasetukset",
       "decisionAccount": "Päätöstili",
       "decisionBudget": "Päätöksen aikakatkaisu (ms)",
@@ -1843,7 +1935,7 @@
       "removeAccount": "Poista {name}",
       "requestLimit": "Päätöspyyntöjä tunnissa (0 = rajaton)",
       "requestLimitHint": "Jaetaan äänen, chatin, esikatselujen ja varjotarkistusten kesken. Laskee yritykset, kun toiminto on käytössä, myös epäonnistumiset, ja säilyy uudelleenkäynnistyksen yli. Nollautuu joka tasatunti UTC-aikaa. Tavanomaisella tarjoajallasi on erillinen kiintiö. Tämä on pyyntöraja, ei valuuttaraja.",
-      "timeoutHint": "Anna lisää aikaa hitaammille yhteyksille. Jos päätös ei ole valmis ajoissa, tavanomainen tarjoajasi käsittelee pyynnön.",
+      "timeoutHint": "Anna lisää aikaa hitaammille yhteyksille. Jos päätös ei ole valmis ajoissa, tavanomainen palveluntarjoajasi käsittelee pyynnön.",
       "useProvider": "Käytä päätöstarjoajaa",
       "useProviderHelp": "Päällä: valittu päätöstarjoaja käsittelee pyynnöt, joita Phoenix ei voi yhdistää paikallisesti. Pois: päätöstarjoajaa ei käytetä, vaikka sellainen on valittu.",
       "useProviderNone": "Lisää päätöstarjoaja, niin voit ottaa tämän käyttöön."
@@ -1858,7 +1950,6 @@
       "failed": "Epäonnistui tai jäi kesken",
       "headline": "{percent} % pyynnöistä valmistui ilman keskustelumallia.",
       "local": "Valmistui paikallisten intenttien avulla",
-      "missing": "{count} pyynnöltä puuttuu käyttötiedot",
       "note": "Vain raportoidut tokenit, ei arvioituja säästöjä. Jonossa olevat määrät kuvastavat vastausta, eivät sen hetkistä hyväksyntätilaa.",
       "pending": "Jonossa hyväksyntää varten",
       "provider": "Lähetettiin keskustelupalveluntarjoajalle",
@@ -1867,7 +1958,11 @@
       "scope": "Vain Phoenixin ääni ja chat. Ulkoiset MCP-asiakkaat ja tekoälytehtävä on jätetty pois.",
       "since": "Alkaen {date}. Säilytetään uudelleenkäynnistysten yli.",
       "title": "Reititystilastot",
-      "unavailable": "Ei saatavissa"
+      "unavailable": "Ei saatavissa",
+      "missing": {
+        "one": "{count} pyynnöltä puuttuu käyttötiedot",
+        "other": "{count} pyynnöltä puuttuu käyttötiedot"
+      }
     },
     "selectBy": {
       "area": "Huone",
@@ -2006,7 +2101,6 @@
       "detailLevel": "Tarkkuus",
       "detailLevelAria": "{surface}-tarkkuustaso",
       "experimentalCard": "Kokeellinen",
-      "flushEveryMinutes": "{n} minuutin välein",
       "flushIntervalHelp": "Ei koskaan poista säännöllisiä tarkastuslokin tallennuksia käytöstä. Home Assistantin pysäytys, uudelleenlataus ja poisto yrittävät silti tehdä lopullisen tallennuksen.",
       "flushIntervalLabel": "Tarkastuslokin kirjoitusväli",
       "homeFocused": "Kotiin keskittyvä",
@@ -2170,7 +2264,12 @@
       "voicePreferredClearedToast": "Phoenix MCP ei ole enää ensisijainen avustaja",
       "voicePreferredFailed": "Ensisijaisen avustajan vaihtaminen ei onnistunut.",
       "voicePreferredSetToast": "Phoenix MCP on nyt ensisijainen avustaja",
-      "wipeWarningSelected": "Tämä poistaa alla olevat tiedot, eikä sitä voi peruuttaa."
+      "wipeWarningSelected": "Tämä poistaa alla olevat tiedot, eikä sitä voi peruuttaa.",
+      "flushEveryMinutes": {
+        "one": "{count} minuutin välein",
+        "other": "{count} minuutin välein"
+      },
+      "modelWithMode": "{model} ({mode})"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2195,29 +2294,33 @@
       "card.added": "lisäsi kohteen {subject} ({where})",
       "card.deleted": "poisti kohteen {subject} ({where})",
       "card.edited": "muokkasi kohdetta {subject} ({where})",
-      "cards": "{count} korttia",
-      "cards.was": "{count} korttia (oli {before})",
+      "cards": "kortit: {count}",
+      "cards.was": "kortit: {count} (oli {before})",
       "config_entry.options": "määritti kohteen {subject} uudelleen",
       "config_entry.reconfigure": "määritti kohteen {subject} uudelleen",
       "config_entry.removed": "integraatio poistettu",
       "device.changed": "muutti: {fields}",
       "device.removed": "laiterekisterin merkintä poistettu",
-      "device.zigbee_binding": "{operation} Zigbee-sidonta kohteeseen {target}",
-      "device.zigbee_group": "{operation} Zigbee-ryhmä: {name}",
       "device.zigbee_options": "muutti Zigbee2MQTT-asetuksia: {keys}",
       "device.zigbee_property": "muutti Zigbee2MQTT-ominaisuutta: {property}",
       "device.zigbee_reporting": "määritti Zigbee-raportoinnin: {cluster}.{attribute}",
-      "energy.sources": "{count} lähdettä, {devices} laitetta",
+      "energy.sources": "lähteet: {count}, laitteet: {devices}",
       "entity.changed": "muutti: {fields}",
       "entity.removed": "rekisterimerkintä poistettu",
       "loc.card": "kortti {index}",
       "loc.section": "osio {index}",
       "loc.view": "näkymä {index}",
       "patch.append": "lisäsi kohteen {subject} loppuun",
-      "patch.multi": "{count} muutosta",
+      "patch.multi": "muutokset: {count}",
       "patch.remove": "poisti kohteen {subject}",
       "patch.set": "asetti kohteen {subject}",
-      "size.was": "{size} (oli {before})"
+      "size.was": "{size} (oli {before})",
+      "device.zigbee_binding.bind": "sitoi Zigbee-ohjauksen kohteeseen {target}",
+      "device.zigbee_binding.unbind": "poisti Zigbee-sidonnan kohteeseen {target}",
+      "device.zigbee_group.add_members": "lisätty Zigbee-ryhmään: {name}",
+      "device.zigbee_group.create": "loi Zigbee-ryhmän: {name}",
+      "device.zigbee_group.delete": "poisti Zigbee-ryhmän: {name}",
+      "device.zigbee_group.remove_members": "poistettu Zigbee-ryhmästä: {name}"
     },
     "wizard": {
       "accessKeyCreatedBanner": "Käyttöavain luotu. Voit nimetä sen uudelleen myöhemmin; peruuta ja aloita alusta, jos haluat muuttaa sen vanhenemista.",
@@ -2305,7 +2408,7 @@
       "skillOtherHint": "Lataa opas ja lisää se agenttisi projektikontekstiin tai sääntöihin. Agentti voi myös noutaa sen alla olevasta URL-osoitteesta.",
       "skillSectionBody": "Asenna Phoenix MCP -taito, jotta rajattuja käyttöoikeuksia, hyväksyntöjä ja MESA-sääntöjä voidaan selittää kohteelle {label}. Phoenix MCP jakaa nämä ohjeet myös, kun agentti muodostaa yhteyden.",
       "skillSectionTitle": "Phoenix MCP -taito (valinnainen)",
-      "stepAccess": "Käyttöoikeus",
+      "stepAccess": "Pääsy",
       "stepAccessKey": "Käyttöavain",
       "stepChoose": "Valitse",
       "stepConnect": "Yhdistä",
@@ -2505,13 +2608,13 @@
     "companion_busy": "Toinen pyyntö on yhä käynnissä. Tätä pyyntöä ei aloitettu; odota aiemman pyynnön tulosta ennen kuin lähetät kokonaan uuden pyynnön.",
     "companion_candidates": "Osumiin kuuluvat: {names}.",
     "companion_clarify": "Yritä uudelleen täydellisellä pyynnöllä: mitä tehdään, mikä laite tai huone ja mahdolliset rajoitukset. Älä vastaa pelkällä laitteen nimellä.",
-    "companion_count_calm_guide": "Phoenix voi käyttää {count} vastaavaa {kind}; tämä määrä kattaa sallitun rajauksesi.",
-    "companion_count_direct": "Näen {count} vastaavaa {kind} sallitun rajauksesi sisällä.",
+    "companion_count_calm_guide": "Phoenix voi käyttää näin monta vastaavaa {kind}: {count}. Tämä määrä kattaa sallitun rajauksesi.",
+    "companion_count_direct": "Sallitussa rajauksessasi on näin monta vastaavaa {kind}: {count}.",
     "companion_count_groups": "Tähän lasketaan Home Assistant -entiteettejä, jotka voivat sisältää ryhmiä.",
-    "companion_count_lively": "{count} vastaavaa {kind} on näkyvissä Phoenixille.",
+    "companion_count_lively": "Phoenix näkee näin monta vastaavaa {kind}: {count}.",
     "companion_count_scope": "Vain ne vastaavat entiteetit lasketaan, joihin tämä avustaja pääsee käsiksi; tämä ei kerro fyysisten laitteiden määrää.",
-    "companion_count_technical": "Määrä: {count} vastaavaa {kind} Phoenixille sallitun rajauksen sisällä.",
-    "companion_count_warm": "Näen {count} vastaavaa {kind} Phoenixille sallitun rajauksen sisällä.",
+    "companion_count_technical": "Phoenixille sallitun rajauksen sisällä on näin monta vastaavaa {kind}, lukumäärä: {count}.",
+    "companion_count_warm": "Näen Phoenixille sallitun rajauksen sisällä näin monta vastaavaa {kind}: {count}.",
     "companion_group_targets": "{count} {kind} huoneessa {area}",
     "companion_kind_fan": "tuuletinentiteettiä",
     "companion_kind_light": "valoentiteettiä",
@@ -2531,7 +2634,7 @@
     "companion_unavailable_targets": "Ei saatavissa ({count}): {names}. Tarkista Home Assistantista; älä lähetä komentoja uudelleen.",
     "companion_unverified": "Laitteiden lopullisia tiloja ei varmistettu. Tarkista ne Home Assistantista; älä lähetä komentoja uudelleen vain siksi, että vahvistus puuttuu.",
     "companion_unverified_targets": "Varmistamattomat ({count}): {names}. Tarkista Home Assistantista; älä lähetä komentoja uudelleen.",
-    "companion_verification_progress": "Home Assistant ilmoittaa pyydetyt asetukset {count} kohteelle yhteensä {total} kohteesta.",
+    "companion_verification_progress": "Kohteet, joille Home Assistant ilmoittaa pyydetyt asetukset: {count}, yhteensä {total}.",
     "companion_verified": "Home Assistant ilmoittaa hyväksytyt laitteet käsketyillä asetuksilla.",
     "companion_verified_short": "Se ilmoittaa pyydetyt asetukset.",
     "could_not_complete": "Valitettavasti en voinut suorittaa tätä loppuun.",
@@ -2550,17 +2653,17 @@
     "local_state_unavailable": "Ei saatavissa",
     "local_state_unconfirmed": "Komento lähetetty. Home Assistant ei ole vielä vahvistanut pyydettyä tilaa.",
     "local_state_unknown": "Tuntematon",
-    "local_summary_breakdown": "Assistille paljastetuista entiteeteistä, joihin pääsen käsiksi: {total} entiteettiä. {summary}.",
-    "local_summary_count": "Assistille paljastetuista entiteeteistä, joihin pääsen käsiksi: {matched}/{total} on tilassa {state}; {unknown} on tilassa tuntematon tai ei saatavissa.",
-    "local_summary_total": "Assistille paljastetuista entiteeteistä, joihin pääsen käsiksi: {total} entiteettiä; {unknown} on tilassa tuntematon tai ei saatavissa.",
+    "local_summary_breakdown": "Assistille paljastetut entiteetit, joihin pääsen käsiksi: {total}. {summary}.",
+    "local_summary_count": "Assistille paljastetut entiteetit, joihin pääsen käsiksi, tilassa {state}: {matched}, yhteensä {total}. Tuntematon tai ei saatavilla: {unknown}.",
+    "local_summary_total": "Assistille paljastetut entiteetit, joihin pääsen käsiksi: {total}. Tuntematon tai ei saatavilla: {unknown}.",
     "local_unauthorized": "Tämä käyttöavain ei ole enää valtuutettu.",
     "not_configured": "Phoenix MCP -ääniagenttia ei ole määritetty kokonaan.",
     "out_of_steps": "Valitettavasti vaiheet loppuivat kesken ennen kuin sain tämän valmiiksi.",
     "outcome_unknown": "Tämä toiminto on saatettu suorittaa. Tarkista Home Assistant ja sen hyväksyntähistoria ennen kuin yrität uudelleen. Avaa Tarvitsee huomiotasi Phoenix MCP:ssä.",
     "output_limit": "Valitettavasti malli tuotti liikaa tulostetta, joten pysähdyin.",
     "prior_action_unresolved": "Tätä pyyntöä ei suoritettu, koska aiempi toiminto vaatii tarkistusta. Avaa Tarvitsee huomiotasi Phoenix MCP:ssä.",
-    "provider_error": "Valitettavasti {reason}.",
     "unavailable": "Phoenix MCP -ääniagentti ei ole tällä hetkellä saatavilla.",
-    "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli."
+    "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
+    "provider_unavailable": "Valitettavasti kielimalli ei pystynyt vastaamaan juuri nyt."
   }
 }

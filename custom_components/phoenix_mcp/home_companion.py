@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from .helpers import access_key_notes_block, log_internal_failure
+from .command_display import async_state_translations
+from .helpers import access_key_notes_block, canonical_language, log_internal_failure
 
 import asyncio
 from contextvars import ContextVar
@@ -391,6 +392,10 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
     guard_context = None
     turn = CompanionTurn(access_key.id, language=arguments.get("language", "en"), request=arguments["request"])
     try:
+        # Readings are spoken in the request's language; load HA's state labels
+        # and the CLDR number data now, off the event loop, before any tool runs.
+        turn.evidence.language = canonical_language(turn.language)
+        turn.evidence.state_translations = await async_state_translations(hass, turn.language)
         authority = RoutingAuthority.capture(data, access_key)
         settings = data.store.get_settings()
         turn.style, turn.detail = _presentation.get() or (settings.voice_agent_conversation_style, settings.voice_agent_detail_level)

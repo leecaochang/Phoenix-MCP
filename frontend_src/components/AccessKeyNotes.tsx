@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import type { AccessKeyRecord } from "../types";
 import { ActionButton } from "../ui/ActionButton";
 
@@ -69,7 +69,7 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
         <span className={`access-key-notes-count${tooLong ? " field-error" : ""}`} aria-live="polite">
           {tooLong
             ? t("accessKeys.notesTooLong", { max: ACCESS_KEY_NOTES_MAX_LENGTH })
-            : t("accessKeys.notesCount", { count: length, max: ACCESS_KEY_NOTES_MAX_LENGTH })}
+            : tn("accessKeys.notesCount", ACCESS_KEY_NOTES_MAX_LENGTH, { count: length, max: ACCESS_KEY_NOTES_MAX_LENGTH })}
         </span>
         {dirty && (
           <span className="access-key-notes-actions">

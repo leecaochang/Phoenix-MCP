@@ -148,7 +148,7 @@ from .const import (
 )
 from .data import PhoenixData
 from .model_selection import effective_model
-from .helpers import get_client_ip, access_key_has_write_scope, voice_text
+from .helpers import LocalizedReason, get_client_ip, access_key_has_write_scope, voice_text
 from .access_key_store import AccessKeyRecord
 from .tool_loading import ToolLoader
 
@@ -1936,19 +1936,19 @@ class ClaudeProvider:
                 if resp.status == 200:
                     return True, ""
                 if resp.status in (401, 403):
-                    return False, "API key rejected."
+                    return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                 if self.kind == "minimax":
                     # MiniMax's Anthropic-compatible base may not expose /v1/models;
                     # a non-auth error there does not mean the key is bad. Soft-accept
                     # (a real problem surfaces on the first message with a clean error).
                     return True, ""
-                return False, f"Provider returned HTTP {resp.status}."
+                return False, LocalizedReason(f"Provider returned HTTP {resp.status}.", "providerHttpStatus", status=resp.status)
         try:
             return await _retry_transient(_probe)
         except ValueError:
-            return False, "Invalid provider connection settings."
+            return False, LocalizedReason("Invalid provider connection settings.", "providerSettingsInvalid")
         except (ClientError, asyncio.TimeoutError) as exc:
-            return False, f"Could not reach the provider: {exc}"
+            return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
 
     async def list_models(self, session: ClientSession) -> list[str]:
         fallback = list(AGENTCLI_MINIMAX_MODELS) if self.kind == "minimax" \
@@ -2876,49 +2876,52 @@ class OpenAICompatProvider:
                     if resp.status == 200:
                         return True, ""
                     if resp.status in (401, 403):
-                        return False, "API key rejected."
+                        return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                     label = "Ollama Cloud" if self._is_ollama_cloud else "Ollama"
-                    return False, f"{label} returned HTTP {resp.status}."
+                    return False, LocalizedReason(f"{label} returned HTTP {resp.status}.", "providerNamedHttpStatus", provider=label, status=resp.status)
             async with session.get(self._models_url(), headers=self._headers(),
                                    timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status == 200:
                     return True, ""
                 if resp.status in (401, 403):
-                    return False, "API key rejected."
+                    return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                 if self.definition.validation_error == "fireworks" and resp.status == 412:
-                    return False, (
+                    return False, LocalizedReason(
                         "Fireworks reports that this account is not active for API inference. "
                         "Check the account status and confirm that billing or free-trial credits "
-                        "are activated."
+                        "are activated.",
+                        "providerFireworksInactive",
                     )
                 if self.definition.validation_error == "qwen_openai" and resp.status == 404:
-                    return False, (
+                    return False, LocalizedReason(
                         "Qwen returned HTTP 404. Phoenix uses the OpenAI-compatible Chat "
                         "Completions endpoint; enter that Base URL, not the "
-                        "Anthropic-compatible /apps/anthropic URL."
+                        "Anthropic-compatible /apps/anthropic URL.",
+                        "providerQwenWrongEndpoint",
                     )
-                return False, f"Provider returned HTTP {resp.status}."
+                return False, LocalizedReason(f"Provider returned HTTP {resp.status}.", "providerHttpStatus", status=resp.status)
         try:
             return await _retry_transient(_probe)
         except ValueError:
-            return False, "Invalid provider connection settings."
+            return False, LocalizedReason("Invalid provider connection settings.", "providerSettingsInvalid")
         except (ClientError, asyncio.TimeoutError) as exc:
             if self._is_ollama_local:
                 # Newlines are preserved in the panel (the banner uses
                 # white-space: pre-line), so keep this as a short lead plus a
                 # scannable checklist rather than one dense paragraph.
-                return False, (
+                return False, LocalizedReason(
                     f"Could not reach Ollama at {self.cfg.base_url}.\n"
                     f"({exc})\n\n"
                     "Phoenix MCP connects from the Home Assistant server, not your browser, so "
                     "Ollama must be reachable from that host:\n"
                     "- Ollama is running and bound to a reachable interface (OLLAMA_HOST=0.0.0.0).\n"
                     "- The firewall allows the Ollama port (default 11434).\n"
-                    "- 'localhost' here means the HA server, not your PC."
+                    "- 'localhost' here means the HA server, not your PC.",
+                    "providerOllamaUnreachable", url=self.cfg.base_url, detail=str(exc),
                 )
             if self._is_ollama_cloud:
-                return False, f"Could not reach Ollama Cloud at {self.cfg.base_url}. ({exc})"
-            return False, f"Could not reach the provider: {exc}"
+                return False, LocalizedReason(f"Could not reach Ollama Cloud at {self.cfg.base_url}. ({exc})", "providerOllamaCloudUnreachable", url=self.cfg.base_url, detail=str(exc))
+            return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
 
     async def list_models(self, session: ClientSession) -> list[str]:
         try:
@@ -4589,7 +4592,7 @@ async def _stream_turn_resilient(
                         retry = True
                         first_detail = first_detail or _failure_detail(ev)
                         yield {"type": EV_RETRYING, "attempt": attempt + 1, "status": ev.get("status"),
-                               "detail": _failure_detail(ev)}
+                               "detail": _failure_detail(ev), "detail_code": _failure_detail_code(ev)}
                         break
                     if etype == EV_ERROR and dispatch_started:
                         ev = _after_dispatch_failure(ev, write_started)
@@ -4618,6 +4621,15 @@ def _failure_detail(ev: dict) -> str:
     return str(ev.get("provider_detail") or ev.get("message") or "").strip()
 
 
+def _failure_detail_code(ev: dict) -> str:
+    """The code behind _failure_detail when that detail is Phoenix's own English.
+
+    The panel translates the detail through this code; a provider's own sentence
+    has no code here, so it shows verbatim.
+    """
+    return "" if str(ev.get("provider_detail") or "").strip() else str(ev.get("code") or "")
+
+
 def _retry_exhausted(ev: dict, seconds: int, first_detail: str) -> dict:
     """The final error after retrying: the real time spent and, kept, the failure that started it."""
     detail = str(ev.get("message") or "").strip()
@@ -4629,7 +4641,7 @@ def _retry_exhausted(ev: dict, seconds: int, first_detail: str) -> dict:
         message = f"The provider did not answer after retrying for about {seconds}s. {detail}"
     extra = {"provider_detail": first_detail} if first_detail and not ev.get("provider_detail") else {}
     return {**ev, **extra, "code": code, "message": message.strip(),
-            "message_params": {"seconds": seconds, "detail": detail}}
+            "message_params": {"seconds": seconds, "detail": detail, "detail_code": str(ev.get("code") or "")}}
 
 
 class _CallStatus:
@@ -4672,7 +4684,8 @@ class _CallStatus:
             await self._send()
         elif etype == EV_RETRYING:
             self._since, self._phase = self._time(), "waiting"
-            self._fields.update(attempt=ev.get("attempt"), detail=ev.get("detail") or "")
+            self._fields.update(attempt=ev.get("attempt"), detail=ev.get("detail") or "",
+                                detail_code=ev.get("detail_code") or "")
             await self._send(retrying=True)
 
     async def _send(self, retrying: bool = False) -> None:
@@ -5067,14 +5080,17 @@ async def _run_tool_batch(
             # typed rejection reason, or the executor's error when an
             # approval executed but failed (status "execution_failed").
             resolved_record = get_approval(data.store, pending["approval_id"])
-            reason = None
+            reason = failure = None
             if resolved_record is not None:
-                reason = execution_failure_text(resolved_record) \
-                    or getattr(resolved_record, "rejected_reason", None)
+                failure = execution_failure_text(resolved_record)
+                reason = failure or getattr(resolved_record, "rejected_reason", None)
             await emit("approval_resolved", {
                 "approval_id": pending["approval_id"],
                 "status": status,
                 "reason": _clip_display(reason) if reason else None,
+                # The executor's own text is English for the agent; the panel
+                # shows its localized form, as the Approvals window does.
+                **({"reason_kind": "execution"} if failure else {}),
             })
             refused = refused_before_write(resolved_record)
             if status in (STATUS_FAILED, "execution_failed") and not refused:
@@ -5551,6 +5567,9 @@ class _HeadlessTurnResult:
     review_urls: list[str]
     outcome: str = TURN_OK
     detail: str = ""
+    # The provider error's code, so a spoken reply can choose its own sentence
+    # instead of reading out the English detail.
+    detail_code: str = ""
     focus_declined: bool = False
     blocked_by_prior_action: bool = False
     recovery_turn_id: str = ""
@@ -5706,6 +5725,7 @@ async def _run_headless_turn(
                     detail=(voice_text(routing_language, "model_api_unsupported")
                             if ev.get("code") == "model_api_unsupported"
                             else str(ev.get("message") or _HEADLESS_PROVIDER_ERROR)),
+                    detail_code=str(ev.get("code") or ""),
                     focus_declined=focus_declined,
                 )
         if correct_format:
@@ -5984,7 +6004,12 @@ async def async_run_voice_turn(
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
         return voice_text(language, "prior_action_unresolved" if turn.blocked_by_prior_action else "outcome_unknown")
     if turn.outcome == TURN_PROVIDER_ERROR:
-        return turn.text.strip() or voice_text(language, "provider_error", reason=turn.detail)
+        if turn.text.strip():
+            return turn.text.strip()
+        # The detail is English for the Conversations log and AI Task; speak a
+        # sentence of the conversation's own language instead.
+        return voice_text(language, "model_api_unsupported" if turn.detail_code == "model_api_unsupported"
+                          else "provider_unavailable")
     if turn.outcome == TURN_OUTPUT_LIMIT:
         return turn.text.strip() or voice_text(language, "output_limit")
     if turn.outcome == TURN_AUTHORITY_LOST:
@@ -6544,15 +6569,16 @@ def _build_setup_provider(cfg: ProviderConfig):
 
 async def _checked_decision_models(provider, session, model: object, rid: str) -> tuple[list[str], web.Response | None]:
     """Require a real advertised model before persisting a decision account."""
-    from .decision_provider import DecisionError
+    from .decision_provider import DecisionError, decision_error_reason
 
     if not isinstance(model, str) or not model.strip() or len(model) > 200:
         return [], _err("invalid_request", "A model is required.", 400, rid, key="providerModelRequired")
     try:
         models = await provider.list_models(session)
     except DecisionError as error:
+        reason = decision_error_reason(str(error))
         return [], _err("invalid_request", "Could not load decision provider models.", 400, rid,
-                       key="providerConnectionFailed", params={"detail": str(error)})
+                       key=reason.key, params=reason.params or None)
     if model.strip() not in models:
         return [], _err("invalid_request", "Choose a model returned by this provider.", 400, rid,
                        key="providerModelNotListed")
@@ -6616,6 +6642,9 @@ class PhoenixAgentCliProvidersView(PhoenixView):
         else:
             ok, reason = await provider.validate(session)
             if not ok:
+                if isinstance(reason, LocalizedReason):
+                    return _err("invalid_request", f"Connection failed: {reason}", 400, rid,
+                                key=reason.key, params=reason.params or None)
                 return _err(
                     "invalid_request", f"Connection failed: {reason}", 400, rid,
                     key="providerConnectionFailed", params={"detail": reason},
@@ -7072,6 +7101,8 @@ class PhoenixAgentCliProbeView(PhoenixView):
         provider = _build_setup_provider(probe)
         ok, reason = await provider.validate(session)
         if not ok:
+            if isinstance(reason, LocalizedReason):
+                return _ok(ProbeConfigError(reason, reason.key, reason.params or None).payload(), request_id=rid)
             if reason:
                 return _ok(
                     {

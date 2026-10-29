@@ -154,7 +154,7 @@ def test_count_detail_describes_scope_instead_of_one_arbitrary_search_row(style)
     reports = [build_report('completed', 'There are 999 bulbs.', evidence, 'en',
                             style=style, detail=detail)
                for detail in ['concise', 'balanced', 'detailed']]
-    assert all('44 matching light entities' in report['message'] for report in reports)
+    assert all('light entities' in report['message'] and ': 44' in report['message'] for report in reports)
     assert all('Tall Lamp' not in report['message'] and '999' not in report['message'] for report in reports)
     assert 'groups' not in reports[0]['message']
     assert 'groups' in reports[1]['message']
@@ -171,7 +171,7 @@ def test_count_kind_comes_from_the_selected_admitted_search(domain,kind):
                          {'domain':selected_domain})
     assert evidence.select_read_answer({'kind':'count','source':1})
     report = build_report('completed','7 sensors',evidence,'en',detail='concise')
-    assert f'7 matching {kind}' in report['message']
+    assert f'{kind}' in report['message'] and ': 7' in report['message']
 
 
 def test_concise_success_omits_advisory_without_omitting_required_next_steps():
@@ -205,10 +205,10 @@ def test_room_readback_distinguishes_confirmed_lights_from_unavailable_exception
     assert 'do not resend' in report['message'] and 'Repairs' not in report['message']
     assert 'final device states were not verified' not in report['message']
     if detail == 'concise':
-        assert report['message'].startswith('Turned off 6 lights in Steve Office.')
+        assert report['message'].startswith('Turned off lights in Steve Office (6).')
         assert 'light.room_' not in report['message']
     else:
-        assert 'requested settings for 6 of 7 targets' in report['message']
+        assert 'requested settings: 6 of 7' in report['message']
 
 
 def test_room_summary_requires_a_shared_canonical_area_for_every_summarized_target():
@@ -222,7 +222,7 @@ def test_room_summary_requires_a_shared_canonical_area_for_every_summarized_targ
         assert 'Visible light.one, Visible light.two' in message
         assert 'in Office' not in message
     evidence.areas = dict.fromkeys(ids, 'Office')
-    assert build_report('completed', '', evidence, 'en', detail='concise')['message'] == 'Turned on 2 lights in Office.'
+    assert build_report('completed', '', evidence, 'en', detail='concise')['message'] == 'Turned on lights in Office (2).'
 
 
 def test_mismatch_missing_read_and_bounded_exception_names_do_not_disappear():
@@ -340,4 +340,4 @@ def test_a_count_reference_answers_only_a_counting_question(history):
     assert evidence.select_read_answer({'kind':'count','source':0})
     report=build_report('completed','The gate sensor never triggered this week.',evidence,'en')
     assert ('never triggered' in report['message']) is history
-    assert ('2 matching' in report['message']) is not history
+    assert ('scope: 2.' in report['message']) is not history

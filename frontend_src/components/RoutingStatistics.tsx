@@ -1,7 +1,7 @@
 import { BusyButton } from "./BusyButton";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import type { RoutingSurfaceStatistics } from "../types";
@@ -43,7 +43,7 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
     const missing = usage.requests - usage.reports;
     return <>{missing && !usage.reports ? t("routingStats.unavailable") :
       `${localeNumber(usage.input_tokens)} / ${localeNumber(usage.output_tokens)}`}
-      {missing > 0 && <small>{t("routingStats.missing", { count: localeNumber(missing) })}</small>}</>;
+      {missing > 0 && <small>{tn("routingStats.missing", missing, { count: localeNumber(missing) })}</small>}</>;
   }
   return <details className="routing-statistics" open={open} onToggle={event => {
     const expanded = event.currentTarget.open;

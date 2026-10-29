@@ -96,6 +96,14 @@ def _unverified_restore(tool_result: dict) -> bool:
     return False
 
 
+# Restore refusals async_restore_version itself raises, by their exact agent text.
+_RESTORE_NO_CONFIG_SIDE = "This version has no configuration to restore on that side."
+_RESTORE_YAML_TAGS = (
+    "This version contains YAML tags such as !secret or !include and "
+    "cannot be restored automatically. Re-create it manually."
+)
+
+
 def _err(
     code: str,
     message: str,
@@ -152,6 +160,20 @@ def require_admin(method: Callable) -> Callable:
     Generates a per-request ID, stashes it on the request object as 'phoenix_mcp_rid',
     and logs every admin API call so the ID can be correlated with response headers.
     """
+    return _admin_only(method, ready_required=True)
+
+
+def require_admin_before_ready(method: Callable) -> Callable:
+    """require_admin for a view that must answer while setup is still running.
+
+    Only for data that depends on nothing setup builds after the catalogs load,
+    such as the panel's own strings: without them the panel cannot even say
+    that setup is incomplete. Authentication and the admin check are unchanged.
+    """
+    return _admin_only(method, ready_required=False)
+
+
+def _admin_only(method: Callable, *, ready_required: bool) -> Callable:
     @functools.wraps(method)
     async def wrapper(self, request: web.Request, **kwargs: Any) -> web.Response:
         request_id = str(uuid.uuid4())
@@ -163,7 +185,7 @@ def require_admin(method: Callable) -> Callable:
         if not user or not user.is_admin:
             _LOGGER.info("Admin %s %s forbidden rid=%s", request.method, request.path, request_id)
             return _err("forbidden", "Admin access required.", 403, request_id, key="adminRequired")
-        if self.hass.data.get(RUNTIME_READY_KEY, True) is False:
+        if ready_required and self.hass.data.get(RUNTIME_READY_KEY, True) is False:
             return _err(
                 "service_unavailable",
                 "Phoenix MCP setup is not complete.",
@@ -629,7 +651,7 @@ class PhoenixAdminCatalogView(PhoenixView):
     name = "api:phoenix-mcp:admin:catalog"
     requires_auth = True
 
-    @require_admin
+    @require_admin_before_ready
     async def get(self, request: web.Request, language: str) -> web.Response:
         resources = await self.hass.async_add_executor_job(panel_catalog, language)
         if not resources:
@@ -4873,15 +4895,22 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             # which a fixed string would hide. This is an
             # admin-only surface authenticated by an HA session, so there is no
             # caller to keep in the dark, unlike the access-key-facing tools where
-            # uniform messages are what prevent an oracle.
+            # uniform messages are what prevent an oracle. The restore refusals
+            # Phoenix knows are translated; any other executor text is agent
+            # English, so the panel labels it as the tool's own report.
             detail = " ".join(
                 item.get("text", "")
                 for item in tool_result.get("content", [])
                 if isinstance(item, dict) and item.get("type") == "text"
             ).strip()
+            if detail == _RESTORE_NO_CONFIG_SIDE:
+                return _err("invalid_request", detail, 400, rid, key="restoreNoConfigSide")
+            if detail == _RESTORE_YAML_TAGS:
+                return _err("invalid_request", detail, 400, rid, key="restoreYamlTags")
             if detail:
                 return _err(
-                    "invalid_request", detail, 400, rid, passthrough=True,
+                    "invalid_request", detail, 400, rid,
+                    key="restoreToolReported", params={"detail": detail},
                 )
             return _err(
                 "invalid_request",

@@ -12,7 +12,7 @@ import type { MesaProfileScope, MesaSuggestion, MesaValidationIssue } from "../t
 import { ErrorMsg, Loading } from "../components/common";
 import { MesaIdentity } from "../components/MesaIdentity";
 import { MODE_LABEL_KEYS, SIGNAL_LABEL_KEYS, suggestionReason } from "../components/MesaSuggestions";
-import { localeNumber, t, tn } from "../i18n";
+import { localeNumber, t, tn, tnKey } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useMesa, type MesaState, type ProfileRow } from "../shell/mesa";
 import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
@@ -273,7 +273,7 @@ function OrphanGroup({ m, scope, ids, textKey, onOpen }: { m: MesaState; scope: 
   if (!ids.length) return null;
   return (
     <div className="mesa-orphan-group">
-      {tRich(textKey, { strong: (c) => <strong>{c}</strong> }, { count: ids.length, list: "" })}
+      {tRich(tnKey(textKey, ids.length), { strong: (c) => <strong>{c}</strong> }, { count: ids.length })}
       <ul className="mesa-notice-identities">
         {ids.map((id) => (
           <li key={id}>

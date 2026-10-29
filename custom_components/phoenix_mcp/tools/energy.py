@@ -845,7 +845,8 @@ async def _build_diff_edit_energy_config(args: dict, access_key: AccessKeyRecord
             "energy": {"before": _preview_rows(before, access_key, hass), "after": _preview_rows(after, access_key, hass)},
         }
     except Exception:  # noqa: BLE001 - diagnostic only
-        diff.setdefault("summary", "Change the Energy dashboard configuration")
+        for field, value in _summary("edit_energy_config.fallback").items():
+            diff.setdefault(field, value)
     return diff
 
 
@@ -1038,7 +1039,7 @@ def energy_recovery_diff(before: dict[str, Any], after: dict[str, Any], side: st
     new_prefs = after["preferences"]
     return {
         "kind": "config_diff",
-        "summary": "Restore Energy dashboard preferences",
+        **_summary("restore.energy"),
         "target": {"type": "energy", "id": "preferences", "label": "Energy dashboard"},
         "before": json.dumps(filter_service_response(old_prefs, access_key, hass), indent=2, sort_keys=True, default=str),
         "after": json.dumps(filter_service_response(new_prefs, access_key, hass), indent=2, sort_keys=True, default=str),

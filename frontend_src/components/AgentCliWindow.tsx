@@ -17,6 +17,8 @@ import {
 import { approvalStatusLabel, copyToClipboard, effortLevelLabel } from "../utils";
 import { clearReasonDraft, getReasonDraft } from "../utils/approval_reason_draft";
 import { localizedApprovalReason } from "../utils/approval_reason";
+import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
+import { localizedExecutorError } from "../utils/approval_text";
 import { subscribeApprovalEvents } from "../utils/approval_events";
 import {
   AGENTCHAT_REVIEW_CLOSED_EVENT,
@@ -50,7 +52,7 @@ type ChatEntry =
   | { kind: "tool_result"; id: string; name: string; isError: boolean; summary: string }
   | { kind: "tool_image"; id: string; name: string; mimeType: string; dataUrl?: string; unavailable?: boolean }
   | { kind: "progress"; id: string; message: string; activity?: boolean }
-  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; checking?: boolean }
+  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; executionReason?: boolean; checking?: boolean }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
       rateLimit?: ProviderRateLimit; providerDetail?: string };
@@ -1279,7 +1281,8 @@ export function AgentCliWindow({
               updateLive((prev) => prev.map((e) =>
                 e.kind === "approval" && e.approvalId === p.approval_id
                   ? { ...e, status: String(p.status ?? "resolved"),
-                      reason: typeof p.reason === "string" && p.reason ? p.reason : undefined } : e));
+                      reason: typeof p.reason === "string" && p.reason ? p.reason : undefined,
+                      executionReason: p.reason_kind === "execution" } : e));
               setAnnouncement(t("agentchat.announceResolved", { status: approvalStatusLabel(String(p.status ?? "resolved")) }));
               break;
             case "usage": {
@@ -2073,7 +2076,7 @@ export function AgentCliWindow({
           {pendingContinue !== null && !sending && (
             <div className="agentcli-continue" role="status">
               <span className="agentcli-continue-text">
-                {t("agentchat.pausedAfter", { count: pendingContinue })}
+                {tn("agentchat.pausedAfter", pendingContinue)}
               </span>
               <button className="btn btn-primary btn-sm" onClick={continueTurn}>{t("agentchat.continue")}</button>
               <button className="btn btn-sm" onClick={() => setPendingContinue(null)}>{t("agentchat.stop")}</button>
@@ -2221,7 +2224,7 @@ export function AgentCliWindow({
 export function modelStatusText(p: Record<string, unknown>): string {
   const provider = String(p.provider ?? "");
   const seconds = localeNumber(Number(p.seconds ?? 0));
-  const detail = String(p.detail ?? "");
+  const detail = failureDetailText(String(p.detail ?? ""), p.detail_code);
   const attempt = localeNumber(Number(p.attempt ?? 0));
   let status: string;
   if (p.phase === "retrying") {
@@ -2250,9 +2253,7 @@ function serverText(
   rateLimit?: ProviderRateLimit,
   providerDetail?: string,
 ): string {
-  const key = code ? `agentchat.notice.${code}` : "";
-  const base = key && hasMessage(key) ? t(key, params) : message;
-  const lines = [base, rateLimitDiagnostics(rateLimit)];
+  const lines = [chatNoticeText(code, message, params), rateLimitDiagnostics(rateLimit)];
   if (providerDetail) lines.push(t("agentchat.providerDetail", { detail: providerDetail }));
   return lines.filter(Boolean).join("\n");
 }
@@ -2463,7 +2464,7 @@ function ChatItem({
           ) : (
             <div className="agentcli-approval-status">
               {entry.checking ? t("common.loading") : approvalStatusLabel(entry.status)}
-              {entry.reason ? <span className="agentcli-approval-reason">{t("agentchat.approvalReason", { reason: localizedApprovalReason(entry.reason) })}</span> : null}
+              {entry.reason ? <span className="agentcli-approval-reason">{t("agentchat.approvalReason", { reason: entry.executionReason ? localizedExecutorError(entry.reason) : localizedApprovalReason(entry.reason) })}</span> : null}
             </div>
           )}
         </div>

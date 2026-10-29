@@ -20,7 +20,7 @@ import { Loading, ErrorMsg } from "../components/common";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
-import { hasMessage, loadTranslations, resolveLanguage, t } from "../i18n";
+import { hasMessage, loadTranslations, registerLanguageRoot, resolveLanguage, t } from "../i18n";
 
 import { JS_BUILD } from "../version";
 
@@ -177,6 +177,7 @@ class QuickAddElement extends HTMLElement {
     const mount = document.createElement("div");
     mount.style.height = "100%";
     shadow.appendChild(mount);
+    registerLanguageRoot(mount);
 
     this._root = createRoot(mount);
     this._root.render(

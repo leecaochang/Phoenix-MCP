@@ -118,9 +118,12 @@ describe("i18n keys", () => {
     // pins the diff summary entries against const.DIFF_SUMMARY_TEMPLATES in both
     // directions.
     const used = new Set([...uses.map((u) => u.key), ...literals]);
+    // A plural base held as a literal and resolved with tnKey() (for a tRich
+    // sentence) uses every category stored under it.
+    const pluralBase = (k: string) => k.replace(/\.(zero|one|two|few|many|other)$/, "");
     const orphans = Object.keys(catalog)
       .filter((k) => !BACKEND_NAMED.some((p) => k.startsWith(p)))
-      .filter((k) => !used.has(k));
+      .filter((k) => !used.has(k) && !used.has(pluralBase(k)));
     expect(orphans).toEqual([]);
   });
 

@@ -954,7 +954,7 @@ async def test_room_targets_follow_registry_area_even_when_names_suggest_other_r
     ])
     report = payload(await rpc(hass, companion, args={'request': 'turn off lights in steve office'}))
     assert len(calls) == 1 and set(calls[0]['entity_id']) == set(targets)
-    assert report['message'].startswith('Turned off 2 lights in Steve Office.')
+    assert report['message'].startswith('Turned off lights in Steve Office (2).')
     assert 'Unavailable (1): Garage Switch Qwerty Lights.' in report['message']
     assert report['verification'] == 'not_verified'
     assert not companion[0].agent_recovery.records(companion[1].id)
@@ -969,7 +969,7 @@ async def test_invalid_count_report_gets_one_tools_free_correction(hass, compani
                         transcripts=transcripts)
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
-    assert report['status'] == 'completed' and '1 matching light entities' in report['message']
+    assert report['status'] == 'completed' and 'Matching light entities in your permitted scope: 1.' in report['message']
     assert '999' not in report['message'] and report['execution'] == 'not_attempted'
     assert len(catalogs) == 3 and catalogs[-1] == []
     assert 'did not pass validation' in json.dumps(transcripts[-1])

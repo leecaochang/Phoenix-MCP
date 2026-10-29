@@ -5,7 +5,7 @@ import { PermissionSelector } from "./PermissionSelector";
 import { MesaProfileLink, type LinkScope } from "./MesaProfileLink";
 import { api, currentHass } from "../api";
 import { HIGH_RISK_DOMAINS, PERMISSION_LABEL_KEYS } from "../utils";
-import { compareStrings, t, tn } from "../i18n";
+import { compareStrings, foldForSearch, t, tn } from "../i18n";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
@@ -24,13 +24,13 @@ const INDIRECT_CONTROL_DOMAINS = new Set([
  * makes both searches useful without changing what is displayed.
  */
 export function matchesTreeSearch(query: string, ...values: Array<string | null | undefined>): boolean {
-  const literalQuery = query.trim().toLocaleLowerCase();
+  const literalQuery = foldForSearch(query.trim());
   if (!literalQuery) return true;
   const compactQuery = literalQuery.replace(/[\s._-]+/g, "");
 
   return values.some((value) => {
     if (!value) return false;
-    const literalValue = value.toLocaleLowerCase();
+    const literalValue = foldForSearch(value);
     if (literalValue.includes(literalQuery)) return true;
     return compactQuery.length > 0
       && literalValue.replace(/[\s._-]+/g, "").includes(compactQuery);

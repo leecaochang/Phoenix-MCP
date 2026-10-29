@@ -49,12 +49,11 @@
       "daysAgo": "{d} d sedan",
       "delete": "Radera",
       "deletePermanently": "Radera permanent",
-      "diffAnnounceAll": "Annonsera alla verktyg: {from} -> {to}",
-      "diffAssistExposure": "Assist-exponeringsfilter: {from} -> {to}",
-      "diffInlineWait": "Väntetid för godkännande i anropet: {from} -> {to}",
-      "diffPassThrough": "Pass-through: {from} -> {to}",
-      "diffPermissionTree": "Behörighetsträd: {count} nod(er) skiljer sig",
-      "diffRateLimit": "Hastighetsgräns: {fromRequests}/min burst {fromBurst} -> {toRequests}/min burst {toBurst}",
+      "diffAnnounceAll": "Annonsera alla verktyg: {from}, nu {to}",
+      "diffAssistExposure": "Assist-exponeringsfilter: {from}, nu {to}",
+      "diffInlineWait": "Väntetid för godkännande i anropet: {from}, nu {to}",
+      "diffPassThrough": "Pass-through: {from}, nu {to}",
+      "diffRateLimit": "Hastighetsgräns: {fromRequests}/min burst {fromBurst}, nu {toRequests}/min burst {toBurst}",
       "done": "Klar",
       "empty": "Inga åtkomstnycklar ännu. Skapa en för att komma igång.",
       "emptyFiltered": "Inga åtkomstnycklar matchar filtret.",
@@ -170,13 +169,20 @@
       "switchToScoped": "Byt till avgränsat läge",
       "updateFailed": "Det gick inte att uppdatera åtkomstnyckeln.",
       "waitBeforeClose": "Vänta 3 sekunder innan du stänger",
-      "notesCount": "{count} / {max} tecken",
       "notesDiscard": "Förkasta ändringar",
       "notesLabel": "Anteckningar för agenter",
       "notesPlaceholder": "Exempel: Gästrummet kallas arbetsrummet. Fråga innan du ändrar något i barnrummet.",
       "notesTooLong": "Anteckningar får innehålla högst {max} tecken.",
       "cardGuidance": "Vägledning",
-      "cardAgentBehavior": "Agentbeteende"
+      "cardAgentBehavior": "Agentbeteende",
+      "diffPermissionTree": {
+        "one": "Behörighetsträd: {count} nod skiljer sig",
+        "other": "Behörighetsträd: {count} noder skiljer sig"
+      },
+      "notesCount": {
+        "one": "{count} / {max} tecken",
+        "other": "{count} / {max} tecken"
+      }
     },
     "adminError": {
       "accessKeyIdOrNull": "{field} måste vara en åtkomstnyckel-ID-sträng eller null.",
@@ -332,7 +338,24 @@
       "attachmentDimensions": "En bifogad bild är större än {max} pixlar på en sida.",
       "attachmentsContinue": "Bilder kan bara bifogas till ett nytt meddelande.",
       "attachmentsCompanion": "Home Companion tar bara emot textkommandon, så bilder kan inte bifogas.",
-      "attachmentsVisionUnsupported": "Den här modellen accepterar inte bilder."
+      "attachmentsVisionUnsupported": "Den här modellen accepterar inte bilder.",
+      "providerKeyRejected": "API-nyckeln avvisades.",
+      "providerHttpStatus": "Leverantören returnerade HTTP {status}.",
+      "providerNamedHttpStatus": "{provider} returnerade HTTP {status}.",
+      "providerSettingsInvalid": "Ogiltiga anslutningsinställningar för leverantören.",
+      "providerUnreachable": "Det gick inte att nå leverantören: {detail}",
+      "providerOllamaUnreachable": "Det gick inte att nå Ollama på {url}.\n({detail})\n\nPhoenix MCP ansluter från Home Assistant-servern, inte från din webbläsare, så Ollama måste vara nåbar från den värden:\n- Ollama körs och är bunden till ett nåbart gränssnitt (OLLAMA_HOST=0.0.0.0).\n- Brandväggen tillåter Ollama-porten (standard 11434).\n- 'localhost' betyder här HA-servern, inte din dator.",
+      "providerOllamaCloudUnreachable": "Det gick inte att nå Ollama Cloud på {url}. ({detail})",
+      "providerFireworksInactive": "Fireworks rapporterar att det här kontot inte är aktivt för API-inferens. Kontrollera kontostatusen och bekräfta att fakturering eller krediter för gratis provperiod är aktiverade.",
+      "providerQwenWrongEndpoint": "Qwen returnerade HTTP 404. Phoenix använder den OpenAI-kompatibla Chat Completions-slutpunkten; ange den bas-URL:en, inte den Anthropic-kompatibla URL:en /apps/anthropic.",
+      "decisionProviderRateLimited": "Beslutsleverantören begränsar antalet begäranden. Försök igen senare.",
+      "decisionProviderTimeout": "Beslutsleverantören svarade inte i tid.",
+      "decisionProviderUnreachable": "Det gick inte att nå beslutsleverantören.",
+      "decisionProviderUnreadable": "Beslutsleverantören returnerade ett svar som Phoenix inte kunde läsa.",
+      "decisionProviderCheckFailed": "Kontrollen av beslutsleverantören misslyckades ({detail}).",
+      "restoreNoConfigSide": "Den här versionen har ingen konfiguration att återställa på den sidan.",
+      "restoreYamlTags": "Den här versionen innehåller YAML-taggar som !secret eller !include och kan inte återställas automatiskt. Skapa den igen manuellt.",
+      "restoreToolReported": "Återställningen kunde inte tillämpas. Verktyget rapporterade: {detail}"
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -420,7 +443,6 @@
         "upstream": "Leverantören är tillfälligt otillgänglig."
       },
       "options": "Alternativ",
-      "pausedAfter": "Pausad efter {count} steg. Fortsätta undersöka?",
       "popIn": "Fäst tillbaka i Home Assistant",
       "popOut": "Öppna i ett separat fönster",
       "popOutBlocked": "Din webbläsare blockerade det separata fönstret. Tillåt popup-fönster för Home Assistant och försök igen.",
@@ -489,7 +511,11 @@
       "verbose": "Visa utförlig utdata",
       "verboseHint": "Visa agentens verktygsanrop, verktygsresultat och tänkande. Av visar endast det slutliga svaret.",
       "workingOn": "Arbetar: {name}",
-      "workingSpinner": "Arbetar…"
+      "workingSpinner": "Arbetar…",
+      "pausedAfter": {
+        "one": "Pausad efter {count} steg. Fortsätta undersöka?",
+        "other": "Pausad efter {count} steg. Fortsätta undersöka?"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",
@@ -497,12 +523,12 @@
       "blueprint.create.body": "Detta tillämpar den föreslagna konfigurationsändringen.",
       "blueprint.create.title": "Skapa {domain}-blueprint '{rel}'",
       "blueprint.delete.body": "Detta raderar {domain}-blueprinten {rel} permanent.",
-      "blueprint.delete.consumers.body": "Detta raderar {rel} permanent, trots att {count} automatiseringar eller skript fortfarande använder den.",
-      "blueprint.delete.consumers.title": "Radera {domain}-blueprinten '{rel}' ({count} använder den fortfarande)",
+      "blueprint.delete.consumers.body": "Detta raderar {rel} permanent. Automatiseringar och skript som fortfarande använder den: {count}.",
+      "blueprint.delete.consumers.title": "Radera {domain}-blueprinten '{rel}' (fortfarande i bruk: {count})",
       "blueprint.delete.title": "Radera {domain}-blueprinten '{rel}'",
       "blueprint.edit.body": "Detta tillämpar den föreslagna konfigurationsändringen.",
       "blueprint.edit.consumers.body": "Detta tillämpar den föreslagna konfigurationsändringen.",
-      "blueprint.edit.consumers.title": "Ersätt {domain}-blueprinten '{rel}' ({count} laddas om)",
+      "blueprint.edit.consumers.title": "Ersätt {domain}-blueprinten '{rel}' (laddas om: {count})",
       "blueprint.edit.title": "Ersätt {domain}-blueprinten '{rel}'",
       "call_service.body": "Detta kör den föreslagna tjänsteåtgärden i Home Assistant.",
       "call_service.mesa.body": "Detta kör den föreslagna tjänsteåtgärden i Home Assistant.",
@@ -712,12 +738,8 @@
       "update_calendar_event.body": "Detta tillämpar den föreslagna åtgärden.",
       "update_calendar_event.title": "Uppdatera kalenderhändelse",
       "zigbee_binding.body": "Detta ändrar direkt styrning mellan två Zigbee-enheter. Öppna Detaljer för att granska båda enheterna och de valda klustren.",
-      "zigbee_binding.devices.body": "Detta {operation} direkt Zigbee-styrning från {source} till {target}. Öppna Detaljer för att granska den exakta relationen.",
-      "zigbee_binding.devices.title": "{operation} Zigbee-bindning från {source} till {target}",
       "zigbee_binding.title": "Ändra bindningen för en Zigbee-enhet",
       "zigbee_group.body": "Detta ändrar vilka enheter som styrs tillsammans som en Zigbee-grupp. Öppna Detaljer för att granska medlemskapet.",
-      "zigbee_group.named.body": "Detta {operation} Zigbee-gruppen {name}. Öppna Detaljer för att granska den exakta ändringen av medlemskapet.",
-      "zigbee_group.named.title": "{operation} Zigbee-gruppen {name}",
       "zigbee_group.title": "Ändra en Zigbee-grupp",
       "zigbee_options.body": "Detta ändrar enhetsalternativen i Zigbee2MQTT. Öppna Detaljer för att granska de föreslagna värdena.",
       "zigbee_options.device.body": "Detta ändrar enhetsalternativen i Zigbee2MQTT för {label}. Öppna Detaljer för att granska de föreslagna värdena.",
@@ -754,7 +776,33 @@
       "dashboard_resource.delete.title": "Ta bort kontrollpanelsresurs {url}",
       "dashboard_resource.create.body": "Varje webbläsare som öppnar en kontrollpanel läser in {url}. En JavaScript-fil körs med den personens åtkomst till Home Assistant, så godkänn bara en fil du litar på.",
       "dashboard_resource.update.body": "Detta ändrar en fil som varje webbläsare läser in när den öppnar en kontrollpanel. Öppna Detaljer för att jämföra den nuvarande och den föreslagna filen.",
-      "dashboard_resource.delete.body": "Kontrollpaneler slutar läsa in {url}. Kort som kommer från den visar ett fel tills den läggs till igen."
+      "dashboard_resource.delete.body": "Kontrollpaneler slutar läsa in {url}. Kort som kommer från den visar ett fel tills den läggs till igen.",
+      "edit_energy_config.fallback.body": "Detta uppdaterar kontrollpanelskonfigurationen i Home Assistant.",
+      "edit_energy_config.fallback.title": "Ändra konfigurationen för energikontrollpanelen",
+      "restore.blueprint.body": "Detta återställer blueprint-källan från den valda ändringen. Öppna Detaljer för att jämföra den med den nuvarande källan.",
+      "restore.blueprint.title": "Återställ blueprint-källan '{label}'",
+      "restore.dashboard_layout.body": "Detta återställer kontrollpanelens layout från den valda ändringen. Öppna Detaljer för att jämföra den med den nuvarande layouten.",
+      "restore.dashboard_layout.title": "Återställ layouten för kontrollpanelen '{label}'",
+      "restore.dashboard_registry.body": "Detta återställer kontrollpanelens registerinställningar från den valda ändringen. Öppna Detaljer för att jämföra dem med de nuvarande inställningarna.",
+      "restore.dashboard_registry.title": "Återställ registerposten för kontrollpanelen '{label}'",
+      "restore.dashboard_resource.body": "Detta återställer kontrollpanelsresursen från den valda ändringen. Varje webbläsare läser in den när den öppnar en kontrollpanel.",
+      "restore.dashboard_resource.title": "Återställ kontrollpanelsresurs {url}",
+      "restore.energy.body": "Detta återställer inställningarna för energikontrollpanelen från den valda ändringen. Öppna Detaljer för att jämföra dem med de nuvarande inställningarna.",
+      "restore.energy.title": "Återställ inställningarna för energikontrollpanelen",
+      "restore.template_helper.body": "Detta återställer mallhjälparens konfiguration från den valda ändringen. Öppna Detaljer för att jämföra den med den nuvarande konfigurationen.",
+      "restore.template_helper.title": "Återställ mallhjälparens konfiguration",
+      "zigbee_binding.devices.bind.body": "Detta låter {source} styra {target} direkt via Zigbee. Öppna Detaljer för att granska den exakta relationen.",
+      "zigbee_binding.devices.bind.title": "Koppla ihop Zigbee-enheten {source} med {target}",
+      "zigbee_binding.devices.unbind.body": "Detta gör att {source} slutar styra {target} direkt via Zigbee. Öppna Detaljer för att granska den exakta relationen.",
+      "zigbee_binding.devices.unbind.title": "Koppla isär Zigbee-enheten {source} från {target}",
+      "zigbee_group.named.add_members.body": "Detta lägger till enheter i Zigbee-gruppen {name}. Öppna Detaljer för att granska den exakta ändringen av medlemskapet.",
+      "zigbee_group.named.add_members.title": "Lägg till enheter i Zigbee-gruppen {name}",
+      "zigbee_group.named.create.body": "Detta skapar Zigbee-gruppen {name}. Öppna Detaljer för att granska dess medlemmar.",
+      "zigbee_group.named.create.title": "Skapa Zigbee-gruppen {name}",
+      "zigbee_group.named.delete.body": "Detta tar bort Zigbee-gruppen {name}. Dess enheter förblir parkopplade men styrs inte längre tillsammans.",
+      "zigbee_group.named.delete.title": "Ta bort Zigbee-gruppen {name}",
+      "zigbee_group.named.remove_members.body": "Detta tar bort enheter från Zigbee-gruppen {name}. Öppna Detaljer för att granska den exakta ändringen av medlemskapet.",
+      "zigbee_group.named.remove_members.title": "Ta bort enheter från Zigbee-gruppen {name}"
     },
     "approvals": {
       "approve": "Godkänn",
@@ -878,7 +926,7 @@
       "filterTimeAria": "Filtrera efter tidsfönster",
       "ipPlaceholder": "Källa...",
       "loadFailed": "Det gick inte att läsa in revisionsloggen. Uppdatera för att försöka igen.",
-      "mesaAdvisory": "Rådgivande: fortsatte med en varning (skulle kräva godkännande om det tillämpades)",
+      "mesaAdvisory": "Rådgivande: fortsatte med en varning (skulle kräva godkännande i påtvingat läge)",
       "methodPlaceholder": "Metod...",
       "openEntryAria": "Öppna revisionspost {outcome} för {name}",
       "outcomeAllowed": "Tillåten",
@@ -944,8 +992,8 @@
         "label": "Diagnostik"
       },
       "cap_energy_write": {
-        "description": "Ändra vilken statistik som matar Energi-kontrollpanelen: elnät, solenergi, batteri, gas, vatten och enskilda enheter.",
-        "label": "Hantera Energi-kontrollpanelen"
+        "description": "Ändra vilken statistik som matar energikontrollpanelen: elnät, solenergi, batteri, gas, vatten och enskilda enheter.",
+        "label": "Hantera energikontrollpanelen"
       },
       "cap_esphome_flash": {
         "description": "Installera kompilerad firmware på en ESPHome-enhet trådlöst och ersätt den firmware som körs. En dålig avbildning kan göra en enhet oåtkomlig tills den flashas om via kabel, så Bekräfta rekommenderas starkt.",
@@ -1109,7 +1157,6 @@
       "typeScript": "Skript",
       "typeYamlConfig": "YAML-konfiguration",
       "previewCardFallbackLabel": "kort",
-      "previewErrorHead": "Ett kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta kortet.",
       "previewNotReady": "Förhandsgranskning av kontrollpaneler är inte tillgänglig i den här sessionen. Öppna valfri kontrollpanel en gång och återvänd sedan hit.",
       "restore": "Återställ",
       "restoreBefore": "Återställ ”Före”",
@@ -1130,10 +1177,16 @@
       "stackedShort": "Staplad",
       "sideBySideShort": "Sida vid sida",
       "lineViewShort": "Radvy",
-      "previewErrorHeadMany": "Kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten.",
       "previewErrorCopy": "Kopiera fel",
       "previewErrorCopyLead": "Konfigurationsfel för kort hittades i förhandsgranskningen av kontrollpanelen, undersök dem:",
-      "previewStrategySection": "Det här avsnittet genereras av en strategi vid körning; det finns inga statiska kort att förhandsgranska."
+      "previewStrategySection": "Det här avsnittet genereras av en strategi vid körning; det finns inga statiska kort att förhandsgranska.",
+      "defaultDashboard": "Standardkontrollpanel",
+      "energyDashboard": "Energikontrollpanel",
+      "cardNoun": "kort",
+      "previewErrorHead": {
+        "one": "Ett kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta kortet.",
+        "other": "Kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten."
+      }
     },
     "common": {
       "after": "Efter",
@@ -1158,7 +1211,10 @@
       "preview": "Förhandsgranska",
       "refresh": "Uppdatera",
       "save": "Spara",
-      "saving": "Sparar..."
+      "saving": "Sparar...",
+      "serverUnreachable": "Det gick inte att nå Home Assistant. Kontrollera anslutningen och försök igen.",
+      "httpStatus": "Servern svarade med HTTP {status}. Uppdatera och försök igen.",
+      "sentenceSeparator": " "
     },
     "conversations": {
       "accessKeyLabel": "Åtkomstnyckel",
@@ -1209,7 +1265,6 @@
       },
       "execution": "Verktyg: {outcome}",
       "executionUnknown": "Resultatet är obekräftat: åtgärden kan ha körts. Kontrollera Home Assistant innan du försöker igen.",
-      "fullText": "Visa hela texten ({count} tecken)",
       "groupingUnavailable": "Ingen gräns för användartur angavs, så varje verktygsutbyte visas separat. En delad session innebär inte en delad prompt.",
       "historyMissing": "Tidigare turer är otillgängliga. De kan ha ägt rum före inspelningen eller tagits bort av bevarandegränserna.",
       "identityUnavailable": "Inte tillgänglig för Phoenix",
@@ -1229,7 +1284,6 @@
         "sanitization": "En del innehåll kunde inte rensas på ett säkert sätt och utelämnades.",
         "size_limit": "Vissa detaljer kortades eller utelämnades för att hållas inom inspelningsgränserna."
       },
-      "omittedEvents": "Händelsegränsen har nåtts: {count} händelser visas inte. Registrerade utfall behålls separat.",
       "operation": {
         "action": "Begärde en enhetsåtgärd",
         "delegate": "Begärde delegerad assistans",
@@ -1337,14 +1391,23 @@
       "unknown": "Okänd",
       "week": "Senaste veckan",
       "clearShort": "Rensa konversationer",
-      "retention": "Bevarande"
+      "retention": "Bevarande",
+      "fullText": {
+        "one": "Visa hela texten ({count} tecken)",
+        "other": "Visa hela texten ({count} tecken)"
+      },
+      "omittedEvents": {
+        "one": "Händelsegränsen har nåtts: {count} händelse visas inte. Registrerade utfall behålls separat.",
+        "other": "Händelsegränsen har nåtts: {count} händelser visas inte. Registrerade utfall behålls separat."
+      },
+      "toolCallRejected": "Verktygsanropet avvisades innan det kördes. Detaljer visar orsaken som agenten fick."
     },
     "diff": {
       "blueprint.create": "Skapa {domain}-blueprint '{rel}'",
       "blueprint.delete": "Radera {domain}-blueprinten '{rel}'",
-      "blueprint.delete.consumers": "Radera {domain}-blueprinten '{rel}' ({count} använder den fortfarande)",
+      "blueprint.delete.consumers": "Radera {domain}-blueprinten '{rel}' (fortfarande i bruk: {count})",
       "blueprint.edit": "Ersätt {domain}-blueprinten '{rel}'",
-      "blueprint.edit.consumers": "Ersätt {domain}-blueprinten '{rel}' ({count} laddas om)",
+      "blueprint.edit.consumers": "Ersätt {domain}-blueprinten '{rel}' (laddas om: {count})",
       "call_service": "Anropa {domain}/{service}",
       "call_service.mesa": "Anropa {domain}/{service} (inkluderar MESA-bekräftelse)",
       "config_entry.options": "Ändra {keys} på hjälparen '{label}'",
@@ -1422,9 +1485,7 @@
       "set_entity": "Uppdatera metadata i entitetsregistret ({fields}) för {entity_id}",
       "update_calendar_event": "Uppdatera kalenderhändelse",
       "zigbee_binding": "Ändra bindningen för en Zigbee-enhet",
-      "zigbee_binding.devices": "{operation} Zigbee-bindning från {source} till {target}",
       "zigbee_group": "Ändra en Zigbee-grupp",
-      "zigbee_group.named": "{operation} Zigbee-gruppen {name}",
       "zigbee_options": "Ändra enhetsalternativ i Zigbee2MQTT",
       "zigbee_options.device": "Ändra Zigbee2MQTT-alternativ ({keys}) för {label}",
       "zigbee_permit": "Öppna Zigbee-nätverket för anslutning",
@@ -1442,7 +1503,20 @@
       "zigbee_topology.backend": "Skanna {backend}-grannstabeller för den avgränsade Zigbee-kartan",
       "dashboard_resource.create": "Lägg till kontrollpanelsresurs {url}",
       "dashboard_resource.update": "Ändra kontrollpanelsresurs {url}",
-      "dashboard_resource.delete": "Ta bort kontrollpanelsresurs {url}"
+      "dashboard_resource.delete": "Ta bort kontrollpanelsresurs {url}",
+      "edit_energy_config.fallback": "Ändra konfigurationen för energikontrollpanelen",
+      "restore.blueprint": "Återställ blueprint-källan '{label}'",
+      "restore.dashboard_layout": "Återställ layouten för kontrollpanelen '{label}'",
+      "restore.dashboard_registry": "Återställ registerposten för kontrollpanelen '{label}'",
+      "restore.dashboard_resource": "Återställ kontrollpanelsresurs {url}",
+      "restore.energy": "Återställ inställningarna för energikontrollpanelen",
+      "restore.template_helper": "Återställ mallhjälparens konfiguration",
+      "zigbee_binding.devices.bind": "Koppla ihop Zigbee-enheten {source} med {target}",
+      "zigbee_binding.devices.unbind": "Koppla isär Zigbee-enheten {source} från {target}",
+      "zigbee_group.named.add_members": "Lägg till enheter i Zigbee-gruppen {name}",
+      "zigbee_group.named.create": "Skapa Zigbee-gruppen {name}",
+      "zigbee_group.named.delete": "Ta bort Zigbee-gruppen {name}",
+      "zigbee_group.named.remove_members": "Ta bort enheter från Zigbee-gruppen {name}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",
@@ -1459,8 +1533,8 @@
       "advisoryOnly": "Detta är endast rådgivande; ingen åtgärd krävs.",
       "apply": "Tillämpa",
       "applySuggestionFailed": "Det gick inte att tillämpa förslaget.",
-      "archiveContains": "Arkivet innehåller {summary} profil(er).",
-      "archiveContainsDefaults": "Arkivet innehåller {summary} profil(er) plus installationens standardvärden.",
+      "archiveContains": "Arkivet innehåller profiler för: {summary}.",
+      "archiveContainsDefaults": "Arkivet innehåller profiler för: {summary}, plus installationens standardvärden.",
       "archiveFileAria": "Arkivfil för profiler",
       "archiveNone": "inga",
       "cancel": "Avbryt",
@@ -1570,7 +1644,6 @@
       "importComplete": "Importen är klar",
       "importFailed": "Importen misslyckades.",
       "importIntro": "Importera profiler från ett MESA JSON-arkiv. Ogiltiga profiler hoppas över och rapporteras. Giltiga profiler börjar gälla direkt.",
-      "importInvalid": "{count} dokument klarade inte valideringen och importerades inte:",
       "importNotArchive": "Ingen MESA-profilexport (roten mesa_export saknas).",
       "importNotJson": "Kunde inte läsa filen som JSON.",
       "importResult": {
@@ -1599,10 +1672,6 @@
       "noMatchingEntity": "Ingen matchande entitet. Välj en från listan.",
       "noMatchingIntegration": "Ingen matchande integration. Välj en från listan.",
       "noOpenSuggestions": "Inga öppna förslag.",
-      "orphanAreas": "<strong>{count} övergivna områdesprofiler</strong> (området finns inte längre): {list}",
-      "orphanDevices": "<strong>{count} övergivna enhetsprofiler</strong> (enheten finns inte längre): {list}",
-      "orphanEntities": "<strong>{count} övergivna entitetsprofiler</strong> (entiteten finns inte längre): {list}",
-      "orphanIntegrations": "<strong>{count} övergivna integrationsprofiler</strong> (integrationen är inte inläst): {list}",
       "partialInspection": {
         "one": "{count} automatisering kunde bara granskas delvis eftersom den innehåller mallar eller använder en blueprint.",
         "other": "{count} automatiseringar kunde bara granskas delvis eftersom de innehåller mallar eller använder blueprints."
@@ -1695,11 +1764,34 @@
       "deleteEntityConfirm": "Radera den här entitetsprofilen?",
       "deleteEntityProfile": "Radera entitetsprofil",
       "deleteEntityWarn": "Entiteten ”{key}” faller tillbaka till de profiler som täcker den (enhet, område, integration, domän, installationens standardvärden och sedan den inbyggda säkerhetsbaslinjen). Själva entiteten finns kvar i Home Assistant.",
-      "discardAndOpen": "Förkasta och öppna"
+      "discardAndOpen": "Förkasta och öppna",
+      "importInvalid": {
+        "one": "{count} dokument klarade inte valideringen och importerades inte:",
+        "other": "{count} dokument klarade inte valideringen och importerades inte:"
+      },
+      "orphanAreas": {
+        "one": "<strong>{count} övergiven områdesprofil</strong> (området finns inte längre):",
+        "other": "<strong>{count} övergivna områdesprofiler</strong> (området finns inte längre):"
+      },
+      "orphanDevices": {
+        "one": "<strong>{count} övergiven enhetsprofil</strong> (enheten finns inte längre):",
+        "other": "<strong>{count} övergivna enhetsprofiler</strong> (enheten finns inte längre):"
+      },
+      "orphanEntities": {
+        "one": "<strong>{count} övergiven entitetsprofil</strong> (entiteten finns inte längre):",
+        "other": "<strong>{count} övergivna entitetsprofiler</strong> (entiteten finns inte längre):"
+      },
+      "orphanIntegrations": {
+        "one": "<strong>{count} övergiven integrationsprofil</strong> (integrationen är inte inläst):",
+        "other": "<strong>{count} övergivna integrationsprofiler</strong> (integrationen är inte inläst):"
+      },
+      "roleTrigger": "utlösare",
+      "roleCondition": "villkor",
+      "roleAction": "åtgärd"
     },
     "mesaSuggestion": {
       "baseline_note": " Förbjudet matchar den inbyggda baslinjen för denna domän, så den skapade profilen tydliggör den avsikten; välj Bekräfta i Granska för att i stället tillåta agentstyrning bakom godkännanden.",
-      "blast_radius.fanout": "Denna {noun} refererar till {count} entiteter och har ingen egen MESA-profil; en enda utlösare har en stor spridningsrisk.",
+      "blast_radius.fanout": "Denna {noun} har ingen egen MESA-profil och refererar till många entiteter ({count}); en enda utlösare har en stor spridningsrisk.",
       "blast_radius.risky.one": "Denna {noun} berör {count} riskabel entitet ({shown}) och har ingen egen MESA-profil; en agent som får utlösa den styr dessa entiteter indirekt och kringgår deras egna profiler.",
       "blast_radius.risky.other": "Denna {noun} berör {count} riskabla entiteter ({shown}) och har ingen egen MESA-profil; en agent som får utlösa den styr dessa entiteter indirekt och kringgår deras egna profiler.",
       "concern.alarm_control_panel": "aktiverar och avaktiverar hemmets larmsystem; en tyst avaktivering sätter det ur spel",
@@ -1709,7 +1801,7 @@
       "concern.update": "tar emot firmware-uppdateringar som i praktiken är oåterkalleliga och kan göra enheten obrukbar",
       "concern.valve": "styr vatten- eller gasflödet; ett felaktigt tillstånd kan orsaka översvämning eller läckage utan tillsyn",
       "concern.water_heater": "når skållheta temperaturer och drar energi; återhämtar sig långsamt",
-      "naked_risky.domain": "{count} {domain}-entiteter saknar MESA-profil på alla nivåer. Denna domän {concern}. En domännivåprofil täcker dem alla på en gång.{baseline_note}",
+      "naked_risky.domain": "{domain}-entiteter utan MESA-profil på någon nivå: {count}. Denna domän {concern}. En domännivåprofil täcker dem alla på en gång.{baseline_note}",
       "naked_risky.entity": "Ingen MESA-profil täcker denna entitet på någon nivå, och den {concern}.{baseline_note}",
       "noun.automation": "automatisering",
       "noun.scene": "scen",
@@ -1858,7 +1950,6 @@
       "failed": "Misslyckade eller ofullständiga",
       "headline": "{percent}% av begärandena slutfördes utan konversationsmodellen.",
       "local": "Slutförda av lokala avsikter",
-      "missing": "{count} begäranden saknar användningsdata",
       "note": "Endast rapporterade tokens, inte uppskattad besparing. Köade antal avser svaret, inte aktuell godkännandestatus.",
       "pending": "Köade för godkännande",
       "provider": "Skickade till konversationsleverantör",
@@ -1867,7 +1958,11 @@
       "scope": "Endast Phoenix Voice och Chat. Externa MCP-klienter och AI-uppgift undantas.",
       "since": "Sedan {date}. Bevaras mellan omstarter.",
       "title": "Routningsstatistik",
-      "unavailable": "Otillgänglig"
+      "unavailable": "Otillgänglig",
+      "missing": {
+        "one": "{count} begäran saknar användningsdata",
+        "other": "{count} begäranden saknar användningsdata"
+      }
     },
     "selectBy": {
       "area": "Område",
@@ -2006,7 +2101,6 @@
       "detailLevel": "Detaljnivå",
       "detailLevelAria": "Detaljnivå för {surface}",
       "experimentalCard": "Experimentell",
-      "flushEveryMinutes": "Var {n}:e minut",
       "flushIntervalHelp": "Alternativet Aldrig inaktiverar de återkommande sparningarna av revisionsloggen. När Home Assistant stoppas, laddas om eller avlastas försöker den fortfarande göra en sista sparning.",
       "flushIntervalLabel": "Skrivintervall för revisionsloggen",
       "homeFocused": "Hemfokuserad",
@@ -2170,7 +2264,12 @@
       "voicePreferredClearedToast": "Phoenix MCP är inte längre den föredragna assistenten",
       "voicePreferredFailed": "Det gick inte att ändra den föredragna assistenten.",
       "voicePreferredSetToast": "Phoenix MCP är nu den föredragna assistenten",
-      "wipeWarningSelected": "Detta raderar nedanstående data och kan inte ångras."
+      "wipeWarningSelected": "Detta raderar nedanstående data och kan inte ångras.",
+      "flushEveryMinutes": {
+        "one": "Med {count} minuts intervall",
+        "other": "Med {count} minuters intervall"
+      },
+      "modelWithMode": "{model} ({mode})"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2195,29 +2294,33 @@
       "card.added": "lade till {subject} ({where})",
       "card.deleted": "tog bort {subject} ({where})",
       "card.edited": "redigerade {subject} ({where})",
-      "cards": "{count} kort",
-      "cards.was": "{count} kort (var {before})",
+      "cards": "kort: {count}",
+      "cards.was": "kort: {count} (var {before})",
       "config_entry.options": "omkonfigurerade {subject}",
       "config_entry.reconfigure": "omkonfigurerade {subject}",
       "config_entry.removed": "integration borttagen",
       "device.changed": "ändrade: {fields}",
       "device.removed": "enhetsregisterpost borttagen",
-      "device.zigbee_binding": "{operation} Zigbee-bindning till {target}",
-      "device.zigbee_group": "{operation} Zigbee-grupp: {name}",
       "device.zigbee_options": "ändrade Zigbee2MQTT-alternativ: {keys}",
       "device.zigbee_property": "ändrade Zigbee2MQTT-egenskap: {property}",
       "device.zigbee_reporting": "konfigurerade Zigbee-rapportering: {cluster}.{attribute}",
-      "energy.sources": "{count} källor, {devices} enheter",
+      "energy.sources": "källor: {count}, enheter: {devices}",
       "entity.changed": "ändrade: {fields}",
       "entity.removed": "registerpost borttagen",
       "loc.card": "kort {index}",
       "loc.section": "avsnitt {index}",
       "loc.view": "vy {index}",
       "patch.append": "lade till i {subject}",
-      "patch.multi": "{count} ändringar",
+      "patch.multi": "ändringar: {count}",
       "patch.remove": "tog bort {subject}",
       "patch.set": "angav {subject}",
-      "size.was": "{size} (var {before})"
+      "size.was": "{size} (var {before})",
+      "device.zigbee_binding.bind": "kopplade ihop Zigbee-styrning med {target}",
+      "device.zigbee_binding.unbind": "tog bort Zigbee-bindningen till {target}",
+      "device.zigbee_group.add_members": "tillagd i Zigbee-grupp: {name}",
+      "device.zigbee_group.create": "skapade Zigbee-grupp: {name}",
+      "device.zigbee_group.delete": "tog bort Zigbee-grupp: {name}",
+      "device.zigbee_group.remove_members": "borttagen från Zigbee-grupp: {name}"
     },
     "wizard": {
       "accessKeyCreatedBanner": "Åtkomstnyckeln har skapats. Du kan byta namn på den senare. Avbryt och börja om för att ändra dess utgång.",
@@ -2505,14 +2608,14 @@
     "companion_busy": "En annan begäran körs fortfarande. Den här begäran startades inte; vänta på resultatet från den tidigare innan du skickar en ny komplett begäran.",
     "companion_candidates": "Träffar: {names}.",
     "companion_clarify": "Försök igen med hela begäran: vad som ska göras, vilken enhet eller vilket rum och eventuella begränsningar. Svara inte med bara ett enhetsnamn.",
-    "companion_count_calm_guide": "Phoenix har åtkomst till {count} matchande {kind}; antalet gäller ditt tillåtna omfång.",
-    "companion_count_direct": "Jag kan se {count} matchande {kind} inom ditt tillåtna omfång.",
+    "companion_count_calm_guide": "Matchande {kind} som Phoenix har åtkomst till: {count}. Antalet gäller ditt tillåtna omfång.",
+    "companion_count_direct": "Matchande {kind} inom ditt tillåtna omfång: {count}.",
     "companion_count_groups": "Detta räknar Home Assistant-entiteter, som kan omfatta grupper.",
-    "companion_count_lively": "{count} matchande {kind} är synliga för Phoenix.",
+    "companion_count_lively": "Matchande {kind} som är synliga för Phoenix: {count}.",
     "companion_count_scope": "Endast matchande entiteter som den här assistenten har åtkomst till räknas; detta fastställer inte antalet fysiska enheter.",
-    "companion_count_technical": "Antal: {count} matchande {kind} inom Phoenix tillåtna omfång.",
-    "companion_count_warm": "Jag kan se {count} matchande {kind} inom Phoenix tillåtna omfång.",
-    "companion_group_targets": "{count} {kind} i {area}",
+    "companion_count_technical": "Matchande {kind} inom Phoenix tillåtna omfång, antal: {count}.",
+    "companion_count_warm": "Matchande {kind} som jag kan se inom Phoenix tillåtna omfång: {count}.",
+    "companion_group_targets": "{kind} i {area} ({count})",
     "companion_kind_fan": "fläktentiteter",
     "companion_kind_light": "lampentiteter",
     "companion_kind_other": "entiteter",
@@ -2531,7 +2634,7 @@
     "companion_unavailable_targets": "Otillgängliga ({count}): {names}. Kontrollera i Home Assistant; skicka inte kommandona igen.",
     "companion_unverified": "De slutliga enhetstillstånden verifierades inte. Kontrollera dem i Home Assistant; skicka inte kommandona igen bara för att en bekräftelse saknas.",
     "companion_unverified_targets": "Inte verifierade ({count}): {names}. Kontrollera i Home Assistant; skicka inte kommandona igen.",
-    "companion_verification_progress": "Home Assistant rapporterar de begärda inställningarna för {count} av {total} mål.",
+    "companion_verification_progress": "Mål som Home Assistant rapporterar med de begärda inställningarna: {count} av {total}.",
     "companion_verified": "Home Assistant rapporterar de accepterade enheterna med de begärda inställningarna.",
     "companion_verified_short": "Den rapporterar de begärda inställningarna.",
     "could_not_complete": "Tyvärr, jag kunde inte slutföra det.",
@@ -2550,17 +2653,17 @@
     "local_state_unavailable": "Otillgänglig",
     "local_state_unconfirmed": "Kommandot har skickats. Home Assistant har ännu inte bekräftat det begärda tillståndet.",
     "local_state_unknown": "Okänd",
-    "local_summary_breakdown": "Bland entiteter som är exponerade för Assist och som jag har åtkomst till: {total} entiteter. {summary}.",
-    "local_summary_count": "Bland entiteter som är exponerade för Assist och som jag har åtkomst till: {matched} av {total} har tillståndet {state}; {unknown} har okänt eller otillgängligt tillstånd.",
-    "local_summary_total": "Bland entiteter som är exponerade för Assist och som jag har åtkomst till: {total} entiteter; {unknown} har okänt eller otillgängligt tillstånd.",
+    "local_summary_breakdown": "Entiteter som är exponerade för Assist och som jag har åtkomst till: {total}. {summary}.",
+    "local_summary_count": "Entiteter som är exponerade för Assist och som jag har åtkomst till, med tillståndet {state}: {matched} av {total}. Okända eller otillgängliga: {unknown}.",
+    "local_summary_total": "Entiteter som är exponerade för Assist och som jag har åtkomst till: {total}. Okända eller otillgängliga: {unknown}.",
     "local_unauthorized": "Den här åtkomstnyckeln är inte längre auktoriserad.",
     "not_configured": "Phoenix MCP-röstagenten är inte fullständigt konfigurerad.",
     "out_of_steps": "Tyvärr, jag fick slut på steg innan jag kunde slutföra det.",
     "outcome_unknown": "Den här åtgärden kan ha körts. Kontrollera Home Assistant och dess godkännandehistorik innan du försöker igen. Öppna Behöver uppmärksamhet i Phoenix MCP.",
     "output_limit": "Tyvärr, modellen producerade för mycket utdata, så jag stoppade.",
     "prior_action_unresolved": "Den här begäran kördes inte eftersom en tidigare åtgärd behöver granskas. Öppna Behöver uppmärksamhet i Phoenix MCP.",
-    "provider_error": "Tyvärr, {reason}.",
     "unavailable": "Phoenix MCP-röstagenten är för närvarande otillgänglig.",
-    "model_api_unsupported": "Den här modellen är inte verifierad för OpenCode Chat Completions. Välj en modell som stöds."
+    "model_api_unsupported": "Den här modellen är inte verifierad för OpenCode Chat Completions. Välj en modell som stöds.",
+    "provider_unavailable": "Tyvärr kunde språkmodellen inte svara just nu."
   }
 }

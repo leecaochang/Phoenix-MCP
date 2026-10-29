@@ -411,9 +411,11 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
             except (ValueError, TypeError):
                 continue
     if proposal['intent'] == 'PhoenixStateSummary':
+        from .command_display import async_state_translations
         from .command_summary import summary_text
         rows = payload.get('states') if isinstance(payload, dict) else None
-        summary_reply = summary_text(proposal, rows, language) if plan_is_current(plan, hass, data, access_key) else None
+        translations = await async_state_translations(hass, language)
+        summary_reply = summary_text(proposal, rows, language, translations) if plan_is_current(plan, hass, data, access_key) else None
         return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), outcome='ok' if summary_reply is not None else 'failed', allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")

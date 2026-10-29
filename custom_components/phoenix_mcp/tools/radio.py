@@ -983,6 +983,18 @@ def _group_mesa_entities(
     return tuple(sorted(anchors))
 
 
+def _zigbee_group_summary_op(change: _ResolvedZigbeeGroupChange) -> str:
+    """The summary variant for a group change.
+
+    One template per operation rather than an interpolated verb, so each
+    language can conjugate its own: membership edits and removing the whole
+    group are different sentences even though both carry operation "remove".
+    """
+    if change.tool_name == "set_zigbee_group_members":
+        return "add_members" if change.operation == "add" else "remove_members"
+    return "create" if change.operation == "create" else "delete"
+
+
 async def _resolve_create_zigbee_group(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeGroupChange | tuple[dict, str, str]:
@@ -1678,8 +1690,7 @@ async def _build_diff_set_zigbee_binding(
     return {
         "kind": "config_diff",
         **_summary(
-            "zigbee_binding.devices",
-            operation=change.operation,
+            f"zigbee_binding.devices.{change.operation}",
             source=source_label,
             target=target_label,
         ),
@@ -1785,7 +1796,7 @@ async def _build_diff_zigbee_group(
     )
     return {
         "kind": "config_diff",
-        **_summary("zigbee_group.named", operation=change.operation, name=change.name),
+        **_summary(f"zigbee_group.named.{_zigbee_group_summary_op(change)}", name=change.name),
         "target": target,
         "before": _truncate(json.dumps(before, indent=2)),
         "after": _truncate(json.dumps(after, indent=2)),
@@ -2781,8 +2792,7 @@ async def _execute_set_zigbee_binding(
         },
         alias=source_label,
         summary=_version_summary(
-            "device.zigbee_binding",
-            operation=change.operation,
+            f"device.zigbee_binding.{change.operation}",
             target=(
                 change.target.device.name_by_user
                 or change.target.device.name
@@ -3149,7 +3159,7 @@ async def _execute_zigbee_group_change(
         },
         alias=change.name,
         summary=_version_summary(
-            "device.zigbee_group", operation=change.operation, name=change.name
+            f"device.zigbee_group.{_zigbee_group_summary_op(change)}", name=change.name
         ),
     )
     body: dict[str, Any] = {

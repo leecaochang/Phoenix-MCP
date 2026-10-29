@@ -24,6 +24,7 @@ from custom_components.phoenix_mcp.const import (
     VOICE_TEMPLATES,
 )
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+from custom_components.phoenix_mcp.helpers import voice_text
 
 
 class _MockProvider:
@@ -428,7 +429,24 @@ async def test_voice_turn_provider_error_yields_spoken_fallback():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
-    assert "the model is down" in text
+    # The provider's detail is English for the log; the speaker hears a sentence
+    # of the conversation's language instead of it.
+    assert "the model is down" not in text
+    assert text == voice_text("en", "provider_unavailable")
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_provider_error_speaks_the_conversation_language():
+    stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
+    with patch.object(agentcli, "_stream_turn_resilient", stream), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _MockProvider(), MagicMock(),
+            "http://h", "hi", language="de",
+        )
+    assert text == voice_text("de", "provider_unavailable")
+    assert text != voice_text("en", "provider_unavailable")
 
 
 @pytest.mark.asyncio

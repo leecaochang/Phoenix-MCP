@@ -22,7 +22,7 @@ import { AUDIT_TOGGLES, LoggingSettings, PRIVACY_TOGGLES } from "../components/L
 import { NotificationSettings } from "../components/NotificationSettings";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { DEFAULT_WIPE_SCOPES, WIPE_SCOPES, WipeConfirmModal, type WipeScopes } from "../components/WipeConfirmModal";
-import { LANGUAGES, LANGUAGE_AUTO, t } from "../i18n";
+import { LANGUAGES, LANGUAGE_AUTO, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/compatibility";
 import { useFindSettingTool, useSettings, useSettingsChange, type Theme } from "../shell/settings";
@@ -223,7 +223,7 @@ export function LogsSettingsWindow() {
             <BusySelect aria-label={t("settings.flushIntervalLabel")} className="input input-auto" value={settings.audit_flush_interval}
               busy={saving} disabled={settings.disable_all_logging} onChange={(e) => change("audit_flush_interval", Number(e.target.value))}>
               <option value={0}>{t("common.never")}</option>
-              {[5, 10, 15, 30, 60].map((n) => <option key={n} value={n}>{t("settings.flushEveryMinutes", { n })}</option>)}
+              {[5, 10, 15, 30, 60].map((n) => <option key={n} value={n}>{tn("settings.flushEveryMinutes", n)}</option>)}
             </BusySelect>
           </div>
           <div className={`toggle-row toggle-row-stacked-control${greyed}`}>

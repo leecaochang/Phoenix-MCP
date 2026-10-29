@@ -390,7 +390,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
     { id: "provider", label: t("settings.colProvider"), cell: (inst) => typeLabel(inst.kind), sortValue: (inst) => typeLabel(inst.kind) },
     {
       id: "model", label: t("settings.colModel"), maxWidth: 320, sortValue: (inst) => inst.model ?? "",
-      cell: (inst) => inst.model_mode === "auto" ? `${inst.model || t("settings.agentcliNotSet")} (${t("settings.modelAutomatic")})` : (inst.model || t("settings.agentcliNotSet")),
+      cell: (inst) => inst.model_mode === "auto" ? t("settings.modelWithMode", { model: inst.model || t("settings.agentcliNotSet"), mode: t("settings.modelAutomatic") }) : (inst.model || t("settings.agentcliNotSet")),
     },
   ];
 

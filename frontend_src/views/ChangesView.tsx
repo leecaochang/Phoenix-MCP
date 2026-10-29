@@ -19,6 +19,7 @@ import { InlineTools, useEnsureOpen, useWindowToggle } from "../shell/windowTool
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
+import { withCardLocation, withLocaleSizes } from "../utils/dashboard_names";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { formatDateTime } from "../utils";
@@ -97,7 +98,7 @@ function whoDetail(
 
 /** A change's one-line summary, localized when the backend supplied a catalog key this bundle knows. */
 function versionSummary(v: { summary?: string | null; summary_key?: string | null; summary_params?: Record<string, string | number> | null }): string {
-  if (v.summary_key && hasMessage(v.summary_key)) return t(v.summary_key, v.summary_params ?? undefined);
+  if (v.summary_key && hasMessage(v.summary_key)) return t(v.summary_key, withLocaleSizes(v.summary_key, withCardLocation(v.summary_key, v.summary_params ?? undefined)));
   return v.summary ?? "";
 }
 

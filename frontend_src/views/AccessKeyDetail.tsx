@@ -16,7 +16,7 @@ import { PassThroughNotice } from "../components/PassThroughNotice";
 import { EntityTree, rememberEntityTree } from "../components/EntityTree";
 import { PermissionSummary } from "../components/PermissionSummary";
 import { ProfileEditor } from "./MesaView";
-import { t } from "../i18n";
+import { t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
 import type { MenuEntry } from "../ui/Menu";
@@ -266,7 +266,7 @@ function snapDiffLines(from: SettingsSnap, to: SettingsSnap): string[] {
       if (nodeSig(from.permissions[level][k]) !== nodeSig(to.permissions[level][k])) permDiff++;
     }
   }
-  if (permDiff > 0) lines.push(t("accessKeys.diffPermissionTree", { count: permDiff }));
+  if (permDiff > 0) lines.push(tn("accessKeys.diffPermissionTree", permDiff));
   return lines;
 }
 

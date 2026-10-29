@@ -348,7 +348,7 @@ class TestPatchDashboardSeveralChanges:
         assert stored["views"][0]["badges"][0]["entity"] == "sensor.new_remaining"
         assert stored["views"][0]["badges"][0]["name"] == "Washer"
         hist = versions.list_for("dashboard", "lovelace")
-        assert len(hist) == 1 and hist[0].summary == "2 changes"
+        assert len(hist) == 1 and hist[0].summary == "changes: 2"
 
     async def test_one_bad_change_writes_nothing_and_names_its_index(self, hass, lovelace_env):
         h, _l = lovelace_env

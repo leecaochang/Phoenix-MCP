@@ -67,8 +67,8 @@ describe("accessible names are localized in Italian, not just present", () => {
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry({ mesa_advisory: true })], total: 1 });
     render(<AuditView accessKeys={[]} />);
     await screen.findAllByRole("row");
-    const cell = screen.getByText("Consultivo", { selector: "td" });
-    expect(cell).toHaveAttribute("title", expect.stringContaining("Consultivo"));
+    const cell = screen.getByText("Consultiva", { selector: "td" });
+    expect(cell).toHaveAttribute("title", expect.stringContaining("Consultiva"));
   });
 
   it("leaves no raw catalog keys in any accessible name", async () => {

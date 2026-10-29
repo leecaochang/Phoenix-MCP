@@ -12,7 +12,7 @@ it("loads only on expansion and never presents missing usage as zero", async () 
   expect(get).not.toHaveBeenCalled(); expand();
   expect(await screen.findByText("50% of requests completed without the conversational model.")).toBeVisible();
   expect(screen.getByText("Unavailable")).toBeVisible();
-  expect(screen.getByText("1 requests missing usage")).toBeVisible();
+  expect(screen.getByText("1 request missing usage")).toBeVisible();
   expect(screen.getByText(/External MCP clients/)).toBeVisible();
 });
 it("confirms in place and resets only the selected surface", async () => {

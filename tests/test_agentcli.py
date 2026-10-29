@@ -3192,12 +3192,15 @@ async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
         ))
 
     # The retry is announced with the provider's own sentence.
+    # No detail_code: the detail is the provider's own sentence, shown verbatim.
     assert events[0] == {"type": agentcli.EV_RETRYING, "attempt": 2, "status": 503,
-                         "detail": "This model is currently experiencing high demand."}
+                         "detail": "This model is currently experiencing high demand.", "detail_code": ""}
     # The final error gives the real time spent and keeps the failure that started the retries.
     assert events[1]["code"] == expected_code
     assert events[1]["message"] == expected_text
-    assert events[1]["message_params"] == {"seconds": 0, "detail": final_error["message"]}
+    # The detail is Phoenix's own sentence, so its code lets the panel translate it.
+    assert events[1]["message_params"] == {"seconds": 0, "detail": final_error["message"],
+                                           "detail_code": final_error["code"]}
     assert events[1]["provider_detail"] == "This model is currently experiencing high demand."
 
 
@@ -5624,7 +5627,7 @@ async def test_a_retry_is_shown_with_the_providers_own_sentence():
         await _consume(provider, events, step=1, tools=0)
     retrying = [p for n, p in events if n == "status" and p["phase"] == "retrying"]
     assert retrying == [{"provider": "Gemini", "step": 1, "tools": 0, "attempt": 2, "detail": "High demand.",
-                         "phase": "retrying", "seconds": 0}]
+                         "detail_code": "", "phase": "retrying", "seconds": 0}]
     assert all(n != "error" for n, _p in events)
 
 

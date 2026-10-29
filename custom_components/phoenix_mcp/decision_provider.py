@@ -20,6 +20,7 @@ from .const import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
 from .const import DECISION_SEQUENTIAL_MAX_TARGETS
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
+from .helpers import LocalizedReason
 
 if TYPE_CHECKING:
     from .agentcli import ProviderConfig
@@ -27,6 +28,28 @@ if TYPE_CHECKING:
 
 class DecisionError(ValueError):
     """A safe classification, never a raw provider body or transport exception."""
+
+
+_DECISION_ERROR_REASONS = {
+    "authentication": ("API key rejected.", "providerKeyRejected"),
+    "rate_limited": ("The decision provider is limiting requests. Try again later.", "decisionProviderRateLimited"),
+    "timeout": ("The decision provider did not answer in time.", "decisionProviderTimeout"),
+    "unavailable": ("Could not reach the decision provider.", "decisionProviderUnreachable"),
+    "malformed": ("The decision provider returned a response Phoenix could not read.", "decisionProviderUnreadable"),
+    "response_too_large": ("The decision provider returned a response Phoenix could not read.", "decisionProviderUnreadable"),
+}
+
+
+def decision_error_reason(code: str) -> LocalizedReason:
+    """An operator-facing reason for a failed decision provider check.
+
+    The code is DecisionError's bounded classification; one without its own
+    sentence keeps the code as a detail, since it is an identifier.
+    """
+    text, key = _DECISION_ERROR_REASONS.get(code, ("", ""))
+    if key:
+        return LocalizedReason(text, key)
+    return LocalizedReason(f"Decision provider check failed ({code}).", "decisionProviderCheckFailed", detail=code)
 
 
 class DecisionValidationError(DecisionError):
@@ -292,7 +315,7 @@ class DecisionProvider:
             await self.list_models(session)
             return True, ""
         except DecisionError as error:
-            return False, f"Decision provider check failed ({error})."
+            return False, decision_error_reason(str(error))
 
     async def list_model_capabilities(self, session: ClientSession, models: list[str]) -> dict:
         return {}

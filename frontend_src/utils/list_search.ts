@@ -1,3 +1,5 @@
+import { foldForSearch } from "../i18n/format";
+
 /**
  * Match every search word against the text in a loaded list. A word has to
  * appear in the text as it was typed: matching its letters in order anywhere
@@ -6,7 +8,7 @@
  * appear, in any order and in any part of the text the list searches.
  */
 export function matchesListSearch(text: string, query: string): boolean {
-  const normalized = text.normalize("NFKC").toLowerCase();
-  return query.normalize("NFKC").toLowerCase().trim().split(/\s+/u)
+  const normalized = foldForSearch(text);
+  return foldForSearch(query).trim().split(/\s+/u)
     .every((word) => !word || normalized.includes(word));
 }

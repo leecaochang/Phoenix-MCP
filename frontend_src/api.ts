@@ -119,9 +119,11 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   let res: Response;
   try {
     res = await hass.fetchWithAuth(`${BASE}${path}`, opts);
-  } catch (e: unknown) {
+  } catch {
     noteConnection(false);
-    throw e;
+    // The rejection's own message is the browser's text ("Failed to fetch",
+    // "Load failed"), not the operator's language; every view shows e.message.
+    throw new ApiError(0, "unreachable", t("common.serverUnreachable"));
   }
   noteConnection(true);
 
@@ -129,7 +131,8 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   let json: unknown;
   try { json = await res.json(); }
   catch {
-    if (!res.ok) throw new ApiError(res.status, "parse_error", res.statusText || t("common.invalidResponse"));
+    // A proxy's HTML error page: its reason phrase is English, the status is not.
+    if (!res.ok) throw new ApiError(res.status, "parse_error", t("common.httpStatus", { status: String(res.status) }));
     throw new ApiError(502, "invalid_response", t("common.invalidResponse"));
   }
   const error = json !== null && typeof json === "object" && !Array.isArray(json)

@@ -617,13 +617,15 @@ def _version_change_summary(
         return None
     if resource_type in ("yaml_config", "file"):
         b, a = _payload_size(before), _payload_size(after)
+        # The English sizes are the stored record; the byte counts travel too so
+        # the panel can format them for the reader's locale.
         if a is not None and b is not None:
             return (
-                _version_summary("size.was", size=_fmt_bytes(a), before=_fmt_bytes(b))
-                if a != b else _version_summary("size", size=_fmt_bytes(a))
+                _version_summary("size.was", size=_fmt_bytes(a), before=_fmt_bytes(b), size_bytes=a, before_bytes=b)
+                if a != b else _version_summary("size", size=_fmt_bytes(a), size_bytes=a)
             )
         if a is not None:
-            return _version_summary("size", size=_fmt_bytes(a))
+            return _version_summary("size", size=_fmt_bytes(a), size_bytes=a)
         return None
     if resource_type in ("entity", "device"):
         if after is None:

@@ -4,6 +4,7 @@ import {
   getLanguagePreference,
   isI18nReady,
   loadTranslations,
+  registerLanguageRoot,
   resolveLanguage,
   setLanguagePreference,
   syncTranslations,
@@ -71,6 +72,7 @@ class PhoenixPanelElement extends HTMLElement {
     const mount = document.createElement("div");
     mount.style.height = "100%";
     shadow.appendChild(mount);
+    registerLanguageRoot(mount);
 
     this._root = createRoot(mount);
     this._render();

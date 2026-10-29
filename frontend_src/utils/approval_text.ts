@@ -8,7 +8,7 @@
 import type { ApprovalDiff, ApprovalRecord } from "../types";
 import { hasMessage, t } from "../i18n";
 import { localizedApprovalReason } from "./approval_reason";
-import { friendlyApprovalSummary } from "./approval_summary";
+import { approvalParams, friendlyApprovalSummary } from "./approval_summary";
 
 /** The approval's summary in the operator's language.
  *
@@ -18,7 +18,7 @@ import { friendlyApprovalSummary } from "./approval_summary";
  *  behind a cached panel). */
 export function diffSummary(diff: ApprovalDiff | undefined): string {
   if (diff?.summary_key && hasMessage(diff.summary_key)) {
-    return t(diff.summary_key, diff.summary_params);
+    return t(diff.summary_key, approvalParams(diff));
   }
   return diff?.summary ?? "";
 }
@@ -101,7 +101,12 @@ const INTEGRATION_STATE_NOT_RELOADABLE = /^Integration state (.+) is not reloada
 /** Keep Summary fully localized; raw diagnostics remain available in Details. */
 export function localizedResultErrorText(result: unknown): string | null {
   const detail = extractResultErrorText(result);
-  if (!detail) return null;
+  return detail ? localizedExecutorError(detail) : null;
+}
+
+/** One executor error sentence, localized: a known sentence, or the generic failure line. */
+export function localizedExecutorError(text: string): string {
+  const detail = boundedFriendlyDetail(text);
   const key = LOCALIZED_EXECUTOR_ERRORS[detail];
   if (key) return t(key);
   const stateMatch = detail.match(INTEGRATION_STATE_NOT_RELOADABLE);

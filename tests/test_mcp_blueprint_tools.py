@@ -464,7 +464,7 @@ class TestApprovalDiff:
             diff = await blueprint_tools._build_diff_blueprint(
                 {"domain": "automation", "path": "author/existing.yaml", "content": VALID},
                 hass, "edit")
-        assert "3 will be reloaded" in diff["summary"]
+        assert "to be reloaded: 3" in diff["summary"]
         assert diff["preview"]["used_by_count"] == 3
         assert diff["preview"]["used_by"] == ["automation.a", "automation.b", "automation.c"]
         assert "Test Blueprint" in diff["before"]

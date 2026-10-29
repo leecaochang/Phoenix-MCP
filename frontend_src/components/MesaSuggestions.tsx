@@ -4,7 +4,7 @@
  * raised each one, its suggested mode, and its reason in the reader's language.
  */
 
-import { t, hasMessage } from "../i18n";
+import { t, hasMessage, tnKey } from "../i18n";
 import type { MesaSuggestion } from "../types";
 
 export const SIGNAL_LABEL_KEYS: Record<string, string> = {
@@ -23,9 +23,13 @@ export const SIGNAL_LABEL_KEYS: Record<string, string> = {
  * record or a new template still reads.
  */
 export function suggestionReason(s: MesaSuggestion): string {
-  const key = s.reason_key ? `mesaSuggestion.${s.reason_key}` : "";
-  if (!key || !hasMessage(key)) return s.reason;
+  const stored = s.reason_key ? `mesaSuggestion.${s.reason_key}` : "";
+  if (!stored || !hasMessage(stored)) return s.reason;
   const params: Record<string, string | number> = { ...(s.reason_params ?? {}) };
+  // The backend picks .one or .other by English rules; the reader's language
+  // may need another category (Polish and Russian "few").
+  const plural = /\.(one|other)$/.test(stored) && typeof params.count === "number";
+  const key = plural ? tnKey(stored.replace(/\.(one|other)$/, ""), params.count as number) : stored;
   for (const [param, holder] of [["noun_key", "noun"], ["concern_key", "concern"], ["baseline_key", "baseline_note"]] as const) {
     const sub = params[param];
     if (typeof sub === "string" && sub && hasMessage(`mesaSuggestion.${sub}`)) {

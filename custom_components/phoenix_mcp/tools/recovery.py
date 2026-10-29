@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.helpers import entity_registry as er
 
 from ..config_recovery import ConfigurationRecoveryError, recovery_resolution
-from ..helpers import content_hash, effective_cap
+from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap
 from ..request_authority import check_request_authority
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success
 from .helper import (
@@ -75,7 +75,7 @@ def _restore_diff(record: dict[str, Any], side: str, current: dict[str, Any]) ->
     before = current["entry"]
     return {
         "kind": "config_diff",
-        "summary": "Restore Template helper configuration",
+        **_summary("restore.template_helper"),
         "target": {
             "type": "config_entry",
             "id": selected["entry_id"],
@@ -273,7 +273,7 @@ async def _tool_restore_blueprint_configuration(
         return _tool_error(str(exc)), "invalid_request", tool
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         diff = {
-            "kind": "yaml_diff", "summary": "Restore blueprint source",
+            "kind": "yaml_diff", **_summary("restore.blueprint", label=path),
             "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},
             "before": current, "after": snapshot.get("content"),
         }
@@ -288,7 +288,7 @@ async def _tool_restore_blueprint_configuration(
     blocked = await _gate(
         "cap_blueprint_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "yaml_diff", "summary": "Restore blueprint source",
+        diff=lambda: {"kind": "yaml_diff", **_summary("restore.blueprint", label=path),
                       "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},
                       "before": current, "after": snapshot.get("content")},
     )
@@ -332,8 +332,8 @@ async def _tool_restore_dashboard_layout(
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint,
             "diff": {
-                "kind": "yaml_diff", "summary": "Restore dashboard layout",
-                "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "Default"},
+                "kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
+                "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "(default dashboard)"},
                 "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
                 "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str),
             },
@@ -345,8 +345,8 @@ async def _tool_restore_dashboard_layout(
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "yaml_diff", "summary": "Restore dashboard layout",
-                      "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "Default"},
+        diff=lambda: {"kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
+                      "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "(default dashboard)"},
                       "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
                       "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str)},
     )
@@ -381,7 +381,7 @@ async def _tool_restore_dashboard_registry(
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint,
             "diff": {
-                "kind": "config_diff", "summary": "Restore dashboard registry entry",
+                "kind": "config_diff", **_summary("restore.dashboard_registry", label=snapshot["resource_id"]),
                 "target": {"type": "dashboard", "id": snapshot["resource_id"]},
                 "before": json.dumps(target, default=str),
                 "after": json.dumps(snapshot, default=str),
@@ -394,7 +394,7 @@ async def _tool_restore_dashboard_registry(
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "config_diff", "summary": "Restore dashboard registry entry",
+        diff=lambda: {"kind": "config_diff", **_summary("restore.dashboard_registry", label=snapshot["resource_id"]),
                       "target": {"type": "dashboard", "id": snapshot["resource_id"]},
                       "before": json.dumps(target, default=str),
                       "after": json.dumps(snapshot, default=str)},

@@ -281,3 +281,26 @@ async def test_endpoint_404s_when_the_catalog_cannot_be_read(tmp_path, monkeypat
     helpers.load_catalogs()
     resp = await _get("en")
     assert resp.status == 404
+
+
+async def test_endpoint_serves_the_catalog_while_setup_is_incomplete() -> None:
+    """The panel needs its strings to say setup is incomplete; other admin views refuse."""
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminSettingsView
+    from custom_components.phoenix_mcp.const import RUNTIME_READY_KEY
+
+    # The previous test points CATALOGS_DIR at an empty folder; this one needs
+    # the shipped catalogs whatever order the file runs in.
+    helpers.load_catalogs()
+    view = PhoenixAdminCatalogView()
+    view.hass = MagicMock()
+    view.hass.data = {RUNTIME_READY_KEY: False}
+    view.hass.async_add_executor_job = AsyncMock(side_effect=lambda fn, *args: fn(*args))
+    resp = await view.get(_admin_request(), language="en")
+    assert resp.status == 200
+    assert json.loads(resp.text)["resources"]["common.loading"]
+    # Still admin-only before setup finishes.
+    assert (await view.get(_admin_request(is_admin=False), language="en")).status == 403
+    # Positive control: an ordinary admin view still waits for setup.
+    settings = PhoenixAdminSettingsView()
+    settings.hass = view.hass
+    assert (await settings.get(_admin_request())).status == 503

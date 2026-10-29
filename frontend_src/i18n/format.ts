@@ -110,14 +110,21 @@ export function getFormatLocale(): string | undefined {
   return dateLocale;
 }
 
-function dateFormatter(kind: "date" | "shortDate" | "clock" | "time"): Intl.DateTimeFormat {
+type FormatterKind = "date" | "shortDate" | "clock" | "time" | "dateTime" | "shortDateTime";
+
+function dateFormatter(kind: FormatterKind): Intl.DateTimeFormat {
   let formatter = dateFormatters.get(kind);
   if (!formatter) {
     const isDate = kind === "date" || kind === "shortDate";
-    const options: Intl.DateTimeFormatOptions = isDate
-      ? { month: "numeric", day: "numeric", ...(kind === "date" ? { year: "numeric" } : {}) }
-      : { hour: "2-digit", minute: "2-digit", ...(kind === "time" ? { second: "2-digit" } : {}),
-          ...(hour12 === undefined ? {} : { hourCycle: hour12 ? "h12" : "h23" }) };
+    const time: Intl.DateTimeFormatOptions = {
+      hour: "2-digit", minute: "2-digit", ...(kind === "time" || kind === "dateTime" ? { second: "2-digit" } : {}),
+      ...(hour12 === undefined ? {} : { hourCycle: hour12 ? "h12" : "h23" }),
+    };
+    const date: Intl.DateTimeFormatOptions = {
+      month: "numeric", day: "numeric", ...(kind === "date" || kind === "dateTime" ? { year: "numeric" } : {}),
+    };
+    // Date and time in one formatter, so the locale's own pattern joins them.
+    const options = kind === "dateTime" || kind === "shortDateTime" ? { ...date, ...time } : isDate ? date : time;
     formatter = new Intl.DateTimeFormat(isDate && dateFormat === "system" ? undefined : dateLocale, {
       ...options, timeZone,
     });
@@ -144,25 +151,29 @@ function formatDate(date: Date, short = false): string {
 /** Date only, in the selected zone and calendar order. */
 export function localeDate(iso: string | number | Date): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "Invalid Date" : formatDate(date);
+  return Number.isNaN(date.getTime()) ? String(iso) : formatDate(date);
 }
 
 /** Numeric date and time, independently respecting both profile preferences. */
 export function localeDateTime(iso: string | number | Date): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "Invalid Date" : `${formatDate(date)}, ${dateFormatter("time").format(date)}`;
+  if (Number.isNaN(date.getTime())) return String(iso);
+  if (dateFormat === "language") return dateFormatter("dateTime").format(date);
+  return `${formatDate(date)}, ${dateFormatter("time").format(date)}`;
 }
 
 /** Month, day and time for the narrow audit table. */
 export function localeDateTimeShort(iso: string | number | Date): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "Invalid Date" : `${formatDate(date, true)}, ${dateFormatter("clock").format(date)}`;
+  if (Number.isNaN(date.getTime())) return String(iso);
+  if (dateFormat === "language") return dateFormatter("shortDateTime").format(date);
+  return `${formatDate(date, true)}, ${dateFormatter("clock").format(date)}`;
 }
 
 /** Wall clock, hours and minutes only. */
 export function localeClock(ts: string | number | Date): string {
   const date = new Date(ts);
-  return Number.isNaN(date.getTime()) ? "Invalid Date" : dateFormatter("clock").format(date);
+  return Number.isNaN(date.getTime()) ? String(ts) : dateFormatter("clock").format(date);
 }
 
 /** A plain number, grouped per the operator's HA number-format preference. */
@@ -170,6 +181,27 @@ export function localeNumber(value: number): string {
   // Preserve numeric evidence in interpolated summaries; Intl's default of
   // three fractional digits can otherwise turn a small nonzero value into 0.
   return value.toLocaleString(numberLocale, { useGrouping: numberGrouping, maximumSignificantDigits: 21 });
+}
+
+/** A file size in the locale's own digits and unit, matching the backend's 1024-byte KB. */
+export function localeFileSize(bytes: number): string {
+  const kilo = bytes >= 1024;
+  return new Intl.NumberFormat(numberLocale, {
+    style: "unit", unit: kilo ? "kilobyte" : "byte", unitDisplay: "short",
+    maximumFractionDigits: kilo ? 1 : 0, useGrouping: numberGrouping,
+  }).format(kilo ? bytes / 1024 : bytes);
+}
+
+/**
+ * Fold case and accents for matching typed search words against display text.
+ *
+ * Only the combining diacritics of Latin, Greek and Cyrillic are dropped, so
+ * "ubersicht" finds "Übersicht" while Japanese voicing marks and Hangul, which
+ * decompose too, recompose unchanged.
+ */
+export function foldForSearch(text: string): string {
+  return text.normalize("NFKC").toLocaleLowerCase(dateLocale)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC");
 }
 
 /** CLDR plural category for a count in the active panel language. */

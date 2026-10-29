@@ -10,7 +10,7 @@ import logging
 import math
 import re
 import string
-from collections.abc import Awaitable, Callable, Collection, Iterator
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator
 from functools import lru_cache
 import time
 from dataclasses import dataclass
@@ -1884,6 +1884,39 @@ def voice_text(language: object, key: str, **params: object) -> str:
     Falls back to English for an unknown language like the notification path.
     """
     return _localized(VOICE_TEMPLATES, "voice", key, language, params)
+
+
+# The list separator spoken replies use between names. CJK text joins with the
+# ideographic comma; every other shipped language uses a comma and a space.
+_SPOKEN_LIST_SEPARATORS = {"ja": "、", "zh-Hans": "、", "zh-Hant": "、"}
+
+
+def spoken_list(items: Iterable[str], language: object) -> str:
+    """Join names for a spoken reply with the language's own separator."""
+    return _SPOKEN_LIST_SEPARATORS.get(canonical_language(language), ", ").join(items)
+
+
+def spoken_sentences(parts: Iterable[str], language: object) -> str:
+    """Join whole sentences: CJK sentences end in an ideographic full stop and take no space."""
+    return ("" if canonical_language(language) in _SPOKEN_LIST_SEPARATORS else " ").join(parts)
+
+
+class LocalizedReason(str):
+    """English operator text that also names its adminError catalog key.
+
+    A str, so every caller that compares, logs or returns the English keeps
+    working; an admin response sends `key` and `params` so the panel shows the
+    reader's language instead.
+    """
+
+    key: str
+    params: dict[str, str | int]
+
+    def __new__(cls, text: str, key: str, **params: str | int) -> LocalizedReason:
+        reason = super().__new__(cls, text)
+        reason.key = key
+        reason.params = params
+        return reason
 
 
 def _localized(

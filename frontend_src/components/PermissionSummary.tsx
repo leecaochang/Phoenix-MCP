@@ -195,7 +195,7 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
         const found = target(item);
         if (found) onEntityClick?.(found.entity, found.depth);
       }}
-      rowLabel={(item) => [t(TYPE_LABEL_KEYS[item.type]), nameOf(item), item.id, t(STATE_LABEL_KEYS[stateOf(item)])].filter(Boolean).join(", ")}
+      rowLabel={(item) => [t(TYPE_LABEL_KEYS[item.type]), nameOf(item), item.id, t(STATE_LABEL_KEYS[stateOf(item)])].filter(Boolean).join(t("common.listSeparator"))}
     />
   );
 }

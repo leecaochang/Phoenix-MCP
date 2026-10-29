@@ -16,6 +16,7 @@ import { api } from "../api";
 import type { VersionRecord, VersionSummary } from "../types";
 import { t } from "../i18n";
 import { formatDateTime } from "../utils";
+import { dashboardDisplayName } from "../utils/dashboard_names";
 import { useLatestRequest } from "../utils/latest_request";
 import { useNotify } from "../ui/notify";
 
@@ -41,8 +42,8 @@ export function rawSide(value: Record<string, unknown> | null): { content: strin
 }
 
 /** The item a change belongs to, as the list names it. */
-export function changeLabel(v: { alias: string | null; resource_id: string }): string {
-  return v.alias || v.resource_id;
+export function changeLabel(v: { alias: string | null; resource_id: string; resource_type: string }): string {
+  return v.alias ? dashboardDisplayName(v.alias, v.resource_type) : v.resource_id;
 }
 
 export type RestoreSide = "before" | "after";

@@ -57,7 +57,7 @@ function ApprovalStatusLabel({ record, claimed }: { record: ApprovalRecord; clai
   return (
     <span className={`phx-outcome approval-status-${status}`}>
       <Icon name={claimed ? "processing" : STATUS_ICONS[record.status]} size={14} />
-      {claimed ? t("approvals.processing") : t(STATUS_LABEL_KEYS[record.status])}
+      {claimed ? t("approvals.processing") : STATUS_LABEL_KEYS[record.status] ? t(STATUS_LABEL_KEYS[record.status]) : record.status}
     </span>
   );
 }
