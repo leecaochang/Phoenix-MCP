@@ -148,7 +148,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, contentHeights: def.contentHeights, contentWindows: def.contentWindows, pairs: { ...SHARED_PAIRS, ...def.pairs } };
+      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, contentHeights: def.contentHeights, contentWindows: def.contentWindows, contentMax: { [ATTENTION_WINDOW]: 1 / 3, ...def.contentMax }, pairs: { ...SHARED_PAIRS, ...def.pairs } };
       // My Workspace holds the windows the user added, laid out in the order added.
       controller = id === "my"
         ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), def.arrange, windowTitle,

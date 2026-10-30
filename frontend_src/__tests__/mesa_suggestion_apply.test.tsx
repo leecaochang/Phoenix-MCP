@@ -1,20 +1,20 @@
 /**
- * MESA findings explain validation limits, in the Advisory and Orphaned
- * Profiles windows that show only while something is undismissed;
+ * MESA findings explain validation limits, in the one Advisory window that
+ * shows only while something is undismissed and dismisses each finding;
  * suggestions preserve concurrent edits; every scope names its target.
  */
 import { beforeEach, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { api, ApiError, setHass } from "../api";
 import type { MesaFindings } from "../shell/mesa";
-import { EMPTY_ISSUES as empty, advisoryWindow, diagnosticsWindow, mockEmptyMesa, orphansWindow, profilesWindow, renderMesa, rowsIn, suggestedWindow } from "./mesa_harness";
+import { EMPTY_ISSUES as empty, advisoryWindow, editorWindow, mockEmptyMesa, profilesWindow, renderMesa, rowsIn } from "./mesa_harness";
 
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
   const names = [
     "listMesaProfiles", "getMesaIssues", "listMesaDomains", "listMesaIntegrations", "listMesaAreas", "listMesaDevices",
     "getEntityTree", "getMesaVocabulary", "getMesaIntegrationOptions", "getMesaDeviceOptions",
-    "putMesaDomain", "putMesaProfile", "getMesaProfile", "clearMesaOrphans", "dismissMesaSuggestion", "restoreMesaSuggestions",
+    "putMesaDomain", "putMesaProfile", "getMesaProfile", "getMesaDomain", "clearMesaOrphans", "dismissMesaSuggestion", "restoreMesaSuggestions",
   ];
   return { ...actual, api: Object.fromEntries(names.map((n) => [n, vi.fn()])) };
 });
@@ -26,23 +26,30 @@ beforeEach(() => {
   mockEmptyMesa();
 });
 
-const refresh = () => fireEvent.click(profilesWindow().getByRole("button", { name: "Refresh MESA" }));
+/** Read the findings again: Rescan, from the MESA Actions menu (there is no Refresh button). */
+const refresh = () => {
+  fireEvent.click(profilesWindow().getByRole("button", { name: "MESA Actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Rescan" }));
+};
 const ADVISORY = "This is advisory only; no action is required.";
 
 it.each(["entity", "domain"] as const)("does not replace a %s profile created after the suggestion loaded", async (scope) => {
   const subject = scope === "entity" ? "lock.front" : "lock";
-  vi.mocked(api.getMesaIssues).mockResolvedValueOnce({ ...empty, suggestions: [{ key: "suggestion", signal: "naked_risky", scope, subject_id: subject, suggested_mode: "prohibited", reason: "Physical boundary", evidence: {} }] }).mockResolvedValue(empty);
+  vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, suggestions: [{ key: "suggestion", signal: "naked_risky", scope, subject_id: subject, suggested_mode: "prohibited", reason: "Physical boundary", evidence: {} }] });
   const put = scope === "entity" ? api.putMesaProfile : api.putMesaDomain;
+  const get = scope === "entity" ? api.getMesaProfile : api.getMesaDomain;
+  vi.mocked(get).mockResolvedValue({ stored: null, effective: {}, explanation: { explanation: [], warnings: [] } } as never);
   vi.mocked(put).mockRejectedValue(new ApiError(412, "already_exists", "A profile already exists."));
   renderMesa();
   await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
+  // The suggestion opens in the editor, which saves it create-only, so a profile
+  // written since the scan is reported rather than replaced (user, 2026-10-30).
   fireEvent.click(rowsIn("Suggested Profiles")[0]);
-  fireEvent.click(suggestedWindow().getByRole("button", { name: "Apply" }));
+  const editor = editorWindow();
+  await waitFor(() => expect(editor.getByLabelText(/Control mode/)).toHaveValue("prohibited"));
+  fireEvent.click(editor.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(put).toHaveBeenCalledExactlyOnceWith(subject, expect.any(Object), true));
-  expect(await suggestedWindow().findByText("A profile already exists.")).toBeVisible();
-  expect(api.getMesaIssues).toHaveBeenCalledTimes(2);
-  expect(rowsIn("Suggested Profiles")).toHaveLength(0);
-  expect(suggestedWindow().getByRole("button", { name: "Apply" })).toBeDisabled();
+  expect(await editor.findByText("A profile already exists.")).toBeVisible();
 });
 
 it("combines template inspection notices and leaves automation details collapsed", async () => {
@@ -55,9 +62,9 @@ it("combines template inspection notices and leaves automation details collapsed
   const { container } = renderMesa();
   const advisory = advisoryWindow();
   const summary = await advisory.findByText("23 automations could only be partially inspected because they contain templates or use blueprints.");
-  expect(summary.closest(".banner")).toHaveClass("banner-info");
-  expect(advisory.getAllByText(ADVISORY)).toHaveLength(1);
-  expect(orphansWindow().getAllByText(ADVISORY)).toHaveLength(1);
+  expect(summary.closest(".mesa-notice")).toHaveClass("mesa-notice-info");
+  // The inspection notice and the orphaned profiles each say so, in the one window (user, 2026-10-30).
+  expect(advisory.getAllByText(ADVISORY)).toHaveLength(2);
   expect(advisory.queryByText(recommendation)).toBeNull();
   expect(advisory.queryByText("Warning:")).toBeNull();
   const details = advisory.getByText("View Automations").closest("details")!;
@@ -67,10 +74,11 @@ it("combines template inspection notices and leaves automation details collapsed
   expect(details).toHaveAttribute("open");
   expect(advisory.getByText("template_automation_0")).toBeVisible();
   expect(container.querySelectorAll("code:empty")).toHaveLength(0);
-  expect(orphansWindow().getByText(/sensor.retained_profile/)).toBeVisible();
+  expect(advisory.getByText(/sensor.retained_profile/)).toBeVisible();
   expect(screen.queryByRole("button", { name: /Clear all orphaned profiles/ })).toBeNull();
+  // Each finding is dismissed from Advisory itself.
   expect(advisory.getByRole("button", { name: "Dismiss inspection notice permanently" })).toBeVisible();
-  expect(orphansWindow().getByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeVisible();
+  expect(advisory.getByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeVisible();
   expect(api.clearMesaOrphans).not.toHaveBeenCalled();
 });
 
@@ -119,59 +127,62 @@ it("does not downgrade unknown configuration warnings or inspection errors", asy
 it.each(["orphans", "orphan_devices", "orphan_areas", "orphan_integrations"] as const)("treats %s as optional advisory cleanup", async (key) => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, [key]: ["retained_profile"] });
   renderMesa();
-  const profile = await orphansWindow().findByText(/retained_profile/);
-  const notice = profile.closest<HTMLElement>(".banner")!;
-  expect(notice).toHaveClass("banner-info");
+  const profile = await advisoryWindow().findByText(/retained_profile/);
+  const notice = profile.closest<HTMLElement>(".mesa-notice")!;
+  expect(notice).toHaveClass("mesa-notice-info");
   expect(within(notice).getByText(ADVISORY)).toBeVisible();
   expect(api.clearMesaOrphans).not.toHaveBeenCalled();
 });
 
-it("shows Orphaned Profiles and Advisory only while they hold undismissed findings", async () => {
+it("shows Advisory only while it holds an undismissed finding of any kind, and brings dismissed ones back from MESA Actions", async () => {
   const findings: Array<MesaFindings | null> = [];
   const inspection = { entity_id: "", declared_value: "unknown", automation_id: "templated", role: "configuration", severity: "warning", recommendation: "templates or blueprint inputs require host expansion; reference coverage is incomplete" };
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [inspection], orphans: ["sensor.kept"] });
   renderMesa({ onFindings: (f) => findings.push(f) });
-  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ orphans: true, advisory: true }));
+  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
   expect(findings[0]).toBeNull();
-  fireEvent.click(orphansWindow().getByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
-  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ orphans: false, advisory: true }));
+  // One finding left is still a reason to show it.
+  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  expect(advisoryWindow().queryByText(/sensor.kept/)).toBeNull();
+  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
   fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss inspection notice permanently" }));
-  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ orphans: false, advisory: false }));
-  // Diagnostics still lists every finding, dismissed or not, without dismissing anything.
-  expect(diagnosticsWindow().getByText(/sensor.kept/)).toBeVisible();
-  expect(diagnosticsWindow().getByText("View Automations")).toBeInTheDocument();
-  expect(diagnosticsWindow().queryByRole("button", { name: /Dismiss/ })).toBeNull();
+  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: false }));
+  // Dismissed notices come back from the MESA Actions menu (user, 2026-10-30).
+  fireEvent.click(profilesWindow().getByRole("button", { name: "MESA Actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Restore Dismissed Notices" }));
+  await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
+  expect(advisoryWindow().getByText(/sensor.kept/)).toBeVisible();
 });
 
 it("opens an orphaned profile in Profile Editor so it can be reviewed and removed", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphan_devices: ["gone-device"] });
   vi.mocked(api.getMesaProfile).mockResolvedValue({ stored: null } as never);
   renderMesa();
-  fireEvent.click(await orphansWindow().findByRole("button", { name: "gone-device" }));
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "gone-device" }));
   expect(await screen.findByRole("region", { name: "Profile Editor window" })).toHaveTextContent("gone-device");
 });
 
 it("permanently dismisses orphan findings across refresh, remount, subsets and reordering without deleting profiles", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_a", "sensor.kept_b"] });
   const first = renderMesa();
-  fireEvent.click(await orphansWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
-  expect(orphansWindow().queryByText(/sensor.kept_a/)).toBeNull();
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  expect(advisoryWindow().queryByText(/sensor.kept_a/)).toBeNull();
   refresh();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
-  expect(orphansWindow().queryByText(/sensor.kept_a/)).toBeNull();
+  expect(advisoryWindow().queryByText(/sensor.kept_a/)).toBeNull();
   first.unmount();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b", "sensor.kept_a"] });
   const second = renderMesa();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(3));
-  expect(orphansWindow().queryByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeNull();
+  expect(advisoryWindow().queryByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeNull();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b"] });
   refresh();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(4));
-  expect(orphansWindow().queryByText(/sensor.kept_b/)).toBeNull();
+  expect(advisoryWindow().queryByText(/sensor.kept_b/)).toBeNull();
   second.unmount();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.new_finding"] });
   renderMesa();
-  expect(await orphansWindow().findByText(/sensor.new_finding/)).toBeVisible();
+  expect(await advisoryWindow().findByText(/sensor.new_finding/)).toBeVisible();
   expect(api.clearMesaOrphans).not.toHaveBeenCalled();
   expect(api.putMesaProfile).not.toHaveBeenCalled();
 });
@@ -179,16 +190,16 @@ it("permanently dismisses orphan findings across refresh, remount, subsets and r
 it("keeps dismissals scoped to the current authenticated account", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.retained"] });
   const first = renderMesa();
-  fireEvent.click(await orphansWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
   first.unmount();
   setHass({ user: { id: "another-admin" } });
   const second = renderMesa();
-  expect(await orphansWindow().findByText(/sensor.retained/)).toBeVisible();
+  expect(await advisoryWindow().findByText(/sensor.retained/)).toBeVisible();
   second.unmount();
   setHass({ user: { id: "test-admin" } });
   renderMesa();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(3));
-  expect(orphansWindow().queryByText(/sensor.retained/)).toBeNull();
+  expect(advisoryWindow().queryByText(/sensor.retained/)).toBeNull();
 });
 
 it("dismisses inspection and validation notices independently and resurfaces changed validation", async () => {
@@ -218,8 +229,8 @@ it("still allows dismissal when browser storage is unavailable or malformed", as
   const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Unavailable"); });
   try {
     renderMesa();
-    fireEvent.click(await orphansWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
-    expect(orphansWindow().queryByText(/sensor.retained/)).toBeNull();
+    fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+    expect(advisoryWindow().queryByText(/sensor.retained/)).toBeNull();
   } finally { write.mockRestore(); }
 });
 
@@ -236,19 +247,20 @@ it("names every profile scope and suggestion by its familiar name, with the exac
   vi.mocked(api.getMesaIntegrationOptions).mockResolvedValue({ integrations: [{ id: "test_integration", name: "Test integration" }] });
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, suggestions: [{ key: "fan-suggestion", signal: "naked_risky", scope: "entity", subject_id: "fan.office", suggested_mode: "confirm", reason: "Review this entity.", evidence: {} }] });
   renderMesa();
-  await waitFor(() => expect(rowsIn("Profiles").map((r) => r.querySelector(".mesa-profile-name")?.textContent)).toEqual(
-    expect.arrayContaining(["Office fan", "Office device", "Office", "Test integration", "fan"]),
+  const nameOf = (r: HTMLElement) => r.querySelectorAll("td")[1]?.textContent ?? "";
+  await waitFor(() => expect(rowsIn("Profiles").map(nameOf)).toEqual(
+    expect.arrayContaining(["Office fan", "Office device", "Office", "Test integration"]),
   ));
   for (const [name, id] of [["Office fan", "fan.office"], ["Office device", "device-office"], ["Office", "office"], ["Test integration", "test_integration"]]) {
-    const row = rowsIn("Profiles").find((r) => r.querySelector(".mesa-profile-name")?.textContent === name)!;
+    const row = rowsIn("Profiles").find((r) => nameOf(r) === name)!;
     expect(within(row).getByText(id).tagName).toBe("CODE");
     expect(row).toHaveTextContent("Confirm");
   }
-  // A domain's key is its name, so it is not repeated.
-  const domain = rowsIn("Profiles").find((r) => r.querySelector(".mesa-profile-name")?.textContent === "fan")!;
-  expect(domain.querySelector("code")).toBeNull();
+  // A domain has no familiar name of its own: its ID is all there is.
+  const domain = rowsIn("Profiles").find((r) => r.querySelectorAll("td")[0]?.textContent === "fan")!;
+  expect(nameOf(domain)).toBe("");
   const suggestion = rowsIn("Suggested Profiles")[0];
-  expect(within(suggestion).getByText("Office fan").tagName).toBe("STRONG");
+  expect(within(suggestion).getByText("Office fan")).toBeTruthy();
   expect(within(suggestion).getByText("fan.office").tagName).toBe("CODE");
 });
 

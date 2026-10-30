@@ -1,7 +1,8 @@
 /**
  * Renders the MESA workspace as the shell does: its windows around their
  * shared state. Outside the shell each window draws its tools inside it.
- * `onFindings` receives which conditional windows have something to show.
+ * `onFindings` receives whether Advisory, the one findings window, has
+ * anything to show.
  */
 
 import { render, screen, within } from "@testing-library/react";
@@ -10,7 +11,7 @@ import { api } from "../api";
 import { MesaProvider, type MesaFindings } from "../shell/mesa";
 import type { MesaIssuesResponse } from "../types";
 import {
-  AdvisoryWindow, DiagnosticsWindow, MesaImportWindow, MesaProfilesWindow, OrphanedProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow,
+  AdvisoryWindow, MesaProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow,
 } from "../views/MesaWindows";
 
 /** The api functions the MESA workspace calls; mock `../api` with these. */
@@ -45,10 +46,7 @@ export function renderMesa({ onFindings }: { onFindings?: (f: MesaFindings | nul
       <section aria-label="Profiles window"><MesaProfilesWindow /></section>
       <section aria-label="Profile Editor window"><ProfileEditorWindow /></section>
       <section aria-label="Suggested Profiles window"><SuggestedProfilesWindow /></section>
-      <section aria-label="Orphaned Profiles window"><OrphanedProfilesWindow /></section>
       <section aria-label="Advisory window"><AdvisoryWindow /></section>
-      <section aria-label="Diagnostics window"><DiagnosticsWindow /></section>
-      <section aria-label="Import window"><MesaImportWindow /></section>
     </MesaProvider>,
   );
 }
@@ -57,9 +55,7 @@ const win = (name: string) => within(screen.getByRole("region", { name: `${name}
 export const profilesWindow = () => win("Profiles");
 export const editorWindow = () => win("Profile Editor");
 export const suggestedWindow = () => win("Suggested Profiles");
-export const orphansWindow = () => win("Orphaned Profiles");
 export const advisoryWindow = () => win("Advisory");
-export const diagnosticsWindow = () => win("Diagnostics");
 
 /** The table rows of a window, in shown order. */
 export const rowsIn = (name: string): HTMLElement[] => [...screen.getByRole("region", { name: `${name} window` }).querySelectorAll<HTMLElement>("tbody tr[data-row]")];

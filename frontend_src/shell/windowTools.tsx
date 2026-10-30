@@ -4,7 +4,7 @@
  * or closed, and bringing a window into view.
  */
 
-import { useCallback, useContext, useSyncExternalStore } from "react";
+import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 import { ControllerContext } from "./dock/TitleBar";
 import type { Tool, ToolGroup } from "./tools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
@@ -34,14 +34,19 @@ export function InlineTools({ groups }: { groups: ToolGroup[] }) {
 const noSubscribe = () => () => {};
 const noVersion = () => 0;
 
-/** A toolbar toggle that opens a closed window or closes an open one, for the window it belongs to. */
-export function useWindowToggle(windowId: string): { open: boolean; toggle: () => void; autoOpen: () => void } | null {
+/**
+ * A toolbar toggle that opens a closed window or closes an open one, for the
+ * window it belongs to. A window the workspace floats (MESA's findings) opens
+ * over the workspace rather than in the grid.
+ */
+export function useWindowToggle(windowId: string, floating = false): { open: boolean; toggle: () => void; autoOpen: () => void } | null {
   const controller = useContext(ControllerContext);
   useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.getVersion ?? noVersion);
   if (!controller) return null;
   return {
     open: !!controller.hostOf(windowId),
     toggle: () => {
+      if (floating) { controller.openFloating(windowId); return; }
       const group = controller.groupOf(windowId);
       if (group) controller.close(group);
       else controller.ensureOpen(windowId);
@@ -49,6 +54,14 @@ export function useWindowToggle(windowId: string): { open: boolean; toggle: () =
     // Opens it when there is something to show, unless the user closed it.
     autoOpen: () => controller.autoOpen(windowId),
   };
+}
+
+/** Forget what this window had chosen when the workspace is reset (user, 2026-10-30). */
+export function useWorkspaceReset(forget: () => void): void {
+  const controller = useContext(ControllerContext);
+  const latest = useRef(forget);
+  latest.current = forget;
+  useEffect(() => controller?.onReset(() => latest.current()), [controller]);
 }
 
 /** Open (or unfold) a window of this workspace; does nothing outside the shell. */

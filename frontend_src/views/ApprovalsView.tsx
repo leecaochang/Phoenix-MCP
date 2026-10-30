@@ -14,6 +14,7 @@ import { YamlView, toYaml } from "../components/YamlView";
 import { t } from "../i18n";
 import { APPROVALS_SCOPES, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
+import { useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
 import { Icon, type IconName } from "../ui/Icon";
@@ -143,6 +144,8 @@ function listColumns(a: ApprovalsState): Column<ApprovalRecord>[] {
 
 export function ApprovalsListWindow() {
   const a = useApprovals();
+  // Resetting the workspace clears what it had chosen, as it clears the arrangement.
+  useWorkspaceReset(() => a?.select(null));
   const groups: ToolGroup[] = a ? [{
     id: "approvals",
     label: t("shell.tabApprovals"),

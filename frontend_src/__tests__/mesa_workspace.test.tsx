@@ -43,20 +43,22 @@ beforeEach(() => {
   vi.mocked(api.getMesaDevice).mockResolvedValue({ stored: doc("confirm") } as never);
 });
 
-const names = () => rowsIn("Profiles").map((r) => r.querySelector(".mesa-profile-name")!.textContent);
-const choose = (name: string) => fireEvent.click(rowsIn("Profiles").find((r) => r.querySelector(".mesa-profile-name")!.textContent === name)!);
+/** The Name column of each row: ID, Name, Control Mode, Type, Actions (user, 2026-10-30). */
+const nameCell = (r: HTMLElement) => r.querySelectorAll("td")[1]?.textContent ?? "";
+const names = () => rowsIn("Profiles").map(nameCell);
+const choose = (name: string) => fireEvent.click(rowsIn("Profiles").find((r) => nameCell(r) === name)!.querySelectorAll("td")[1]!);
 
 describe("Profiles", () => {
   it("lists every scope together, filters by type, control mode (with counts) and enforcement, and searches", async () => {
     renderMesa();
     await waitFor(() => expect(names().sort()).toEqual(["Desk lamp", "Front door", "Hall hub"]));
     const win = profilesWindow();
-    expect(win.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(expect.arrayContaining(["Name", "Applies To"]));
+    expect(win.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["ID", "Name", "Control Mode", "Type", "Actions"]);
     expect(win.queryByRole("columnheader", { name: /Tags/ })).toBeNull();
 
-    fireEvent.change(win.getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
+    fireEvent.change(win.getByRole("combobox", { name: "Type" }), { target: { value: "device" } });
     expect(names()).toEqual(["Hall hub"]);
-    fireEvent.change(win.getByRole("combobox", { name: "Applies To" }), { target: { value: "" } });
+    fireEvent.change(win.getByRole("combobox", { name: "Type" }), { target: { value: "" } });
 
     const control = win.getByRole("combobox", { name: "Control Mode" });
     expect([...control.querySelectorAll("option")].map((o) => o.textContent)).toContain("Prohibited (1)");
@@ -81,35 +83,27 @@ describe("Profiles", () => {
     await waitFor(() => expect(names()).toContain("Hall hub"));
     choose("Hall hub");
     const heading = await editorWindow().findByRole("heading", { level: 3 });
+    // The line names the scope and the exact id; the familiar name is the field below it.
     expect(heading).toHaveTextContent("Device");
-    expect(heading).toHaveTextContent("Hall hub");
     expect(within(heading).getByText("dev-hall").tagName).toBe("CODE");
+    expect(heading).not.toHaveTextContent("Hall hub");
+    expect(editorWindow().getByDisplayValue("Hall hub")).toBeDisabled();
     expect(api.getMesaDevice).toHaveBeenCalledWith("dev-hall");
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm"));
     expect(rowsIn("Profiles").find((r) => r.getAttribute("aria-selected") === "true")).toHaveTextContent("Hall hub");
   });
 
-  it("empties Profile Editor when the list is told to show other profiles, unless it holds changes", async () => {
+  it("empties Profile Editor when the list is told to show other profiles", async () => {
     renderMesa();
     await waitFor(() => expect(names()).toContain("Front door"));
     choose("Front door");
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
     // Showing other profiles leaves nothing chosen in the list (user, 2026-10-29).
-    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
+    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Type" }), { target: { value: "device" } });
     expect(await editorWindow().findByText("Select a profile to edit it, or add one.")).toBeTruthy();
-
-    // Unsaved changes are not thrown away by a filter.
-    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "" } });
-    await waitFor(() => expect(names()).toContain("Front door"));
-    choose("Front door");
-    await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
-    fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
-    fireEvent.change(profilesWindow().getByRole("combobox", { name: "Applies To" }), { target: { value: "device" } });
-    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
-    expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
   });
 
-  it("asks before leaving unsaved changes for another profile", async () => {
+  it("opens another profile straight away, unsaved changes and all (user, 2026-10-30)", async () => {
     renderMesa();
     await waitFor(() => expect(names()).toContain("Front door"));
     choose("Front door");
@@ -117,19 +111,12 @@ describe("Profiles", () => {
     fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
     // Choosing the profile already open keeps the form as it is.
     choose("Front door");
-    expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
     expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
 
+    // Another profile loads at once: nothing asks about the changes, and nothing was saved.
     choose("Desk lamp");
-    const ask = editorWindow().getByRole("group", { name: "Discard changes?" });
-    expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Front door");
-    fireEvent.click(within(ask).getByRole("button", { name: "Keep Editing" }));
+    await waitFor(() => expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("light.desk"));
     expect(editorWindow().queryByRole("group", { name: "Discard changes?" })).toBeNull();
-    expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("confirm");
-
-    choose("Desk lamp");
-    fireEvent.click(within(editorWindow().getByRole("group", { name: "Discard changes?" })).getByRole("button", { name: "Discard and Open" }));
-    await waitFor(() => expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Desk lamp"));
     expect(api.putMesaProfile).not.toHaveBeenCalled();
   });
 
@@ -157,15 +144,39 @@ describe("Profiles", () => {
     ]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Add Domain Profile" }));
     expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Add Domain Profile");
-    expect(editorWindow().queryByRole("button", { name: "Delete" })).toBeNull();
+    // Delete is offered but does nothing until there is a profile to delete (user, 2026-10-30).
+    expect(editorWindow().getByRole("button", { name: "Delete" })).toBeDisabled();
     fireEvent.change(editorWindow().getByRole("combobox", { name: /Domain/ }), { target: { value: "lock" } });
     fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
     fireEvent.click(editorWindow().getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.putMesaDomain).toHaveBeenCalledWith("lock", expect.any(Object), true));
-    await waitFor(() => expect(editorWindow().getByRole("button", { name: "Delete" })).toBeInTheDocument());
+    await waitFor(() => expect(editorWindow().getByRole("button", { name: "Delete" })).not.toBeDisabled());
     expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("lock");
     expect(api.getMesaDomain).toHaveBeenCalledWith("lock");
     expect(api.listMesaProfiles).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not offer a new profile a target that already has one", async () => {
+    vi.mocked(api.listMesaDomains).mockResolvedValue({ domains: [{ domain: "lock", document: doc("confirm") }] } as never);
+    renderMesa();
+    await waitFor(() => expect(names()).toContain("Front door"));
+    const add = (item: string) => {
+      fireEvent.click(profilesWindow().getByRole("button", { name: "Add Profile" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: item }));
+    };
+    const offered = (label: RegExp, text: string) => {
+      fireEvent.change(editorWindow().getByRole("combobox", { name: label }), { target: { value: text } });
+      const list = editorWindow().queryByRole("listbox");
+      return list ? within(list).getAllByRole("option").map((o) => o.querySelector("code")?.textContent ?? o.textContent) : [];
+    };
+    add("Add Domain Profile");
+    expect(offered(/Domain/, "l")).toEqual(["light"]);
+    // Typed in full, a taken target is refused rather than saved over.
+    offered(/Domain/, "lock");
+    expect(editorWindow().getByRole("button", { name: "Save" })).toBeDisabled();
+    add("Add Entity Profile");
+    // Both entities have profiles; the editor's own entity picker offers neither.
+    expect(offered(/Entity/, "e")).toEqual([]);
   });
 
   it("deletes only after an inline confirmation naming the target, then empties the editor", async () => {
@@ -176,7 +187,8 @@ describe("Profiles", () => {
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
     fireEvent.click(editorWindow().getByRole("button", { name: "Delete" }));
     const confirm = editorWindow().getByRole("group", { name: "Delete this entity profile?" });
-    expect(confirm).toHaveTextContent('The "Front door" entity will fall back');
+    // What it falls back to reads in Help rather than inside the box (user, 2026-10-30).
+    expect(confirm.getAttribute("data-help-text")).toContain('The "Front door" entity will fall back');
     expect(api.deleteMesaProfile).not.toHaveBeenCalled();
     fireEvent.click(within(confirm).getByRole("button", { name: "Delete Entity Profile" }));
     await waitFor(() => expect(api.deleteMesaProfile).toHaveBeenCalledWith("lock.front"));
@@ -200,10 +212,9 @@ describe("the injected modal editor", () => {
 
 describe("conditional MESA windows", () => {
   it("are unknown until MESA has loaded, then follow its findings; other windows are always allowed", () => {
-    expect(windowAvailable("mesaOrphans", null)).toBeNull();
     expect(windowAvailable("mesaAdvisory", null, null)).toBeNull();
-    expect(windowAvailable("mesaOrphans", null, { orphans: true, advisory: false })).toBe(true);
-    expect(windowAvailable("mesaAdvisory", null, { orphans: true, advisory: false })).toBe(false);
+    expect(windowAvailable("mesaAdvisory", null, { advisory: true })).toBe(true);
+    expect(windowAvailable("mesaAdvisory", null, { advisory: false })).toBe(false);
     expect(windowAvailable("mesaProfiles", null, null)).toBe(true);
   });
 });

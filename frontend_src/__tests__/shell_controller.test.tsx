@@ -15,9 +15,25 @@ const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div data-w
 
 function mount(saved?: Parameters<WorkspaceController["load"]>[0]) {
   const controller = new WorkspaceController("logs", WINDOWS, arrange, (id) => `Title ${id}`, { transient: new Set(["attention"]) });
-  render(<DockviewReact components={components} onReady={(e) => { controller.api = e.api; controller.load(saved); }} />);
+  // Needs Attention floats over the workspace, so the floating layer is part of the shell.
+  let floating: DockviewApi | null = null;
+  let main: DockviewApi | null = null;
+  const ready = () => {
+    if (!floating || !main) return;
+    controller.attach("float", floating);
+    controller.api = main;
+    controller.load(saved);
+  };
+  render(
+    <div>
+      <DockviewReact components={components} onReady={(e) => { main = e.api; ready(); }} />
+      <DockviewReact components={components} onReady={(e) => { floating = e.api; ready(); }} />
+    </div>,
+  );
   return controller;
 }
+/** Every window the controller holds, in any host. */
+const allIds = (c: WorkspaceController) => c.windows.filter((id) => c.hostOf(id));
 const ids = (c: WorkspaceController) => c.api!.panels.map((p) => p.id);
 /** Windows in layout order, read from the saved grid (api.panels lists them in creation order). */
 const order = (c: WorkspaceController) =>
@@ -46,11 +62,13 @@ describe("workspace controller", () => {
   it("never saves the shell-managed Needs Attention window", () => {
     const c = mount();
     c.showTransient("attention");
-    expect(ids(c)).toContain("attention");
+    expect(allIds(c)).toContain("attention");
+    expect(c.hostOf("attention")).toBe("float");
     const saved = c.layout()!;
     expect(Object.keys(saved.dock.panels).sort()).toEqual(["auditLog", "conversationLog"]);
+    expect(Object.keys(saved.floats?.panels ?? {})).not.toContain("attention");
     c.hideTransient("attention");
-    expect(ids(c)).not.toContain("attention");
+    expect(allIds(c)).not.toContain("attention");
   });
 
   it("remembers a closed window, offers it again and reopens it", () => {
@@ -137,18 +155,18 @@ describe("workspace controller", () => {
     const closed = vi.fn();
     c.onTransientClose = closed;
     c.showTransient("attention");
-    c.close(c.api!.getPanel("attention")!.group);
+    c.close(c.groupOf("attention")!);
     expect(closed).toHaveBeenCalledWith("attention");
     expect(c.closedWindows()).toEqual([]);
   });
 
-  it("floats a window and docks it back", () => {
+  it("floats a window into the floating layer and docks it back", () => {
     const c = mount();
-    const group = c.api!.getPanel("auditLog")!.group;
-    c.float(group);
-    expect(c.api!.getPanel("auditLog")!.group.api.location.type).toBe("floating");
-    c.dock(c.api!.getPanel("auditLog")!.group);
-    expect(c.api!.getPanel("auditLog")!.group.api.location.type).toBe("grid");
+    c.float(c.groupOf("auditLog")!);
+    expect(c.hostOf("auditLog")).toBe("float");
+    c.dock(c.groupOf("auditLog")!);
+    expect(c.hostOf("auditLog")).toBe("main");
+    expect(c.groupOf("auditLog")!.api.location.type).toBe("grid");
   });
 
   it("restores the original arrangement and forgets closed windows", () => {

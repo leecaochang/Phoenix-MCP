@@ -378,6 +378,16 @@ describe("pinned bands and the floating layer", () => {
     expect(w.apis.float!.panels).toHaveLength(0);
     expect(w.hosts.top!.style.height).toBe("0px");
   });
+
+  it("Reset This Workspace forgets where floating windows were moved", () => {
+    const first = mount();
+    const saved = { ...first.controller.layout()!, floatBoxes: { b: { left: 300, top: 200, width: 420, height: 320 } } };
+    const w = mount();
+    w.controller.load(saved);
+    expect(w.controller.layout()!.floatBoxes).toEqual(saved.floatBoxes);
+    w.controller.restoreOriginal();
+    expect(w.controller.layout()!.floatBoxes).toBeUndefined();
+  });
 });
 
 describe("window content across moves", () => {

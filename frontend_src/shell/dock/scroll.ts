@@ -144,6 +144,9 @@ export class WorkspaceCanvas {
   /** Windows hidden in place (Access Keys hides a key's windows while none is chosen): they take no height and keep their intended one. */
   hidden: (id: string) => boolean = () => false;
 
+  /** Windows as tall as their content, which are never the one that takes the space left. */
+  followsContent: (id: string) => boolean = () => false;
+
   /** The height a window takes in the layout: its title bar when folded, none when hidden. */
   private heightOf(id: string): number {
     if (this.hidden(id)) return 0;
@@ -264,7 +267,11 @@ export class WorkspaceCanvas {
         // The space left goes to the window beside the band that last changed (the lowest by default),
         // so space a closed Help frees goes to its neighbour; a fitted workspace skips the window just sized.
         const untargeted = flexible.filter((c) => !leafOrder(c).some((id) => id in targets));
-        const pool = this.fit && untargeted.length ? untargeted : flexible;
+        const offered = this.fit && untargeted.length ? untargeted : flexible;
+        // A window as tall as its content never takes the space left, even when no height was
+        // just asked for: it would draw its frame short and leave a band under it (user, 2026-10-30).
+        const free = offered.filter((c) => !leafOrder(c).every((id) => this.followsContent(id)));
+        const pool = free.length ? free : offered;
         // A child that cannot be sized takes the space left, or Dockview shares it out and a dragged border lags the pointer.
         const unsized = flexible.filter((c) => !settable(c));
         const takers = unsized.length ? unsized : pool;

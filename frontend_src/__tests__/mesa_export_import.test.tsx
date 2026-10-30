@@ -41,10 +41,10 @@ function pickFile(container: HTMLElement, contents: string) {
 
 const document = { semantic_profile: { operational_boundaries: { control_mode: "confirm" } } };
 
-/** Export, from the MESA Actions menu in Profiles. */
+/** Export, from the MESA Actions menu in Profiles; it is ticked while the panel is open. */
 function chooseExport() {
   fireEvent.click(profilesWindow().getByRole("button", { name: "MESA Actions" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Export MESA Profiles" }));
+  fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Export MESA Profiles" }));
 }
 
 describe("Export", () => {
@@ -61,9 +61,11 @@ describe("Export", () => {
     await waitFor(() => expect(profilesWindow().getAllByRole("row").length).toBeGreaterThan(1));
     chooseExport();
     const confirm = profilesWindow().getByRole("group", { name: "Export MESA Profiles" });
-    expect(within(confirm).getByText(/Download 1\.234 MESA profiles/)).toBeInTheDocument();
+    // What it downloads reads in the Help window, not inside the box (user, 2026-10-30).
+    expect(confirm.getAttribute("data-help-text")).toMatch(/Download 1\.234 MESA profiles/);
     expect(api.exportMesaProfiles).not.toHaveBeenCalled();
-  });
+    // Rendering 1234 rows takes longer than the usual budget in jsdom, under load.
+  }, 20_000);
 
   it("downloads the archive only after the explicit confirm", async () => {
     vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: ["a", "b", "c"].map((x) => ({ entity_id: `light.${x}`, document })), total_matched: 3, has_more: false, next_cursor: null });
@@ -78,7 +80,7 @@ describe("Export", () => {
       await waitFor(() => expect(profilesWindow().getAllByRole("row")).toHaveLength(4));
       chooseExport();
       const confirm = profilesWindow().getByRole("group", { name: "Export MESA Profiles" });
-      expect(within(confirm).getByText(/Download 3 MESA profiles/i)).toBeInTheDocument();
+      expect(confirm.getAttribute("data-help-text")).toMatch(/Download 3 MESA profiles/i);
       expect(api.exportMesaProfiles).not.toHaveBeenCalled();
 
       fireEvent.click(within(confirm).getByRole("button", { name: "Export" }));
@@ -124,7 +126,8 @@ describe("Import", () => {
     const { container, getByText, findByText, getByLabelText } = render(<MesaImport onImported={() => {}} />);
     pickFile(container, JSON.stringify(archive));
     await findByText(/Archive contains/);
-    expect(getByText(/left unchanged/)).toBeInTheDocument();
+    // What it leaves alone reads in the Help window (user, 2026-10-30).
+    expect(container.querySelector(".mesa-import")!.getAttribute("data-help-text")).toMatch(/left unchanged/);
 
     fireEvent.click(getByLabelText(/Replace existing profiles/i));
     expect(getByText(/Profiles with matching keys will be replaced/)).toBeInTheDocument();

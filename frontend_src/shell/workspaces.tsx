@@ -16,7 +16,7 @@ import { ApprovalsListWindow, RequestDetailsWindow, ReviewWindow } from "../view
 import { AuditView } from "../views/AuditView";
 import { ChangesListWindow, ComparisonWindow, ItemHistoryWindow } from "../views/ChangesView";
 import { ConversationsView } from "../views/ConversationsView";
-import { AdvisoryWindow, DiagnosticsWindow, MesaImportWindow, MesaProfilesWindow, OrphanedProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow } from "../views/MesaWindows";
+import { AdvisoryWindow, MesaProfilesWindow, ProfileEditorWindow, SuggestedProfilesWindow } from "../views/MesaWindows";
 import type { MesaFindings } from "./mesa";
 import { SETTINGS_WINDOW_TITLE_KEYS } from "./settingsIndex";
 import { OnboardingWizard } from "../views/OnboardingWizard";
@@ -56,10 +56,7 @@ export const WINDOW_TITLE_KEYS = {
   mesaProfiles: "workspace.mesaProfiles",
   mesaEditor: "workspace.profileEditor",
   mesaSuggestions: "mesa.suggestTitle",
-  mesaOrphans: "workspace.orphanedProfiles",
   mesaAdvisory: "workspace.advisory",
-  mesaImport: "mesa.importTitle",
-  mesaDiagnostics: "workspace.diagnostics",
   auditLog: "shell.tabAudit",
   conversationLog: "conversations.title",
   logDetails: "workspace.logDetails",
@@ -112,19 +109,20 @@ export interface WorkspaceDef {
   contentHeights?: boolean;
   /** Windows as tall as their content although the rest of the workspace is not. */
   contentWindows?: readonly WindowId[];
+  /** The most of the visible height one of those windows takes, as a fraction. */
+  contentMax?: Partial<Record<WindowId, number>>;
   /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
   pairs?: Readonly<Record<string, string>>;
 }
 
 /**
  * Whether a conditional window is allowed now; null while unknown. Presets
- * follows its setting; Orphaned Profiles and Advisory appear only while MESA
- * has findings for them that are not dismissed.
+ * follows its setting; Advisory appears only while MESA has a finding, of any
+ * kind, that is not dismissed.
  */
 export function windowAvailable(id: string, settings: GlobalSettings | null, mesa: MesaFindings | null = null, showArchived = false): boolean | null {
   if (id === "presets") return settings ? !!settings.access_key_presets_enabled : null;
   if (id === ARCHIVED_WINDOW) return showArchived;
-  if (id === "mesaOrphans") return mesa ? mesa.orphans : null;
   if (id === "mesaAdvisory") return mesa ? mesa.advisory : null;
   return true;
 }
@@ -217,28 +215,29 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     labelKey: "shell.tabMesa",
     helpKey: "help.wsMesa",
     icon: "mesa",
-    windows: ["mesaProfiles", "mesaEditor", "mesaSuggestions", "mesaOrphans", "mesaAdvisory", "mesaImport", "mesaDiagnostics", "attention"],
-    // Finding and editing a profile get the primary space: Profiles beside Profile
-    // Editor, Suggested Profiles across the bottom, as accepted for MESA. Orphaned
-    // Profiles and Advisory appear below it only while they have findings; Import
-    // and Diagnostics open from the MESA Actions menu.
+    windows: ["mesaProfiles", "mesaEditor", "mesaSuggestions", "mesaAdvisory", "attention"],
+    // Two columns of equal width, each the full height: Profiles with Suggested
+    // Profiles under it, and Profile Editor beside them (user, 2026-10-30).
+    // Importing is part of Profiles, and the findings windows float over the
+    // workspace rather than taking space from either column.
     arrange: (api, add) => {
       add("mesaProfiles");
       add("mesaEditor", { referencePanel: "mesaProfiles", direction: "right" });
-      add("mesaSuggestions", { direction: "below" });
-      share(api, "mesaProfiles", 0.45);
+      add("mesaSuggestions", { referencePanel: "mesaProfiles", direction: "below" });
+      share(api, "mesaProfiles", 0.5);
     },
     conditional: {
-      mesaOrphans: { neighbor: "mesaSuggestions", side: "bottom" },
-      mesaAdvisory: { neighbor: "mesaSuggestions", side: "bottom" },
+      mesaAdvisory: { neighbor: "mesaProfiles", side: "bottom", host: "float" },
     },
-    closedAt: {
-      mesaImport: { neighbor: "mesaEditor", side: "bottom" },
-      mesaDiagnostics: { neighbor: "mesaSuggestions", side: "bottom" },
-    },
-    heights: { mesaProfiles: 560, mesaEditor: 560, mesaSuggestions: 320, mesaOrphans: 240, mesaAdvisory: 260, mesaImport: 360, mesaDiagnostics: 360 },
-    // 2: the MESA windows replaced the single MESA window.
-    layoutVersion: 2,
+    heights: { mesaProfiles: 560, mesaEditor: 560, mesaSuggestions: 260 },
+    // The windows always fit the screen; Suggested Profiles is as tall as what it
+    // lists, up to a third of its column, and Profiles takes the rest. Advisory
+    // floats at the height of its findings, up to the workspace's own (user, 2026-10-30).
+    fit: true,
+    contentWindows: ["mesaSuggestions", "mesaAdvisory"],
+    contentMax: { mesaSuggestions: 1 / 3, mesaAdvisory: 1 },
+    // 4: one floating Advisory window holds every finding; Orphaned Profiles and Diagnostics are gone.
+    layoutVersion: 4,
   },
   logs: {
     labelKey: "workspace.logs",
@@ -366,11 +365,31 @@ const px = (value: string): number => {
 };
 
 /**
- * The height a window's content needs: the content's own boxes plus the room
- * the frame keeps around them. The frame itself is as tall as the window, so
- * measuring it says only how much room the content was given, never how much
- * it wanted (user, 2026-10-29).
+ * The height an element's content needs, ignoring any height forced on it.
+ *
+ * A box that is as tall as its own content is measured directly. A box that
+ * was stretched to fill its window, or that scrolls, reports back the height
+ * it was given rather than the height it wants, so its children are measured
+ * instead: a window sized from that number would chase itself up and down for
+ * ever (user, 2026-10-30, a list that never settled).
  */
+function neededHeight(el: HTMLElement): number {
+  const style = getComputedStyle(el);
+  const scrolls = style.overflowY === "auto" || style.overflowY === "scroll";
+  const column = style.display.endsWith("flex") && style.flexDirection.startsWith("column");
+  if (!scrolls && !column) return el.offsetHeight;
+  let inner = 0;
+  for (const child of Array.from(el.children) as HTMLElement[]) {
+    // Absent, absolutely placed, or the heading only screen readers hear: no room of its own.
+    if (!child.offsetHeight && !child.offsetWidth) continue;
+    const box = getComputedStyle(child);
+    if (box.position === "absolute" || box.position === "fixed") continue;
+    inner += neededHeight(child) + px(box.marginTop) + px(box.marginBottom);
+  }
+  return px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth) + inner;
+}
+
+/** The height a window's content needs, frame included. */
 function contentHeight(el: HTMLElement): number {
   // The heading screen readers announce the window by takes no room.
   const content = (Array.from(el.children) as HTMLElement[]).filter((child) => !child.classList.contains("sr-only"));
@@ -381,7 +400,7 @@ function contentHeight(el: HTMLElement): number {
   let height = px(frame.paddingTop) + px(frame.paddingBottom);
   for (const child of content) {
     const box = getComputedStyle(child);
-    height += child.offsetHeight + px(box.marginTop) + px(box.marginBottom);
+    height += neededHeight(child) + px(box.marginTop) + px(box.marginBottom);
   }
   return height;
 }
@@ -513,10 +532,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   mesaProfiles: MesaProfilesWindow,
   mesaEditor: ProfileEditorWindow,
   mesaSuggestions: SuggestedProfilesWindow,
-  mesaOrphans: OrphanedProfilesWindow,
   mesaAdvisory: AdvisoryWindow,
-  mesaImport: MesaImportWindow,
-  mesaDiagnostics: DiagnosticsWindow,
   auditLog: AuditLogContent,
   conversationLog: ConversationLogContent,
   settingsProviders: AiProvidersWindow,

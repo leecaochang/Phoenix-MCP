@@ -146,7 +146,8 @@ describe("panel stylesheet", () => {
   });
 
   it("keeps long localized MESA names and modes inside their column, and the editor grid responsive", () => {
-    expect(CSS).toMatch(/\.mesa-profile-cell\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+    // Every table cell clips rather than widening its column; MESA's lists rely on it.
+    expect(CSS).toMatch(/\.phx-table\s+td\s*\{[^}]*text-overflow:\s*ellipsis;/s);
     expect(CSS).toMatch(/\.mesa-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,/s);
   });
 

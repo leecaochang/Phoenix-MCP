@@ -226,6 +226,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.approvals.energyGas",  # "Gas"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
+        "panel.mesa.colAppliesTo",  # "Type"
         "panel.changes.typeBlueprint",  # "Blueprint"
         "panel.changes.typeScene",  # "Scene"
         "panel.changes.typeScript",  # "Script"
@@ -471,6 +472,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
+        "panel.mesa.colAppliesTo",  # "Type"
         "panel.changes.typeScene",  # "Scene"
         "panel.common.diff",  # "Diff"
         "panel.mesa.privNormal",  # "Normal"
@@ -486,6 +488,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     }),
     "nl": frozenset({
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.mesa.colAppliesTo",  # "Type", the same word in this language
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.mesa.roleTrigger",  # "trigger", Home Assistant's Dutch term
@@ -534,7 +537,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.changes.typeHelper",            # "Helper"
         "panel.changes.typeScript",            # "Script"
         "panel.common.diff",                   # "Diff"
-        "panel.mesa.helpAria",                 # "Help: {text}", "Help" is a cognate
         "panel.mesaSuggestion.noun.script",    # "script"
         "panel.perms.colType",                 # "Type"
         "panel.selectBy.label",                # "Label"

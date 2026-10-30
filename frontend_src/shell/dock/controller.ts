@@ -71,8 +71,6 @@ const EMPTY: ReadonlySet<string> = new Set();
 
 const DIRECTION_OF: Record<Side, "left" | "right" | "above" | "below"> = { left: "left", right: "right", top: "above", bottom: "below" };
 
-/** Height a shell-managed window opens at, so it does not take half the workspace. */
-const TRANSIENT_HEIGHT = 240;
 /**
  * How far a measured content height may drift before a window that cannot grow freely
  * follows it. Large enough that settling noise never moves the windows under the
@@ -92,6 +90,8 @@ const isBand = (host: unknown): host is Band => host === "top" || host === "bott
 const FLOAT_BOUNDS = { minWidth: 360, maxWidth: 640, minHeight: 260, maxHeight: 480, left: 80, top: 64 };
 /** A window floating onto another's corner moves down and right by this much, so neither hides the other. */
 const FLOAT_CASCADE = 28;
+/** Space kept between a floating window sized to its content and the workspace's edges. */
+const FLOAT_MARGIN = 24;
 
 const validBox = (b: unknown): b is FloatBox => !!b && typeof b === "object"
   && (["left", "top", "width", "height"] as const).every((k) => Number.isFinite((b as Record<string, unknown>)[k]))
@@ -141,6 +141,8 @@ export interface WorkspaceExtras {
    * below it takes the space left (user, 2026-10-29).
    */
   contentWindows?: readonly string[];
+  /** The most of the visible height one of those windows may take, as a fraction of it. */
+  contentMax?: Readonly<Record<string, number>>;
   /**
    * Windows that open beside a partner in its pinned band, at its height, rather
    * than along the bottom: { notifications: "help" } puts Notifications to the
@@ -162,6 +164,8 @@ export class WorkspaceController {
   readonly tables = new TableSettingsStore();
   /** Called when the user closes a shell-managed window. */
   onTransientClose: ((id: string) => void) | null = null;
+  /** Windows that forget their chosen record when the workspace is reset. */
+  private resetListeners = new Set<() => void>();
   /** Called when the user closes or reopens a window (not when the shell does). */
   onWindowToggle: ((id: string, open: boolean) => void) | null = null;
   /** The window that last had focus in this workspace. */
@@ -286,17 +290,51 @@ export class WorkspaceController {
     const targets: Heights = {};
     for (const [id, h] of this.natural) {
       if (!this.followsContent(id)) continue;
+      // A floating window has no place in the grid: it takes its content's height directly.
+      if (this.hostOf(id) === "float") { this.sizeFloating(id, h); continue; }
       const group = api.getPanel(id)?.group;
       if (!group || this.folds.isFolded(id) || this.hiddenIds.has(id)) continue;
       let target = Math.max(MIN_WINDOW_HEIGHT, h);
       // A window the workspace names may shrink to its content, but never take room another
       // window needs: a long request must not resize Needs Attention (user, 2026-10-29).
       // Needs Attention itself is not held back, so what it holds is always shown.
-      if (this.contentOwn.has(id)) target = Math.min(target, canvas.roomFor(id));
+      if (this.contentOwn.has(id)) {
+        const share = this.extras.contentMax?.[id];
+        const cap = share ? Math.round(canvas.visibleHeight() * share) : 0;
+        target = Math.min(target, canvas.roomFor(id), ...(cap > MIN_WINDOW_HEIGHT ? [cap] : []));
+      }
       if (Math.abs((canvas.intended[id] ?? 0) - target) >= 2) targets[id] = target;
     }
     if (Object.keys(targets).length) this.batch(() => canvas.apply(targets));
     this.markSlack();
+  }
+
+  /**
+   * Draw a floating window at the height its content needs, up to its share of
+   * the workspace (a third unless the workspace says otherwise) and never past
+   * its visible height, so a notice with two lines in it is not a half-empty
+   * box (user, 2026-10-30). A window in the lower half keeps its bottom edge,
+   * so one opened in the bottom corner grows upward and shrinks back down;
+   * either way it stays inside the workspace.
+   */
+  private sizeFloating(id: string, needed: number): void {
+    const group = this.apiOf("float")?.getPanel(id)?.group;
+    if (!group) return;
+    const visible = this.visibleHeight();
+    const cap = Math.round(Math.min(visible * (this.extras.contentMax?.[id] ?? 1 / 3), visible - 2 * FLOAT_MARGIN));
+    const target = Math.max(MIN_WINDOW_HEIGHT, cap > MIN_WINDOW_HEIGHT ? Math.min(Math.round(needed), cap) : Math.round(needed));
+    if (Math.abs(group.height - target) < 8) return;
+    // Dockview resizes a floating window from its top edge and has no call to move one,
+    // so the frame is placed first and Dockview then keeps it within its layer.
+    const box = this.floatBox(group);
+    const frame = group.element.closest<HTMLElement>(".dv-resize-container");
+    if (box && frame && visible > 0) {
+      const bottom = box.top + box.height;
+      const top = bottom > visible / 2 ? bottom - target : box.top;
+      frame.style.top = `${Math.max(0, Math.min(top, visible - target))}px`;
+      frame.style.bottom = "auto";
+    }
+    group.api.setSize({ height: target });
   }
 
   /**
@@ -479,7 +517,13 @@ export class WorkspaceController {
   /** Whether the workspace is on screen; changes to its windows made while it was hidden apply now. */
   setShown(shown: boolean): void {
     this.shown = shown;
-    if (shown) this.followContent();
+    if (shown) {
+      // A hidden workspace measures nothing, so anything laid out while it was away
+      // (a pinned band's own height) was laid out against zero: do it again now that
+      // there is something to measure (user, 2026-10-30, a band that came back empty).
+      for (const [, host] of this.attached(LAYOUT_ORDER)) host.canvas?.apply();
+      this.followContent();
+    }
     if (!shown || !this.windowsChanged || !this.api) return;
     this.windowsChanged = false;
     this.batch(() => this.applyWindows());
@@ -592,13 +636,19 @@ export class WorkspaceController {
   /** The scrolling grid's canvas. */
   get canvas(): WorkspaceCanvas | null { return this.hosts.main?.canvas ?? null; }
   set canvas(canvas: WorkspaceCanvas | null) {
-    if (canvas) canvas.hidden = (id) => this.hiddenIds.has(id);
+    if (canvas) {
+      canvas.hidden = (id) => this.hiddenIds.has(id);
+      canvas.followsContent = (id) => this.contentOwn.has(id);
+    }
     if (this.hosts.main) this.hosts.main.canvas = canvas;
   }
 
   /** Register a host's Dockview instance and canvas, or remove it with null. */
   attach(host: HostId, api: DockviewApi | null, canvas: WorkspaceCanvas | null = null): void {
-    if (canvas) canvas.hidden = (id) => this.hiddenIds.has(id);
+    if (canvas) {
+      canvas.hidden = (id) => this.hiddenIds.has(id);
+      canvas.followsContent = (id) => this.contentOwn.has(id);
+    }
     if (api) this.hosts[host] = { api, canvas };
     else delete this.hosts[host];
   }
@@ -712,7 +762,7 @@ export class WorkspaceController {
     if (dock) {
       try {
         this.batch(() => {
-          const keep = [...this.transient].filter((id) => api.getPanel(id));
+          const keep = [...this.transient].filter((id) => this.hostOf(id));
           for (const host of ["top", "bottom", "float"] as const) {
             const other = this.apiOf(host);
             if (other?.panels.length) other.clear();
@@ -737,7 +787,7 @@ export class WorkspaceController {
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
           this.moveFloatsToLayer();
           // Needs Attention stays when an arrangement is restored over it.
-          for (const id of keep) if (!api.getPanel(id)) this.add(id, { direction: "above" });
+          for (const id of keep) if (!this.hostOf(id)) this.openFloating(id);
           for (const [, host] of this.attached(LAYOUT_ORDER)) host.canvas?.apply();
           this.retitle();
           this.syncAvailable();
@@ -782,18 +832,28 @@ export class WorkspaceController {
     }
   }
 
+  /** Tell this window when the workspace is reset, so it can forget its chosen record. */
+  onReset(listener: () => void): () => void {
+    this.resetListeners.add(listener);
+    return () => { this.resetListeners.delete(listener); };
+  }
+
   /** Reset this workspace to its default arrangement. */
   restoreOriginal(): void {
     const api = this.api;
     if (!api) return;
+    for (const listener of [...this.resetListeners]) listener();
     this.batch(() => {
-      const keep = [...this.transient].filter((id) => api.getPanel(id));
+      const keep = [...this.transient].filter((id) => this.hostOf(id));
       for (const [, host] of this.attached()) host.api.clear();
       this.folds.restore(undefined, () => false);
       this.tables.restore(undefined);
       this.closed.clear();
       this.floatedFrom.clear();
       this.pinnedFrom.clear();
+      // Floating windows come back at their default place and size, not where they were
+      // last moved (user, 2026-10-30).
+      this.floatBoxes.clear();
       // The default arrangement's pairs come back in their default order and shares.
       this.pairLeft.clear();
       this.pairShare.clear();
@@ -824,7 +884,7 @@ export class WorkspaceController {
         this.canvas.apply();
       }
       for (const id of this.extras.folded ?? []) this.foldById(id);
-      for (const id of keep) this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: TRANSIENT_HEIGHT });
+      for (const id of keep) this.openFloating(id);
       this.syncAvailable();
       this.applyWanted();
       this.collectAll();
@@ -879,12 +939,17 @@ export class WorkspaceController {
         this.keepHeights(() => panel.api.close());
         changed = true;
       } else if (allowed && !panel && !this.closed.has(id)) {
-        const anchor = api.getPanel(home.neighbor);
-        this.keepHeights(() => {
-          if (anchor && anchor.group.api.location.type === "grid") this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[home.side] });
-          else this.add(id, { direction: "below" });
-        }, { [id]: this.extras.heights?.[id] ?? REOPEN_HEIGHT });
-        if (this.extras.folded?.includes(id)) this.foldById(id);
+        // A window the workspace floats (MESA's findings) comes up over the
+        // workspace instead of taking space from it (user, 2026-10-30).
+        if (home.host === "float") this.openFloating(id);
+        else {
+          const anchor = api.getPanel(home.neighbor);
+          this.keepHeights(() => {
+            if (anchor && anchor.group.api.location.type === "grid") this.add(id, { referencePanel: anchor, direction: DIRECTION_OF[home.side] });
+            else this.add(id, { direction: "below" });
+          }, { [id]: this.extras.heights?.[id] ?? REOPEN_HEIGHT });
+          if (this.extras.folded?.includes(id)) this.foldById(id);
+        }
         changed = true;
       }
     }
@@ -1264,6 +1329,22 @@ export class WorkspaceController {
     return true;
   }
 
+  /**
+   * Open a window over the workspace, at a third of its width and height and in
+   * the bottom corner: the size and place a window the workspace floats takes
+   * when it has none of its own yet. The corner keeps it off the list the
+   * workspace is built around (user, 2026-10-30); from there the user moves it.
+   */
+  openFloating(id: string, fraction = 1 / 3): void {
+    const room = this.canvas?.host.clientWidth ?? 0;
+    const width = Math.round(room * fraction);
+    const height = Math.round(this.visibleHeight() * fraction);
+    if (!this.floatBoxes.has(id) && room > 0 && height > 0) {
+      this.floatBoxes.set(id, { left: Math.max(0, room - width - FLOAT_BOUNDS.left), top: Math.max(0, this.visibleHeight() - height - FLOAT_MARGIN), width, height });
+    }
+    this.toggleFloating(id, width, height);
+  }
+
   /** Open a closed window as a floating window over the workspace; close it again when it is open. */
   toggleFloating(id: string, width: number, height: number): void {
     const group = this.groupOf(id);
@@ -1467,19 +1548,10 @@ export class WorkspaceController {
 
   /** Add a shell-managed window above everything, full width and compact, if it is not open. */
   showTransient(id: string): void {
-    const api = this.api;
-    if (!api || this.hostOf(id)) return;
-    // Its own measured height when it has one, so nothing it shows is clipped.
-    const measured = this.natural.get(id);
-    const height = measured && measured > 0
-      ? measured
-      : Math.min(TRANSIENT_HEIGHT, Math.max((this.canvas?.visibleHeight() || api.height) / 3, 140));
-    if (this.canvas) {
-      this.keepHeights(() => this.add(id, { direction: "above" }), { [id]: height });
-    } else {
-      this.add(id, { direction: "above" });
-      api.getPanel(id)?.group.api.setSize({ height });
-    }
+    if (!this.api || this.hostOf(id)) return;
+    // Over the workspace, not across the top of it: a window that comes and goes may
+    // not squeeze the windows the workspace is built from (user, 2026-10-30).
+    this.openFloating(id);
   }
 
   hideTransient(id: string): void {

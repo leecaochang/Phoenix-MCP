@@ -1,13 +1,13 @@
 /**
  * The MESA workspace's windows, around the shared state in `shell/mesa.tsx`:
- * Profiles (every profile at every scope in one list), Profile Editor (the
- * shared editor as a window), Suggested Profiles, the conditional Orphaned
- * Profiles and Advisory windows, Diagnostics with every finding, and Import.
- * The workspace's tools (Add Profile, Refresh, Suggested Profiles, Filters and
- * the MESA Actions menu) come with Profiles.
+ * Profiles (every profile at every scope in one list, with importing and
+ * exporting in place), Profile Editor, Suggested Profiles under the list, and
+ * the floating Orphaned Profiles, Advisory and Diagnostics windows. The
+ * workspace's tools (Add Profile, Filters and the MESA Actions menu) come with
+ * Profiles.
  */
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import type { MesaProfileScope, MesaSuggestion, MesaValidationIssue } from "../types";
 import { ErrorMsg, Loading } from "../components/common";
 import { MesaIdentity } from "../components/MesaIdentity";
@@ -16,15 +16,16 @@ import { localeNumber, t, tn, tnKey } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useMesa, type MesaState, type ProfileRow } from "../shell/mesa";
 import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
-import { InlineTools, useEnsureOpen, useWindowToggle } from "../shell/windowTools";
-import { ActionButton } from "../ui/ActionButton";
+import { InlineTools, useEnsureOpen, useWindowToggle, useWorkspaceReset } from "../shell/windowTools";
+import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import type { MenuEntry } from "../ui/Menu";
+import { useClickAway } from "../ui/useClickAway";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { matchesListSearch } from "../utils/list_search";
 import {
-  ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_LABEL_KEYS, isEnforced, profileSource, rawControlMode, tagsOf,
+  ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_LABEL_KEYS, deleteProfile, isEnforced, profileSource, rawControlMode, tagsOf,
 } from "./MesaView";
 
 const CONTROL_FILTERS = ["confirm", "prohibited", "read_only", "autonomous", "inherited"] as const;
@@ -32,7 +33,7 @@ const CONTROL_FILTERS = ["confirm", "prohibited", "read_only", "autonomous", "in
 const scopeLabel = (scope: MesaProfileScope): string => t(SCOPE_LABEL_KEYS[scope]);
 const controlLabel = (mode: string): string => t(CONTROL_MODE_LABEL_KEYS[mode] ?? "mesa.modeInherited");
 
-/** The configured control mode, as the list shows it under a profile's name. */
+/** The control mode a profile sets, with its enforcement when it enforces. */
 function ControlMode({ row }: { row: ProfileRow }) {
   const mode = rawControlMode(row.document);
   return (
@@ -43,6 +44,52 @@ function ControlMode({ row }: { row: ProfileRow }) {
   );
 }
 
+/** How a profile's control reads in one string, for sorting and for a row's name. */
+const controlText = (row: ProfileRow): string =>
+  `${controlLabel(rawControlMode(row.document))}${isEnforced(row.document) ? ` ${t("mesa.modeEnforced")}` : ""}`;
+
+/**
+ * A row's own action, asking in place before it acts: the button turns red and
+ * is answered beside it, on the same line, and a click anywhere else cancels,
+ * as Delete Permanently does in Archived Access Keys (user, 2026-10-30).
+ */
+function RowAction({ id, label, confirmLabel, icon, busy, confirming, boxRef, onAsk, onConfirm }: {
+  id: string;
+  label: string;
+  confirmLabel: string;
+  icon: "delete" | "close";
+  busy: boolean;
+  confirming: string | null;
+  /** The window's own click-away box, given to the row that is asking. */
+  boxRef: RefObject<HTMLSpanElement | null>;
+  onAsk: (id: string | null) => void;
+  onConfirm: () => void;
+}) {
+  const asked = confirming === id;
+  return (
+    // Acting on a row never chooses it: the list's own choice stays where it is.
+    <span className="row-actions" ref={asked ? boxRef : undefined} onClick={(e) => e.stopPropagation()}>
+      <ActionButton icon={icon} label={asked ? t("common.confirm") : label} name={asked ? confirmLabel : undefined} busy={busy}
+        className={asked ? "btn btn-danger btn-sm" : "btn btn-ghost btn-sm"}
+        onClick={() => (asked ? onConfirm() : onAsk(id))} />
+      {asked && <ActionButton icon="undo" label={t("common.cancel")} className="btn btn-outline btn-sm" busy={busy} onClick={() => onAsk(null)} />}
+    </span>
+  );
+}
+
+/** What a window says when it holds nothing, with the way out of it. */
+function NothingHere({ window: windowId, text, floating = false }: { window: string; text: string; floating?: boolean }) {
+  const toggle = useWindowToggle(windowId, floating);
+  return (
+    <div className="phx-window-empty phx-window-nothing">
+      <p>{text}</p>
+      {toggle?.open && <ActionButton icon="close" label={t("common.close")} className="btn btn-outline btn-sm" onClick={toggle.toggle} />}
+    </div>
+  );
+}
+
+const BY_ID = { column: "id", dir: "asc" } as const;
+
 export function MesaProfilesWindow() {
   const m = useMesa();
   const ensureOpen = useEnsureOpen();
@@ -52,27 +99,43 @@ export function MesaProfilesWindow() {
   const [control, setControl] = useState("");
   const [enforcement, setEnforcement] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Importing and exporting both open in place at the top of the list (user, 2026-10-30).
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // One click-away for the whole list: at most one row is ever asking.
+  const confirmBox = useRef<HTMLSpanElement | null>(null);
+  useClickAway(confirmBox, () => setConfirmId(null), !!confirmId && !deleting);
   // Hidden filters stop applying and come back as they were (user, 2026-10-27); the search is not one of them.
   const filtersApply = !useOnToolbar() || filtersOpen;
   const activeFilters = filtersApply ? (scope ? 1 : 0) + (control ? 1 : 0) + (enforcement ? 1 : 0) : 0;
+  // Resetting the workspace clears what it had chosen, as it clears the arrangement.
+  useWorkspaceReset(() => { m?.open(null); m?.selectSuggestion(null); });
 
   const openNew = (s: MesaProfileScope) => { m?.open({ scope: s, key: null, isNew: true }); ensureOpen("mesaEditor"); };
+  const showImport = (open: boolean) => { setImporting(open); if (open) m?.cancelExport(); };
   const actionsMenu = (): MenuEntry[] => [
-    { id: "import", label: t("mesa.importTitle"), onSelect: () => ensureOpen("mesaImport") },
-    { id: "export", label: t("mesa.exportTitle"), disabled: !m?.rows.length, onSelect: () => m?.askExport() },
-    { id: "diagnostics", label: t("workspace.diagnostics"), onSelect: () => ensureOpen("mesaDiagnostics") },
+    { id: "import", label: t("mesa.importTitle"), toggle: true, checked: importing, onSelect: () => showImport(!importing) },
+    { id: "export", label: t("mesa.exportTitle"), toggle: true, checked: !!m?.exporting, disabled: !m?.rows.length,
+      onSelect: () => { if (m?.exporting) m.cancelExport(); else { setImporting(false); m?.askExport(); } } },
     "separator",
+    ...(suggestions ? [{ id: "suggestions", label: t("mesa.suggestTitle"), toggle: true, checked: suggestions.open, onSelect: suggestions.toggle }] : []),
+    "separator",
+    { id: "rescan", label: t("mesa.rescan"), onSelect: () => { void m?.rescan(); } },
     { id: "restore", label: t("mesa.restoreDismissed"), disabled: !m?.issues.dismissed_suggestions.length, onSelect: () => { void m?.restoreSuggestions(); } },
+    // Findings dismissed in Advisory come back from here, as dismissed suggestions do (user, 2026-10-30).
+    { id: "restore-notices", label: t("mesa.restoreNotices"), disabled: !m?.anyDismissed, onSelect: () => m?.restoreNotices() },
   ];
   const groups: ToolGroup[] = m ? [{
     id: "mesa",
     label: t("shell.tabMesa"),
     tools: [
       { id: "add", label: t("mesa.addProfile"), icon: "add", menu: () => EDITOR_SCOPES.map((s) => ({ id: s, label: t(ADD_TITLE_KEYS[s]), onSelect: () => openNew(s) })) },
-      { id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabMesa") }), short: t("common.refresh"), icon: "refresh", onSelect: m.refresh },
-      ...(suggestions ? [{ id: "suggestions", label: t("mesa.suggestTitle"), icon: "suggestions" as const, pressed: suggestions.open, onSelect: suggestions.toggle }] : []),
       { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
-        pressed: filtersOpen, badge: activeFilters || undefined, onSelect: () => setFiltersOpen((open) => !open) },
+        pressed: filtersOpen, badge: activeFilters || undefined,
+        // Opening the filters puts Import and Export away, so the list is what is under them.
+        onSelect: () => { if (!filtersOpen) { setImporting(false); m?.cancelExport(); } setFiltersOpen((open) => !open); } },
       { id: "actions", label: t("mesa.menu"), icon: "more", menu: actionsMenu },
     ],
   }] : [];
@@ -82,37 +145,48 @@ export function MesaProfilesWindow() {
   const showFilters = !onToolbar || filtersOpen;
   /**
    * Showing other profiles leaves nothing chosen in the list, so Profile Editor
-   * does not keep the one it had (user, 2026-10-29). An editor holding unsaved
-   * changes is left alone: a filter is not a reason to lose them.
+   * does not keep the one it had (user, 2026-10-29).
    */
-  const forget = () => { if (m.editing && !m.editorDirty()) m.open(null, { force: true }); };
+  const forget = () => { if (m.editing) m.open(null); };
   const clearFilters = () => { forget(); setScope(""); setControl(""); setEnforcement(""); };
   // The control-mode filter keeps the old summary's counts.
   const count = (mode: string) => m.rows.filter((r) => (mode === "enforced" ? isEnforced(r.document) : rawControlMode(r.document) === mode)).length;
+
+  async function remove(row: ProfileRow) {
+    setDeleting(row.id);
+    setDeleteError(null);
+    try {
+      await deleteProfile(row.scope, row.key);
+      if (m && m.editing && !m.editing.isNew && m.editing.scope === row.scope && m.editing.key === row.key) m.open(null);
+      m?.refresh();
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : t("mesa.deleteProfileFailed"));
+    } finally {
+      setDeleting(null);
+      setConfirmId(null);
+    }
+  }
 
   const shown = m.rows.filter((r) => (!filtersApply || ((!scope || r.scope === scope)
     && (!control || rawControlMode(r.document) === control)
     && (!enforcement || (enforcement === "enforced") === isEnforced(r.document))))
     && matchesListSearch(`${r.name} ${r.key} ${scopeLabel(r.scope)} ${tagsOf(r.document).join(" ")}`, search));
+  // ID, Name, Control Mode, Type, Actions, sorted by ID (user, 2026-10-30). Each column is as
+  // wide as what it holds, up to a ceiling, and Actions always fits Confirm beside Cancel: a
+  // narrow window scrolls the list sideways rather than cutting Name and Type short.
   const columns: Column<ProfileRow>[] = [
-    {
-      id: "name", label: t("mesa.colName"), width: 260, maxWidth: 360, sortValue: (r) => r.name || r.key, title: (r) => r.key,
-      // The compact default: the familiar name, with the configured control and the exact ID under it.
-      cell: (r) => (
-        <span className="mesa-profile-cell">
-          <span className="mesa-profile-name">{r.name || r.key}</span>
-          <span className="conversation-secondary"><ControlMode row={r} />{r.name && r.name !== r.key && <> · <code>{r.key}</code></>}</span>
-        </span>
-      ),
-    },
-    { id: "scope", label: t("mesa.colAppliesTo"), width: 120, sortValue: (r) => scopeLabel(r.scope), cell: (r) => scopeLabel(r.scope) },
-    { id: "control", label: t("mesa.colControl"), width: 130, hidden: true, sortValue: (r) => controlLabel(rawControlMode(r.document)), cell: (r) => controlLabel(rawControlMode(r.document)) },
-    { id: "enforcement", label: t("mesa.fieldEnforcement"), width: 120, hidden: true, sortValue: (r) => (isEnforced(r.document) ? 1 : 0),
-      cell: (r) => t(isEnforced(r.document) ? "mesa.modeEnforced" : "mesa.modeAdvisory") },
+    { id: "id", label: t("mesa.colId"), width: 140, maxWidth: 260, sortValue: (r) => r.key, title: (r) => r.key, cell: (r) => <code>{r.key}</code> },
+    { id: "name", label: t("mesa.colName"), width: 120, maxWidth: 240, sortValue: (r) => (r.name || "").toLowerCase(), title: (r) => r.name, cell: (r) => r.name },
+    { id: "control", label: t("mesa.colControl"), width: 140, maxWidth: 180, sortValue: controlText, cell: (r) => <ControlMode row={r} /> },
+    { id: "scope", label: t("mesa.colAppliesTo"), width: 90, maxWidth: 130, sortValue: (r) => scopeLabel(r.scope), cell: (r) => scopeLabel(r.scope) },
     { id: "tags", label: t("mesa.colTags"), width: 180, maxWidth: 300, hidden: true, sortValue: (r) => tagsOf(r.document).join(" "), cell: (r) => tagsOf(r.document).join(t("common.listSeparator")) },
     { id: "source", label: t("mesa.colSource"), width: 100, hidden: true, sortValue: (r) => profileSource(r.document),
       cell: (r) => (profileSource(r.document) === "developer" ? <span title={t("mesa.vendorTitle")}>{t("mesa.vendorBadge")}</span> : null) },
-    { id: "id", label: t("mesa.colId"), width: 200, maxWidth: 300, hidden: true, sortValue: (r) => r.key, cell: (r) => <code>{r.key}</code> },
+    { id: "actions", label: t("mesa.colActions"), width: 205, maxWidth: 205, className: "phx-td-actions",
+      cell: (r) => (
+        <RowAction id={r.id} icon="delete" label={t("mesa.delete")} confirmLabel={t("mesa.confirmDelete")} busy={deleting === r.id}
+          confirming={confirmId} boxRef={confirmBox} onAsk={setConfirmId} onConfirm={() => { void remove(r); }} />
+      ) },
   ];
   const editing = m.editing && !m.editing.isNew ? `${m.editing.scope}:${m.editing.key}` : null;
 
@@ -120,11 +194,17 @@ export function MesaProfilesWindow() {
     <div className="phx-list-view mesa-profiles-view">
       {!onToolbar && <InlineTools groups={groups} />}
       {m.exporting && (
-        <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("mesa.cancel")}
-          busy={m.exporting.busy} error={m.exporting.error} onConfirm={() => { void m.doExport(); }} onCancel={m.cancelExport}>
-          <p>{tn("mesa.exportBody", m.rows.length)}</p>
-          <p>{t("mesa.exportNote")}</p>
-        </InlineConfirm>
+        <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("common.cancel")}
+          confirmClassName="btn btn-outline btn-sm" help={`${tn("mesa.exportBody", m.rows.length)} ${t("mesa.exportNote")}`}
+          busy={m.exporting.busy} error={m.exporting.error} onConfirm={() => { void m.doExport(); }} onCancel={m.cancelExport} />
+      )}
+      {importing && (
+        <div className="phx-inline-panel mesa-import-panel">
+          <div className="phx-inline-panel-head">
+            <h3 className="phx-section-title">{t("mesa.importTitle")}</h3>
+          </div>
+          <MesaImport onImported={() => m.refresh()} onCancel={() => showImport(false)} />
+        </div>
       )}
       <div className="phx-filters" hidden={!showFilters}>
         <div className="filter-row">
@@ -149,16 +229,18 @@ export function MesaProfilesWindow() {
         </div>
       </div>
       {m.error && <ErrorMsg msg={m.error} />}
+      {deleteError && <ErrorMsg msg={deleteError} />}
       {!m.loaded && m.loading && <Loading />}
       <ConfigTable
         id="mesaProfiles"
         label={t("workspace.mesaProfiles")}
+        defaultSort={BY_ID}
         columns={columns}
         rows={shown}
         rowKey={(r) => r.id}
         selectedKey={editing}
         onSelect={(r) => { m.open({ scope: r.scope, key: r.key, isNew: false }); ensureOpen("mesaEditor"); }}
-        rowLabel={(r) => `${r.name || r.key}, ${scopeLabel(r.scope)}, ${controlLabel(rawControlMode(r.document))}`}
+        rowLabel={(r) => `${r.key}, ${r.name || ""}, ${controlText(r)}, ${scopeLabel(r.scope)}`}
         empty={!m.loaded ? null : <p className="audit-empty">{m.rows.length ? t("mesa.noMatch") : t("mesa.emptyState")}</p>}
       />
     </div>
@@ -169,15 +251,7 @@ export function ProfileEditorWindow() {
   const m = useMesa();
   if (!m) return null;
   const e = m.editing;
-  const pending = m.pending;
   if (!e) return <p className="phx-window-empty">{t("mesa.editorEmpty")}</p>;
-  // Opening another profile while this one holds changes asks first.
-  const notice = pending && (
-    <InlineConfirm label={t("mesa.discardTitle")} confirmLabel={t("mesa.discardAndOpen")} confirmIcon="check" confirmClassName="btn btn-danger btn-sm"
-      cancelLabel={t("mesa.keepEditing")} onConfirm={m.confirmSwitch} onCancel={m.cancelSwitch}>
-      <p>{t("mesa.discardBody")}</p>
-    </InlineConfirm>
-  );
   return (
     <div className="phx-window-pad">
       <ProfileEditor
@@ -191,36 +265,34 @@ export function ProfileEditorWindow() {
         integrationOptions={m.integrationOptions}
         deviceOptions={m.deviceOptions}
         seedControlMode={e.seedControlMode}
+        seedReason={e.seedReason}
+        taken={m.keysIn(e.scope)}
         lockedKey={e.lockedKey}
         keyLabel={e.key ? m.nameOf(e.scope, e.key) || undefined : undefined}
-        onClose={() => m.open(null, { force: true })}
+        onClose={() => m.open(null)}
         onSaved={m.refresh}
-        onShowSaved={(key) => m.open({ scope: e.scope, key, isNew: false }, { force: true })}
-        onDirtyChange={m.setEditorDirty}
-        notice={notice}
+        onShowSaved={(key) => m.open({ scope: e.scope, key, isNew: false })}
       />
     </div>
   );
 }
 
-/** A suggestion's subject: the entity's name over its ID, or the domain it covers. */
-function SuggestionSubject({ s, m }: { s: MesaSuggestion; m: MesaState }) {
-  return <MesaIdentity id={s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id} name={s.scope === "entity" ? m.friendly(s.subject_id) : ""} />;
-}
-
 export function SuggestedProfilesWindow() {
   const m = useMesa();
   const ensureOpen = useEnsureOpen();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const confirmBox = useRef<HTMLSpanElement | null>(null);
+  useClickAway(confirmBox, () => setConfirmId(null), !!confirmId);
   if (!m) return null;
   const list = m.issues.suggestions;
-  const selected = list.find((s) => s.key === m.selectedSuggestion) ?? null;
-  const busy = !!selected && m.suggestionBusy === selected.key;
+  // Choosing a suggestion opens it in the editor, already filled in (user, 2026-10-30).
   const review = (s: MesaSuggestion) => {
     m.open({
       scope: s.scope === "domain" ? "domain" : "entity",
       key: s.subject_id,
       isNew: true,
       seedControlMode: s.suggested_mode,
+      seedReason: s.reason,
       // The subject comes from a live backend scan, which can be ahead of the
       // registry snapshot the editor validates against; it is a fact, so the
       // editor takes it as given, as the injected buttons do.
@@ -228,20 +300,22 @@ export function SuggestedProfilesWindow() {
     });
     ensureOpen("mesaEditor");
   };
+  const mode = (s: MesaSuggestion) => (MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode);
   const columns: Column<MesaSuggestion>[] = [
-    { id: "subject", label: t("mesa.colTarget"), width: 240, maxWidth: 360, sortValue: (s) => m.friendly(s.subject_id) || s.subject_id, cell: (s) => <SuggestionSubject s={s} m={m} /> },
-    { id: "mode", label: t("mesa.colSuggested"), width: 160, sortValue: (s) => s.suggested_mode, cell: (s) => (MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode) },
-    { id: "signal", label: t("mesa.colSignal"), width: 130, sortValue: (s) => s.signal, cell: (s) => (SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal) },
+    { id: "subject", label: t("mesa.colTarget"), width: 140, maxWidth: 260, sortValue: (s) => s.subject_id,
+      cell: (s) => <code>{s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id}</code> },
+    { id: "name", label: t("mesa.colName"), width: 120, maxWidth: 240, sortValue: (s) => m.friendly(s.subject_id).toLowerCase(), cell: (s) => m.friendly(s.subject_id) },
+    { id: "mode", label: t("mesa.colControl"), width: 140, maxWidth: 180, sortValue: (s) => s.suggested_mode,
+      cell: (s) => <span className={`mesa-control mesa-control-${s.suggested_mode}`}>{mode(s)}</span> },
+    { id: "signal", label: t("mesa.colSignal"), width: 100, maxWidth: 140, sortValue: (s) => s.signal, cell: (s) => (SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal) },
+    { id: "actions", label: t("mesa.colActions"), width: 205, maxWidth: 205, className: "phx-td-actions",
+      cell: (s) => (
+        <RowAction id={s.key} icon="close" label={t("mesa.dismiss")} confirmLabel={t("mesa.confirmDismiss")} busy={m.suggestionBusy === s.key}
+          confirming={confirmId} boxRef={confirmBox} onAsk={setConfirmId} onConfirm={() => { void m.dismissSuggestion(s); setConfirmId(null); }} />
+      ) },
   ];
   return (
-    <div className="phx-list-view mesa-suggestions-view">
-      <p className="phx-window-note">{t("mesa.suggestSub")}</p>
-      <div className="phx-window-actions">
-        <ActionButton icon="check" label={t("mesa.apply")} busy={busy} disabled={!selected} onClick={() => { if (selected) void m.applySuggestion(selected); }} className="btn btn-primary btn-sm" />
-        <ActionButton icon="edit" label={t("mesa.review")} busy={busy} disabled={!selected} onClick={() => { if (selected) review(selected); }} className="btn btn-outline btn-sm" />
-        <ActionButton icon="close" label={t("mesa.dismiss")} busy={busy} disabled={!selected} onClick={() => { if (selected) void m.dismissSuggestion(selected); }} className="btn btn-outline btn-sm" />
-        <ActionButton icon="refresh" label={t("mesa.rescan")} busy={m.rescanning} onClick={() => { void m.rescan(); }} className="btn btn-outline btn-sm" />
-      </div>
+    <div className="phx-list-view mesa-suggestions-view" data-help="mesa.suggestSub">
       {m.suggestionError && <ErrorMsg msg={m.suggestionError} />}
       <ConfigTable
         id="mesaSuggestions"
@@ -249,21 +323,12 @@ export function SuggestedProfilesWindow() {
         columns={columns}
         rows={list}
         rowKey={(s) => s.key}
-        selectedKey={selected?.key ?? null}
-        onSelect={(s) => m.selectSuggestion(s.key)}
-        rowLabel={(s) => `${s.subject_id}, ${MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode}`}
-        empty={<p className="audit-empty">{t("mesa.noOpenSuggestions")}</p>}
+        selectedKey={m.selectedSuggestion}
+        onSelect={(s) => { m.selectSuggestion(s.key); review(s); }}
+        // Why it was suggested reads in Help while the row is under the pointer (user, 2026-10-30).
+        rowLabel={(s) => `${s.subject_id}, ${mode(s)}. ${suggestionReason(s)}`}
+        empty={<NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} />}
       />
-      {/* The chosen suggestion's reason, in full. */}
-      <div className="mesa-suggest-reason" aria-live="polite">
-        {selected ? suggestionReason(selected) : list.length ? t("mesa.noSuggestionSelected") : null}
-      </div>
-      {m.issues.dismissed_suggestions.length > 0 && (
-        <div className="mesa-suggest-footer">
-          <span>{t("mesa.dismissedCount", { count: m.issues.dismissed_suggestions.length })}</span>
-          <ActionButton icon="undo" label={t("mesa.restoreAll")} onClick={() => { void m.restoreSuggestions(); }} className="btn btn-text btn-sm" />
-        </div>
-      )}
     </div>
   );
 }
@@ -300,39 +365,34 @@ function OrphanGroups({ m, onOpen }: { m: MesaState; onOpen?: (scope: MesaProfil
   );
 }
 
-/** A finding notice: its text and a permanent per-account dismissal, which changes nothing in MESA. */
+/**
+ * A finding, in a plain bordered box like every other UI2 item. Dismissing one
+ * is a named button under it rather than a cross in its corner (user,
+ * 2026-10-30), and it is permanent, per account, and changes nothing in MESA.
+ */
 function Notice({ tone, label, onDismiss, children }: { tone: "info" | "warn"; label: string; onDismiss?: () => void; children: ReactNode }) {
   return (
-    <div className={`banner banner-${tone} mesa-notice`}>
-      <div className="mesa-notice-content">{children}</div>
-      {onDismiss && (
-        <button type="button" className="btn btn-ghost btn-sm btn-icon mesa-notice-dismiss" onClick={onDismiss} aria-label={label} title={label}>
-          <Icon name="close" size={16} />
-        </button>
-      )}
+    <div className={`mesa-notice mesa-notice-${tone}`}>
+      {tone === "warn" && <Icon name="warning" size={16} className="mesa-notice-icon" />}
+      <div className="mesa-notice-content">
+        {children}
+        {onDismiss && (
+          // Named in words whatever the toolbar's display mode: a cross alone was what
+          // the user asked to be rid of here (user, 2026-10-30).
+          <DisplayModeContext.Provider value="icon-text">
+            <div className="mesa-notice-actions">
+              <ActionButton icon="close" label={t("mesa.dismiss")} name={label} className="btn btn-outline btn-sm" onClick={onDismiss} />
+            </div>
+          </DisplayModeContext.Provider>
+        )}
+      </div>
     </div>
   );
 }
 
-export function OrphanedProfilesWindow() {
-  const m = useMesa();
-  const ensureOpen = useEnsureOpen();
-  if (!m) return null;
-  const ids = m.findingIds.orphans;
-  if (!ids.length || m.allDismissed(ids)) return <p className="phx-window-empty">{t("mesa.noFindings")}</p>;
+function InspectionNotice({ m, label, onDismiss }: { m: MesaState; label: string; onDismiss: () => void }) {
   return (
-    <div className="phx-window-pad">
-      <Notice tone="info" label={t("mesa.dismissOrphanNotice")} onDismiss={() => m.dismiss(ids)}>
-        <OrphanGroups m={m} onOpen={(scope, key) => { m.open({ scope, key, isNew: false }); ensureOpen("mesaEditor"); }} />
-        <p>{t("mesa.advisoryOnly")}</p>
-      </Notice>
-    </div>
-  );
-}
-
-function InspectionNotice({ m, onDismiss }: { m: MesaState; onDismiss?: () => void }) {
-  return (
-    <Notice tone="info" label={t("mesa.dismissInspectionNotice")} onDismiss={onDismiss}>
+    <Notice tone="info" label={label} onDismiss={onDismiss}>
       <p>{tn("mesa.partialInspection", m.inspection.length)}</p>
       <p>{t("mesa.advisoryOnly")}</p>
       <details className="mesa-notice-details">
@@ -345,9 +405,9 @@ function InspectionNotice({ m, onDismiss }: { m: MesaState; onDismiss?: () => vo
   );
 }
 
-function ValidationNotice({ m, onDismiss }: { m: MesaState; onDismiss?: () => void }) {
+function ValidationNotice({ m, label, onDismiss }: { m: MesaState; label: string; onDismiss: () => void }) {
   return (
-    <Notice tone="warn" label={t("mesa.dismissValidationNotice")} onDismiss={onDismiss}>
+    <Notice tone="warn" label={label} onDismiss={onDismiss}>
       <strong>{t("mesa.triggerIssues", { count: m.validation.length })}</strong>
       <ul>
         {m.validation.map((i: MesaValidationIssue, idx) => (
@@ -364,42 +424,33 @@ function ValidationNotice({ m, onDismiss }: { m: MesaState; onDismiss?: () => vo
   );
 }
 
+/**
+ * Everything MESA found that has not been dismissed, in one window: automations
+ * it could only partly inspect, trigger declarations that do not match, and
+ * profiles whose target is gone. Each finding is dismissed from here, and the
+ * MESA Actions menu shows dismissed ones again; nothing here changes MESA
+ * itself (user, 2026-10-30, one window instead of Advisory, Orphaned Profiles
+ * and Diagnostics).
+ */
 export function AdvisoryWindow() {
   const m = useMesa();
+  const ensureOpen = useEnsureOpen();
   if (!m) return null;
-  const { inspection, validation } = m.findingIds;
-  const showInspection = inspection.length > 0 && !m.allDismissed(inspection);
-  const showValidation = validation.length > 0 && !m.allDismissed(validation);
-  if (!showInspection && !showValidation) return <p className="phx-window-empty">{t("mesa.noFindings")}</p>;
+  const { inspection, validation, orphans } = m.findingIds;
+  const shown = (ids: string[]) => ids.length > 0 && !m.allDismissed(ids);
+  if (!shown(inspection) && !shown(validation) && !shown(orphans)) {
+    return <NothingHere window="mesaAdvisory" floating text={t("mesa.noAdvisoriesNow")} />;
+  }
   return (
     <div className="phx-window-pad mesa-findings">
-      {showInspection && <InspectionNotice m={m} onDismiss={() => m.dismiss(inspection)} />}
-      {showValidation && <ValidationNotice m={m} onDismiss={() => m.dismiss(validation)} />}
-    </div>
-  );
-}
-
-/** Every finding, dismissed or not, for a closer look. Nothing here changes MESA. */
-export function DiagnosticsWindow() {
-  const m = useMesa();
-  if (!m) return null;
-  const any = m.inspection.length > 0 || m.validation.length > 0 || m.findingIds.orphans.length > 0;
-  return (
-    <div className="phx-window-pad mesa-findings">
-      <p className="phx-window-note">{t("mesa.diagnosticsNote")}</p>
-      {!any && <p className="phx-window-empty">{t("mesa.noFindings")}</p>}
-      {m.inspection.length > 0 && <InspectionNotice m={m} />}
-      {m.validation.length > 0 && <ValidationNotice m={m} />}
-      {m.findingIds.orphans.length > 0 && (
-        <Notice tone="info" label="">
-          <OrphanGroups m={m} />
+      {shown(inspection) && <InspectionNotice m={m} label={t("mesa.dismissInspectionNotice")} onDismiss={() => m.dismiss(inspection)} />}
+      {shown(validation) && <ValidationNotice m={m} label={t("mesa.dismissValidationNotice")} onDismiss={() => m.dismiss(validation)} />}
+      {shown(orphans) && (
+        <Notice tone="info" label={t("mesa.dismissOrphanNotice")} onDismiss={() => m.dismiss(orphans)}>
+          <OrphanGroups m={m} onOpen={(scope, key) => { m.open({ scope, key, isNew: false }); ensureOpen("mesaEditor"); }} />
+          <p>{t("mesa.advisoryOnly")}</p>
         </Notice>
       )}
     </div>
   );
-}
-
-export function MesaImportWindow() {
-  const m = useMesa();
-  return <MesaImport onImported={() => m?.refresh()} />;
 }

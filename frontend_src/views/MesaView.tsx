@@ -20,8 +20,8 @@ import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
 import { Loading, ErrorMsg } from "../components/common";
 import { compareStrings, t, tn } from "../i18n";
-import { tRich } from "../i18n/rich";
 import { ActionButton } from "../ui/ActionButton";
+import { useNotify } from "../ui/notify";
 import { InlineConfirm } from "../ui/InlineConfirm";
 
 // Maps an HA domain to the canonical tag namespace roots that describe an ENTITY
@@ -134,6 +134,14 @@ const SCOPE_LABEL: Record<ProfileScope, string> = {
   area: "mesa.scopeLabelArea",
   integration: "mesa.scopeLabelIntegration",
   domain: "mesa.scopeLabelDomain",
+};
+/** What a profile's key is called, for the line naming the profile the editor holds. */
+const SCOPE_ID_LABEL: Record<ProfileScope, string> = {
+  entity: "mesa.idEntity",
+  device: "mesa.idDevice",
+  area: "mesa.idArea",
+  integration: "mesa.idIntegration",
+  domain: "mesa.idDomain",
 };
 const SCOPE_PLACEHOLDER: Record<ProfileScope, string> = {
   entity: "mesa.phEntity",
@@ -339,19 +347,15 @@ export function deleteProfile(scope: ProfileScope, key: string): Promise<void> {
   return SCOPE_API[scope].remove(key);
 }
 
-// A small "?" badge that reveals brief help on hover/focus. Uses the native
-// title attribute so the tooltip is never clipped by the scrolling modal body.
-function HelpTip({ text }: { text: string }) {
-  return (
-    <span className="help-tip" title={text} role="img" aria-label={t("mesa.helpAria", { text })} tabIndex={0}>?</span>
-  );
-}
-
+/**
+ * A field's name. Its explanation is no longer a "?" badge beside it: it reads
+ * in the Help window while the label or the field has the pointer or the
+ * keyboard (user, 2026-10-30).
+ */
 function FieldLabel({ id, text, help }: { id?: string; text: string; help: string }) {
   return (
-    <label htmlFor={id} className="mesa-field-label">
+    <label htmlFor={id} className="mesa-field-label" data-help-text={help}>
       {text}
-      <HelpTip text={help} />
     </label>
   );
 }
@@ -498,40 +502,18 @@ function effectiveModes(detail: MesaProfileDetail): { control_mode: string; enfo
   };
 }
 
-// Shows an entity's EFFECTIVE resolved control_mode/enforcement and which layer
-// provides each. For an existing profile it flags when a broader domain/area
-// profile overrides the entity-level setting (most-restrictive-wins); for a new
-// profile (creating) it explains that the fields below are pre-filled to match.
-function MesaEffectivePanel({ detail, creating }: { detail: MesaProfileDetail; creating?: boolean }) {
-  const { control_mode: cmVal, enforcement_mode: enVal, cmLevel, enLevel } = effectiveModes(detail);
-  const overridden = (cmLevel && cmLevel !== "entity") || (enLevel && enLevel !== "entity");
-  return (
-    <div className="mesa-effective">
-      <span className="mesa-effective-title">{creating ? t("mesa.currently") : t("mesa.effective")}</span>
-      <span>
-        {tRich("mesa.effControlMode", { code: (c) => <code>{c}</code> }, { mode: cmVal })}
-        {cmLevel && tRich("mesa.effFrom", { em: (c) => <em>{c}</em> }, { level: levelText(cmLevel) })}
-        {tRich("mesa.effEnforcement", { code: (c) => <code>{c}</code> }, { mode: enVal })}
-        {enLevel && tRich("mesa.effFrom", { em: (c) => <em>{c}</em> }, { level: levelText(enLevel) })}
-      </span>
-      {creating ? (
-        <div className="mesa-effective-note">
-          {t("mesa.effectiveNoteCreating")}
-        </div>
-      ) : overridden ? (
-        <div className="mesa-effective-note">
-          {t("mesa.effectiveNoteOverridden")}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 /**
  * The MESA profile editor, shared by every caller. As a modal it serves Home
  * Assistant's injected [+]/MESA buttons and the Access Keys tree; as a window
  * it is the MESA workspace's Profile Editor, with its actions above the form.
  */
+/**
+ * Whether the user left Effective Resolution open. It starts folded on every
+ * profile, and stays open for the rest of the session once it is opened
+ * (user, 2026-10-30).
+ */
+let explainLeftOpen = false;
+
 export function ProfileEditor({
   scope,
   profileKey,
@@ -545,9 +527,10 @@ export function ProfileEditor({
   lockedKey,
   keyLabel,
   seedControlMode,
+  seedReason,
+  taken,
   variant = "modal",
   onShowSaved,
-  onDirtyChange,
   notice,
 }: {
   scope: ProfileScope;
@@ -578,12 +561,15 @@ export function ProfileEditor({
   // Initial control_mode for a NEW profile, overriding the effective-mode seed.
   // Used by the suggestions Review flow so the editor opens at the suggested mode.
   seedControlMode?: string;
+  /** The reason a suggestion gave, recorded with a profile created from it. */
+  seedReason?: string;
+  /** Keys in this scope that already have a profile; a new profile's picker leaves them out. */
+  taken?: ReadonlySet<string>;
   /** A dialog over the page, or the MESA workspace's window. */
   variant?: "modal" | "window";
   /** Window: show the profile just saved, instead of closing. */
   onShowSaved?: (key: string) => void;
   /** Window: whether the form holds unsaved changes, so switching profiles can ask first. */
-  onDirtyChange?: (dirty: boolean) => void;
   /** Window: a message shown above the form, such as a question before switching profiles. */
   notice?: React.ReactNode;
 }) {
@@ -613,6 +599,8 @@ export function ProfileEditor({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [showReco, setShowReco] = useState(false);
+  const notify = useNotify();
+  const [explainOpen, setExplainOpen] = useState(explainLeftOpen);
   // Snapshot of the last persisted (or freshly initialised) state, for the
   // unsaved-changes guard.
   const cleanSnapshot = useRef<string>(JSON.stringify(initialState()));
@@ -650,7 +638,7 @@ export function ProfileEditor({
   }
 
   // Valid keys for the current scope, derived from the live registry.
-  const keyOptions = useMemo<Opt[]>(() => {
+  const allKeyOptions = useMemo<Opt[]>(() => {
     if (scope === "device") {
       return (deviceOptions ?? [])
         .map((d) => ({ value: d.id, label: d.name }))
@@ -682,6 +670,10 @@ export function ProfileEditor({
     }
     return out.sort((a, b) => compareStrings(a.label, b.label));
   }, [entityTree, scope, integrationOptions, deviceOptions]);
+  // A new profile cannot be given a target that already has one, so the picker
+  // does not offer it (user, 2026-10-30).
+  const isTaken = useCallback((key: string) => isNew && !lockedKey && !!taken?.has(key), [isNew, lockedKey, taken]);
+  const keyOptions = useMemo(() => allKeyOptions.filter((o) => !isTaken(o.value)), [allKeyOptions, isTaken]);
   // A boolean, so another picker list arriving does not re-run (and cancel)
   // the seed read below.
   const keyKnown = useMemo(() => keyOptions.some((o) => o.value === state.key.trim()), [keyOptions, state.key]);
@@ -738,14 +730,12 @@ export function ProfileEditor({
   // empty (e.g. the integration-options endpoint isn't reachable yet), fall back to
   // validating the typed component-name format so the field is never a dead end.
   const keyValid = !!lockedKey || !isNew
-    || (scope === "integration" && keyOptions.length === 0
-      ? /^[a-z][a-z0-9_]*$/.test(state.key.trim())
+    || (scope === "integration" && allKeyOptions.length === 0
+      ? /^[a-z][a-z0-9_]*$/.test(state.key.trim()) && !isTaken(state.key.trim())
       : keyOptions.some((o) => o.value === state.key.trim()));
   const keyInvalidShown = !lockedKey && isNew && state.key.trim() !== "" && !keyValid;
   const dirty = JSON.stringify(state) !== cleanSnapshot.current;
   const canSave = !saving && !loading && loaded && keyValid && seedReady;
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   // Suggested tags for this scope's domain, ordered by root priority and
   // interleaved so the most relevant namespace leads (not alphabetical, which
@@ -795,10 +785,14 @@ export function ProfileEditor({
     setSaving(true);
     setError(null);
     try {
-      const w = await saveProfile(scope, state.key.trim(), editorToDoc(state), isNew);
+      const doc = editorToDoc(state);
+      // A profile created from a suggestion keeps the suggestion's reason, as applying it did.
+      const boundaries = doc.semantic_profile?.operational_boundaries as Record<string, unknown> | undefined;
+      if (isNew && seedReason && boundaries) boundaries.control_reason = seedReason;
+      const w = await saveProfile(scope, state.key.trim(), doc, isNew);
       cleanSnapshot.current = JSON.stringify(state);
       setWarnings(w);
-      if (w.length === 0) { onSaved(); finish(); }
+      if (w.length === 0) { notify(t("mesa.savedToast", { key: state.key.trim() })); onSaved(); finish(); }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("mesa.saveProfileFailed"));
     } finally {
@@ -811,6 +805,7 @@ export function ProfileEditor({
     setSaving(true);
     try {
       await deleteProfile(scope, profileKey);
+      notify(t("mesa.deletedToast", { key: profileKey }));
       onSaved();
       onClose();
     } catch (e) {
@@ -828,9 +823,7 @@ export function ProfileEditor({
   const deleteConfirmation = confirmDelete && !isNew && (
     <InlineConfirm label={t(DELETE_CONFIRM[scope])} tone="danger" confirmLabel={t(DELETE_BUTTON[scope])} confirmIcon="delete"
       confirmClassName="btn btn-danger btn-sm" cancelLabel={t("mesa.cancel")} busy={saving}
-      onConfirm={() => { void remove(); }} onCancel={() => setConfirmDelete(false)}>
-      <p>{t(DELETE_WARN[scope], { key: target })}</p>
-    </InlineConfirm>
+      onConfirm={() => { void remove(); }} onCancel={() => setConfirmDelete(false)} help={t(DELETE_WARN[scope], { key: target })} />
   );
 
   const body = (
@@ -846,7 +839,6 @@ export function ProfileEditor({
           <button className="btn btn-ghost" onClick={() => setLoadAttempt((n) => n + 1)}>{t("common.refresh")}</button>
         ) : (
           <>
-            {scope === "entity" && !isNew && detail && <MesaEffectivePanel detail={detail} />}
             {isNew && !lockedKey && (
               <div className="field">
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
@@ -863,31 +855,31 @@ export function ProfileEditor({
                 )}
               </div>
             )}
-            {isNew && lockedKey && (
+            {(lockedKey || !isNew) && (
+              // What the profile covers, by its familiar name, on every profile that has
+              // one already: only a new one is chosen here (user, 2026-10-30).
               <div className="field">
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
-                <input id="mesa-key" className="input" value={keyLabel || state.key} readOnly disabled />
+                <input id="mesa-key" className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
               </div>
             )}
 
-            {isNew && scope === "entity" && detail && <MesaEffectivePanel detail={detail} creating />}
-
             <div className="field">
-              <div className="mesa-taglabel-row">
-                <FieldLabel id="mesa-tags" text={t("mesa.semanticTags")} help={t(HELP.tags)} />
+              <FieldLabel id="mesa-tags" text={t("mesa.semanticTags")} help={t(HELP.tags)} />
+              {/* The suggested tags open from the end of the input itself, closed every time (user, 2026-10-30). */}
+              <div className="mesa-tag-row">
+                <TagInput
+                  value={state.tags}
+                  onChange={(t) => set("tags", t)}
+                  canonicalTags={canonicalTags}
+                  recommended={recommendedTags}
+                  showRecommended={showReco}
+                />
                 {recommendedTags.length > 0 && (
-                  <button type="button" className="link-btn" onClick={() => setShowReco((s) => !s)}>
-                    {showReco ? t("mesa.hideSuggestions") : t("mesa.showSuggestions")}
-                  </button>
+                  <ActionButton icon="suggestions" label={showReco ? t("mesa.hideSuggestions") : t("mesa.showSuggestions")}
+                    pressed={showReco} className="btn btn-outline btn-sm" onClick={() => setShowReco((s) => !s)} />
                 )}
               </div>
-              <TagInput
-                value={state.tags}
-                onChange={(t) => set("tags", t)}
-                canonicalTags={canonicalTags}
-                recommended={recommendedTags}
-                showRecommended={showReco}
-              />
             </div>
 
             <div className="mesa-grid">
@@ -938,8 +930,8 @@ export function ProfileEditor({
             )}
 
             {!isNew && scope === "entity" && detail && (
-              <details className="mesa-explain">
-                <summary>{t("mesa.effectiveResolution")} <HelpTip text={t("mesa.helpEffectiveResolution")} /></summary>
+              <details className="mesa-explain" open={explainOpen} onToggle={(e) => { explainLeftOpen = e.currentTarget.open; setExplainOpen(e.currentTarget.open); }}>
+                <summary data-help-text={t("mesa.helpEffectiveResolution")}>{t("mesa.effectiveResolution")}</summary>
                 <table className="data-table">
                   <thead><tr><th>{t("mesa.colField")}</th><th>{t("mesa.colEffective")}</th><th>{t("mesa.colFrom")}</th><th>{t("mesa.colOrigin")}</th></tr></thead>
                   <tbody>
@@ -961,23 +953,22 @@ export function ProfileEditor({
   );
 
   if (variant === "window") {
-    const named = !isNew || !!lockedKey;
     const name = isNew && !lockedKey ? t(ADD_TITLE[scope]) : keyLabel || state.key || String(profileKey);
     const id = isNew ? state.key : String(profileKey);
     return (
       <div className="mesa-editor-window">
         <div className="mesa-editor-head">
           <h3 className="mesa-editor-target">
-            <span className="mesa-editor-scope">{t(SCOPE_LABEL[scope])}</span>
-            <strong>{name}</strong>
-            {named && id && id !== name && <code>{id}</code>}
+            {isNew && !lockedKey
+              ? <strong>{name}</strong>
+              : <><strong className="mesa-editor-scope">{t(SCOPE_ID_LABEL[scope])}</strong><code>{id || name}</code></>}
           </h3>
           <div className="phx-window-actions mesa-editor-actions">
-            <ActionButton icon="save" label={t("mesa.save")} busy={saving} disabled={!canSave} onClick={() => { void save(); }} className="btn btn-primary btn-sm" />
+            {/* A new profile is itself the change; an existing one waits for an edit (user, 2026-10-30). */}
+            <ActionButton icon="save" label={t("mesa.save")} busy={saving} disabled={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
             <ActionButton icon="undo" label={t("mesa.discardChanges")} busy={saving} disabled={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
-            {!isNew && (
-              <ActionButton icon="delete" label={t("mesa.delete")} busy={saving} disabled={confirmDelete || !loaded} onClick={() => setConfirmDelete(true)} className="btn btn-outline btn-sm" />
-            )}
+            {/* Always offered, so the row does not change shape; there is nothing to delete until a profile is open. */}
+            <ActionButton icon="delete" label={t("mesa.delete")} busy={saving} disabled={isNew || confirmDelete || !loaded} onClick={() => setConfirmDelete(true)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         {notice}
@@ -1072,7 +1063,7 @@ type ImportCounts = { entities: number; devices: number; domains: number; integr
  * turns the confirm explicitly destructive. The result stays until another
  * file is picked.
  */
-export function MesaImport({ onImported }: { onImported: () => void }) {
+export function MesaImport({ onImported, onCancel }: { onImported: () => void; onCancel?: () => void }) {
   const [archive, setArchive] = useState<MesaExportArchive | null>(null);
   const [counts, setCounts] = useState<ImportCounts | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -1080,10 +1071,12 @@ export function MesaImport({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MesaImportResult | null>(null);
+  const [fileName, setFileName] = useState("");
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    setFileName(file?.name ?? "");
     setArchive(null);
     setCounts(null);
     setParseError(null);
@@ -1120,6 +1113,7 @@ export function MesaImport({ onImported }: { onImported: () => void }) {
       setArchive(null);
       setCounts(null);
       if (fileInput.current) fileInput.current.value = "";
+      setFileName("");
       onImported();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("mesa.importFailed"));
@@ -1140,11 +1134,15 @@ export function MesaImport({ onImported }: { onImported: () => void }) {
   const invalidEntries = result ? Object.entries(result.invalid) : [];
 
   return (
-    <div className="phx-window-pad mesa-import">
+    // What importing does, and what it leaves alone, reads in the Help window (user, 2026-10-30).
+    <div className="phx-window-pad mesa-import" data-help-text={`${t("mesa.importIntro")} ${t("mesa.skipNote")}`}>
       {error && <ErrorMsg msg={error} />}
-      <p className="modal-body-text">{t("mesa.importIntro")}</p>
-      <div className="field">
-        <input ref={fileInput} type="file" accept="application/json,.json" aria-label={t("mesa.archiveFileAria")} onChange={onFile} />
+      <div className="field mesa-import-file">
+        <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("mesa.archiveFileAria")} onChange={onFile} />
+        <div className="mesa-import-browse">
+          <ActionButton icon="import" label={t("mesa.browse")} onClick={() => fileInput.current?.click()} className="btn btn-outline btn-sm" />
+          <span className="mesa-import-filename">{fileName || t("mesa.noFileChosen")}</span>
+        </div>
         {parseError && <span className="field-error">{parseError}</span>}
         {counts && (
           <p className="modal-body-text mesa-import-summary">
@@ -1154,16 +1152,19 @@ export function MesaImport({ onImported }: { onImported: () => void }) {
           </p>
         )}
       </div>
-      <label className="checkbox-row">
-        <input type="checkbox" checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} />
-        <span>{t("mesa.replaceExisting")}</span>
-      </label>
-      {replaceExisting
-        ? <div className="banner banner-warn">{t("mesa.replaceWarn")}</div>
-        : <p className="modal-body-text">{t("mesa.skipNote")}</p>}
-      <div className="phx-window-actions">
+      {replaceExisting && <div className="banner banner-warn">{t("mesa.replaceWarn")}</div>}
+      {/* Replacing, importing and leaving all sit on one line (user, 2026-10-30). */}
+      <div className="phx-window-actions mesa-import-actions">
+        <div className="toggle-row mesa-import-replace">
+          <div className="toggle-label"><span>{t("mesa.replaceExisting")}</span></div>
+          <label className="toggle-switch">
+            <input type="checkbox" aria-label={t("mesa.replaceExisting")} checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} />
+            <span className="toggle-switch-track" />
+          </label>
+        </div>
         <ActionButton icon="import" label={replaceExisting ? t("mesa.importAndReplace") : t("mesa.import")} busy={busy} disabled={!archive}
-          onClick={() => { void doImport(); }} className={`btn btn-sm ${replaceExisting ? "btn-danger" : "btn-primary"}`} />
+          onClick={() => { void doImport(); }} className={`btn btn-sm ${replaceExisting ? "btn-danger" : "btn-outline"}`} />
+        {onCancel && <ActionButton icon="undo" label={t("mesa.cancel")} busy={busy} onClick={onCancel} className="btn btn-outline btn-sm" />}
       </div>
       {result && (
         <div className="mesa-import-result" role="status">

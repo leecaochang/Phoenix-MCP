@@ -15,7 +15,7 @@ import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t } from "../i18n";
 import { changeLabel, RAW_CONTENT_TYPES, rawSide, restoreAvailability, useChanges, type ChangesState, type RestoreSide } from "../shell/changes";
 import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
-import { InlineTools, useEnsureOpen, useWindowToggle } from "../shell/windowTools";
+import { InlineTools, useEnsureOpen, useWindowToggle, useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -107,6 +107,8 @@ const NEWEST_FIRST = { column: "time", dir: "desc" } as const;
 
 export function ChangesListWindow() {
   const c = useChanges();
+  // Resetting the workspace clears what it had chosen, as it clears the arrangement.
+  useWorkspaceReset(() => c?.select(null));
   // Choosing a change brings Comparison back if the user closed it, as Log Details comes back in Logs.
   const ensureOpen = useEnsureOpen();
   const [search, setSearch] = useState("");

@@ -14,7 +14,7 @@ import type { IconName } from "./Icon";
 import { useClickAway } from "./useClickAway";
 
 export function InlineConfirm({
-  label, title, tone = "warning", children, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
+  label, title, tone = "warning", children, help, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
   cancelLabel, busy = false, error = null, onConfirm, onCancel,
 }: {
   /** Accessible name of the confirmation, usually the action's name. */
@@ -22,8 +22,10 @@ export function InlineConfirm({
   /** The heading; the label when not given. */
   title?: string;
   tone?: "warning" | "danger";
-  /** What the action will do. */
-  children: ReactNode;
+  /** What the action will do; left out when it reads in the Help window instead. */
+  children?: ReactNode;
+  /** What the action will do, read in the Help window rather than shown in the box. */
+  help?: string;
   /** An acknowledgement to tick before Confirm is available. */
   acknowledge?: string;
   confirmLabel: string;
@@ -43,7 +45,7 @@ export function InlineConfirm({
     root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus();
   }, []);
   return (
-    <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label}
+    <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} data-help-text={help}
       onKeyDown={(e) => {
         if (e.key !== "Escape" || busy) return;
         e.preventDefault();
@@ -51,7 +53,7 @@ export function InlineConfirm({
         onCancel();
       }}>
       <div className="phx-inline-confirm-title">{title ?? label}</div>
-      <div className="phx-inline-confirm-body">{children}</div>
+      {children && <div className="phx-inline-confirm-body">{children}</div>}
       {acknowledge && (
         <div className="toggle-row phx-inline-confirm-ack">
           <div className="toggle-label"><span>{acknowledge}</span></div>

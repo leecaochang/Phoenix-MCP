@@ -35,20 +35,25 @@ export interface Editing {
   key: string | null;
   isNew: boolean;
   seedControlMode?: string;
+  /** The reason the suggestion gave, kept with a profile created from it. */
+  seedReason?: string;
   lockedKey?: boolean;
 }
 /** An opened profile; the nonce gives each opening its own editor. */
 export type Opened = Editing & { nonce: number };
 
-/** Which conditional windows have something to show. */
+/** Whether Advisory, the one findings window, has anything undismissed to show. */
 export interface MesaFindings {
-  orphans: boolean;
   advisory: boolean;
 }
 
 // mesa-core exposes this inspection limit through its recommendation text.
 // Only the known warning is advisory; other findings retain their severity.
 const PARTIAL_INSPECTION_RECOMMENDATION = "templates or blueprint inputs require host expansion; reference coverage is incomplete";
+
+/** How often the workspace reads everything again while it is shown. */
+const UPDATE_MS = 30_000;
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 const EMPTY_ISSUES: MesaIssuesResponse = { issues: [], orphans: [], orphan_devices: [], orphan_areas: [], orphan_integrations: [], suggestions: [], dismissed_suggestions: [] };
 
@@ -77,6 +82,8 @@ export interface MesaState {
   refresh: () => void;
   /** Every stored profile, all five scopes. */
   rows: ProfileRow[];
+  /** The targets in one scope that already have a profile. */
+  keysIn: (scope: MesaProfileScope) => ReadonlySet<string>;
   entityTree: EntityTreeData | null;
   canonicalTags: string[];
   integrationOptions: { id: string; name: string }[];
@@ -95,21 +102,17 @@ export interface MesaState {
   /** Whether every one of these findings has been dismissed. */
   allDismissed: (findings: string[]) => boolean;
   dismiss: (findings: string[]) => void;
+  /** Show every dismissed notice again. */
+  restoreNotices: () => void;
+  /** Whether any notice is dismissed, so Diagnostics can offer them back. */
+  anyDismissed: boolean;
 
   editing: Opened | null;
-  /** Open a profile in Profile Editor, or close it with null; asks first while the editor holds changes, unless forced. */
-  open: (next: Editing | null, opts?: { force?: boolean }) => void;
-  /** What opens once the user decides about the editor's unsaved changes. */
-  pending: { target: Opened | null } | null;
-  confirmSwitch: () => void;
-  cancelSwitch: () => void;
-  setEditorDirty: (dirty: boolean) => void;
-  /** Whether the editor holds unsaved changes, so nothing closes it behind the user's back. */
-  editorDirty: () => boolean;
+  /** Open a profile in Profile Editor, or close it with null. */
+  open: (next: Editing | null) => void;
 
   selectedSuggestion: string | null;
   selectSuggestion: (key: string | null) => void;
-  applySuggestion: (s: MesaSuggestion) => Promise<void>;
   dismissSuggestion: (s: MesaSuggestion) => Promise<void>;
   restoreSuggestions: () => Promise<void>;
   rescan: () => Promise<void>;
@@ -153,10 +156,18 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const [deviceOptions, setDeviceOptions] = useState<{ id: string; name: string }[]>([]);
 
   const beginLoad = useLatestRequest();
-  const refresh = useCallback(async () => {
+  /**
+   * Read everything again. A quiet read is the one the workspace makes by
+   * itself every half minute while it is shown, so there is no Refresh button
+   * (user, 2026-10-30): it never shows a loading state, and a failed quiet read
+   * keeps what is already on screen instead of replacing it with an error.
+   */
+  const reload = useCallback(async (quiet = false) => {
     const isLatest = beginLoad();
-    setLoading(true);
-    setError(null);
+    if (quiet) { /* keep what is shown */ } else {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [list, iss, doms, ints, ars, devs] = await Promise.all([
         api.listMesaProfiles({ all: true }),
@@ -180,17 +191,18 @@ export function MesaProvider({ active = true, onFindings, children }: {
       setDevices(devs.devices);
       setLoaded(true);
     } catch (e) {
-      if (isLatest()) setError(e instanceof Error ? e.message : t("mesa.loadFailed"));
+      if (isLatest() && !quiet) setError(e instanceof Error ? e.message : t("mesa.loadFailed"));
     } finally {
-      if (isLatest()) setLoading(false);
+      if (isLatest() && !quiet) setLoading(false);
     }
   }, [beginLoad]);
+  const refresh = useCallback(() => { void reload(); }, [reload]);
 
   // The registry and vocabularies load once, on the first visit.
   const started = useRef(false);
   useEffect(() => {
     if (!active) return;
-    void refresh();
+    void reload();
     if (started.current) return;
     started.current = true;
     // The registry serves the editor's key search and the list's friendly names.
@@ -201,7 +213,15 @@ export function MesaProvider({ active = true, onFindings, children }: {
     api.getMesaIntegrationOptions().then((r) => setIntegrationOptions(r.integrations)).catch(() => null);
     // Registered devices for the device-profile picker: a device id is opaque.
     api.getMesaDeviceOptions().then((r) => setDeviceOptions(r.devices)).catch(() => null);
-  }, [active, refresh]);
+  }, [active, reload]);
+
+  // Every half minute while the workspace is shown, so a profile changed in another
+  // tab or by an agent appears without a Refresh button (user, 2026-10-30).
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => { if (!document.hidden) void reload(true); }, UPDATE_MS);
+    return () => clearInterval(id);
+  }, [active, reload]);
 
   const hassStates = (currentHass() as { states?: Record<string, { attributes?: Record<string, unknown> }> } | null)?.states;
   const friendly = useCallback((eid: string): string => {
@@ -257,6 +277,16 @@ export function MesaProvider({ active = true, onFindings, children }: {
       ...domains.map((d) => row("domain", d.domain, d.document)),
     ];
   }, [profiles, devices, areas, integrations, domains, nameOf]);
+  const keysByScope = useMemo(() => {
+    const out = new Map<MesaProfileScope, Set<string>>();
+    for (const r of rows) {
+      const keys = out.get(r.scope) ?? new Set<string>();
+      keys.add(r.key);
+      out.set(r.scope, keys);
+    }
+    return out;
+  }, [rows]);
+  const keysIn = useCallback((scope: MesaProfileScope): ReadonlySet<string> => keysByScope.get(scope) ?? NO_KEYS, [keysByScope]);
 
   // ---- Findings and their dismissals -------------------------------------
 
@@ -289,6 +319,13 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const storageKey = noticeStorageKey();
   const dismissed = new Set([...readDismissedNotices(storageKey), ...(session.key === storageKey ? session.findings : [])]);
   const allDismissed = (findings: string[]) => findings.every((f) => dismissed.has(f));
+  /** Let every dismissed notice be shown again, from the MESA Actions menu (user, 2026-10-30). */
+  const restoreNotices = () => {
+    const key = noticeStorageKey();
+    try { if (key) localStorage.removeItem(key); } catch { /* nothing to clear */ }
+    setSession({ key, findings: [] });
+  };
+
   const dismiss = (findings: string[]) => {
     const key = noticeStorageKey();
     const next = [...new Set([...readDismissedNotices(key), ...(session.key === key ? session.findings : []), ...findings])];
@@ -300,39 +337,26 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const advisoryShown = (findingIds.inspection.length > 0 && !allDismissed(findingIds.inspection))
     || (findingIds.validation.length > 0 && !allDismissed(findingIds.validation));
   useEffect(() => {
-    onFindings?.(loaded ? { orphans: orphansShown, advisory: advisoryShown } : null);
+    onFindings?.(loaded ? { advisory: advisoryShown || orphansShown } : null);
   }, [onFindings, loaded, orphansShown, advisoryShown]);
 
   // ---- The profile in Profile Editor --------------------------------------
 
   const [editing, setEditing] = useState<Opened | null>(null);
-  const [pending, setPending] = useState<{ target: Opened | null } | null>(null);
   const nonce = useRef(0);
-  const dirty = useRef(false);
   const editingRef = useRef(editing);
   editingRef.current = editing;
-  const open = useCallback((next: Editing | null, opts?: { force?: boolean }) => {
+  /**
+   * Open a profile in Profile Editor, or close it with null. Unsaved changes
+   * never hold another profile back: choosing a row shows that row, and the
+   * editor's own Discard Changes is the way back (user, 2026-10-30).
+   */
+  const open = useCallback((next: Editing | null) => {
     const current = editingRef.current;
     // Choosing the profile already open keeps its form as it is.
     if (next && current && !next.isNew && !current.isNew && next.scope === current.scope && next.key === current.key) return;
-    const target = next ? { ...next, nonce: ++nonce.current } : null;
-    if (!opts?.force && dirty.current && current) { setPending({ target }); return; }
-    dirty.current = false;
-    setPending(null);
-    setEditing(target);
+    setEditing(next ? { ...next, nonce: ++nonce.current } : null);
   }, []);
-  const pendingRef = useRef(pending);
-  pendingRef.current = pending;
-  const confirmSwitch = useCallback(() => {
-    const p = pendingRef.current;
-    if (!p) return;
-    dirty.current = false;
-    setEditing(p.target);
-    setPending(null);
-  }, []);
-  const cancelSwitch = useCallback(() => setPending(null), []);
-  const setEditorDirty = useCallback((d: boolean) => { dirty.current = d; }, []);
-  const editorDirty = useCallback(() => dirty.current, []);
 
   // ---- Suggestions ---------------------------------------------------------
 
@@ -345,24 +369,6 @@ export function MesaProvider({ active = true, onFindings, children }: {
   // reason preserved as control_reason so future admins (and agents, via
   // authored_restrictions) see why it exists. Never automatic; this is the
   // admin's click. Create-only, so a profile made meanwhile is never replaced.
-  const applySuggestion = useCallback(async (s: MesaSuggestion) => {
-    setSuggestionBusy(s.key);
-    setSuggestionError(null);
-    try {
-      const doc: MesaProfileDocument = {
-        semantic_profile: { operational_boundaries: { control_mode: s.suggested_mode, control_reason: s.reason } },
-      };
-      if (s.scope === "domain") await api.putMesaDomain(s.subject_id, doc, true);
-      else await api.putMesaProfile(s.subject_id, doc, true);
-      await refresh();
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 412) await refresh();
-      setSuggestionError(e instanceof Error ? e.message : t("mesa.applySuggestionFailed"));
-    } finally {
-      setSuggestionBusy(null);
-    }
-  }, [refresh]);
-
   const dismissSuggestion = useCallback(async (s: MesaSuggestion) => {
     setSuggestionBusy(s.key);
     setSuggestionError(null);
@@ -412,11 +418,12 @@ export function MesaProvider({ active = true, onFindings, children }: {
   }, []);
 
   const value: MesaState = {
-    loaded, loading, error, refresh: () => { void refresh(); },
-    rows, entityTree, canonicalTags, integrationOptions, deviceOptions, friendly, nameOf, automationName,
-    issues, inspection, validation, findingIds, allDismissed, dismiss,
-    editing, open, pending, confirmSwitch, cancelSwitch, setEditorDirty, editorDirty,
-    selectedSuggestion, selectSuggestion, applySuggestion, dismissSuggestion, restoreSuggestions, rescan, suggestionBusy, rescanning, suggestionError,
+    loaded, loading, error, refresh,
+    rows, keysIn, entityTree, canonicalTags, integrationOptions, deviceOptions, friendly, nameOf, automationName,
+    issues, inspection, validation, findingIds, allDismissed, dismiss, restoreNotices,
+    anyDismissed: [findingIds.inspection, findingIds.validation, findingIds.orphans].some((ids) => ids.length > 0 && allDismissed(ids)),
+    editing, open,
+    selectedSuggestion, selectSuggestion, dismissSuggestion, restoreSuggestions, rescan, suggestionBusy, rescanning, suggestionError,
     exporting, askExport: () => setExporting({ busy: false, error: null }), cancelExport: () => setExporting(null), doExport,
   };
   return <MesaContext.Provider value={value}>{children}</MesaContext.Provider>;

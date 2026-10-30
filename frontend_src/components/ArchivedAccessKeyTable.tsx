@@ -50,7 +50,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
     { id: "archived", label: t("accessKeys.colArchivedOn"), width: 120, sortValue: (k) => k.revoked_at ?? "", cell: (k) => formatDate(k.revoked_at) },
     { id: "lastUsed", label: t("accessKeys.colLastUsed"), width: 120, sortValue: (k) => k.last_used_at ?? "", cell: (k) => formatDate(k.last_used_at) },
     // Delete Permanently turns red to confirm, in place, with Cancel beside it (user, 2026-10-28).
-    { id: "actions", label: t("accessKeys.colActions"), width: 200, maxWidth: 320,
+    { id: "actions", label: t("accessKeys.colActions"), width: 200, maxWidth: 320, className: "phx-td-actions",
       cell: (k) => (
         <span className="row-actions" ref={confirmId === k.id ? confirming : undefined}>
           <ActionButton icon="delete" label={confirmId === k.id ? t("accessKeys.confirmDelete") : t("accessKeys.deletePermanently")}
