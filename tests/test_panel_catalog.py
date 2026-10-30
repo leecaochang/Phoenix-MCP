@@ -30,9 +30,15 @@ from custom_components.phoenix_mcp.const import CATALOGS_DIR
 
 
 @pytest.fixture(autouse=True)
-def _reload_shipped_catalogs():
-    """Catalogs are loaded once into memory, so a test that swaps the directory reloads after."""
+def _reload_shipped_catalogs(monkeypatch):
+    """Catalogs are loaded once into memory, so a test that swaps the directory reloads after.
+
+    The swap is undone first: monkeypatch may tear down after this fixture (an
+    earlier autouse fixture can request it), and reloading while it still points
+    at a test folder leaves the next test on this worker with fake catalogs.
+    """
     yield
+    monkeypatch.undo()
     helpers.load_catalogs()
 
 

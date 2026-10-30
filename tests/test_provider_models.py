@@ -238,41 +238,7 @@ _TOOL = [{"type": "function", "function": {"name": "t", "parameters": {}}}]
 
 
 @pytest.mark.asyncio
-async def test_openai_tool_turns_send_reasoning_effort_none_even_when_a_level_is_chosen():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={"effort": "high"}))
-    assert session.calls[0]["json"]["reasoning_effort"] == "none"
-    # Without tools the operator's level is honoured.
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=[], options={"effort": "high"}))
-    assert session.calls[0]["json"]["reasoning_effort"] == "high"
-
-
-@pytest.mark.asyncio
-async def test_openai_model_that_rejects_effort_none_is_retried_once_and_remembered():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-    reject = _Resp(status=400, text=json.dumps({"error": {
-        "message": "Unrecognized request argument supplied: reasoning_effort", "type": "invalid_request_error"}}))
-    session = _Session(reject, _Resp(body=_DONE_BODY))
-    events = await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={}))
-    assert any(e["type"] == "message_done" for e in events)
-    assert "reasoning_effort" in session.calls[0]["json"]
-    assert "reasoning_effort" not in session.calls[1]["json"]
-    # Remembered: the next tool turn does not send the field, so no failing request.
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={}))
-    assert len(session.calls) == 1 and "reasoning_effort" not in session.calls[0]["json"]
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-
-
-@pytest.mark.asyncio
 async def test_openai_responses_only_refusal_is_learned_as_no_tools():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
     reject = _Resp(status=400, text=json.dumps({"error": {
         "message": "Function calling is not supported with this model on Chat Completions; use the Responses API.",
         "type": "invalid_request_error"}}))

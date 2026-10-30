@@ -6106,3 +6106,195 @@ def test_mimo_offers_each_token_plan_region():
     assert hosts["token_plan"] == "https://token-plan-cn.xiaomimimo.com/v1"
     assert hosts["token_plan_sgp"] == "https://token-plan-sgp.xiaomimimo.com/v1"
     assert hosts["token_plan_ams"] == "https://token-plan-ams.xiaomimimo.com/v1"
+
+
+# --------------------------------------------------------------------------- #
+# OpenAI through the Responses API
+# --------------------------------------------------------------------------- #
+
+def _responses_sse(*events: dict) -> bytes:
+    return _sse(*(f'event: {ev["type"]}\ndata: {json.dumps(ev)}' for ev in events))
+
+
+_OPENAI_TOOLS = [{"type": "function", "function": {"name": "get_state", "description": "Read one entity.",
+                                                   "parameters": {"type": "object", "properties": {}}}}]
+_REASONING_ITEM = {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc=="}
+_CALL_ITEM = {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "get_state",
+              "arguments": '{"entity_id": "light.x"}', "status": "completed"}
+
+
+def _responses_provider(model: str = "gpt-6-astra") -> agentcli.OpenAIResponsesProvider:
+    return agentcli.OpenAIResponsesProvider(ProviderConfig(
+        kind="chatgpt", model=model, base_url="https://api.openai.com/v1", api_key="test-secret", vision=True))
+
+
+def test_openai_accounts_use_the_responses_adapter():
+    provider = agentcli.build_provider(ProviderConfig(kind="chatgpt", model="gpt-6-luna", base_url="https://o", api_key="k"))
+    assert isinstance(provider, agentcli.OpenAIResponsesProvider)
+    other = agentcli.build_provider(ProviderConfig(kind="grok", model="grok-4", base_url="https://x", api_key="k"))
+    assert type(other) is OpenAICompatProvider
+
+
+@pytest.mark.asyncio
+async def test_responses_request_converts_history_tools_and_reasoning():
+    done = _responses_sse({"type": "response.completed", "response": {"status": "completed", "usage": None}})
+    session = _SeqSession(_FakeResp(200, done))
+    messages = [
+        {"role": "user", "content": [{"type": "text", "text": "look"},
+                                     {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]},
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "call_0", "type": "function", "function": {"name": "get_state", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "call_0", "name": "get_state", "content": "on"},
+    ]
+    await _collect(_responses_provider().stream_turn(
+        session, system_prompt="SYS", messages=messages, tools=_OPENAI_TOOLS,
+        options={"effort": "high", "show_thinking": True, "temperature": 0.4}))
+    body = session.bodies[0]
+    assert body["instructions"] == "SYS" and body["store"] is False and body["stream"] is True
+    assert body["include"] == ["reasoning.encrypted_content"]
+    assert body["reasoning"] == {"effort": "high", "summary": "auto"}
+    assert "temperature" not in body
+    assert body["tools"] == [{"type": "function", "name": "get_state", "description": "Read one entity.",
+                              "parameters": {"type": "object", "properties": {}}, "strict": False}]
+    assert body["input"] == [
+        {"role": "user", "content": [{"type": "input_text", "text": "look"},
+                                     {"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "auto"}]},
+        {"type": "function_call", "call_id": "call_0", "name": "get_state", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_0", "output": "on"},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "options", "sent"), [
+    ("gpt-6-luna", {"temperature": 0.4}, False),         # reasons by default
+    ("gpt-6-luna", {"temperature": 0.4, "effort": "none"}, True),
+    ("gpt-4.1", {"temperature": 0.4}, True),             # not a reasoning model
+])
+async def test_responses_temperature_only_without_reasoning(model, options, sent):
+    done = _responses_sse({"type": "response.completed", "response": {"status": "completed"}})
+    session = _SeqSession(_FakeResp(200, done))
+    await _collect(_responses_provider(model).stream_turn(session, system_prompt="s", messages=[],
+                                                          tools=[], options=options))
+    assert ("temperature" in session.bodies[0]) is sent
+
+
+@pytest.mark.asyncio
+async def test_responses_tool_round_streams_and_replays_its_output_items():
+    stream = _responses_sse(
+        {"type": "response.created", "response": {"status": "in_progress"}},
+        {"type": "response.output_item.added", "output_index": 0, "item": {"type": "reasoning", "id": "rs_1"}},
+        {"type": "response.reasoning_summary_text.delta", "output_index": 0, "delta": "Checking."},
+        {"type": "response.output_item.done", "output_index": 0, "item": _REASONING_ITEM},
+        {"type": "response.output_item.added", "output_index": 1,
+         "item": {**_CALL_ITEM, "arguments": "", "status": "in_progress"}},
+        {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": '{"entity_id"'},
+        {"type": "response.output_item.done", "output_index": 1, "item": _CALL_ITEM},
+        {"type": "response.completed", "response": {"status": "completed", "usage": {
+            "input_tokens": 120, "input_tokens_details": {"cached_tokens": 100}, "output_tokens": 30}}},
+    )
+    provider = _responses_provider()
+    events = await _collect(provider.stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                 messages=[{"role": "user", "content": "hi"}], tools=_OPENAI_TOOLS,
+                                                 options={"show_thinking": True}))
+    assert {"type": agentcli.EV_THINKING, "text": "Checking."} in events
+    tool = next(ev for ev in events if ev["type"] == agentcli.EV_TOOL)
+    assert tool["id"] == "call_1" and tool["name"] == "get_state" and tool["input"] == {"entity_id": "light.x"}
+    usage = next(ev for ev in events if ev["type"] == agentcli.EV_USAGE)
+    assert usage["input_tokens"] == 120 and usage["cache_read_tokens"] == 100 and usage["output_tokens"] == 30
+    done = events[-1]
+    assert done["type"] == agentcli.EV_DONE and done["stop_reason"] == "tool_use"
+    assistant = done["assistant_msg"]
+    assert assistant["response_items"] == [_REASONING_ITEM, _CALL_ITEM]
+
+    # The next round sends those items back unchanged, then the tool output.
+    history = [{"role": "user", "content": "hi"}, assistant]
+    provider.append_tool_results(history, [{"tool_use_id": "call_1", "tool_name": "get_state", "result_text": "on"}])
+    after = _responses_sse({"type": "response.completed", "response": {"status": "completed"}})
+    session = _SeqSession(_FakeResp(200, after))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=history, tools=_OPENAI_TOOLS, options={}))
+    sent = session.bodies[0]["input"]
+    assert sent[0] == {"role": "user", "content": "hi"}
+    assert sent[1:3] == [_REASONING_ITEM, _CALL_ITEM]
+    assert sent[3]["type"] == "function_call_output" and sent[3]["call_id"] == "call_1"
+
+    # Once the turn is over, the encrypted items leave the history.
+    from custom_components.phoenix_mcp.decision_history import without_thinking
+    assert "response_items" not in without_thinking(history)[1]
+
+
+@pytest.mark.asyncio
+async def test_responses_final_answer_carries_no_output_items():
+    stream = _responses_sse(
+        {"type": "response.output_item.done", "output_index": 0, "item": _REASONING_ITEM},
+        {"type": "response.output_text.delta", "output_index": 1, "delta": "All off."},
+        {"type": "response.output_item.done", "output_index": 1, "item": {
+            "type": "message", "id": "msg_1", "role": "assistant", "phase": "final_answer",
+            "content": [{"type": "output_text", "text": "All off."}]}},
+        {"type": "response.completed", "response": {"status": "completed"}},
+    )
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert "".join(ev["text"] for ev in events if ev["type"] == agentcli.EV_TEXT) == "All off."
+    done = events[-1]
+    assert done["stop_reason"] == "end_turn" and done["assistant_msg"] == {"role": "assistant", "content": "All off."}
+
+
+@pytest.mark.asyncio
+async def test_responses_replay_uses_the_corrected_arguments_of_an_unparseable_call():
+    assistant = {"role": "assistant", "content": "", "tool_calls": [
+        {"id": "call_1", "type": "function", "function": {"name": "get_state", "arguments": "{}"}}],
+        "response_items": [_REASONING_ITEM, {**_CALL_ITEM, "arguments": '{"entity_id": '}]}
+    items = agentcli._responses_input([{"role": "user", "content": "hi"}, assistant])
+    assert items[2]["arguments"] == "{}" and items[1] == _REASONING_ITEM
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("event", "code", "retryable", "stop"), [
+    ({"type": "response.incomplete", "response": {"status": "incomplete",
+                                                  "incomplete_details": {"reason": "max_output_tokens"}}},
+     None, None, "max_tokens"),
+    ({"type": "response.incomplete", "response": {"status": "incomplete",
+                                                  "incomplete_details": {"reason": "content_filter"}}},
+     "provider_blocked", False, None),
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "server_error", "message": "x"}}},
+     "provider_transient", True, None),
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "invalid_prompt", "message": "x"}}},
+     "provider_blocked", False, None),
+    ({"type": "error", "code": "rate_limit_exceeded", "message": "slow down"}, "provider_transient", True, None),
+])
+async def test_responses_terminal_events(event, code, retryable, stop):
+    stream = _responses_sse({"type": "response.output_text.delta", "output_index": 0, "delta": "part"}, event)
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    if stop:
+        assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == stop
+    else:
+        assert events[-1]["type"] == agentcli.EV_ERROR
+        assert events[-1]["code"] == code and events[-1]["retryable"] is retryable
+
+
+@pytest.mark.asyncio
+async def test_responses_http_errors_keep_the_shared_classification():
+    refused = _FakeResp(429, text_data=json.dumps({"error": {"message": "Slow down", "type": "rate_limit_error",
+                                                             "code": "slow_down"}}), headers={"Retry-After": "7"})
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(refused), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert events[0]["code"] == "rate_limit" and events[0]["retryable"] is True
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 7}
+    billing = _FakeResp(429, text_data=json.dumps({"error": {"message": "No credit", "type": "insufficient_quota",
+                                                             "code": "insufficient_quota"}}))
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(billing), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert events[0]["code"] == "quota" and events[0]["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_responses_effort_refusal_is_learned_as_thinking():
+    refused = _FakeResp(400, text_data=json.dumps({"error": {
+        "message": "Unsupported value: 'reasoning.effort' does not support 'none' with this model.",
+        "type": "invalid_request_error", "param": "reasoning.effort"}}))
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(refused), system_prompt="s",
+                                                              messages=[], tools=[], options={"effort": "none"}))
+    assert events[0]["refused"] == "reasoning_effort"

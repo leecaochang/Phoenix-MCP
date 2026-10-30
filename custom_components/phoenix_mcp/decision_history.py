@@ -162,19 +162,23 @@ def _transcript(messages: list[dict], pending_calls: dict[str, str] | None = Non
 
 
 def without_thinking(messages: Any) -> Any:
-    """A copy without Anthropic thinking blocks, which a tool loop replays to its provider.
+    """A copy without the reasoning a tool loop replays to its provider.
 
-    They hold the model's private reasoning and are needed only until that loop
-    ends, so finished history and decision context never carry them.
+    That is Anthropic thinking blocks and the Responses API output items
+    (`response_items`, encrypted reasoning). They hold the model's private
+    reasoning and are needed only until that loop ends, so finished history and
+    decision context never carry them.
     """
     if not isinstance(messages, list):
         return messages
     out = []
     for message in messages:
-        content = message.get("content") if isinstance(message, dict) and message.get("role") == "assistant" else None
-        if isinstance(content, list):
-            message = {**message, "content": [block for block in content if not (
-                isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))]}
+        if isinstance(message, dict) and message.get("role") == "assistant":
+            message = {key: value for key, value in message.items() if key != "response_items"}
+            content = message.get("content")
+            if isinstance(content, list):
+                message["content"] = [block for block in content if not (
+                    isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))]
         out.append(message)
     return out
 
