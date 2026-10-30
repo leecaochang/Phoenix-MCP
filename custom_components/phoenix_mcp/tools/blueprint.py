@@ -29,6 +29,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from ..const import (
+    CAP_CONFIRM,
     CAP_DENY,
     MAX_DIFF_INLINE_BYTES,
     MAX_FILE_BYTES,
@@ -310,6 +311,20 @@ def _blueprint_denied(access_key: AccessKeyRecord, args: dict, tool_name: str) -
     return None
 
 
+def _blueprint_gate_cap(access_key: AccessKeyRecord, domain: Any) -> str:
+    """The capability whose mode gates a blueprint write: Confirm on either key wins.
+
+    A blueprint edit changes the behaviour of every automation or script built on
+    it, so Confirm on the domain's own write capability applies to it too. Deny on
+    either key is refused earlier by _blueprint_denied.
+    """
+    domain_cap = _BLUEPRINT_DOMAIN_CAPS.get(str(domain or "").strip().lower())
+    if (effective_cap(access_key, "cap_blueprint_write") != CAP_CONFIRM
+            and domain_cap is not None and effective_cap(access_key, domain_cap) == CAP_CONFIRM):
+        return domain_cap
+    return "cap_blueprint_write"
+
+
 async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None:
     """Current blueprint file text, or None when absent or unreadable."""
     if not await hass.async_add_executor_job(os.path.isfile, target):
@@ -417,7 +432,7 @@ async def _tool_create_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", access_key, hass, data,
+        _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="create_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "create"),
     )
@@ -444,7 +459,7 @@ async def _tool_edit_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", access_key, hass, data,
+        _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="edit_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "edit"),
     )
@@ -471,7 +486,7 @@ async def _tool_delete_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", access_key, hass, data,
+        _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="delete_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "delete"),
     )

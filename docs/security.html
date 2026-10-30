@@ -43,7 +43,7 @@
         <ul>
           <li>Only the <strong>SHA-256 hash</strong> of an access key is stored. The raw value is never written to disk or logs.</li>
           <li>Comparisons always use a constant-time algorithm (<code>hmac.compare_digest</code>). String equality is never used.</li>
-          <li>Access keys are accepted only in the <code>Authorization: Bearer</code> header. Query parameters are rejected with 401, and no access key value ever appears in HA logs.</li>
+          <li>Access keys are accepted only in the <code>Authorization: Bearer</code> header. A request carrying a <code>token</code> or <code>access_token</code> query parameter is rejected with 401, a key anywhere else in the URL never authenticates, and no access key value ever appears in HA logs.</li>
           <li>The format check (prefix and length) runs first, so an accidentally pasted long-lived access token is caught before any hashing work.</li>
         </ul>
 
@@ -100,7 +100,7 @@
 
         <h2>Access key lifecycle</h2>
         <h3>Removing Phoenix MCP</h3>
-        <p>Removing the integration revokes its access keys, cancels unclaimed approvals, clears Assist, Voice, AI Task and decision-provider bindings, and deletes provider credentials. Re-adding it starts without usable prior credentials or bindings. Settings, MESA profiles, audit history and recovery records are retained; removal is not a full data wipe.</p>
+        <p>Removing the integration revokes its access keys, cancels unclaimed approvals, clears Assist, Voice, AI Task and decision-provider bindings, and deletes provider credentials. Re-adding it starts without usable prior credentials or bindings. Settings, archived access-key records, MESA profiles, audit history, recovery records, configuration history snapshots, Conversation Log transcripts, routing statistics and the card catalog are retained; removal is not a full data wipe. To delete most of them, use <strong>Wipe Phoenix MCP Data</strong> in Settings before removing the integration; MESA profiles are deleted only when that option is selected, and configuration safety records are kept.</p>
         <h3>Rotation</h3>
         <p>Rotation generates a new raw value for an existing access key while keeping its permissions, capabilities, rate limits, and audit history intact. The old value is invalidated the moment rotation is confirmed; there is no grace period, and the new value is shown once. Use it when you suspect a value has leaked but do not want to rebuild the tree.</p>
         <h3>Revocation</h3>

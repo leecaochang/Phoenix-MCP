@@ -369,7 +369,13 @@ class DomainLayout:
 
 
 def _resolve_include_path(containing_file: str, value: str, config_dir: str) -> str | None:
-    """Resolve an include target relative to its containing file, contained to config_dir."""
+    """Resolve an include target relative to its containing file, contained to config_dir.
+
+    An embedded NUL is refused here, as at every other jail: realpath raises on it
+    rather than returning a path the containment check could refuse.
+    """
+    if "\x00" in value:
+        return None
     candidate = os.path.realpath(os.path.join(os.path.dirname(containing_file), value))
     base = os.path.realpath(config_dir)
     if candidate == base or candidate.startswith(base + os.sep):

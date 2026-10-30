@@ -242,9 +242,10 @@ async def _tool_restore_blueprint_configuration(
 ) -> tuple[dict, str, str]:
     """Preflight one blueprint source restore under its dual gate.
 
-    The gate is cap_blueprint_write plus the blueprint domain's own write cap.
+    The gate is cap_blueprint_write plus the blueprint domain's own write cap;
+    Confirm on either one requires approval.
     """
-    from .blueprint import _blueprint_denied, _read_blueprint_source, _resolve_blueprint_path
+    from .blueprint import _blueprint_denied, _blueprint_gate_cap, _read_blueprint_source, _resolve_blueprint_path
 
     tool = "restore_configuration"
     snapshot = record.get(side)
@@ -286,7 +287,7 @@ async def _tool_restore_blueprint_configuration(
     bound = {"recovery_id": record["id"], "side": side,
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
-        "cap_blueprint_write", access_key, hass, data, tool_name=tool, args=bound,
+        _blueprint_gate_cap(access_key, domain), access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "yaml_diff", **_summary("restore.blueprint", label=path),
                       "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},

@@ -271,9 +271,11 @@ async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_
                 "jsonrpc": "2.0", "method": "notifications/initialized"})
             assert response.status == 202
             await response.read()
-        body = {"jsonrpc": "2.0", "id": 7, "method": "ping", "params": {}}
+        # 2026-07-28 has no ping, so the modern era probes with tools/list.
+        method = "tools/list" if era == "modern" else "ping"
+        body = {"jsonrpc": "2.0", "id": 7, "method": method, "params": {}}
         if era == "modern":
-            headers.update({"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "ping"})
+            headers.update({"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": method})
             body["params"] = {"_meta": {
                 "io.modelcontextprotocol/protocolVersion": "2026-07-28",
                 "io.modelcontextprotocol/clientCapabilities": {},

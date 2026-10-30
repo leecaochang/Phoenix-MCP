@@ -36,7 +36,7 @@ class _Content:
 
 class _Resp:
     def __init__(self, status=200, body=b"", json_data=None, text=""):
-        self.status, self.content, self._json, self._text = status, _Content(body), json_data, text
+        self.status, self.content, self._json, self._text = status, _Content(body or text.encode()), json_data, text
         self.headers: dict = {}
 
     async def text(self):

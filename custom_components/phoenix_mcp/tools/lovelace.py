@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from typing import Any, TypeGuard
 
@@ -78,6 +79,8 @@ from ..ws_dispatch import (
     async_save_lovelace_config,
     async_ws_command,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dict:
@@ -876,8 +879,10 @@ async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyReco
         if current is not None:
             # Redact out-of-scope entity ids the same way get_dashboard_config does.
             before = _truncate(json.dumps(filter_service_response(current, access_key, hass), indent=2, default=str))
-    except Exception:  # noqa: BLE001 - diagnostic only; a new/auto dashboard has no before
-        pass
+    except WsDashboardNotFoundError:
+        pass  # a new dashboard has no before
+    except Exception:  # noqa: BLE001 - diagnostic only; the tool refused an unreadable one before gating
+        _LOGGER.warning("Could not read dashboard %s for its approval preview", label, exc_info=True)
     return {
         "kind": "yaml_diff",
         **_summary("set_dashboard_config", label=label),
@@ -941,18 +946,19 @@ async def _tool_set_dashboard_config(
     pre = _dashboard_write_precheck(args, "set_dashboard_config")
     if pre is not None:
         return pre
+    url_path = str(args.get("url_path") or "").strip() or None
+    try:
+        current = await async_get_lovelace_config(hass, url_path)
+    except WsDashboardNotFoundError:
+        current = None  # genuinely absent: any expected_hash conflicts
+    except WsDispatchError as exc:
+        # An unreadable lovelace must not be mistaken for an absent dashboard:
+        # the CAS guard would pass against a phantom None, and the approval
+        # would present the replacement as a new dashboard.
+        return _tool_error(
+            f"Could not read dashboard: {exc}"
+        ), "invalid_request", "set_dashboard_config"
     if args.get("expected_hash"):
-        url_path = str(args.get("url_path") or "").strip() or None
-        try:
-            current = await async_get_lovelace_config(hass, url_path)
-        except WsDashboardNotFoundError:
-            current = None  # genuinely absent: any expected_hash conflicts
-        except WsDispatchError as exc:
-            # An unreadable lovelace must not be mistaken for an absent dashboard;
-            # doing so would let the CAS guard pass against a phantom None.
-            return _tool_error(
-                f"Could not read dashboard: {exc}"
-            ), "invalid_request", "set_dashboard_config"
         conflict = _cas_conflict(args.get("expected_hash"), current, "set_dashboard_config")
         if conflict is not None:
             return conflict

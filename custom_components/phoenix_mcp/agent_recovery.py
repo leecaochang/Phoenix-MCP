@@ -34,6 +34,10 @@ class RecoveryRequired(RuntimeError):
     """A dispatch cannot safely start or its outcome cannot be established."""
 
 
+class NotDispatched(RecoveryRequired):
+    """The dispatch barrier refused before anything reached Home Assistant."""
+
+
 def _journal_tool_name(tool: str) -> str:
     """Persist only server catalog names, never an unbounded caller label."""
     from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
@@ -136,8 +140,10 @@ class AgentRecovery:
 
     async def begin(self, access_key_id: str, tool: str, rid: str) -> None:
         async with self._lock:
-            if self.blocks(access_key_id) or len(self._records) >= MAX_RECORDS:
-                raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs Attention before retrying.")
+            if self.blocks(access_key_id):
+                raise NotDispatched("Reconcile the previous agent operation in Phoenix MCP > Needs Attention before retrying; nothing was dispatched.")
+            if len(self._records) >= MAX_RECORDS:
+                raise NotDispatched("Too many agent operations await review in Phoenix MCP > Needs Attention; nothing was dispatched.")
             tool = _journal_tool_name(tool)
             self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
@@ -145,7 +151,7 @@ class AgentRecovery:
             except Exception:
                 # Retain the barrier in memory too: a failed save may still
                 # have committed, and continuing would make that ambiguous.
-                raise RecoveryRequired("Could not persist the dispatch barrier; nothing was dispatched.") from None
+                raise NotDispatched("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
 
     async def retain_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
@@ -329,8 +335,12 @@ async def dispatch_agent_tool(
     name: str, arguments: dict, tool_id: Any, request_id: str,
     client_ip: str, base_url: str,
 ) -> tuple:
-    """One dispatch, with no retry after the durable boundary."""
-    from .tool_common import RefusedBeforeWrite
+    """One dispatch, with no retry after the durable boundary.
+
+    A barrier refusal is returned as an ordinary tool refusal, because nothing
+    was dispatched; only a failure after the boundary is an unknown outcome.
+    """
+    from .tool_common import RefusedBeforeWrite, _tool_error
 
     recovery = data.agent_recovery
     # Unknown names are refused before a handler can run. Do not turn a model
@@ -340,7 +350,10 @@ async def dispatch_agent_tool(
     try:
         if write:
             await recovery.reconcile(data.store, access_key.id)
-            await recovery.begin(access_key.id, name, request_id)
+            try:
+                await recovery.begin(access_key.id, name, request_id)
+            except NotDispatched as refusal:
+                return {"jsonrpc": "2.0", "id": tool_id, "result": _tool_error(str(refusal))}, "tools/call", name, "denied"
         response = await dispatch(
             "tools/call", tool_id, {"name": name, "arguments": arguments},
             access_key, hass, data, client_ip, base_url, request_id=request_id,

@@ -19,11 +19,20 @@ from custom_components.phoenix_mcp.const import AGENTCLI_PROBE_IMAGE_MAX_TOKENS
 STRIPES = ["blue", "white", "red"]
 
 
+class _Content:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def iter_chunked(self, _n: int):
+        yield self._data
+
+
 class _Resp:
     def __init__(self, status: int, payload: object = None, text: str = "") -> None:
         self.status = status
         self._payload = payload
         self._text = text
+        self.content = _Content(text.encode())
 
     async def json(self, content_type=None):
         return self._payload

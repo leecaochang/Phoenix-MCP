@@ -271,6 +271,14 @@ class TestModernProtocolEra:
         assert result["cacheScope"] == "private"
         assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "Phoenix MCP"
 
+    async def test_ping_is_not_a_modern_method(self):
+        """2026-07-28 removed ping; the legacy era still answers it."""
+        _access_key, raw, _data, hass = _strict_env()
+        resp = await _view(hass).post(_make_request(
+            _modern_body("ping"), "application/json", raw, _modern_headers("ping")))
+        assert resp.status == 404
+        assert json.loads(resp.text)["error"]["code"] == -32601
+
     async def test_header_body_version_mismatch_is_a_recognized_modern_error(self):
         _access_key, raw, _data, hass = _strict_env()
         headers = _modern_headers("ping")
@@ -547,6 +555,8 @@ class TestLegacyProtocolEra:
                 self._initialize_body(), "application/json", raw))
             assert init.status == 200
             session_ids.append(init.headers["Mcp-Session-Id"])
+        for session_id in session_ids:
+            data.mcp_sessions[session_id]["in_use"] = 1
 
         exhausted = await _view(hass).post(_make_request(
             self._initialize_body(), "application/json", raw))
@@ -566,7 +576,7 @@ class TestLegacyProtocolEra:
         access_key, raw, data, hass = _strict_env()
         session_id = "owned-session"
         now = mcp_view.time.monotonic()
-        data.mcp_sessions[session_id] = {"access_key_id": access_key.id, "last_seen": now}
+        data.mcp_sessions[session_id] = {"access_key_id": access_key.id, "last_seen": now, "in_use": 1}
         for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
             data.mcp_sessions[f"other-{index}"] = {
                 "access_key_id": f"other-access-key-{index}",
@@ -712,8 +722,21 @@ async def test_session_quota_cannot_evict_another_access_key():
     victim_id = mcp_view._open_legacy_session(data, victim)
     allocated = [mcp_view._open_legacy_session(data, attacker) for _ in range(300)]
     assert victim_id in data.mcp_sessions
-    assert sum(s is not None for s in allocated) == mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
-    assert len(data.mcp_sessions) == 1 + mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
+    assert all(allocated)
+    assert set(allocated[-mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT:]) == set(data.mcp_sessions) - {victim_id}
+
+
+async def test_full_global_quota_evicts_only_the_callers_own_idle_session():
+    access_key, _, data, _ = _strict_env()
+    now = mcp_view.time.monotonic()
+    data.mcp_sessions["own-old"] = {"access_key_id": access_key.id, "last_seen": now - 10}
+    data.mcp_sessions["own-busy"] = {"access_key_id": access_key.id, "last_seen": now - 20, "in_use": 1}
+    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 2):
+        data.mcp_sessions[str(i)] = {"access_key_id": str(i), "last_seen": now - 30}
+    others = {key: value for key, value in data.mcp_sessions.items() if not key.startswith("own")}
+    session = mcp_view._open_legacy_session(data, access_key)
+    assert session is not None
+    assert set(data.mcp_sessions) == {*others, "own-busy", session}
 
 
 async def test_global_session_capacity_refuses_without_eviction():
@@ -728,7 +751,7 @@ async def test_global_session_capacity_refuses_without_eviction():
 async def test_session_capacity_returns_retryable_http_error():
     access_key, raw, data, hass = _strict_env()
     for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
-        assert mcp_view._open_legacy_session(data, access_key)
+        data.mcp_sessions[mcp_view._open_legacy_session(data, access_key)]["in_use"] = 1
     response = await _view(hass).post(_make_request(
         TestLegacyProtocolEra._initialize_body(), 'application/json', raw))
     assert response.status == 429

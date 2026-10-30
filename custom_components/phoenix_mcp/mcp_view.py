@@ -13,6 +13,7 @@ import math
 import re
 import secrets
 import time
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, cast
@@ -66,7 +67,7 @@ from .device_semantics import (
     entity_name_source,
     update_device_registry_entry,
 )
-from .service_targets import secondary_target_error, unsupported_secondary_targets
+from .service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
 from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, handler_arguments, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from .mesa import (
@@ -528,8 +529,11 @@ _MCP_CACHEABLE_METHODS = frozenset({
     "resources/templates/list", "resources/read",
 })
 _MCP_LEGACY_SESSION_TTL_SECONDS = 3600.0
+_MCP_LEGACY_UNINITIALIZED_TTL_SECONDS = 60.0
 _MCP_LEGACY_SESSION_LIMIT = 256
 _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT = 8
+# The legacy session this request holds open, released when the request ends.
+_legacy_session_in_use: ContextVar[dict | None] = ContextVar("phoenix_legacy_session_in_use", default=None)
 
 
 def _protocol_error_response(
@@ -2009,6 +2013,8 @@ async def _tool_call_service(
             "invalid_request",
             "call_service",
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
 
     service_key = f"{domain}/{service}"
 
@@ -2191,6 +2197,8 @@ async def _execute_call_service(
             "invalid_request",
             resource,
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", resource
 
     check_request_authority()
     entity_id = args.get("entity_id")
@@ -5962,17 +5970,8 @@ async def _tool_get_approval_status(
     record = get_approval(data.store, approval_id)
     if record is None or record.access_key_id != access_key.id:
         return _tool_error("Approval not found."), "not_found", "get_approval_status"
-    payload = {
-        "approval_id": record.id,
-        "status": record.status,
-        "tool_name": record.tool_name,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
-        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
-        "resolved_at": record.resolved_at.isoformat() if record.resolved_at else None,
-        "result": record.result,
-        "rejected_reason": record.rejected_reason,
-    }
-    return _tool_success(json.dumps(payload, default=str)), "allowed", _approval_resource(record)
+    return (_approval_status_result(record, resolved=record.status != STATUS_PENDING),
+            "allowed", _approval_resource(record))
 
 
 def _approval_status_result(record: Any, *, resolved: bool) -> dict:
@@ -6003,7 +6002,7 @@ def _approval_status_result(record: Any, *, resolved: bool) -> dict:
 
 
 def _approval_status_payload(record: Any, *, resolved: bool) -> dict:
-    """Status body shared by wait_for_approval (same fields as get_approval_status)."""
+    """Status body shared by get_approval_status and wait_for_approval."""
     return {
         "approval_id": record.id,
         "status": record.status,
@@ -9278,7 +9277,7 @@ def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> st
         lines.extend(("", notes_block))
     lines.append("")
     caps = effective_caps(access_key)
-    lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval per request):")
+    lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval for each change, while reads run):")
     label_map = (
         ("cap_config_read", "Config read"),
         ("cap_automation_write", "Automation write"),
@@ -9593,8 +9592,9 @@ _MCP_METHODS: frozenset[str] = frozenset({
     "prompts/list",
     "prompts/get",
 })
+# 2026-07-28 removed ping together with the session lifecycle.
 _MCP_MODERN_METHODS = _MCP_METHODS - {
-    "initialize", "notifications/initialized", "initialized",
+    "initialize", "notifications/initialized", "initialized", "ping",
 }
 _MCP_LEGACY_METHODS = _MCP_METHODS - {"server/discover"}
 
@@ -10394,12 +10394,18 @@ def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str)
 
 
 def _prune_legacy_sessions(data: PhoenixData) -> None:
-    """Expire idle legacy sessions and bound worst-case in-memory growth."""
+    """Expire idle legacy sessions and bound worst-case in-memory growth.
+
+    A session that never completed initialization expires sooner: a client that
+    abandons its handshake would otherwise hold a quota slot for the full hour.
+    """
     now = time.monotonic()
     expired = [
         session_id
         for session_id, state in data.mcp_sessions.items()
-        if now - float(state.get("last_seen", 0.0)) > _MCP_LEGACY_SESSION_TTL_SECONDS
+        if now - float(state.get("last_seen", 0.0)) > (
+            _MCP_LEGACY_SESSION_TTL_SECONDS if state.get("initialized")
+            else _MCP_LEGACY_UNINITIALIZED_TTL_SECONDS)
     ]
     for session_id in expired:
         data.mcp_sessions.pop(session_id, None)
@@ -10422,11 +10428,22 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
 
 
 def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str | None:
-    """Allocate within both quotas without evicting another active session."""
+    """Allocate within both quotas, closing this access key's own stale session first.
+
+    A client that restarts without DELETE leaves its old session behind, so a full
+    quota closes the key's least recently used session with no request open; its
+    client receives 404 and initializes again. Another access key's session is
+    never closed, and None means every candidate is busy.
+    """
     _prune_legacy_sessions(data)
-    owned = sum(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values())
-    if owned >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
-        return None
+    owned = [(state, session_id) for session_id, state in data.mcp_sessions.items()
+             if state.get("access_key_id") == access_key.id]
+    if len(owned) >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
+        idle = [(float(state.get("last_seen", 0.0)), session_id) for state, session_id in owned
+                if not state.get("in_use")]
+        if not idle:
+            return None
+        data.mcp_sessions.pop(min(idle)[1], None)
     session_id = secrets.token_urlsafe(32)
     data.mcp_sessions[session_id] = {
         "access_key_id": access_key.id,
@@ -10446,6 +10463,9 @@ def _legacy_session(
     if state is None or state.get("access_key_id") != access_key.id:
         return None
     state["last_seen"] = time.monotonic()
+    if _legacy_session_in_use.get() is None:
+        state["in_use"] = state.get("in_use", 0) + 1
+        _legacy_session_in_use.set(state)
     return state
 
 
@@ -10483,10 +10503,15 @@ class PhoenixMcpView(PhoenixView):
     async def post(self, request: web.Request) -> web.Response:
         """Handle one request with task-local credential identity."""
         context = request_authority.set(None)
+        in_use = _legacy_session_in_use.set(None)
         try:
             with transport_session(request.headers.get("Mcp-Session-Id")):
                 return await self._post(request)
         finally:
+            if (session := _legacy_session_in_use.get()) is not None:
+                session["in_use"] -= 1
+                session["last_seen"] = time.monotonic()
+            _legacy_session_in_use.reset(in_use)
             request_authority.reset(context)
 
     async def delete(self, request: web.Request) -> web.Response:

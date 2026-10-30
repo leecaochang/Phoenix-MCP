@@ -756,6 +756,20 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
         )
 
 
+@pytest.mark.parametrize(("name", "object_prefix"), [
+    ("my-access-key", "phoenix_mcp_access_key_my_access_key"),
+    ("delete---my_access_key", "phoenix_mcp_access_key_delete_my_access_key"),
+    ("_Edge-Key_", "phoenix_mcp_access_key_edge_key"),
+])
+def test_suggested_entity_id_is_always_valid(name, object_prefix):
+    """HA refuses a suggested ID with a doubled or edge underscore, which a valid key name can produce."""
+    from homeassistant.core import valid_entity_id
+
+    for sensor in _make_sensors(_make_access_key(name), _make_data()):
+        assert valid_entity_id(sensor.entity_id), sensor.entity_id
+        assert sensor.entity_id == f"sensor.{object_prefix}_{sensor._sensor_type}"
+
+
 async def test_released_sensor_identity_migration_preserves_entity_id(hass):
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.sensor import _async_migrate_unique_ids

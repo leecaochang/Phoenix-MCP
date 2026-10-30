@@ -443,14 +443,14 @@ async def test_invalid_template_settings_do_not_create_recovery_barrier(hass):
     assert entry.options["state"] == "{{ 8 }}"
 
 
-def test_numeric_version_is_not_a_helper_entity_reference():
+async def test_numeric_version_is_not_a_helper_entity_reference(hass):
     """Update version strings coexist with recursively scoped entity targets."""
     from custom_components.phoenix_mcp.tools.helper import _entities_in_options
 
     assert _entities_in_options({
         "installed_version": "1.0", "latest_version": "2.0",
         "install": [{"target": {"entity_id": "update.firmware"}}],
-    }) == {"update.firmware"}
+    }, er.async_get(hass)) == {"update.firmware"}
 
 
 async def test_template_storage_failure_prevents_removal(hass):

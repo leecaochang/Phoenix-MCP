@@ -523,6 +523,8 @@ AGENTCLI_DEFERRED_TOOL_GROUPS: dict[str, tuple[tuple[str, ...], tuple[str, ...],
 }
 # Longest provider error-envelope message shown to an administrator.
 AGENTCLI_PROVIDER_DETAIL_CHARS = 300
+# Bytes of a provider's error body read for classification; the rest is never read.
+AGENTCLI_PROVIDER_ERROR_BYTES = 4000
 # Images an administrator attaches to one Agent Chat message. The browser
 # re-encodes each to a JPEG with a long edge of at most
 # AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX; the server bounds stay independent of it.

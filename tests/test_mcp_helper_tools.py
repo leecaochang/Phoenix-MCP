@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfTemperature
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
@@ -328,6 +329,28 @@ class TestConfigFlowHelperCreation:
                 assert all(hass.states.get(entity_id) is not None for entity_id in body["entity_ids"])
             finally:
                 await hass.config_entries.async_remove(entry_id)
+
+    @pytest.mark.parametrize("spelling", ["entity_id", "upper", "registry_id"])
+    async def test_red_source_is_refused_in_every_spelling_the_selector_accepts(
+        self, hass: HomeAssistant, hass_admin_user, spelling,
+    ):
+        """The entity selector lowercases IDs and resolves registry IDs, so each binds the RED entity."""
+        entry = er.async_get(hass).async_get_or_create(
+            "sensor", "test", "secret_power", suggested_object_id="secret_power")
+        hass.states.async_set("sensor.secret_power", "1234.5", {"unit_of_measurement": "W"})
+        ref = {"entity_id": "sensor.secret_power", "upper": "SENSOR.SECRET_POWER",
+               "registry_id": entry.id}[spelling]
+        tree = PermissionTree(domains={"sensor": PermissionNode(state="GREEN")},
+                              entities={"sensor.secret_power": PermissionNode(state="RED")})
+        content, outcome, _ = await _call(
+            "create_helper",
+            {"helper_type": "min_max", "flow_steps": [{"step_id": "user", "data": {
+                "name": "Probe", "entity_ids": [ref], "type": "max", "round_digits": 2}}]},
+            _access_key(permissions=tree), hass,
+        )
+        assert outcome == "denied", content
+        assert "outside this access key's write scope" in content["content"][0]["text"]
+        assert not hass.config_entries.async_entries("min_max")
 
     async def test_out_of_scope_source_is_rejected_before_approval(
         self, hass: HomeAssistant, hass_admin_user,

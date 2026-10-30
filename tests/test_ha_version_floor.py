@@ -201,6 +201,10 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.helpers.storage": {
         "Store": "0.0.0",
     },
+    "homeassistant.helpers.template": {
+        # Core's template-syntax predicate, verified in 2026.7.0 and long older.
+        "is_template_string": "0.0.0",
+    },
     "homeassistant.helpers.service": {
         # Present in 2024.1.0, older than any claimed floor.
         "async_get_all_descriptions": "0.0.0",

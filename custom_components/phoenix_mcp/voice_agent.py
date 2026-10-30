@@ -384,6 +384,7 @@ try:  # assist_pipeline is a default HA integration but guard like the rest.
 except ImportError:  # pragma: no cover - assist_pipeline absent only in minimal envs
     _KEY_ASSIST_PIPELINE = None  # type: ignore[assignment]
     _ASSIST_PIPELINE_AVAILABLE = False
+    _LOGGER.warning("Assist pipeline internals are unavailable; one-click Voice pipeline setup is disabled")
 
 
 class VoicePipelineError(Exception):

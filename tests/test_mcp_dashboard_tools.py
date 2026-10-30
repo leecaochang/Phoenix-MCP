@@ -278,6 +278,18 @@ class TestDashboardReadFailureIsNotAbsence:
         assert outcome == "invalid_request"
         assert "Could not read dashboard" in content["content"][0]["text"]
 
+    async def test_unreadable_dashboard_is_refused_before_an_approval(self, hass, lovelace_env):
+        """Without expected_hash too: the approval would otherwise show a replacement as a new dashboard."""
+        h, _light = lovelace_env
+        data, _v = _data()
+        with self._patch_read(WsDispatchError("lovelace is not loaded")), \
+                patch.object(lovelace_tools, "_gate", new=AsyncMock()) as gate:
+            content, outcome, _ = await _call(
+                "set_dashboard_config", {"config": {"views": []}}, _access_key(cap_lovelace_write="confirm"), h, data)
+        assert outcome == "invalid_request"
+        assert "Could not read dashboard" in content["content"][0]["text"]
+        gate.assert_not_awaited()
+
     async def test_cas_pregate_treats_not_found_as_absence(self, hass, lovelace_env):
         # Unknown dashboard: absence is real, so the CAS guard conflicts.
         h, _light = lovelace_env

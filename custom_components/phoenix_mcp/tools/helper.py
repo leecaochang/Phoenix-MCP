@@ -2836,16 +2836,32 @@ async def _tool_get_config_entry_options(
     return _tool_success(json.dumps(body, default=str)), "allowed", tool
 
 
-def _entities_in_options(options: Any) -> set[str]:
-    """Whole entity IDs and statically established template dependencies.
+def _entities_in_options(options: Any, registry: er.EntityRegistry) -> set[str]:
+    """Entity references and statically established template dependencies.
 
     Matched by VALUE, never by key name: each helper names its source differently
     (`entity_id` on threshold, `source` on derivative, `entity_ids` on min_max,
     whatever a third-party helper chose), so a key list would go stale silently
     and let an unchecked entity through. Over-matching a coincidental string only
-    costs a scope check the caller would pass anyway.
+    costs a scope check.
+
+    Strings are read the way HA's validators read them, since those decide what
+    the helper binds to: an entity ID in any letter case, a comma-separated list,
+    or an entity registry ID, which the entity selector accepts and resolve()
+    maps to its entity.
     """
     found: set[str] = set()
+
+    def _string(value: str) -> None:
+        found.update(template_entities(value))
+        for part in value.split(","):
+            part = part.strip()
+            lowered = part.lower()
+            if (_ENTITY_ID_RE.fullmatch(lowered)
+                    and not all(piece.isdecimal() for piece in lowered.split("."))):
+                found.add(lowered)
+            elif registry.async_get(part) is not None:
+                found.add(part)
 
     def _walk(node: Any) -> None:
         if isinstance(node, dict):
@@ -2855,10 +2871,7 @@ def _entities_in_options(options: Any) -> set[str]:
             for value in node:
                 _walk(value)
         elif isinstance(node, str):
-            found.update(template_entities(node))
-            if (_ENTITY_ID_RE.fullmatch(node)
-                    and not all(part.isdecimal() for part in node.split("."))):
-                found.add(node)
+            _string(node)
 
     _walk(options)
     return found
@@ -2889,7 +2902,7 @@ def _unwritable_option_entities(
     if template_type is not None:
         validate_template_selectors(options, template_type)
     return sorted(
-        eid for eid in _entities_in_options(options)
+        eid for eid in _entities_in_options(options, er.async_get(hass))
         if resolve(eid, access_key, hass) != Permission.WRITE
     )
 

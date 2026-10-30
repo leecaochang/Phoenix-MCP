@@ -3101,53 +3101,66 @@ async def test_a_mesa_confirm_honours_the_inline_wait_like_a_capability_confirm(
 def _resolved_approval(status, *, tool_result=None):
     from types import SimpleNamespace
     return SimpleNamespace(
-        id="appr-7", status=status, tool_name="call_service",
+        id="appr-7", status=status, tool_name="call_service", access_key_id="key-7",
         created_at=None, expires_at=None, resolved_at=None,
         result={"tool_result": tool_result} if tool_result is not None else None,
         rejected_reason=None,
     )
 
 
-def test_polling_an_approved_action_carries_the_operator_accepted_note():
+async def _poll_approval(record):
+    """get_approval_status for one of the polling key's own approvals."""
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.mcp_view import _tool_get_approval_status
+
+    data = MagicMock()
+    data.agent_recovery.reconcile = AsyncMock()
+    with patch("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
+        out, outcome, _ = await _tool_get_approval_status(
+            {"approval_id": record.id}, SimpleNamespace(id="key-7"), MagicMock(), data)
+    assert outcome == "allowed"
+    return [c.get("text") for c in out["content"]]
+
+
+async def test_polling_an_approved_action_carries_the_operator_accepted_note():
     """The operator-accepted note must reach agents that POLL.
 
     Not just those that wait inline: every approval outliving the inline window
     resolves by polling, and those are the slow ones an agent is most likely to
     re-propose.
     """
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_APPROVED
 
-    record = _resolved_approval(STATUS_APPROVED, tool_result={"content": [{"type": "text", "text": "{}"}]})
-    out = _approval_status_result(record, resolved=True)
+    texts = await _poll_approval(
+        _resolved_approval(STATUS_APPROVED, tool_result={"content": [{"type": "text", "text": "{}"}]}))
 
-    texts = [c.get("text") for c in out["content"]]
     assert _OPERATOR_ACCEPTED_NOTE in texts
     # The status body is still the first item, so existing readers are unaffected.
-    assert json.loads(texts[0])["status"] == STATUS_APPROVED
+    body = json.loads(texts[0])
+    assert body["status"] == STATUS_APPROVED and body["resolved"] is True
 
 
-def test_polling_a_rejection_carries_no_acceptance_note():
+async def test_polling_a_rejection_carries_no_acceptance_note():
     """Nothing was accepted, so saying otherwise would be a lie the agent acts on."""
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_REJECTED
 
-    out = _approval_status_result(_resolved_approval(STATUS_REJECTED), resolved=True)
-
-    assert all(c.get("text") != _OPERATOR_ACCEPTED_NOTE for c in out["content"])
+    assert _OPERATOR_ACCEPTED_NOTE not in await _poll_approval(_resolved_approval(STATUS_REJECTED))
 
 
-def test_polling_an_approval_that_never_ran_carries_no_note():
+async def test_polling_an_approval_that_never_ran_carries_no_note():
     """Approved but with no stored result: there is no landed change to accept."""
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_APPROVED
 
-    out = _approval_status_result(_resolved_approval(STATUS_APPROVED), resolved=True)
+    assert _OPERATOR_ACCEPTED_NOTE not in await _poll_approval(_resolved_approval(STATUS_APPROVED))
 
-    assert all(c.get("text") != _OPERATOR_ACCEPTED_NOTE for c in out["content"])
+
+async def test_polling_a_pending_approval_is_unresolved():
+    from custom_components.phoenix_mcp.approvals import STATUS_PENDING
+
+    assert json.loads((await _poll_approval(_resolved_approval(STATUS_PENDING)))[0])["resolved"] is False
 
 
 # --- stale-tool-list advisory (soft tools/list_changed) ---

@@ -200,6 +200,42 @@ class TestDualCapabilityGate:
                 _access_key(cap_script_write="deny"), hass, _data()[0])
         assert outcome == "allowed"
 
+    @pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint", "delete_blueprint", "restore"])
+    @pytest.mark.parametrize(("blueprint_mode", "domain_mode", "gated_on"), [
+        ("allow", "allow", "cap_blueprint_write"),
+        ("confirm", "allow", "cap_blueprint_write"),
+        ("allow", "confirm", "cap_automation_write"),
+        ("confirm", "confirm", "cap_blueprint_write"),
+    ])
+    async def test_confirm_on_either_capability_gates_the_write(
+        self, hass, bp_env, tool, blueprint_mode, domain_mode, gated_on,
+    ):
+        """A blueprint edit rewires every consumer, so Confirm on the domain cap must not be bypassed."""
+        from custom_components.phoenix_mcp.tools import recovery
+        _write_existing(bp_env)
+        access_key = _access_key(cap_blueprint_write=blueprint_mode, cap_automation_write=domain_mode)
+        pending = ({"content": [{"type": "text", "text": "pending"}]}, "pending_approval", "a1")
+        gate = AsyncMock(return_value=pending)
+        if tool == "restore":
+            record = {"id": "r1", "before": {"schema": 1, "domain": "automation", "path": "author/existing.yaml",
+                                             "exists": True, "content": VALID.replace("Test Blueprint", "Old")}}
+            receipt, _, _ = await recovery._tool_restore_blueprint_configuration(
+                {}, record, "before", access_key, hass, MagicMock(), "", None)
+            bound = {key: _json(receipt)[key] for key in ("snapshot_digest", "target_fingerprint")}
+            with patch.object(recovery, "_gate", new=gate):
+                result = await recovery._tool_restore_blueprint_configuration(
+                    bound, record, "before", access_key, hass, MagicMock(), "", None)
+        else:
+            args = {"domain": "automation", "path": "author/existing.yaml"}
+            if tool != "delete_blueprint":
+                args["content"] = VALID.replace("light.kitchen", "light.porch")
+            if tool == "create_blueprint":
+                args["path"] = "author/new.yaml"
+            with patch.object(blueprint_tools, "_gate", new=gate):
+                result = await _call(tool, args, access_key, hass, _data()[0])
+        assert result == pending
+        assert gate.await_args.args[0] == gated_on
+
     async def test_denied_access_key_learns_nothing_about_its_payload(self, hass, bp_env):
         """The cap-deny check runs before validation, so nothing is echoed back."""
         content, outcome, _ = await _call(

@@ -246,7 +246,7 @@ config is good on the strength of validation alone if you can compile it.
 - Prefer the native intent tools (`intent__HassTurnOn`, `intent__HassTurnOff`,
   `light__HassLightSet`, `intent__HassSetPosition`, climate/media/fan tools) for
   everyday control; fall back to `call_service` for anything they do not cover.
-- Supply explicit targets for call_service and dry_run_service; targetless services are unsupported. Use kind all only for intentional domain-wide targeting. Entity, device, area, floor and label selectors in service.data are refused. Phoenix resolves device/area targets to writable entities, silently dropping inaccessible members.
+- Supply explicit targets for call_service and dry_run_service; targetless services are unsupported. Use kind all only for intentional domain-wide targeting. Entity, device, area, floor and label selectors in service.data are refused, and so is template syntax ({{ }}, {% %}): read the values first and send them as plain text. Phoenix resolves device/area targets to writable entities, silently dropping inaccessible members.
 - Authoring tools, when granted: automations and scripts (`cap_automation_write`
   / `cap_script_write`), scenes (`cap_scene_write`), helpers such as
   `input_boolean`, `input_number`, `timer`, `counter` (`cap_helper_write`),

@@ -132,6 +132,7 @@ from .const import (
     AGENTCLI_LOAD_TOOLS_NAME,
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
     AGENTCLI_PROVIDER_DETAIL_CHARS,
+    AGENTCLI_PROVIDER_ERROR_BYTES,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
     AGENTCLI_RETRY_FIRST_REPLY_SECONDS,
     AGENTCLI_STATUS_INTERVAL_SECONDS,
@@ -1087,18 +1088,21 @@ def _parse_provider_error(text: str) -> tuple[str, str | None]:
     return _envelope_message(obj) or (text or "").strip(), (codes[0] if codes else None)
 
 
-def _provider_error_detail(text: str) -> str:
+def _provider_error_detail(text: str, api_key: str | None = None) -> str:
     """The provider's own error sentence for an administrator, or "".
 
     Only the message inside a JSON error envelope qualifies; a proxy's HTML page
-    or another unstructured body is not shown. The sentence is clipped and then
-    scrubbed like conversation-log text, so a key, bearer token or address a
-    provider echoes is redacted. It reaches the admin panel, the conversation
-    log and the Home Assistant log, never a model, Voice or AI Task.
+    or another unstructured body is not shown. The configured key is removed
+    verbatim first, since key formats differ by provider, then the sentence is
+    clipped and scrubbed like conversation-log text, so a key, bearer token or
+    address a provider echoes is redacted. It reaches the admin panel, the
+    conversation log and the Home Assistant log, never a model, Voice or AI Task.
     """
     message = _envelope_message(_error_envelope(text))
     if not message:
         return ""
+    if api_key:
+        message = message.replace(api_key, "<redacted>")
     clipped = " ".join(message.split())[:AGENTCLI_PROVIDER_DETAIL_CHARS]
     try:
         return str(sanitized(clipped, max_bytes=8 * AGENTCLI_PROVIDER_DETAIL_CHARS, hide_ip=True))
@@ -1174,7 +1178,9 @@ def _http_failure_code(status: int, server_error: str = "upstream") -> str:
     return server_error
 
 
-def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bool, **extra: Any) -> dict:
+def _http_failure(
+    kind: str, status: int, text: str, *, code: str, retryable: bool, api_key: str | None = None, **extra: Any,
+) -> dict:
     """One EV_ERROR for a non-200 provider answer, with the administrator-only detail.
 
     Billing refusals override the status classification (_billing_refusal). The
@@ -1189,7 +1195,7 @@ def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bo
         code, retryable = "rate_limit", True
     elif codes and codes[0] in _NON_RETRYABLE_ERROR_CODES:
         retryable = False
-    detail = _provider_error_detail(text)
+    detail = _provider_error_detail(text, api_key)
     machine = next((c for c in codes if re.fullmatch(r"[a-z0-9_.:-]{1,64}", c)), None)
     _LOGGER.log(
         logging.DEBUG if retryable else logging.WARNING,
@@ -1290,6 +1296,16 @@ async def _retry_transient(attempt: Callable[[], Awaitable[Any]]) -> Any:
                 await asyncio.sleep(_VALIDATE_RETRY_BACKOFF_SECONDS)
     assert last is not None
     raise last
+
+
+async def _error_body(resp: Any) -> str:
+    """The start of a provider's error body; a huge or endless body is never buffered."""
+    raw = bytearray()
+    async for chunk in resp.content.iter_chunked(4096):
+        raw.extend(chunk)
+        if len(raw) >= AGENTCLI_PROVIDER_ERROR_BYTES:
+            break
+    return bytes(raw[:AGENTCLI_PROVIDER_ERROR_BYTES]).decode("utf-8", errors="replace")
 
 
 async def _sse_lines(resp: Any) -> AsyncIterator[str]:
@@ -1931,7 +1947,7 @@ class ClaudeProvider:
         async def _probe() -> tuple[bool, str]:
             async with session.get(
                 f"{self.cfg.base_url}/v1/models",
-                headers=self._headers(), timeout=_PROBE_TIMEOUT,
+                headers=self._headers(), timeout=_PROBE_TIMEOUT, allow_redirects=False,
             ) as resp:
                 if resp.status == 200:
                     return True, ""
@@ -1962,7 +1978,7 @@ class ClaudeProvider:
                 params = {"limit": "1000", **({"after_id": after_id} if after_id else {})}
                 async with session.get(
                     f"{self.cfg.base_url}/v1/models", headers=self._headers(),
-                    params=params, timeout=_PROBE_TIMEOUT,
+                    params=params, timeout=_PROBE_TIMEOUT, allow_redirects=False,
                 ) as resp:
                     if resp.status != 200:
                         break
@@ -2003,7 +2019,7 @@ class ClaudeProvider:
             async with session.post(f"{self.cfg.base_url}/v1/messages", headers=self._headers(), json=body,
                                     timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status != 200:
-                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                    return resp.status, _parse_provider_error(await _error_body(resp))[0]
                 data = await resp.json(content_type=None)
         except (ClientError, asyncio.TimeoutError, ValueError):
             return None, ""
@@ -2084,10 +2100,10 @@ class ClaudeProvider:
             for attempt in range(2):
                 async with session.post(
                     f"{self.cfg.base_url}/v1/messages", headers=self._headers(),
-                    json=body, timeout=_CHAT_TIMEOUT,
+                    json=body, timeout=_CHAT_TIMEOUT, allow_redirects=False,
                 ) as resp:
                     if resp.status != 200:
-                        text = (await resp.text())[:4000]
+                        text = await _error_body(resp)
                         msg = _parse_provider_error(text)[0]
                         if (attempt == 0 and resp.status == 400
                                 and _thinking_type(body) == "adaptive"
@@ -2101,6 +2117,7 @@ class ClaudeProvider:
                                       if resp.status == 429 else {})
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
                                             retryable=resp.status in (429, 500, 502, 503, 504, 529),
+                                            api_key=self.cfg.api_key,
                                             refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
@@ -3000,7 +3017,7 @@ class OpenAICompatProvider:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
                                     timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status != 200:
-                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                    return resp.status, _parse_provider_error(await _error_body(resp))[0]
                 data = await resp.json(content_type=None)
         except (ClientError, asyncio.TimeoutError, ValueError):
             return None, ""
@@ -3232,7 +3249,7 @@ class OpenAICompatProvider:
                 async with session.post(self._chat_url(), headers=self._headers(), json=body,
                                         timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
                     if resp.status != 200:
-                        text = (await resp.text())[:4000]
+                        text = await _error_body(resp)
                         msg = _parse_provider_error(text)[0]
                         if (attempt == 0 and effort_forced and resp.status == 400
                                 and "reasoning_effort" in msg.lower()):
@@ -3248,7 +3265,7 @@ class OpenAICompatProvider:
                             else _RETRY_AFTER_HEADER_FIELDS,
                         ) if resp.status == 429 else {}
                         yield _http_failure(self.kind, resp.status, text, code=code, retryable=retryable,
-                                            refused=_refused_option(resp.status, msg, body),
+                                            api_key=self.cfg.api_key, refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
                     async for ev in self._parse(resp, show_thinking):

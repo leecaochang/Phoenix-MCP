@@ -53,7 +53,7 @@ class _FakeResp:
         text_data: str = "", headers: dict | None = None,
     ) -> None:
         self.status = status
-        self.content = _FakeContent(body)
+        self.content = _FakeContent(body or text_data.encode())
         self._json = json_data
         self._text = text_data
         self.headers = headers or {}
@@ -2730,6 +2730,25 @@ async def test_sse_lines_caps_cumulative_newline_delimited_output(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_error_body_read_stops_at_its_cap():
+    # An error body is classified from its start, so an endless one must not be buffered.
+    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_ERROR_BYTES
+
+    class _Endless:
+        chunks = 0
+
+        async def iter_chunked(self, _n):
+            while True:
+                _Endless.chunks += 1
+                yield b"x" * 1024
+
+    resp = MagicMock()
+    resp.content = _Endless()
+    assert len(await agentcli._error_body(resp)) == AGENTCLI_PROVIDER_ERROR_BYTES
+    assert _Endless.chunks <= AGENTCLI_PROVIDER_ERROR_BYTES // 1024 + 1
+
+
+@pytest.mark.asyncio
 async def test_openai_requests_disable_redirects():
     # The admin-supplied Ollama base URL is an SSRF surface; requests must not
     # follow a redirect (which could 302 to a metadata endpoint).
@@ -2740,6 +2759,21 @@ async def test_openai_requests_disable_redirects():
     await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
     assert session.calls[-1][1]["allow_redirects"] is False
+
+
+@pytest.mark.asyncio
+async def test_claude_requests_disable_redirects():
+    # aiohttp strips only Authorization on a cross-origin redirect, so following
+    # one would forward the x-api-key header to another host.
+    cfg = ProviderConfig(kind="claude", model="claude-opus-4-8", base_url="https://x", api_key="k")
+    provider = ClaudeProvider(cfg)
+    session = _FakeSession(_FakeResp(200, _sse('event: message_stop\ndata: {"type":"message_stop"}'),
+                                     json_data={"data": [], "has_more": False}))
+    await provider.validate(session)
+    await provider.list_models(session)
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert {method for method, _ in session.calls} == {"GET", "POST"}
+    assert all(call["allow_redirects"] is False for _, call in session.calls)
 
 
 def _make_chat_request(body: bytes):
@@ -5173,6 +5207,21 @@ def test_provider_detail_is_scrubbed_and_clipped():
     from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_DETAIL_CHARS
     long = agentcli._provider_error_detail(json.dumps({"error": {"message": "word " * 400}}))
     assert len(long) <= AGENTCLI_PROVIDER_DETAIL_CHARS
+
+
+@pytest.mark.parametrize("key", [
+    "AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "gsk_" + "a1B2c3D4" * 6, "xai-" + "Q9w8E7r6" * 6,
+    "nvapi-" + "z1X2c3V4" * 6, "custom.Format+With/Symbols==",
+])
+def test_provider_detail_never_echoes_a_key(key):
+    """Known prefixes are scrubbed in any text; the configured key is removed whatever its shape."""
+    for message in (f"Invalid API key provided: {key}", f"The key {key} is not valid"):
+        body = json.dumps({"error": {"message": message}})
+        assert key not in agentcli._provider_error_detail(body, key)
+        failure = agentcli._http_failure("groq", 401, body, code="auth", retryable=False, api_key=key)
+        assert key not in failure.get("provider_detail", "")
+    if not key.startswith("custom"):
+        assert key not in agentcli._provider_error_detail(json.dumps({"error": {"message": f"The key {key} is not valid"}}))
 
 
 @pytest.mark.asyncio

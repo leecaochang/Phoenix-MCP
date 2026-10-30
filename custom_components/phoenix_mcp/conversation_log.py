@@ -35,7 +35,8 @@ _LOGGER = logging.getLogger(__name__)
 _REDACTED = "<redacted>"
 _SECRET = re.compile(
     r"(?i)(\b(?:bearer|basic)\s+)\S+|"
-    r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|AKIA[A-Z0-9]{16})\b|"
+    r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|AKIA[A-Z0-9]{16}|"
+    r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b|"
     r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
 )
 _PRIVATE_KEY = re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|\Z)", re.S)

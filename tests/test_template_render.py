@@ -95,6 +95,8 @@ async def test_real_worker_budgets_leave_event_loop_responsive(hass, template, e
 async def test_worker_inherits_runtime_dependency_paths(hass, monkeypatch):
     access_key, data = _env()
     monkeypatch.setenv('PYTHONMALLOC', 'mimalloc')
+    monkeypatch.setenv('SUPERVISOR_TOKEN', 'never-inherited')
+    monkeypatch.setenv('LC_ALL', 'C.UTF-8')
     monkeypatch.setattr(sys, 'path', [*sys.path, '/runtime/integration-dependencies'])
     process = MagicMock(returncode=0)
     process.communicate = AsyncMock(return_value=(b'42', b''))
@@ -103,6 +105,8 @@ async def test_worker_inherits_runtime_dependency_paths(hass, monkeypatch):
         assert await template_render.async_render_template_for_access_key('{{ 6 * 7 }}', access_key, hass, data) == '42'
     assert '/runtime/integration-dependencies' in spawn.call_args.kwargs['env']['PYTHONPATH']
     assert spawn.call_args.kwargs['env']['PYTHONMALLOC'] == 'pymalloc'
+    assert 'SUPERVISOR_TOKEN' not in spawn.call_args.kwargs['env']
+    assert spawn.call_args.kwargs['env']['LC_ALL'] == 'C.UTF-8'
     assert template_render.os.environ['PYTHONMALLOC'] == 'mimalloc'
 
 

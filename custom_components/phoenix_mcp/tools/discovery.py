@@ -61,7 +61,7 @@ from ..device_semantics import (
     effective_entity_area_id,
     entity_name_source,
 )
-from ..service_targets import secondary_target_error, unsupported_secondary_targets
+from ..service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
 from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
 from ..mesa_core.trigger_validator import entities_by_role
@@ -3275,6 +3275,8 @@ async def _tool_dry_run_service(
             "invalid_request",
             "dry_run_service",
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
     # the call that would actually run rather than the one the caller wrote.
     service_data = _sanitize_service_data(args.get("service_data"))
