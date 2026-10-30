@@ -13,6 +13,7 @@ import asyncio
 import json
 from typing import Any, cast
 
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -27,6 +28,16 @@ from .calendar import _safe_calendar_data
 
 STATUSES = ("needs_action", "completed")
 _NOT_FOUND = "Todo list not found."
+_UNAVAILABLE = "The list is unavailable, so Home Assistant skips it and returns no items."
+
+
+def _unavailable(entity_id: str, hass: HomeAssistant) -> bool:
+    """Whether the list reads unavailable: Core's entity services then skip it and still answer success.
+
+    A placeholder restored while its integration loads reads unavailable too.
+    """
+    state = hass.states.get(entity_id)
+    return state is not None and state.state == STATE_UNAVAILABLE
 
 
 def _readable(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
@@ -77,6 +88,9 @@ async def _tool_get_todo_items(
     rows: list[dict] = []
     unreadable: list[dict] = []
     for entity_id in readable:
+        if _unavailable(entity_id, hass):
+            unreadable.append({"list": entity_id, "reason": _UNAVAILABLE})
+            continue
         try:
             rows += [{"list": entity_id, **item} for item in await _items(hass, entity_id, statuses)]
         except AuthorityChangedError:
@@ -158,6 +172,12 @@ async def _tool_set_todo_item(
         return _tool_error("action must be add, update or remove."), "invalid_request", tool
     if not _readable(entity_id, access_key, hass):
         return _tool_error(_NOT_FOUND), "not_found", tool
+    if _unavailable(entity_id, hass):
+        # Core would skip the list and answer success, so nothing would change; say why before any approval.
+        return _tool_error(
+            "This todo list is unavailable, so Home Assistant would skip it and change nothing. Check the "
+            "list's integration, then try again once the list is available."
+        ), "invalid_request", tool
     due = _due_fields(args.get("due"))
     if isinstance(due, str):
         return _tool_error(due), "invalid_request", tool
@@ -167,12 +187,18 @@ async def _tool_set_todo_item(
     if status is not None and status not in STATUSES:
         return _tool_error("status must be needs_action or completed."), "invalid_request", tool
     target: dict | None = None
+    before: list[dict] = []
     service_data: dict[str, Any]
     if action == "add":
         if not isinstance(summary, str) or not summary.strip():
             return _tool_error("add needs summary, the item's text."), "invalid_request", tool
         if args.get("item") or status:
             return _tool_error("add takes summary, due and description; set status with update."), "invalid_request", tool
+        # The items before the add, so the read-back can tell the new item from an older one with the same text.
+        try:
+            before = await _items(hass, entity_id, list(STATUSES))
+        except TimeoutError:
+            return _tool_error("The list did not answer in time."), "invalid_request", tool
         service, service_data = "add_item", {"item": summary.strip(), **due}
     else:
         wanted = args.get("item")
@@ -214,7 +240,23 @@ async def _tool_set_todo_item(
     if outcome != "allowed" or content.get("isError"):
         # A refusal, a failure or a pending approval answers as call_service did.
         return result
-    return await _verified(hass, access_key, entity_id, action, target, summary, expected)
+    return await _verified(hass, access_key, entity_id, action, target, summary, expected, before)
+
+
+def _added(before: list[dict], after: list[dict], summary: Any) -> dict | None:
+    """The one item the add created, or None when it cannot be singled out.
+
+    Lists may insert at the top or the bottom, so the new item is the one uid
+    that was not there before, never the first or last with the same text. A
+    list that gives no uids is matched by text only while that text is unique.
+    """
+    folded = str(summary).strip().casefold()
+    if any(item.get("uid") for item in after):
+        known = {item.get("uid") for item in before}
+        new = [item for item in after if item.get("uid") and item.get("uid") not in known]
+        return new[0] if len(new) == 1 else None
+    named = [item for item in after if str(item.get("summary") or "").strip().casefold() == folded]
+    return named[0] if len(named) == 1 and len(after) == len(before) + 1 else None
 
 
 def _same_due(read: Any, sent: str) -> bool:
@@ -246,10 +288,15 @@ def _unapplied(item: dict, expected: dict) -> list[str]:
 
 async def _verified(
     hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, action: str, target: dict | None, summary: Any,
-    expected: dict | None = None,
+    expected: dict | None = None, before: list[dict] | None = None,
 ) -> tuple[dict, str, str]:
     """Read the list back, so the result says what it now holds rather than what was asked."""
     body: dict[str, Any] = {"list": entity_id, "action": action}
+    if _unavailable(entity_id, hass):
+        # Home Assistant answers no items for an unavailable list, which would read as a lost change.
+        body.update(applied=None, verified=False,
+                    note="The list became unavailable, so whether the change took cannot be confirmed.")
+        return _tool_success(_dumps(body)), "allowed", entity_id
     try:
         items = await _items(hass, entity_id, list(STATUSES))
     except Exception:  # noqa: BLE001 - the change was applied; only its confirmation failed
@@ -261,9 +308,16 @@ async def _verified(
         return [item for item in items if str(item.get("summary") or "").strip().casefold() == folded]
 
     if action == "add":
-        # A list appends new items, so the newest with this text is the one added.
-        added = named(summary)
-        body.update(applied=True, verified=bool(added), item=added[-1] if added else None)
+        added = _added(before or [], items, summary)
+        body.update(applied=True, verified=added is not None)
+        if added is not None:
+            body["item"] = added
+            if str(added.get("summary") or "").strip().casefold() != str(summary).strip().casefold():
+                body.update(verified=False, not_applied=["summary"],
+                            note="The list accepted the item, but its text does not read back as requested.")
+        else:
+            body["note"] = ("The list accepted the item, but the new item could not be told apart from the others, "
+                            "so it is not shown; read the list to see it.")
     elif target is not None and target.get("uid"):
         after = next((item for item in items if item.get("uid") == target["uid"]), None)
         verified = after is None if action == "remove" else after is not None

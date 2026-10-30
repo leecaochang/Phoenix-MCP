@@ -139,6 +139,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
+        "STATE_UNAVAILABLE": "0.0.0",
         "UnitOfTime": "0.0.0",
         "__version__": "0.0.0",
     },

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.components.todo import TodoItem, TodoItemStatus, TodoListEntity, TodoListEntityFeature
@@ -189,3 +189,129 @@ def test_a_due_time_without_an_offset_is_compared_in_local_time(hass):
     assert _same_due(local.isoformat(), "2026-11-02T18:00") and _same_due(local.isoformat(), "2026-11-02 18:00")
     assert _same_due(dt_util.as_utc(local).isoformat(), "2026-11-02T18:00")
     assert not _same_due(local.isoformat(), "2026-11-02T19:00") and not _same_due(None, "2026-11-02")
+
+
+class _Unavailable(_List):
+    """A list whose integration has lost it: Core's entity services skip it and still answer success."""
+
+    _attr_available = False
+
+
+@pytest.fixture
+async def gone(hass, lists):
+    """todo.gone unavailable through its entity, todo.restored as the placeholder held while an integration loads."""
+    await hass.data[DATA_COMPONENT].async_add_entities(
+        [_Unavailable("Gone", [TodoItem(uid="soap", summary="Soap", status=TodoItemStatus.NEEDS_ACTION)])])
+    await hass.async_block_till_done()
+    hass.states.async_set("todo.restored", "unavailable", {"restored": True, "friendly_name": "Restored"})
+    key = _key()
+    key.permissions.entities["todo.gone"] = PermissionNode(state="GREEN")
+    key.permissions.entities["todo.restored"] = PermissionNode(state="GREEN")
+    return key
+
+
+async def test_an_unavailable_list_is_reported_unreadable_not_empty(hass, gone):
+    assert hass.states.get("todo.gone").state == "unavailable"
+    body, outcome = await _call(hass, "get_todo_items", {"entity_id": ["todo.gone", "todo.restored", "todo.shopping"]},
+                                gone)
+    assert outcome == "allowed" and body["total"] == 4 and body["not_found"] == []
+    assert {row["list"] for row in body["unreadable"]} == {"todo.gone", "todo.restored"}
+    assert all("unavailable" in row["reason"] for row in body["unreadable"])
+    body, _ = await _call(hass, "get_todo_items", {}, gone)
+    assert {row["list"] for row in body["unreadable"]} == {"todo.gone", "todo.restored"}
+
+
+@pytest.mark.parametrize("entity_id", ["todo.gone", "todo.restored"])
+@pytest.mark.parametrize("args", [{"action": "add", "summary": "Tea"},
+                                  {"action": "update", "item": "Soap", "status": "completed"},
+                                  {"action": "remove", "item": "soap"}])
+async def test_a_write_to_an_unavailable_list_is_refused_before_any_service_or_approval(
+        hass, gone, entity_id, args):
+    # Home Assistant announces every service call on its bus, so none may appear.
+    called = []
+    hass.bus.async_listen("call_service", lambda event: called.append(event.data))
+    data = _data()
+    data.approvals = MagicMock(async_create=AsyncMock())
+    content, outcome, _ = await _call_tool("set_todo_item", {"entity_id": entity_id, **args}, gone, hass, data)
+    await hass.async_block_till_done()
+    assert called == []
+    text = content["content"][0]["text"]
+    assert outcome == "invalid_request" and "unavailable" in text and "No item" not in text
+    data.approvals.async_create.assert_not_awaited()
+
+
+async def test_the_service_call_listener_sees_a_real_write(hass, gone):
+    """Positive control for the refusal test above: the same listener records an ordinary add."""
+    called = []
+    hass.bus.async_listen("call_service", lambda event: called.append(event.data["service"]))
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "add", "summary": "Tea"},
+                                gone)
+    await hass.async_block_till_done()
+    assert outcome == "allowed" and body["verified"] is True and "add_item" in called
+
+
+async def test_an_unavailable_hidden_list_still_reads_as_not_found(hass, gone):
+    text, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.gone", "action": "add", "summary": "x"})
+    assert text == "Todo list not found." and outcome == "not_found"
+
+
+class _Prepending(_List):
+    """A list that puts new items at the top, as some integrations do."""
+
+    async def async_create_todo_item(self, item: TodoItem) -> None:
+        self._attr_todo_items = [TodoItem(uid=uuid.uuid4().hex, summary=item.summary,
+                                          status=TodoItemStatus.NEEDS_ACTION), *self._attr_todo_items]
+        self.async_write_ha_state()
+
+
+async def _added_list(hass, entity: _List) -> AccessKeyRecord:
+    await hass.data[DATA_COMPONENT].async_add_entities([entity])
+    await hass.async_block_till_done()
+    key = _key()
+    key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+    return key
+
+
+async def test_an_add_on_a_prepending_list_reports_the_new_item_not_an_older_one(hass, lists):
+    top = _Prepending("Top", [TodoItem(uid="old-eggs", summary="Eggs", status=TodoItemStatus.COMPLETED)])
+    key = await _added_list(hass, top)
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.top", "action": "add", "summary": "Eggs"}, key)
+    assert outcome == "allowed" and body["verified"] is True
+    assert body["item"]["uid"] == top.todo_items[0].uid != "old-eggs"
+    assert body["item"]["status"] == "needs_action"
+
+
+async def test_an_add_that_creates_no_single_new_uid_is_not_verified(hass, lists):
+    class _Twice(_List):
+        async def async_create_todo_item(self, item: TodoItem) -> None:
+            await super().async_create_todo_item(item)
+            await super().async_create_todo_item(item)
+    key = await _added_list(hass, _Twice("Twice", []))
+    body, _ = await _call(hass, "set_todo_item", {"entity_id": "todo.twice", "action": "add", "summary": "Tea"}, key)
+    assert body["applied"] is True and body["verified"] is False and "item" not in body
+
+
+async def test_a_uidless_list_verifies_an_add_only_while_the_text_is_unique(hass, lists):
+    class _Plain(_List):
+        async def async_create_todo_item(self, item: TodoItem) -> None:
+            self._attr_todo_items = [*self._attr_todo_items,
+                                     TodoItem(summary=item.summary, status=TodoItemStatus.NEEDS_ACTION)]
+            self.async_write_ha_state()
+    key = await _added_list(hass, _Plain("Plain", [TodoItem(summary="Soap", status=TodoItemStatus.COMPLETED)]))
+    body, _ = await _call(hass, "set_todo_item", {"entity_id": "todo.plain", "action": "add", "summary": "Tea"}, key)
+    assert body["verified"] is True and body["item"]["summary"] == "Tea"
+    body, _ = await _call(hass, "set_todo_item", {"entity_id": "todo.plain", "action": "add", "summary": "soap"}, key)
+    assert body["applied"] is True and body["verified"] is False and "item" not in body
+
+
+async def test_a_list_that_goes_unavailable_after_the_write_is_not_claimed(hass, lists):
+    class _Lost(_List):
+        async def async_create_todo_item(self, item: TodoItem) -> None:
+            await super().async_create_todo_item(item)
+            self._attr_available = False
+            self.async_write_ha_state()
+    lost = _Lost("Lost", [])
+    key = await _added_list(hass, lost)
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.lost", "action": "add", "summary": "Tea"}, key)
+    assert len(lost.todo_items) == 1
+    assert outcome == "allowed" and body["applied"] is None and body["verified"] is False and "item" not in body
