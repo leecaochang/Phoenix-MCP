@@ -233,8 +233,11 @@ def test_the_primer_carries_framed_notes_redacted_to_the_current_scope(home):
     assert "light.kitchen" in primer
     assert "lock.front_door" not in primer and "<redacted-entity>" in primer
     assert "hunter2" not in primer
-    # The usage-guide link stays last.
-    assert primer.rstrip().endswith("configuration work).")
+    # The usage-guide link precedes the notes, which end the primer: a client that
+    # clips server instructions (Claude Code keeps 4,096 characters) loses only
+    # the end of the notes, never the link.
+    assert primer.index("configuration work).") < primer.index("<administrator_notes>")
+    assert primer.rstrip().endswith("</administrator_notes>")
 
     # Narrowing the scope later hides an ID the notes name, without editing them.
     key.permissions.entities.pop("light.kitchen")

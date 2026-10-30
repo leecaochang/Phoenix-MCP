@@ -74,9 +74,21 @@ export function buildMcpJson(url: string, accessKey: string, serverName: string)
   );
 }
 
-// Gemini CLI: `gemini mcp add <name> <url> --transport http --header ...`.
+// Gemini CLI, user scope: the default project scope would write the access key
+// into the project's .gemini/settings.json.
 export function buildGeminiCommand(url: string, accessKey: string, serverName: string): string {
-  return `gemini mcp add ${serverName} ${shellArg(url)} --transport http --header ${shellArg(`Authorization: ${buildBearerValue(accessKey)}`)}`;
+  return `gemini mcp add --scope user --transport http --header ${shellArg(`Authorization: ${buildBearerValue(accessKey)}`)} ${serverName} ${shellArg(url)}`;
+}
+
+// Antigravity CLI reads ~/.gemini/config/mcp_config.json (serverUrl + headers).
+// Its 180 s per-call default would cut off Phoenix's longest holds (an ESPHome
+// build wait of up to 300 s), so the entry raises it.
+export function buildAntigravityJson(url: string, accessKey: string, serverName: string): string {
+  return JSON.stringify({
+    mcpServers: {
+      [serverName]: { serverUrl: url, headers: { Authorization: buildBearerValue(accessKey) }, timeoutSeconds: 330 },
+    },
+  }, null, 2);
 }
 
 // The value for an Authorization header (for GUI clients that take a header
@@ -98,7 +110,7 @@ export function buildCodexConfig(url: string, serverName: string, envVar: string
 
 export function buildHarnessConfig(url: string, accessKey: string, accessKeyName: string): string {
   const name = harnessServerName(accessKeyName);
-  return `- insert:\n    - id: mcp-phx-${name}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: ${JSON.stringify(name)}\n        transport: streamable-http\n        url: ${JSON.stringify(url)}\n        headers:\n          Authorization: ${JSON.stringify(buildBearerValue(accessKey))}`;
+  return `- insert:\n    - id: mcp-phx-${name}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: ${JSON.stringify(name)}\n        transport: streamable-http\n        url: ${JSON.stringify(url)}\n        headers:\n          Authorization: ${JSON.stringify(buildBearerValue(accessKey))}\n        toolCallTimeoutMs: 330000`;
 }
 
 // Cursor reads remote servers from ~/.cursor/mcp.json using url + headers
@@ -147,6 +159,13 @@ export function buildAgentTabs(url: string, accessKey: string, accessKeyName: st
       label: "Gemini CLI",
       href: "https://geminicli.com/docs/tools/mcp-server/",
       blocks: [{ hint: t("wizard.agentGeminiHint"), code: buildGeminiCommand(url, accessKey, serverName) }],
+    },
+    {
+      key: "antigravity",
+      label: "Antigravity CLI",
+      href: "https://antigravity.google/docs/mcp?tab=cli",
+      intro: t("wizard.agentAntigravityIntro"),
+      blocks: [{ code: buildAntigravityJson(url, accessKey, serverName) }],
     },
     {
       key: "codex",
@@ -228,7 +247,7 @@ export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBloc
       return [{
         title,
         hint: t("wizard.skillCursorHint"),
-        code: `mkdir -p .cursor/rules && curl -fsSL ${shellArg(skillUrl)} -o .cursor/phoenix.md && cat > .cursor/rules/phoenix.mdc <<'PHOENIX_RULE'\n---\ndescription: Use when inspecting, controlling, or configuring Home Assistant through Phoenix MCP\nalwaysApply: false\n---\nBefore using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions, approvals, and MESA guidance.\nPHOENIX_RULE`,
+        code: `mkdir -p ~/.cursor/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.cursor/skills/phoenix/SKILL.md`,
       }];
     case "gemini":
       return [{
@@ -243,6 +262,13 @@ export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBloc
         hint: t("wizard.skillCodexHint"),
         fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
         code: `mkdir -p ~/.agents/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.agents/skills/phoenix/SKILL.md`,
+      }];
+    case "antigravity":
+      return [{
+        title,
+        hint: t("wizard.skillAntigravityHint"),
+        fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
+        code: `mkdir -p ~/.gemini/antigravity-cli/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md`,
       }];
     case "deepseek-harness":
       return [{

@@ -34,7 +34,7 @@ const ALLOWED = new Set([
   "Anthropic", "DeepSeek", "Gemini", "Grok", "Kimi", "Meta", "MiniMax", "NVIDIA NIM",
   "OpenAI", "OpenRouter",
   "Ollama (cloud)", "Ollama (local)",   // resolved through kindLabel(); these are the fallbacks
-  "Claude Code", "Gemini CLI", "Codex", "Cursor",   // agent product names (wizard_helpers AGENTS)
+  "Claude Code", "Gemini CLI", "Antigravity CLI", "Codex", "Cursor",   // agent product names (wizard_helpers AGENTS)
   "MESA",
 ]);
 

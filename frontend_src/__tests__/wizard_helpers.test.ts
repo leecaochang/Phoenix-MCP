@@ -57,11 +57,9 @@ describe("buildMcpJson", () => {
 });
 
 describe("buildGeminiCommand", () => {
-  it("uses gemini mcp add with --transport http and a Bearer header", () => {
+  it("adds the server in user scope, keeping the key out of project settings", () => {
     const cmd = buildGeminiCommand("http://ha/api/phoenix-mcp", "phx_abc", "phx-voice");
-    expect(cmd).toContain("gemini mcp add phx-voice http://ha/api/phoenix-mcp");
-    expect(cmd).toContain("--transport http");
-    expect(cmd).toContain("--header 'Authorization: Bearer phx_abc'");
+    expect(cmd).toBe("gemini mcp add --scope user --transport http --header 'Authorization: Bearer phx_abc' phx-voice http://ha/api/phoenix-mcp");
   });
 });
 
@@ -87,7 +85,9 @@ describe("HTTP client configuration", () => {
       buildGeminiCommand(url, "phx_abc", "phx-voice"),
       buildCodexCommand(url, "phx-voice", "PHOENIX_ACCESS_KEY_VOICE"),
     ]) {
-      expect(command).toContain("'https://ha.test/api/phoenix-mcp?x=$(touch injected)&y='\\''test'\\''' ");
+      const quoted = "'https://ha.test/api/phoenix-mcp?x=$(touch injected)&y='\\''test'\\'''";
+      // The whole URL is one quoted word, wherever it sits in the command.
+      expect(command.includes(`${quoted} `) || command.endsWith(quoted)).toBe(true);
     }
   });
 
@@ -102,13 +102,14 @@ describe("HTTP client configuration", () => {
   it("emits a parseable Harness insert overlay with the bearer header intact", () => {
     const url = 'https://ha.test/api/phoenix-mcp?value="quoted"';
     const overlay = load(buildHarnessConfig(url, "phx_secret", "Voice_Assist")) as Array<{
-      insert: Array<{ name: string; config: { serverName: string; transport: string; url: string; headers: Record<string, string> } }>;
+      insert: Array<{ name: string; config: { serverName: string; transport: string; url: string; headers: Record<string, string>; toolCallTimeoutMs: number } }>;
     }>;
     const entry = overlay[0].insert[0];
     expect(entry.name).toBe("@deepseek-ai/dsh-mcp-client");
+    // Harness gives up on a tool after 60 s by default; Phoenix holds up to 300 s.
     expect(entry.config).toEqual({
       serverName: "voice-assist", transport: "streamable-http", url,
-      headers: { Authorization: "Bearer phx_secret" },
+      headers: { Authorization: "Bearer phx_secret" }, toolCallTimeoutMs: 330000,
     });
   });
 });
@@ -116,7 +117,7 @@ describe("HTTP client configuration", () => {
 describe("buildAgentTabs", () => {
   it("returns the supported clients with Harness and keeps the limited hosted beta out", () => {
     const tabs = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist");
-    expect(tabs.map((t) => t.key)).toEqual(["claude", "gemini", "codex", "cursor", "deepseek-harness", "other"]);
+    expect(tabs.map((t) => t.key)).toEqual(["claude", "gemini", "antigravity", "codex", "cursor", "deepseek-harness", "other"]);
     expect(tabs[0].blocks[0].code).toContain("claude mcp add");
     // Every tab carries a docs link and at least one block.
     for (const t of tabs) {
@@ -133,6 +134,10 @@ describe("buildAgentTabs", () => {
     expect(other.mcpServers["phx-voice-assist"]).toBeDefined();
     const cursor = JSON.parse(tabs.find((t) => t.key === "cursor")!.blocks[0].code!);
     expect(cursor.mcpServers["phx-voice-assist"]).toBeDefined();
+    const antigravity = JSON.parse(tabs.find((t) => t.key === "antigravity")!.blocks[0].code!);
+    expect(antigravity.mcpServers["phx-voice-assist"]).toEqual({
+      serverUrl: "http://ha/api/phoenix-mcp", headers: { Authorization: "Bearer phx_abc" }, timeoutSeconds: 330,
+    });
   });
 
   it("Codex tab gives the exact Authorization header key/value as fields and a per-access-key env var", () => {
@@ -250,20 +255,15 @@ describe("buildSkillInstall", () => {
     expect(blocks[0].code).toContain("~/.claude/skills/phoenix/SKILL.md");
     expect(blocks[0].code).toContain(url);
   });
-  it("creates a recognized Cursor rule referencing the downloaded guide", () => {
-    const blocks = buildSkillInstall(url, "cursor");
-    const command = blocks[0].code!;
-    expect(command).toContain("-o .cursor/phoenix.md");
-    expect(command).toContain(".cursor/rules/phoenix.mdc");
-    const metadata = command.split("\n---\n")[1];
-    expect(load(metadata)).toEqual({
-      description: "Use when inspecting, controlling, or configuring Home Assistant through Phoenix MCP",
-      alwaysApply: false,
-    });
-    expect(command).toContain("@.cursor/phoenix.md");
+  it("installs the guide as a native Cursor skill", () => {
+    const command = buildSkillInstall(url, "cursor")[0].code!;
+    expect(command).toBe(`mkdir -p ~/.cursor/skills/phoenix && curl -fsSL ${url} -o ~/.cursor/skills/phoenix/SKILL.md`);
+  });
+  it("installs the guide where Antigravity CLI reads global skills", () => {
+    expect(buildSkillInstall(url, "antigravity")[0].code).toContain("~/.gemini/antigravity-cli/skills/phoenix/SKILL.md");
   });
   it("gives non-Claude agents the skill URL as a copyable field plus a download", () => {
-    for (const key of ["gemini", "codex", "deepseek-harness", "other"]) {
+    for (const key of ["gemini", "antigravity", "codex", "deepseek-harness", "other"]) {
       const blocks = buildSkillInstall(url, key);
       expect(blocks[0].fields).toContainEqual({ label: "Skill guide URL", value: url });
       expect(blocks[0].code).toContain(url);

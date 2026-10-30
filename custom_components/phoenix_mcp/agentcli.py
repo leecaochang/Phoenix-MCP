@@ -103,6 +103,8 @@ from .const import (
     AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL,
     AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL,
     AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL,
+    AGENTCLI_MINIMAX_CHINA_BASE_URL,
+    AGENTCLI_OPENAI_REGION_PREFIXES,
     AGENTCLI_MISTRAL_EU_BASE_URL,
     AGENTCLI_MISTRAL_US_BASE_URL,
     AGENTCLI_OPENAI_US_BASE_URL,
@@ -435,10 +437,22 @@ _MISTRAL_ENDPOINTS = (
     ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_MISTRAL_EU_BASE_URL),
     ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_MISTRAL_US_BASE_URL),
 )
+_OPENAI_REGION_NAMES = {
+    "ae": ("United Arab Emirates", "settings.agentcliRegionAe"), "au": ("Australia", "settings.agentcliRegionAu"),
+    "ca": ("Canada", "settings.agentcliRegionCa"), "jp": ("Japan", "settings.agentcliRegionJp"),
+    "in": ("India", "settings.agentcliRegionIn"), "sg": ("Singapore", "settings.agentcliSingapore"),
+    "kr": ("South Korea", "settings.agentcliRegionKr"), "gb": ("United Kingdom", "settings.agentcliRegionGb"),
+}
 _OPENAI_ENDPOINTS = (
     ProviderChoice(*_GLOBAL, AGENTCLI_OPENAI_BASE_URL),
     ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_OPENAI_US_BASE_URL),
     ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_OPENAI_EU_BASE_URL),
+    *(ProviderChoice(prefix, *_OPENAI_REGION_NAMES[prefix], f"https://{prefix}.api.openai.com/v1")
+      for prefix in AGENTCLI_OPENAI_REGION_PREFIXES),
+)
+_MINIMAX_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_MINIMAX_BASE_URL),
+    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENTCLI_MINIMAX_CHINA_BASE_URL),
 )
 _GROK_ENDPOINTS = (
     ProviderChoice(*_GLOBAL, AGENTCLI_GROK_BASE_URL),
@@ -515,7 +529,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
-                    tool_stream="gemini"),
+                    tool_stream="gemini", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
         _definition(
             "grok", "Grok", AGENTCLI_GROK_BASE_URL,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
@@ -525,9 +539,11 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
             fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
+            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("meta", "Meta", AGENTCLI_META_BASE_URL, reasoning="meta", model_filter="meta"),
-        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic"),
+        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic",
+                    fields=(_region_field(_MINIMAX_ENDPOINTS), _API_KEY_FIELD), endpoints=_MINIMAX_ENDPOINTS),
         _definition(
             "mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
             fields=(_region_field(_MISTRAL_ENDPOINTS), _API_KEY_FIELD), endpoints=_MISTRAL_ENDPOINTS,
@@ -551,7 +567,10 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         ),
         _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
-        _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort", model_filter="openrouter"),
+        # OpenRouter forwards the tools array to the routed provider, and OpenAI's
+        # models behind it refuse more than 128.
+        _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
+                    model_filter="openrouter", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
         _definition(
             "together", "Together", AGENTCLI_TOGETHER_BASE_URL,
             model_filter="together", models_shape="list",
@@ -1776,9 +1795,8 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
 
     Claude takes the full surface (adaptive thinking with a display mode plus an
     output_config effort). MiniMax's Anthropic-compatible API turns thinking on
-    via `{type: adaptive}` and takes `output_config.effort` only on its newest
-    model; the effort is not sent, and a model that always thinks simply
-    ignores the toggle.
+    via `{type: adaptive}` and takes `output_config.effort` only on
+    MiniMax-M3.1-Flash, which is sent when the panel chose a level.
     """
     body["max_tokens"] = int(options.get("max_tokens") or AGENTCLI_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
@@ -1795,6 +1813,11 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
         effort = options.get("effort", AGENTCLI_DEFAULT_EFFORT)
         if effort in AGENTCLI_EFFORT_LEVELS:
             body["output_config"] = {"effort": effort}
+    elif (kind == "minimax" and thinking and options.get("effort") in AGENTCLI_EFFORT_LEVELS
+          and re.match(r"minimax-m3\.1", str(body.get("model") or ""), re.I)):
+        # Only MiniMax-M3.1-Flash takes an effort (default max); the panel offers
+        # the control for that model alone, and Voice sends none.
+        body["output_config"] = {"effort": options["effort"]}
 
 
 # The output cap every Anthropic-format model has accepted; the fallback for a
@@ -2611,22 +2634,29 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
 def _effort_probe_body(kind: str, level: str) -> dict | None:
     """The request fragment that carries an effort level for this backend.
 
-    None for a backend with no effort control at all, which is then not probed
-    (MiniMax takes an adaptive object with no level vocabulary). The aggregators
+    None for a backend with no effort control at all, which is then not probed.
+    The aggregators
     (OpenRouter, NVIDIA NIM) ARE probed: what they pass through varies per model,
     but a probe runs against the one selected model, so that variation is exactly
     what it handles.
 
-    DeepSeek's fragment carries the thinking toggle too, because it only reads
-    the effort when thinking is enabled: probing the level alone would test
-    nothing and answer 200 for every value.
+    DeepSeek's and Z.ai's fragments carry the thinking toggle too, because they
+    only read the effort when thinking is enabled: probing the level alone would
+    test nothing and answer 200 for every value.
     """
     if kind == "claude":
         return {"output_config": {"effort": level}}
-    if kind == "deepseek":
+    if kind == "minimax":
+        # Only MiniMax-M3.1-Flash reads the effort; it documents a 400 for an
+        # unknown level, so the two-stage probe is meaningful there.
+        return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
+    if kind in ("deepseek", "zai"):
         return {"thinking": {"type": "enabled"}, "reasoning_effort": level}
+    if kind == "openrouter":
+        # The nested object carries every level, including max.
+        return {"reasoning": {"effort": level}}
     if kind in (
-        "chatgpt", "grok", "gemini", "kimi", "meta", "mistral", "openrouter",
+        "chatgpt", "grok", "gemini", "kimi", "meta", "mistral",
         "nvidia", "opencode", "tencent", "ollama", "ollama_cloud", "groq", "together", "cerebras",
         "fireworks",
     ):
@@ -2776,13 +2806,22 @@ def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
             modalities = m.get("input_modalities")
         if not model_id or (not isinstance(params, list) and not isinstance(modalities, list)):
             continue
-        row: dict[str, bool] = {}
+        row: dict[str, Any] = {}
         if isinstance(params, list):
             row.update({
                 "tools": "tools" in params,
                 "thinking": "reasoning" in params,
                 "temperature": "temperature" in params,
             })
+        # The catalog lists each model's reasoning levels; a mandatory reasoner
+        # cannot take "none". This settles what the probe could only guess.
+        reasoning = m.get("reasoning")
+        efforts = reasoning.get("supported_efforts") if isinstance(reasoning, dict) else None
+        if isinstance(reasoning, dict) and isinstance(efforts, list):
+            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level in efforts
+                      and not (level == "none" and reasoning.get("mandatory") is True)]
+            if levels:
+                row["effort_levels"] = levels
         if isinstance(modalities, list):
             row["vision"] = any(
                 isinstance(item, str) and item.lower() in {"image", "image_url"}
@@ -2824,11 +2863,21 @@ async def _ollama_capabilities(
         caps = body.get("capabilities") if isinstance(body, dict) else None
         if not isinstance(caps, list):
             return None
-        return name, {
+        row: dict[str, Any] = {
             "tools": "tools" in caps,
             "thinking": "thinking" in caps,
             "vision": "vision" in caps,
         }
+        # A model with reasoning levels lists them (false means it can be turned
+        # off, which the panel's own Off covers). Ollama answers an unknown level
+        # with the default rather than a refusal, so a probe cannot learn them.
+        thinking = body.get("thinking")
+        values = thinking.get("values") if isinstance(thinking, dict) else None
+        if isinstance(values, list):
+            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level != "none" and level in values]
+            if levels:
+                row["effort_levels"] = levels
+        return name, row
 
     pairs = await asyncio.gather(*(_one(m) for m in models))
     return dict(p for p in pairs if p is not None)
@@ -2864,13 +2913,13 @@ def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -
 
 
 def _filter_meta_models(models: list[str]) -> list[str]:
-    """Keep Meta's chat models: the Muse Spark text line, without its data-sharing tier.
+    """Keep Meta's chat models: the Muse Wonder and Spark text lines, without the data-sharing tier.
 
     Meta serves image, voice and segmentation models under the same key, and a
     `-contributor` model trains on the prompts it receives, which must be an
     explicit operator choice rather than something a listing offers.
     """
-    chat = sorted(m for m in models if m.lower().startswith("muse-spark")
+    chat = sorted(m for m in models if m.lower().startswith(("muse-spark", "muse-wonder"))
                   and "contributor" not in m.lower())
     return chat or sorted(models)
 
@@ -3183,7 +3232,9 @@ class OpenAICompatProvider:
         # OpenAI's reasoning models reject max_tokens, and Meta deprecates it.
         token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
                        else "max_tokens")
-        body = {"model": self.cfg.model, token_limit: 1, "stream": False,
+        # DashScope's stream-only models refuse a non-streamed call outright,
+        # which would read as a refused control; only the status matters here.
+        body = {"model": self.cfg.model, token_limit: 1, "stream": self.kind == "qwen",
                 "messages": [{"role": "user", "content": "hi"}], **extra}
         try:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
@@ -3326,8 +3377,12 @@ class OpenAICompatProvider:
             # OpenAI shape, so `reasoning_effort` is the candidate, and the probe
             # is what confirms it: if the aggregator does not validate the field,
             # no levels are established, the panel offers none, and this branch
-            # never fires. The wrong guess costs nothing.
-            if effort:
+            # never fires. The wrong guess costs nothing. OpenRouter's nested
+            # `reasoning` object carries every level its catalog lists, max
+            # included, which its top-level reasoning_effort does not.
+            if effort and self.kind == "openrouter":
+                body["reasoning"] = {"effort": effort}
+            elif effort:
                 body["reasoning_effort"] = effort
         elif self.definition.reasoning == "meta":
             # Meta's Model API takes a top-level reasoning_effort (minimal/low/
@@ -3342,6 +3397,12 @@ class OpenAICompatProvider:
             if effort:
                 body["reasoning_effort"] = effort
         elif self.definition.reasoning == "zai":
+            # GLM-5.2 and later take reasoning_effort (default max) beside the
+            # thinking switch; "none" there means thinking off.
+            if effort == "none":
+                thinking = False
+            elif effort:
+                body["reasoning_effort"] = effort
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
                 if thinking and tools:

@@ -4208,6 +4208,8 @@ def _effort_of(extra: dict):
     """The effort level in a probe fragment, whichever backend shape it uses."""
     if "reasoning_effort" in extra:
         return extra["reasoning_effort"]
+    if "reasoning" in extra:
+        return (extra.get("reasoning") or {}).get("effort")
     return (extra.get("output_config") or {}).get("effort")
 
 
@@ -4299,7 +4301,7 @@ class TestCapabilityProbe:
 
         caps, calls, prov, _a = await self._probe(hass, "ollama", answer)
         assert caps["effort_levels"] == ["low", "medium", "high", "max"]
-        assert calls == 8  # control + sentinel + five candidates + temperature
+        assert calls == 10  # control + sentinel + seven candidates + temperature
         assert _effort_of(prov.sent[1]) == agentcli.AGENTCLI_PROBE_SENTINEL
 
     @pytest.mark.asyncio
@@ -4464,13 +4466,22 @@ class TestAggregatorEffort:
     against ONE selected model, which is exactly what per-model variation needs.
     """
 
-    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
+    @pytest.mark.parametrize("kind", ["nvidia", "opencode", "tencent"])
     def test_the_probe_asks_them_about_effort(self, kind):
         assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
-    @pytest.mark.parametrize("kind", ["minimax"])
+    def test_openrouter_is_asked_through_its_nested_reasoning_object(self):
+        # The top-level field has no "max"; the nested object carries every level.
+        assert agentcli._effort_probe_body("openrouter", "max") == {"reasoning": {"effort": "max"}}
+
+    def test_minimax_and_zai_carry_the_switch_their_effort_needs(self):
+        assert agentcli._effort_probe_body("minimax", "low") == {
+            "thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}}
+        assert agentcli._effort_probe_body("zai", "low") == {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
+
+    @pytest.mark.parametrize("kind", ["mimo", "qwen"])
     def test_a_backend_with_no_level_vocabulary_is_still_skipped(self, kind):
-        """MiniMax has an adaptive toggle, not a level vocabulary."""
+        """These take an on/off switch, not a level vocabulary."""
         assert agentcli._effort_probe_body(kind, "high") is None
 
     @pytest.mark.parametrize("kind", ["ollama", "ollama_cloud"])
@@ -4506,7 +4517,10 @@ class TestAggregatorEffort:
                 break
         except Exception:
             pass
-        assert sent.get("reasoning_effort") == "high"
+        if kind == "openrouter":
+            assert sent.get("reasoning") == {"effort": "high"} and "reasoning_effort" not in sent
+        else:
+            assert sent.get("reasoning_effort") == "high"
 
     @pytest.mark.asyncio
     async def test_no_effort_means_no_field(self, hass):
@@ -5455,7 +5469,8 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize(("kind", "capped"), [("chatgpt", True), ("groq", True), ("mistral", True), ("zai", True),
-                                              ("deepseek", False), ("gemini", False), ("claude", False)])
+                                              ("gemini", True), ("kimi", True), ("openrouter", True),
+                                              ("deepseek", False), ("claude", False)])
 def test_documented_tools_array_caps(kind, capped):
     from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOLS_PER_REQUEST
     assert agentcli.PROVIDER_DEFINITIONS[kind].max_tools == (AGENTCLI_MAX_TOOLS_PER_REQUEST if capped else None)
@@ -5989,7 +6004,8 @@ def test_validation_detail_lists_become_one_sentence(body, message):
 
 @pytest.mark.asyncio
 async def test_effort_probe_accepts_a_422_refusal(hass):
-    statuses = iter([200, 422, 200, 422, 200, 422, 422, 200])
+    # control, sentinel refused, then none..max (low and high accepted), temperature.
+    statuses = iter([200, 422, 422, 422, 200, 422, 200, 422, 422, 200])
 
     async def probe_option(self, session, extra):
         return next(statuses)
@@ -6388,3 +6404,68 @@ async def test_ollama_cloud_is_not_checked():
     events = await _collect(_local_ollama("ollama_cloud").stream_turn(
         session, system_prompt="s", messages=_BIG_PROMPT, tools=[], options={}))
     assert session.ps_calls == 0 and events[-1]["type"] == agentcli.EV_DONE
+
+
+# --------------------------------------------------------------------------- #
+# Thinking controls: levels from catalogs, and each backend's effort field
+# --------------------------------------------------------------------------- #
+
+def test_openrouter_catalog_supplies_each_models_levels():
+    caps = agentcli._openrouter_capabilities([
+        {"id": "a/optional", "supported_parameters": ["tools", "reasoning"],
+         "reasoning": {"supported_efforts": ["none", "low", "high", "max", "ultra"], "mandatory": False}},
+        {"id": "b/mandatory", "supported_parameters": ["tools", "reasoning"],
+         "reasoning": {"supported_efforts": ["none", "low", "medium"], "mandatory": True}},
+        {"id": "c/plain", "supported_parameters": ["tools", "temperature"]},
+    ])
+    assert caps["a/optional"]["effort_levels"] == ["none", "low", "high", "max"]
+    assert caps["b/mandatory"]["effort_levels"] == ["low", "medium"]
+    assert "effort_levels" not in caps["c/plain"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_show_supplies_thinking_levels():
+    class _Show:
+        def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+            body = {"capabilities": ["completion", "tools", "thinking"],
+                    "thinking": {"values": [False, "low", "medium", "xhigh"], "default": "medium"}}
+            return _FakeResp(200, json_data=body)
+    caps = await agentcli._ollama_capabilities(_Show(), "http://o", {}, ["qwen3.8:27b"])
+    assert caps["qwen3.8:27b"]["effort_levels"] == ["low", "medium", "xhigh"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("options", "thinking", "effort"), [
+    ({"thinking": True, "effort": "low"}, {"type": "enabled", "clear_thinking": False}, "low"),
+    ({"thinking": True, "effort": "none"}, {"type": "disabled"}, None),
+    ({"thinking": False}, {"type": "disabled"}, None),
+])
+async def test_zai_sends_effort_beside_the_thinking_switch(options, thinking, effort):
+    body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
+    session = _FakeSession(_FakeResp(200, body))
+    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model="glm-5.2", base_url="https://z", api_key="k"))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[{"type": "function"}],
+                                        options=options))
+    sent = session.calls[-1][1]["json"]
+    assert sent["thinking"] == thinking and sent.get("reasoning_effort") == effort
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "sent_effort"), [("MiniMax-M3.1-Flash", "low"), ("MiniMax-M3", None)])
+async def test_minimax_effort_only_on_m31_flash(model, sent_effort):
+    done = _claude_sse({"type": "message_start", "message": {"usage": {"input_tokens": 1}}},
+                       {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                       {"type": "message_stop"})
+    session = _SeqSession(_FakeResp(200, done))
+    provider = ClaudeProvider(ProviderConfig(kind="minimax", model=model, base_url="https://m/anthropic", api_key="k"))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[],
+                                        options={"thinking": True, "effort": "low"}))
+    assert (session.bodies[0].get("output_config") or {}).get("effort") == sent_effort
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "stream"), [("qwen", True), ("deepseek", False)])
+async def test_qwen_probes_stream_because_some_models_only_stream(kind, stream):
+    session = _FakeSession(_FakeResp(200))
+    await OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://q", api_key="k")).probe_option(session, {})
+    assert session.calls[-1][1]["json"]["stream"] is stream

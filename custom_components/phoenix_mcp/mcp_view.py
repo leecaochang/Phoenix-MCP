@@ -9257,14 +9257,17 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
             "entity. Prefer its purpose-built triggers/conditions and ready-to-use config examples "
             "over generic state/numeric_state equivalents."
         )
-    notes_block = access_key_notes_block(access_key, hass)
-    if notes_block:
-        lines.extend(("", notes_block))
     lines.append("")
     lines.append(
         f"Full Phoenix MCP and Home Assistant usage guide: {base_url}/api/phoenix-mcp/skill (fetch it before "
         "complex automation, scene, or configuration work)."
     )
+    # The operator's notes come last: a client that clips server instructions
+    # (Claude Code keeps 4,096 characters) then loses only the end of the notes,
+    # never the guide link.
+    notes_block = access_key_notes_block(access_key, hass)
+    if notes_block:
+        lines.extend(("", notes_block))
     return "\n".join(lines)
 
 

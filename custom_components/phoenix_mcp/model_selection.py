@@ -35,6 +35,9 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
     "qwen": ("max", "plus", "flash"),
     "tencent": (r"^hy", r"^deepseek"),
     "openrouter": (r"anthropic/claude-opus", r"anthropic/claude-sonnet", r"openai/gpt", r"google/gemini"),
+    # The plain GLM model leads its line; flash variants are the fast tier.
+    "zai": (r"^glm-[\d.]+$", r"-air(?:$|-)", r"-flash$", r"-flashx"),
+    "meta": ("wonder", "spark"),
 }
 
 # Markers of a model the provider has not finished. A stable model always ranks

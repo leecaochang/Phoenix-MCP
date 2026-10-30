@@ -350,7 +350,7 @@ AGENTCLI_MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 # case. Automatic mode ranks it like any catalogue, so a new MiniMax model reaches
 # an account through the live listing without touching this tuple.
 AGENTCLI_MINIMAX_MODELS = (
-    "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
+    "MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
     "MiniMax-M2.5-highspeed", "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
 )
 # Mistral's hosted API is OpenAI-compatible for chat and publishes live model
@@ -401,18 +401,16 @@ AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
 # Keep Zen as the default for accounts saved before Console routing existed.
 AGENTCLI_OPENCODE_CONSOLE_BASE_URL = "https://opencode.ai/inference/openai/v1"
 AGENTCLI_OPENCODE_CONSOLE_MODELS_URL = "https://opencode.ai/inference/v1/models"
-# The public catalog exposes ids but no API-family metadata. Console eligibility
-# needs a documented Chat Completions endpoint or a qualified live tool round.
-# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18).
+# Console eligibility needs a documented Chat Completions endpoint or a qualified
+# live tool round. The catalog now also lists each model's API family; this set
+# remains the documented source until that metadata is qualified. Free models are
+# left out: OpenCode serves them only to its own app.
+# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18, rechecked 2026-10-30).
 AGENTCLI_OPENCODE_CHAT_MODELS = frozenset({
     "qwen3.8-max", "deepseek-v4.1-flash", "deepseek-v4-pro",
     "minimax-m3", "minimax-m2.7", "minimax-m2.5", "glm-5.3-flash",
     "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6",
-    "kimi-k2.7-code", "kimi-k3", "mistral-large-4", "big-pickle",
-    "glm-5.3-flash-free", "deepseek-v4.1-flash-free", "space-bunny-free",
-    "beam-free", "ll-alpha-free", "longcat-2.5-preview-free", "exo-free",
-    "mimo-v2.6-flash-free", "mimo-v2.5-free", "nemotron-3-ultra-free",
-    "nemotron-3.5-lightning-free", "nemotron-3.5-super-vl-free",
+    "kimi-k2.7-code", "kimi-k3", "mistral-large-4",
     # The table lists Messages, but live Chat Completions tool rounds also pass.
     "qwen3.5-plus",
 })
@@ -430,6 +428,10 @@ AGENTCLI_MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai/v1"
 AGENTCLI_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
 AGENTCLI_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
 AGENTCLI_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
+# OpenAI's other data-residency prefixes. A residency project must use its own
+# prefixed host; US, EU and UAE also process in-region, the others store only.
+AGENTCLI_OPENAI_REGION_PREFIXES = ("ae", "au", "ca", "jp", "in", "sg", "kr", "gb")
+AGENTCLI_MINIMAX_CHINA_BASE_URL = "https://api.minimaxi.com/anthropic"
 AGENTCLI_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
 # Output cap for Anthropic-format requests. Thinking counts toward it, and a
 # large tool call (a whole-dashboard write) cut off mid-JSON cannot run, so it
@@ -462,7 +464,9 @@ AGENTCLI_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
 # The same levels in a fixed order, which the capability probe walks. A frozenset
 # iterates arbitrarily, and a probe that reports its findings in a different order
 # each run reads as a changing answer when nothing changed.
-AGENTCLI_EFFORT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
+# "none" comes first: a provider that accepts it has a real way to turn
+# reasoning off, which the panel then offers as Off.
+AGENTCLI_EFFORT_LEVEL_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 # The value the probe sends when it is asking "is this field read at all". It has
 # to be something no provider could ever accept as a real level, and recognisable
@@ -470,7 +474,7 @@ AGENTCLI_EFFORT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
 AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
 
 # Hard cap on completion requests one probe run may make. The matrix is bounded by
-# construction (one control request, one validation check, five levels and
+# construction (one control request, one validation check, seven levels and
 # temperature), so this is a backstop that keeps a new knob from turning a button
 # into unbounded spend.
 AGENTCLI_PROBE_MAX_CALLS = 10

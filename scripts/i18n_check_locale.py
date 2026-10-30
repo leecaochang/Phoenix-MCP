@@ -197,6 +197,8 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.changes.typeLabel",  # "Label", Home Assistant's Danish term
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
@@ -248,6 +250,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.workspace.horizontal",  # "Horizontal"
@@ -297,6 +300,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "fi": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Finnish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -315,6 +319,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.mesa.roleCondition",  # "condition", Home Assistant's French term
         "panel.mesa.roleAction",  # "action", Home Assistant's French term
@@ -346,6 +351,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.workspace.general",  # "General"
         "panel.workspace.horizontal",  # "Horizontal"
@@ -379,6 +386,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
         "panel.changes.typeArea",  # "Area", Home Assistant's Italian term
         "panel.agentchat.provider",  # "Provider", the Italian UI term
         "panel.wizard.stepProvider",  # "Provider", the Italian UI term
@@ -436,6 +446,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         # Bare templates and shared technical fragments with no prose to translate.
@@ -471,6 +485,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.mesa.roleTrigger",  # "trigger", Home Assistant's Dutch term
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.changes.colName",               # "Item", the Dutch loanword
@@ -536,6 +553,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "pl": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
@@ -577,6 +595,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"
         "panel.guide.title",  # "Guide", the same word in this language

@@ -402,6 +402,23 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(c.style).toBe("effort");
     expect(c.temperature).toBe(false);
     expect(vals(c)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
+    // From the Claude 5 generation, leaving thinking out still thinks: no Off.
+    for (const model of ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5", "claude-fable-5-1"])
+      expect(vals(modelCaps("claude", model, true))).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(vals(modelCaps("claude", "claude-sonnet-4-5-20250929", true))[0]).toBe("off");
+  });
+  it("z.ai: GLM 5.2+ effort levels, 4.7 always thinks, older models on/off", () => {
+    expect(vals(modelCaps("zai", "glm-5.3", true))).toEqual(["low", "high", "max"]);
+    expect(vals(modelCaps("zai", "glm-5.3-flash", true))).toEqual(["low", "high", "max"]);
+    expect(vals(modelCaps("zai", "glm-5.2", true))).toEqual(["none", "low", "medium", "high", "max"]);
+    expect(modelCaps("zai", "glm-5.3", true).defaultLevel).toBe("max");
+    expect(modelCaps("zai", "glm-4.7", true).thinking).toEqual([]);
+    expect(modelCaps("zai", "glm-4.5", true).style).toBe("boolean");
+  });
+  it("meta: max on Muse Wonder and Spark 1.3, not on contributor models", () => {
+    expect(vals(modelCaps("meta", "muse-wonder-1.0", true)).slice(-1)[0]).toBe("max");
+    expect(vals(modelCaps("meta", "muse-spark-1.3", true)).slice(-1)[0]).toBe("max");
+    expect(vals(modelCaps("meta", "muse-spark-1.3-contributor", true)).slice(-1)[0]).toBe("xhigh");
   });
   it("deepseek: off/low/high/max; temperature only when thinking off", () => {
     // `low` is a distinct level on the v4 models, not folded into high.
@@ -440,12 +457,24 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(vals(o)).toEqual(["off", "on"]);
     expect(o.temperature).toBe(true);
   });
-  it("gemini: 2.5/3.x expose thinking_level (minimal..high), never temperature", () => {
-    for (const model of ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3-pro"]) {
+  it("gemini: Google's per-model thinking levels, never temperature", () => {
+    const table: Record<string, string[]> = {
+      "gemini-2.5-flash": ["none", "low", "medium", "high"],
+      "gemini-2.5-pro": ["low", "medium", "high"],
+      "gemini-3-flash-preview": ["minimal", "low", "medium", "high"],
+      "gemini-3.6-flash": ["minimal", "low", "medium", "high"],
+      "gemini-3-pro-preview": ["low", "high"],
+      "gemini-3.1-pro-preview": ["low", "medium", "high"],
+      "gemini-3.8-flash": ["low", "medium", "high"],
+      "gemini-4-argon": ["low", "medium", "high"],
+    };
+    for (const [model, levels] of Object.entries(table)) {
       const g = modelCaps("gemini", model, false);
-      expect(vals(g)).toEqual(["minimal", "low", "medium", "high"]);
+      expect(vals(g)).toEqual(levels);
       expect(g.temperature).toBe(false);
     }
+    expect(modelCaps("gemini", "gemini-3.6-flash", false).defaultLevel).toBe("high");
+    expect(modelCaps("gemini", "gemini-2.5-flash", false).defaultLevel).toBe("medium");
     const g15 = modelCaps("gemini", "gemini-1.5-pro", false);
     expect(g15.thinking).toEqual([]);
     expect(g15.temperature).toBe(false);
@@ -456,6 +485,12 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(vals(off)).toEqual(["off", "low", "high"]);
     expect(off.temperature).toBe(true);
     expect(modelCaps("grok", "grok-4", true).temperature).toBe(false);
+    // Grok 4.5 and later always reason: no Off; xhigh from 4.6.
+    expect(vals(modelCaps("grok", "grok-4.5", false))).toEqual(["low", "medium", "high"]);
+    expect(vals(modelCaps("grok", "grok-4.7", false))).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(vals(modelCaps("grok", "grok-4.20-reasoning", false))).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(modelCaps("grok", "grok-4.7", false).defaultLevel).toBe("high");
+    expect(modelCaps("grok", "grok-4.20-multi-agent", false).thinking).toEqual([]);
   });
   it("kimi: k3 effort levels, k2 boolean toggle, moonshot-v1 temperature only", () => {
     // K3 always reasons, so there is no off; low/high/max are the levels it takes.
@@ -482,20 +517,27 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(vals(caps)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
     expect(caps.temperature).toBe(false);
   });
-  it("minimax: boolean thinking toggle, never temperature", () => {
-    const caps = modelCaps("minimax", "MiniMax-M2", true);
-    expect(caps.style).toBe("boolean");
-    expect(vals(caps)).toEqual(["off", "on"]);
-    expect(caps.temperature).toBe(false);
+  it("minimax: M3.1 Flash effort, M3 toggle, M2 always reasons; never temperature", () => {
+    const flash = modelCaps("minimax", "MiniMax-M3.1-Flash", true);
+    expect(vals(flash)).toEqual(["low", "medium", "high", "max"]);
+    expect(flash.defaultLevel).toBe("max");
+    const m3 = modelCaps("minimax", "MiniMax-M3", true);
+    expect(m3.style).toBe("boolean");
+    expect(vals(m3)).toEqual(["off", "on"]);
+    expect(modelCaps("minimax", "MiniMax-M2.7", true).thinking).toEqual([]);
+    for (const caps of [flash, m3]) expect(caps.temperature).toBe(false);
   });
 
-  it("mistral: supported models expose none/high reasoning plus temperature", () => {
-    for (const model of ["mistral-small-latest", "mistral-medium-3-5"]) {
+  it("mistral: each reasoning family's levels plus temperature", () => {
+    for (const model of ["mistral-small-latest", "mistral-small-2603", "mistral-medium-3-5", "mistral-medium-latest"]) {
       const caps = modelCaps("mistral", model, true);
       expect(vals(caps)).toEqual(["none", "high"]);
       expect(caps.temperature).toBe(true);
     }
-    const plain = modelCaps("mistral", "mistral-large-latest", false);
+    for (const model of ["mistral-large-latest", "mistral-large-4-0"])
+      expect(vals(modelCaps("mistral", model, true))).toEqual(["low", "medium", "high"]);
+    expect(vals(modelCaps("mistral", "zai-glm-5-3", true))).toEqual(["low", "high", "max"]);
+    const plain = modelCaps("mistral", "ministral-3b-2512", false);
     expect(vals(plain)).toEqual([]);
     expect(plain.temperature).toBe(true);
   });
@@ -575,10 +617,13 @@ describe("agentCLI generation options mapping", () => {
     expect(buildOptions("grok", { thinking: false, effort: "high", temperature: "0.5", verbose: false }, off))
       .toEqual({ thinking: false, temperature: 0.5, show_thinking: false });
   });
-  it("minimax sends the thinking toggle only, never effort or temperature", () => {
-    const caps = modelCaps("minimax", "MiniMax-M2", true);
-    expect(buildOptions("minimax", { thinking: true, effort: "high", temperature: "0.5", verbose: true }, caps))
+  it("minimax sends the toggle on M3, an effort on M3.1 Flash, never temperature", () => {
+    const m3 = modelCaps("minimax", "MiniMax-M3", true);
+    expect(buildOptions("minimax", { thinking: true, effort: "high", temperature: "0.5", verbose: true }, m3))
       .toEqual({ thinking: true, show_thinking: true });
+    const flash = modelCaps("minimax", "MiniMax-M3.1-Flash", true);
+    expect(buildOptions("minimax", { thinking: true, effort: "low", temperature: "0.5", verbose: true }, flash))
+      .toEqual({ effort: "low", show_thinking: true });
   });
 });
 
@@ -2596,10 +2641,12 @@ describe("modelCaps for aggregator providers", () => {
 
   it.each(["openrouter", "nvidia", "tencent"] as const)("probed levels CREATE the control on %s", (kind) => {
     const c = modelCaps(kind, "vendor/reasoner", false, { effort_levels: ["low", "high"] });
-    // "off" is added because a created control the operator cannot decline is
-    // worse than no control at all.
-    expect(vals4(c)).toEqual(["off", "low", "high"]);
+    // No synthetic "off": omitting the field leaves the model at its default
+    // reasoning. Only an accepted "none" is a real off.
+    expect(vals4(c)).toEqual(["low", "high"]);
     expect(c.defaultLevel).toBe("high");
+    const withNone = modelCaps(kind, "vendor/reasoner", false, { effort_levels: ["none", "low", "high"] });
+    expect(vals4(withNone)).toEqual(["none", "low", "high"]);
   });
 
   it("a created control still defaults to a level the probe accepted", () => {

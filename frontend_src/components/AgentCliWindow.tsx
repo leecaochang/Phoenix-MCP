@@ -272,16 +272,17 @@ function applyDeclared(
   // key fronting many vendors, so no single built-in answer fits). That is sound
   // only because the probe proved the field is validated: an unvalidated field
   // records nothing, so a list here means the API accepted exactly these levels
-  // and refused the rest. "off" is kept if the table had it (it is Phoenix not
-  // sending the field, not a level), and a created control always gets "off" so
-  // the operator can decline it.
+  // and refused the rest. "off" is kept only if the table had it (it is Phoenix
+  // not sending the field, not a level) and the levels hold no "none". A created
+  // control gets no synthetic "off": omitting the field leaves the model at its
+  // default reasoning, so an accepted "none" (shown as Off) is the only real off.
   // Ollama is the one deliberate conversion: its fallback is boolean for older
   // servers, but a successful per-model probe proves the endpoint validates
   // effort levels, so the backend knows how to send the resulting dropdown values.
   if (declared.effort_levels?.length
       && (out.style === "effort" || kind === "ollama" || kind === "ollama_cloud")) {
     out.style = "effort";
-    const keepOff = out.thinking.length === 0 || out.thinking.some((o) => o.value === "off");
+    const keepOff = out.thinking.some((o) => o.value === "off") && !declared.effort_levels.includes("none");
     out.thinking = [
       ...(keepOff ? thinkOpts(["off"]) : []),
       ...thinkOpts(declared.effort_levels),
@@ -298,6 +299,29 @@ export function modelCaps(
   declared?: DeclaredModelCaps,
 ): ModelCaps {
   return applyDeclared(shippedCaps(kind, model, thinkingOn), declared, kind);
+}
+
+/** Claude models that keep thinking when the request leaves it out (Claude 5 on). */
+function claudeAlwaysThinks(m: string): boolean {
+  return /^claude-(?:[a-z]+-)?(?:[5-9]|\d{2})(?:[-.]|$)/.test(m) || /^claude-fable/.test(m);
+}
+
+/** Google's per-model Gemini thinking levels, or [] for a model without them. */
+function geminiLevels(m: string): string[] {
+  if (/gemini-3-pro/.test(m)) return ["low", "high"];
+  if (/gemini-3(\.\d+)?-flash(?!-lite)/.test(m) && !/gemini-3\.8/.test(m)) return ["minimal", "low", "medium", "high"];
+  if (/gemini-(?:[4-9]|3\.)/.test(m)) return ["low", "medium", "high"];
+  if (/gemini-2\.5-flash/.test(m)) return ["none", "low", "medium", "high"];
+  if (/gemini-2\.5/.test(m)) return ["low", "medium", "high"];
+  return [];
+}
+
+/** Whether a Grok model is at least major.minor (grok-4.20 is later than 4.6). */
+function grokAtLeast(m: string, major: number, minor: number): boolean {
+  const match = /^grok-(\d+)(?:[.-](\d+))?/.exec(m);
+  if (!match) return false;
+  const [have, sub] = [Number(match[1]), Number(match[2] ?? 0)];
+  return have > major || (have === major && sub >= minor);
 }
 
 /** OpenAI's documented reasoning levels and default for one model id, or null.
@@ -329,8 +353,10 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
   const m = (model || "").toLowerCase();
   switch (kind) {
     case "claude":
-      // Anthropic output_config.effort. Opus does not take temperature.
-      return { thinking: thinkOpts(["off", "low", "medium", "high", "xhigh", "max"]),
+      // Anthropic output_config.effort. Opus does not take temperature. Leaving
+      // thinking out turns it off only before the Claude 5 generation; from it
+      // on, the model still thinks adaptively, so no Off is offered there.
+      return { thinking: thinkOpts([...(claudeAlwaysThinks(m) ? [] : ["off"]), "low", "medium", "high", "xhigh", "max"]),
                style: "effort", defaultLevel: "high", temperature: false };
     case "deepseek":
       // A thinking on/off toggle plus reasoning_effort low/high/max, default high;
@@ -350,19 +376,25 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
     }
     case "gemini": {
       // Gemini via Google's OpenAI-compatible endpoint: reasoning_effort maps to
-      // Gemini's thinking_level (minimal/low/medium/high, default medium). Google
-      // strongly recommends NOT setting temperature on its reasoning models, so no
-      // temperature control is offered. Thinking-capable models are 2.5 and 3.x.
-      if (m.includes("2.5") || m.includes("3.5") || m.includes("gemini-3"))
-        return { thinking: thinkOpts(["minimal", "low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
-      return { thinking: [], style: "effort", defaultLevel: "medium", temperature: false };
+      // the model's thinking level. Google strongly recommends NOT setting
+      // temperature on its reasoning models, so none is offered. Levels follow
+      // Google's per-model table; reasoning cannot be turned off on Gemini 3 or
+      // later, and only 2.5 Flash takes "none".
+      const levels = geminiLevels(m);
+      // Gemini 3 and later default to high thinking; 2.5 to a medium budget.
+      return { thinking: thinkOpts(levels), style: "effort",
+               defaultLevel: /gemini-2\./.test(m) ? "medium" : "high", temperature: false };
     }
     case "grok": {
-      // xAI reasoning_effort on chat completions. grok-3-mini and the grok-4
-      // reasoning models take low/high (newer models also accept medium, but
-      // off/low/high is the safe common set); grok-4 reasons even with none set.
-      // Sending an effort marks a reasoning turn, which drops temperature.
+      // xAI reasoning_effort. Grok 4.5 and later always reason (default high):
+      // low/medium/high, plus xhigh from 4.6. The multi-agent model reads the
+      // field as an agent count, so it gets no control. Older reasoning models
+      // take low/high and can run without it. Sending an effort marks a
+      // reasoning turn, which drops temperature.
+      if (m.includes("multi-agent")) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
+      if (grokAtLeast(m, 4, 5))
+        return { thinking: thinkOpts(["low", "medium", "high", ...(grokAtLeast(m, 4, 6) ? ["xhigh"] : [])]),
+                 style: "effort", defaultLevel: "high", temperature: false };
       return { thinking: thinkOpts(["off", "low", "high"]), style: "effort",
                defaultLevel: "low", temperature: !thinkingOn };
     }
@@ -380,24 +412,36 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     }
     case "meta":
-      // Meta's Model API reasoning_effort. Muse Spark always reasons (it rejects
-      // "none" with a 400), so no off is offered, and "max" is not one of Meta's
-      // levels. Meta tunes the model for its default temperature, so temperature
-      // is not offered either.
-      return { thinking: thinkOpts(["minimal", "low", "medium", "high", "xhigh"]),
+      // Meta's Model API reasoning_effort. Muse models always reason (they reject
+      // "none" with a 400), so no off is offered; Muse Wonder and Spark 1.3 also
+      // take "max". Meta tunes the models for their default temperature, so
+      // temperature is not offered either.
+      return { thinking: thinkOpts(["minimal", "low", "medium", "high", "xhigh",
+                                    ...(/^muse-wonder|^muse-spark-1\.3(?!.*contributor)/.test(m) ? ["max"] : [])]),
                style: "effort", defaultLevel: "medium", temperature: false };
     case "minimax":
-      // MiniMax via its Anthropic-compatible API: thinking is a plain on/off
-      // adaptive toggle (no effort levels, no custom temperature). M2 models
-      // always reason; turning thinking off there is a no-op on the model side.
+      // MiniMax via its Anthropic-compatible API (no custom temperature). M3.1
+      // Flash takes an effort (default max, no "none"); M3 has an on/off adaptive
+      // toggle; M2 models always reason, so they get no control.
+      if (/^minimax-m3\.1/.test(m))
+        return { thinking: thinkOpts(["low", "medium", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^minimax-m2/.test(m)) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
       return { thinking: thinkOpts(["off", "on"]), style: "boolean", defaultLevel: "on", temperature: false };
     case "mistral":
-      // Mistral documents adjustable reasoning on these two aliases, with the
-      // stable `none` and `high` levels. Other Mistral models keep their own
-      // default. Chat Completions supports temperature in either case.
-      if (m === "mistral-small-latest" || m === "mistral-medium-3-5")
+      // Mistral's reasoning models: Small 4 and Medium 3.5 take none/high,
+      // Large 4 takes low/medium/high and always reasons, and the hosted GLM 5.3
+      // takes low/high/max. Other models keep their own default. Chat
+      // Completions supports temperature in every case.
+      if (/^mistral-(small-(latest|2603|4)|medium-(latest|3-5))/.test(m))
         return { thinking: thinkOpts(["none", "high"]), style: "effort",
                  defaultLevel: "high", temperature: true };
+      if (/^mistral-large-(latest|4)/.test(m))
+        return { thinking: thinkOpts(["low", "medium", "high"]), style: "effort",
+                 defaultLevel: "high", temperature: true };
+      if (/^zai-glm-5/.test(m))
+        return { thinking: thinkOpts(["low", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: true };
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     case "ollama":
     case "ollama_cloud":
@@ -415,8 +459,19 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // rather than only narrowing it. Until then the model still reasons at its
       // own default; only the ability to choose is missing.
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
-    case "mimo":
     case "zai":
+      // GLM 5.2 and later take reasoning_effort (default max); 5.3 and 4.7
+      // cannot turn thinking off, and 5.2 turns it off with "none".
+      if (/^glm-5\.[3-9]|^glm-[6-9]/.test(m))
+        return { thinking: thinkOpts(["low", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^glm-5\.2/.test(m))
+        return { thinking: thinkOpts(["none", "low", "medium", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^glm-4\.7/.test(m)) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
+      return { thinking: thinkOpts(["off", "on"]), style: "boolean",
+               defaultLevel: "on", temperature: !thinkingOn };
+    case "mimo":
     case "qwen":
       // These providers publish a boolean thinking control. Their APIs own the
       // reasoning depth, so Phoenix exposes only on and off and omits a custom
