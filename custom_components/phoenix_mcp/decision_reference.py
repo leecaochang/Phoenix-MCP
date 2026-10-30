@@ -19,7 +19,7 @@ from .const import (
 from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets
 from .decision_context import context_history
 from .decision_history import history_texts
-from .decision_provider import DecisionError, DecisionProvider, confident_choice
+from .decision_provider import DecisionError, DecisionProvider, confident_choice, revision_admitted
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 _LOGGER = logging.getLogger(__name__)
@@ -154,8 +154,8 @@ async def _async_review_reference(hass: Any, data: Any, access_key: Any, sentenc
                 reviewed = result("target_selected", decision=answer, proposal=selected)
                 if prepare:
                     from .command_execution import _capture_plan, _digest
-                    if (not reference_execution_eligible(hass, data, lang) or answer["model"] not in
-                            DECISION_REFERENCE_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())):
+                    if (not reference_execution_eligible(hass, data, lang)
+                            or not revision_admitted(DECISION_REFERENCE_EXECUTION_MODELS, cfg, answer["model"])):
                         return result("context_unverified")
                     plan = _capture_plan(hass, data, current, selected, ingress="chat")
                     account_digest = decision_account_fingerprint(hass, account)

@@ -634,6 +634,26 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
     assert jev_hybrid_home[0].decision_shadow.summary()["hybrid"]["reasons"] == {"plan_ready": 1}
 
 
+@pytest.mark.parametrize("returned", ["jev-1.13.0", "jev-1.14.0"])
+async def test_jev_latest_acts_on_whichever_revision_answers(hass, jev_hybrid_home, returned):
+    data, *_, entity_id = jev_hybrid_home
+    async def respond(session, method, path, timeout, payload):
+        return wire_answer(payload, "light_on", model=returned)
+    await set_mesa(hass, jev_hybrid_home, "confirm")
+    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    assert "needs approval" in answer
+    record = data.store.get_pending_approvals()[0]
+    assert record["args"][COMMAND_ROUTING_PLAN_KEY]["decision_batch"]["model"] == returned
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], jev_hybrid_home[1], hass, data)
+    assert outcome == "allowed"
+    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
+
+
 @pytest.mark.parametrize("case,reason", [
     ("provider", "provider_fallback"), ("none", "target_declined"),
     ("low_route", "category_low_probability"), ("low_target", "target_low_probability"),

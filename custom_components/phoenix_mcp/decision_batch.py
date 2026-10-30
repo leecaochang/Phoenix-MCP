@@ -22,7 +22,7 @@ from .const import (
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_identity import explicit_write_target
-from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, confident_choice
+from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, confident_choice, revision_admitted
 from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
@@ -178,8 +178,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         raise DecisionError("targets_changed")
     category, target = answer["route"], answer["target"]
     qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
-    models = qualified[(provider.cfg.kind, provider.cfg.base_url, provider.cfg.model)]
-    if category["model"] not in models or target["model"] != category["model"]:
+    if not revision_admitted(qualified, provider.cfg, category["model"]) or target["model"] != category["model"]:
         raise DecisionError("model_unverified")
     selection: dict = {"reason": "provider_fallback", "decision": None, "executed": False}
     if category["choice"] == "provider":

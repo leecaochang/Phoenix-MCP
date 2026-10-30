@@ -6,7 +6,7 @@ from typing import Any
 from .command_execution import _capture_plan, _digest
 from .command_routing import RoutingAuthority
 from .const import DECISION_BATCH_EXECUTION_MODELS, COMMAND_ROUTING_TEMPORAL_OPERATIONS
-from .decision_provider import DecisionError, confident_choice
+from .decision_provider import DecisionError, confident_choice, revision_admitted
 from .decision_identity import explicit_write_target
 from .temporal_values import valid_temporal_value
 
@@ -70,8 +70,7 @@ async def async_prepare_temporal(hass: Any, authority: RoutingAuthority, provide
     if capture_batch_targets(hass, current, extended=True, temporal=True) != snapshot:
         raise DecisionError("targets_changed")
     category = answer["route"]
-    if category["model"] not in DECISION_BATCH_EXECUTION_MODELS.get(
-            (provider.cfg.kind, provider.cfg.base_url, provider.cfg.model), ()):
+    if not revision_admitted(DECISION_BATCH_EXECUTION_MODELS, provider.cfg, category["model"]):
         raise DecisionError("model_unverified")
     reason, proposal = temporal_proposal(answer, targets, source, timezone, sentence, language)
     selection: dict = {"reason": reason, "decision": answer["target"], "executed": False}

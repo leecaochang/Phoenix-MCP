@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -17,7 +18,7 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_MAX_ERROR_BYTES, DECIS
                     DECISION_PROBABILITY_ROUNDING, DECISION_PROBABILITY_SUM_TOLERANCE,
                     DECISION_PROBABILITY_ROUNDING_EPSILON, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_CHOICE_GROUPS, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_SUMMARY_COMPONENTS)
 from .const import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
-from .const import DECISION_SEQUENTIAL_MAX_TARGETS
+from .const import DECISION_SEQUENTIAL_MAX_TARGETS, DECISION_FOLLOWED_ALIASES, DECISION_FOLLOWED_REVISION
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 from .helpers import LocalizedReason
@@ -79,6 +80,19 @@ def _object(pairs: list[tuple[str, Any]]) -> dict:
 
 def _probability(value: Any) -> bool:
     return type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1
+
+
+def revision_admitted(registry: dict[tuple[str, str, str], frozenset[str]], cfg: Any, returned: Any) -> bool:
+    """Whether the answering revision may act for this account under one execution registry.
+
+    The account's endpoint and configured model must be registered. A followed
+    alias admits any JEV revision; otherwise the revision must be listed.
+    """
+    key = (cfg.kind, cfg.base_url, cfg.model)
+    if key not in registry or not isinstance(returned, str):
+        return False
+    return returned in registry[key] or (
+        key in DECISION_FOLLOWED_ALIASES and re.fullmatch(DECISION_FOLLOWED_REVISION, returned) is not None)
 
 
 def confident_choice(answer: dict) -> bool:

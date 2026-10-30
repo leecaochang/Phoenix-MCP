@@ -23,6 +23,7 @@ from .const import (
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
     DECISION_REFERENCE_EXECUTION_MODELS, DECISION_REFERENCE_LANGUAGES, DECISION_REFERENCE_INTENTS,
 )
+from .decision_provider import revision_admitted
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
@@ -174,7 +175,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, access_key: Any) ->
         if (not isinstance(review, dict) or set(review) != keys
                 or not all(isinstance(review[key], str) for key in keys - {"percentage", "catalog_numeric"})
                 or cfg is None or not batch_execution_eligible(cfg, review["language"])
-                or review["model"] not in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())):
+                or not revision_admitted(qualified, cfg, review["model"])):
             return False
         if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
             return False
@@ -221,7 +222,7 @@ def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:
         and all(isinstance(value, str) for value in review.values())
         and review["language"] in DECISION_CONTEXT_EXECUTION_LANGUAGES
         and cfg and account and cfg.kind == review["kind"]
-        and review["model"] in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and revision_admitted(qualified, cfg, review["model"])
         and (not decision or (isinstance(plan.get("decision_batch"), dict) and plan["decision_batch"].get("model") == review["model"]
                               and review["proposal"] == _digest(plan["proposal"])))
         and review["account"] == decision_account_fingerprint(hass, account)
@@ -244,8 +245,7 @@ def _reference_plan_current(plan: dict, hass: Any, data: Any) -> bool:
         and isinstance(review, dict) and set(review) == {"account", "model", "language", "proposal"}
         and all(isinstance(value, str) for value in review.values())
         and review["language"] in DECISION_REFERENCE_LANGUAGES
-        and cfg and account and review["model"] in
-        DECISION_REFERENCE_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and cfg and account and revision_admitted(DECISION_REFERENCE_EXECUTION_MODELS, cfg, review["model"])
         and isinstance(batch, dict) and batch.get("model") == review["model"]
         and batch.get("language") == review["language"]
         and review["account"] == decision_account_fingerprint(hass, account)

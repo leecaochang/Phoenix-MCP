@@ -2393,6 +2393,11 @@ DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_MAX_ERROR_BYTES = 4096
 DECISION_TYPESAFE_HTTP_ERRORS = {"max_tokens_exceeded": "provider_context_limit"}
+# TypeSafe moves this alias to each new JEV revision. An account configured with
+# it accepts whichever revision answers, by operator decision, wherever the
+# registries below admit the alias; a pinned revision must answer as itself.
+DECISION_FOLLOWED_ALIASES = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest")})
+DECISION_FOLLOWED_REVISION = r"jev-\d+\.\d+\.\d+"
 DECISION_METRIC_SAMPLES = 256
 DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task"})
 DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool"})
