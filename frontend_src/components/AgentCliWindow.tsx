@@ -300,6 +300,31 @@ export function modelCaps(
   return applyDeclared(shippedCaps(kind, model, thinkingOn), declared, kind);
 }
 
+/** OpenAI's documented reasoning levels and default for one model id, or null.
+ *
+ *  From OpenAI's per-model pages (2026-10-30). "none" turns reasoning off and is
+ *  absent where a model cannot stop reasoning (GPT-6 Astra, GPT-6.1 Sol, GPT-5
+ *  and the o-series); GPT-6 has no "minimal". The default is the model's own, so
+ *  an untouched control keeps OpenAI's behaviour.
+ */
+function openaiReasoning(m: string): { levels: string[]; defaultLevel: string } | null {
+  if (/^gpt-6-astra|^gpt-6\.1-sol/.test(m))
+    return { levels: ["low", "medium", "high", "xhigh", "max"], defaultLevel: "medium" };
+  if (/^gpt-6|^gpt-5\.[6-9]/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh", "max"], defaultLevel: "medium" };
+  if (/^gpt-5\.5/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh"], defaultLevel: "medium" };
+  if (/^gpt-5\.[2-4]/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh"], defaultLevel: "none" };
+  if (/^gpt-5\.1/.test(m))
+    return { levels: ["none", "low", "medium", "high"], defaultLevel: "none" };
+  if (/^gpt-5/.test(m))
+    return { levels: ["minimal", "low", "medium", "high"], defaultLevel: "medium" };
+  if (/^o\d/.test(m))
+    return { levels: ["low", "medium", "high"], defaultLevel: "medium" };
+  return null;
+}
+
 function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: boolean): ModelCaps {
   const m = (model || "").toLowerCase();
   switch (kind) {
@@ -315,16 +340,12 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       return { thinking: thinkOpts(["off", "low", "high", "max"]), style: "effort",
                defaultLevel: "high", temperature: !thinkingOn };
     case "chatgpt": {
-      // OpenAI reasoning_effort (Chat Completions). gpt-5 supports none/minimal/
-      // low/medium/high (none = reasoning off); o-series is low/medium/high with
-      // no off. Reasoning models reject a custom temperature; plain gpt-* models
-      // have no thinking control and take temperature.
-      if (m.startsWith("gpt-5"))
-        return { thinking: thinkOpts(["none", "minimal", "low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
-      if (/^o\d/.test(m))
-        return { thinking: thinkOpts(["low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
+      // OpenAI reasoning.effort (Responses API). Reasoning models reject a custom
+      // temperature; plain gpt-* models have no thinking control and take it.
+      const reasoning = openaiReasoning(m);
+      if (reasoning)
+        return { thinking: thinkOpts(reasoning.levels), style: "effort",
+                 defaultLevel: reasoning.defaultLevel, temperature: false };
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     }
     case "gemini": {

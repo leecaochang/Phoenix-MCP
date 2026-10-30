@@ -412,8 +412,22 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     // provider's capability refresh is what corrects it.
     expect(vals(modelCaps("deepseek", "deepseek-v4-pro", true))).toEqual(["off", "low", "high", "max"]);
   });
-  it("chatgpt: gpt-5 none..high, o-series low..high, plain gpt-* no thinking + temperature", () => {
-    expect(vals(modelCaps("chatgpt", "gpt-5", false))).toEqual(["none", "minimal", "low", "medium", "high"]);
+  it("chatgpt: each model family's documented levels and default; plain gpt-* no thinking + temperature", () => {
+    expect(vals(modelCaps("chatgpt", "gpt-5", false))).toEqual(["minimal", "low", "medium", "high"]);
+    expect(vals(modelCaps("chatgpt", "gpt-5-mini", false))).toEqual(["minimal", "low", "medium", "high"]);
+    expect(vals(modelCaps("chatgpt", "gpt-5.1", false))).toEqual(["none", "low", "medium", "high"]);
+    expect(vals(modelCaps("chatgpt", "gpt-5.4-mini", false))).toEqual(["none", "low", "medium", "high", "xhigh"]);
+    expect(modelCaps("chatgpt", "gpt-5.4-mini", false).defaultLevel).toBe("none");
+    expect(vals(modelCaps("chatgpt", "gpt-5.5", false))).toEqual(["none", "low", "medium", "high", "xhigh"]);
+    expect(vals(modelCaps("chatgpt", "gpt-5.6-terra", false))).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
+    // GPT-6: no minimal; Astra and 6.1 Sol cannot turn reasoning off.
+    for (const model of ["gpt-6-luna", "gpt-6-sol", "gpt-6.1-terra"]) {
+      expect(vals(modelCaps("chatgpt", model, false))).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
+      expect(modelCaps("chatgpt", model, false).defaultLevel).toBe("medium");
+      expect(modelCaps("chatgpt", model, false).temperature).toBe(false);
+    }
+    for (const model of ["gpt-6-astra", "gpt-6.1-sol"])
+      expect(vals(modelCaps("chatgpt", model, false))).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect(vals(modelCaps("chatgpt", "o3-mini", false))).toEqual(["low", "medium", "high"]);
     expect(modelCaps("chatgpt", "o3-mini", false).temperature).toBe(false);
     const g = modelCaps("chatgpt", "gpt-4o", false);
