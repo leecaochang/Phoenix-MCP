@@ -231,7 +231,7 @@ HELPER_TEMPLATE_STATE_PROPERTIES = frozenset({
     "last_changed", "last_updated", "last_reported",
 })
 HELPER_TEMPLATE_PURE_FUNCTIONS = frozenset({
-    "float", "int", "bool", "str", "min", "max", "abs", "round",
+    "float", "int", "bool", "min", "max",
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt",
     "log", "average", "median", "clamp", "wrap", "remap",
     "now", "utcnow", "today_at", "as_datetime", "as_local", "as_timestamp",

@@ -448,14 +448,25 @@ def test_the_listed_sets_are_the_enforced_ones():
         assert template_entities(f"{{{{ 'a'.{name}() }}}}") == set()
 
 
-async def test_every_added_name_exists_in_installed_ha(hass):
-    """Each function, filter and test added for pure string and regex work is one HA's environment provides."""
+async def test_every_allowed_name_exists_in_installed_ha(hass):
+    """Each allowed function, filter and test is one HA's template environment provides, so none passes and then fails."""
     from homeassistant.helpers.template import TemplateEnvironment
+    from custom_components.phoenix_mcp import const
     env = TemplateEnvironment(hass)
-    assert {"iif", "is_number"} <= set(env.globals)
-    assert {"iif", "is_number", "format", "regex_replace", "regex_match", "regex_search", "regex_findall",
-            "regex_findall_index"} <= set(env.filters)
-    assert {"is_number", "match", "search"} <= set(env.tests)
+    assert const.HELPER_TEMPLATE_PURE_FUNCTIONS <= set(env.globals)
+    assert const.HELPER_TEMPLATE_PURE_FILTERS <= set(env.filters)
+    assert const.HELPER_TEMPLATE_PURE_TESTS <= set(env.tests)
+
+
+@pytest.mark.parametrize("expression", ["{{ round(1.5) }}", "{{ abs(-1) }}", "{{ str(1) }}"])
+async def test_a_function_ha_lacks_is_refused_and_its_filter_is_not(hass, expression):
+    name = expression.split("(")[0].removeprefix("{{ ")
+    with pytest.raises(HelperScopeError, match=f"the function '{name}'"):
+        template_entities(expression)
+    with pytest.raises(Exception):
+        Template(expression, hass).async_render()
+    if name != "str":
+        assert template_entities(f"{{{{ -1.5 | {name} }}}}") == set()
 
 
 @pytest.mark.parametrize("expression", [
