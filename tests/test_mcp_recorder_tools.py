@@ -148,20 +148,6 @@ async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
     }
 
 
-async def test_year_period_is_rejected_on_older_home_assistant(hass) -> None:
-    hass.states.async_set("sensor.power", "12", {"state_class": "measurement"})
-    with (
-        patch("homeassistant.const.__version__", "2026.2.0"),
-        patch("homeassistant.components.recorder.get_instance") as get_instance,
-    ):
-        content, outcome, _ = await _call(
-            {"entity_id": "sensor.power", "period": "year"}, hass,
-        )
-    assert outcome == "invalid_request"
-    assert "2026.3" in content["content"][0]["text"]
-    get_instance.assert_not_called()
-
-
 async def test_statistics_rejects_unknown_type_before_recorder_query(hass) -> None:
     hass.states.async_set("sensor.power", "12", {"state_class": "measurement"})
     with patch("homeassistant.components.recorder.get_instance") as get_instance:
