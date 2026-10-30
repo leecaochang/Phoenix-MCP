@@ -3265,6 +3265,74 @@ async def test_a_retry_that_sends_nothing_stops_at_the_first_reply_bound():
     assert events[1]["provider_detail"] == "High demand." and "no reply within" in events[1]["message"]
 
 
+class _SilentFirst:
+    """A provider whose first attempt sends nothing for an hour."""
+    cfg = None
+    calls = 0
+
+    async def stream_turn(self, session, **kwargs):
+        self.calls += 1
+        await asyncio.sleep(3600)
+        yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("dispatch_started", "write_started", "code", "outcome"), [
+    (False, False, "provider_slow", None),
+    # A read already ran: still slow, never retried.
+    (True, False, "provider_slow", None),
+    # A write may have run: the turn reports an unknown outcome instead.
+    (True, True, "provider_after_dispatch", "outcome_unknown"),
+])
+async def test_a_bounded_first_reply_ends_the_call_without_retrying(dispatch_started, write_started, code, outcome):
+    provider = _SilentFirst()
+    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+        provider, MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+        cancel=asyncio.Event(), dispatch_started=dispatch_started, write_started=write_started,
+        first_reply_seconds=0.05,
+    )), 5)
+    assert provider.calls == 1
+    assert [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+    assert events[0]["code"] == code and events[0]["retryable"] is False
+    assert events[0].get("outcome") == outcome
+
+
+@pytest.mark.asyncio
+async def test_without_a_first_reply_bound_a_slow_start_still_answers():
+    class _SlowStart:
+        cfg = None
+
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(0.1)
+            yield {"type": agentcli.EV_TEXT, "text": "answer"}
+
+    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+        _SlowStart(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
+    )), 5)
+    assert events == [{"type": agentcli.EV_TEXT, "text": "answer"}]
+
+
+@pytest.mark.asyncio
+async def test_a_retry_keeps_the_shorter_of_the_two_first_reply_bounds():
+    class _FailThenSilent(_SilentFirst):
+        async def stream_turn(self, session, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                       "message": "Provider request failed (HTTP 503)."}
+                return
+            await asyncio.sleep(3600)
+            yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+            _FailThenSilent(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+            cancel=asyncio.Event(), first_reply_seconds=0.05,
+        )), 5)
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert events[1]["code"] == "provider_retry_exhausted"
+
+
 @pytest.mark.asyncio
 async def test_run_agent_turn_does_not_retry_non_retryable_error(hass):
     provider = _ScriptedProvider([

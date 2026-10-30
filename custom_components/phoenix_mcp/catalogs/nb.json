@@ -2664,6 +2664,7 @@
     "prior_action_unresolved": "Denne forespørselen ble ikke utført fordi en tidligere handling må sjekkes. Åpne Trenger oppmerksomhet i Phoenix MCP.",
     "unavailable": "Phoenix MCP-taleagenten er utilgjengelig akkurat nå.",
     "model_api_unsupported": "Denne modellen er ikke kvalifisert for OpenCode Chat Completions. Velg en støttet modell.",
-    "provider_unavailable": "Beklager, språkmodellen kunne ikke svare akkurat nå."
+    "provider_unavailable": "Beklager, språkmodellen kunne ikke svare akkurat nå.",
+    "provider_slow": "Beklager, språkmodellen bruker for lang tid på å svare. Prøv igjen om litt."
   }
 }

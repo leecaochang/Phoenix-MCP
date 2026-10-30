@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "Non verificati ({count}): {names}. Verifica in Home Assistant; non inviare di nuovo i comandi.",
     "companion_verification_progress": "Destinazioni per cui Home Assistant riporta le impostazioni richieste: {count} su {total}.",
     "model_api_unsupported": "Questo modello non è stato verificato per OpenCode Chat Completions. Scegli un modello supportato.",
-    "provider_unavailable": "Spiacente, il modello linguistico non è riuscito a rispondere in questo momento."
+    "provider_unavailable": "Spiacente, il modello linguistico non è riuscito a rispondere in questo momento.",
+    "provider_slow": "Spiacente, il modello linguistico sta impiegando troppo tempo a rispondere. Riprova tra un momento."
   }
 }

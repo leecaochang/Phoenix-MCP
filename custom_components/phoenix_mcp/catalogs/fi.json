@@ -2664,6 +2664,7 @@
     "prior_action_unresolved": "Tätä pyyntöä ei suoritettu, koska aiempi toiminto vaatii tarkistusta. Avaa Tarvitsee huomiotasi Phoenix MCP:ssä.",
     "unavailable": "Phoenix MCP -ääniagentti ei ole tällä hetkellä saatavilla.",
     "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
-    "provider_unavailable": "Valitettavasti kielimalli ei pystynyt vastaamaan juuri nyt."
+    "provider_unavailable": "Valitettavasti kielimalli ei pystynyt vastaamaan juuri nyt.",
+    "provider_slow": "Valitettavasti kielimallin vastaus viipyy liian kauan. Yritä hetken kuluttua uudelleen."
   }
 }

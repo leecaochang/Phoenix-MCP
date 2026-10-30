@@ -75,7 +75,8 @@
     "companion_unverified_targets": "Niezweryfikowane ({count}): {names}. Sprawdź w Home Assistant; nie wysyłaj poleceń ponownie.",
     "companion_verification_progress": "Cele, dla których Home Assistant zgłasza żądane ustawienia: {count} z {total}.",
     "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model.",
-    "provider_unavailable": "Przepraszam, model językowy nie mógł teraz odpowiedzieć."
+    "provider_unavailable": "Przepraszam, model językowy nie mógł teraz odpowiedzieć.",
+    "provider_slow": "Przepraszam, model językowy zbyt długo nie odpowiada. Spróbuj ponownie za chwilę."
   },
   "panel": {
     "shell": {

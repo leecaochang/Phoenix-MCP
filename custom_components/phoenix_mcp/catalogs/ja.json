@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "未確認（{count}件）：{names}。Home Assistantで確認し、コマンドを再送しないでください。",
     "companion_verification_progress": "要求された設定を Home Assistant が報告している対象は、{total} 件中 {count} 件です。",
     "model_api_unsupported": "このモデルは OpenCode Chat Completions での動作が確認されていません。対応モデルを選択してください。",
-    "provider_unavailable": "申し訳ありません。言語モデルが今は応答できませんでした。"
+    "provider_unavailable": "申し訳ありません。言語モデルが今は応答できませんでした。",
+    "provider_slow": "申し訳ありません。言語モデルの応答に時間がかかりすぎています。少し待ってからもう一度お試しください。"
   }
 }

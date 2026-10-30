@@ -436,6 +436,25 @@ async def test_voice_turn_provider_error_yields_spoken_fallback():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["en", "de", "ja"])
+async def test_voice_turn_gives_up_on_a_silent_provider_and_says_so(language):
+    class _Silent(_MockProvider):
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(3600)
+            yield {"type": EV_ERROR, "message": "never"}
+
+    with patch.object(agentcli, "VOICE_FIRST_REPLY_SECONDS", 0.05), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await asyncio.wait_for(async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _Silent(), MagicMock(),
+            "http://h", "hi", language=language,
+        ), 5)
+    assert text == voice_text(language, "provider_slow")
+    assert language == "en" or text != voice_text("en", "provider_slow")
+
+
+@pytest.mark.asyncio
 async def test_voice_turn_provider_error_speaks_the_conversation_language():
     stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \

@@ -75,7 +75,8 @@
     "companion_unverified_targets": "Не проверены ({count}): {names}. Проверьте в Home Assistant; не отправляйте команды повторно.",
     "companion_verification_progress": "Цели, для которых Home Assistant сообщает запрошенные настройки: {count} из {total}.",
     "model_api_unsupported": "Эта модель не проверена для OpenCode Chat Completions. Выберите поддерживаемую модель.",
-    "provider_unavailable": "Извините, языковая модель сейчас не смогла ответить."
+    "provider_unavailable": "Извините, языковая модель сейчас не смогла ответить.",
+    "provider_slow": "Извините, языковая модель слишком долго не отвечает. Попробуйте ещё раз чуть позже."
   },
   "panel": {
     "adminError": {

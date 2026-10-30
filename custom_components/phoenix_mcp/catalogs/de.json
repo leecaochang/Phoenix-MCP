@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "Nicht bestätigt ({count}): {names}. In Home Assistant prüfen; Befehle nicht erneut senden.",
     "companion_verification_progress": "Ziele, für die Home Assistant die gewünschten Einstellungen meldet: {count} von {total}.",
     "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
-    "provider_unavailable": "Entschuldigung, das Sprachmodell konnte gerade nicht antworten."
+    "provider_unavailable": "Entschuldigung, das Sprachmodell konnte gerade nicht antworten.",
+    "provider_slow": "Entschuldigung, das Sprachmodell braucht zu lange für eine Antwort. Versuche es gleich noch einmal."
   }
 }

@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "Non vérifiés ({count}) : {names}. Vérifiez dans Home Assistant ; ne renvoyez pas les commandes.",
     "companion_verification_progress": "Cibles pour lesquelles Home Assistant indique les réglages demandés : {count} sur {total}.",
     "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge.",
-    "provider_unavailable": "Désolé, le modèle de langage n'a pas pu répondre pour le moment."
+    "provider_unavailable": "Désolé, le modèle de langage n'a pas pu répondre pour le moment.",
+    "provider_slow": "Désolé, le modèle de langage met trop de temps à répondre. Réessayez dans un instant."
   }
 }

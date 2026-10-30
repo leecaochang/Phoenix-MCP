@@ -135,6 +135,7 @@ from .const import (
     AGENTCLI_PROVIDER_ERROR_BYTES,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
     AGENTCLI_RETRY_FIRST_REPLY_SECONDS,
+    VOICE_FIRST_REPLY_SECONDS,
     AGENTCLI_STATUS_INTERVAL_SECONDS,
     AGENTCLI_SECRETS_STORAGE_KEY,
     AGENTCLI_SECRETS_STORAGE_VERSION,
@@ -4548,6 +4549,7 @@ async def _stream_turn_resilient(
     cancel: asyncio.Event,
     dispatch_started: bool = False,
     write_started: bool = False,
+    first_reply_seconds: float | None = None,
 ) -> AsyncIterator[dict]:
     """provider.stream_turn wrapped with a bounded retry for a transient connection failure.
 
@@ -4558,6 +4560,10 @@ async def _stream_turn_resilient(
     already-streamed output) or once a tool dispatch has started; a mid-stream or
     non-retryable error passes straight through. Every other event is yielded
     unchanged.
+
+    first_reply_seconds bounds the wait for the first attempt's first event too;
+    past it the call ends as provider_slow, not retried. A surface with someone
+    waiting on a reply (Voice) sets it; the others keep only the silent-stream bound.
     """
     loop_time = asyncio.get_running_loop().time
     started = loop_time()
@@ -4573,13 +4579,17 @@ async def _stream_turn_resilient(
         events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
         ), config=getattr(provider, "cfg", None), messages=messages), cancel)
-        # The deadline only covers the wait for a retry's first event, during which
-        # this generator is awaiting the provider, never suspended at a yield.
+        # The deadline only covers the wait for a retry's (or a bounded surface's)
+        # first event, during which this generator is awaiting the provider, never
+        # suspended at a yield.
         first_reply = asyncio.timeout(None)
+        limit = AGENTCLI_RETRY_FIRST_REPLY_SECONDS if attempt > 1 else first_reply_seconds
+        if attempt > 1 and first_reply_seconds is not None:
+            limit = min(AGENTCLI_RETRY_FIRST_REPLY_SECONDS, first_reply_seconds)
         try:
             async with first_reply, aclosing(events):
-                if attempt > 1:
-                    first_reply.reschedule(loop_time() + AGENTCLI_RETRY_FIRST_REPLY_SECONDS)
+                if limit is not None:
+                    first_reply.reschedule(loop_time() + limit)
                 async for ev in events:
                     first_reply.reschedule(None)
                     etype = ev.get("type")
@@ -4601,8 +4611,13 @@ async def _stream_turn_resilient(
         except TimeoutError:
             if not first_reply.expired():
                 raise
+            if attempt == 1:
+                slow = {"type": EV_ERROR, "status": 0, "code": "provider_slow", "retryable": False,
+                        "message": f"The provider sent no reply within {limit:g}s."}
+                yield _after_dispatch_failure(slow, write_started) if dispatch_started else slow
+                return
             stalled = {"type": EV_ERROR, "status": 0, "code": "network", "retryable": True,
-                       "message": f"The provider sent no reply within {AGENTCLI_RETRY_FIRST_REPLY_SECONDS}s."}
+                       "message": f"The provider sent no reply within {limit:g}s."}
             yield _retry_exhausted(stalled, int(loop_time() - started), first_detail)
             return
         if not retry or cancel.is_set():
@@ -5590,6 +5605,7 @@ async def _run_headless_turn(
     routing_language: object = None,
     reserve_final_round: bool = False,
     response_only: bool = False,
+    first_reply_seconds: float | None = None,
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
@@ -5678,7 +5694,7 @@ async def _run_headless_turn(
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=round_system, messages=messages,
             tools=[] if final_round else tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
-            write_started=write_started,
+            write_started=write_started, first_reply_seconds=first_reply_seconds,
         ):
             etype = ev["type"]
             if etype == EV_INVALID_TOOLS:
@@ -5993,6 +6009,7 @@ async def async_run_voice_turn(
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
         detect_focus_refusal=home_focused, routing_surface="voice", routing_language=language,
+        first_reply_seconds=VOICE_FIRST_REPLY_SECONDS,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
@@ -6005,6 +6022,8 @@ async def async_run_voice_turn(
             return turn.text.strip()
         # The detail is English for the Conversations log and AI Task; speak a
         # sentence of the conversation's own language instead.
+        if turn.detail_code == "provider_slow":
+            return voice_text(language, "provider_slow")
         return voice_text(language, "model_api_unsupported" if turn.detail_code == "model_api_unsupported"
                           else "provider_unavailable")
     if turn.outcome == TURN_OUTPUT_LIMIT:

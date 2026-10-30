@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "未验证（{count}个）：{names}。请在 Home Assistant 中检查，不要重新发送命令。",
     "companion_verification_progress": "Home Assistant 报告已处于请求设置的目标：{total} 个中的 {count} 个。",
     "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。",
-    "provider_unavailable": "抱歉，语言模型现在无法回答。"
+    "provider_unavailable": "抱歉，语言模型现在无法回答。",
+    "provider_slow": "抱歉，语言模型响应时间过长。请稍后再试。"
   }
 }

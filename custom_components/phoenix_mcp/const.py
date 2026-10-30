@@ -557,6 +557,10 @@ AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
 # rather than the full silent-stream bound: a provider that has just said it is
 # overloaded and then sends nothing is stuck, not thinking.
 AGENTCLI_RETRY_FIRST_REPLY_SECONDS = 60
+# A Voice model call that has sent nothing after this long is abandoned and the
+# speaker hears that the provider is too slow, instead of waiting out the
+# silent-stream bound. A healthy provider starts its stream within seconds.
+VOICE_FIRST_REPLY_SECONDS = 30
 # How often Agent Chat's status line reports a model call that has shown nothing yet.
 AGENTCLI_STATUS_INTERVAL_SECONDS = 30
 # Interactive inline-approval wait, tied to the live SSE connection (far longer
@@ -2038,6 +2042,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     # output and is not translated.
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_unavailable": "Sorry, the language model could not answer right now.",
+    "provider_slow": "Sorry, the language model is taking too long to answer. Try again in a moment.",
     "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
     "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs Attention in Phoenix MCP.",
     "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs Attention in Phoenix MCP.",

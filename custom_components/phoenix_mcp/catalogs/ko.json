@@ -2664,6 +2664,7 @@
     "companion_unverified_targets": "확인되지 않음({count}개): {names}. Home Assistant에서 확인하고 명령을 다시 보내지 마세요.",
     "companion_verification_progress": "Home Assistant가 요청한 설정으로 보고하는 대상은 {total}개 중 {count}개입니다.",
     "model_api_unsupported": "이 모델은 OpenCode Chat Completions에서 검증되지 않았습니다. 지원되는 모델을 선택하세요.",
-    "provider_unavailable": "죄송합니다. 지금은 언어 모델이 응답할 수 없습니다."
+    "provider_unavailable": "죄송합니다. 지금은 언어 모델이 응답할 수 없습니다.",
+    "provider_slow": "죄송합니다. 언어 모델의 응답이 너무 오래 걸립니다. 잠시 후 다시 시도하세요."
   }
 }
