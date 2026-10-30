@@ -422,6 +422,7 @@
         "model_api_unsupported": "Den här modellen är inte verifierad för OpenCode Chat Completions. Välj en modell som stöds.",
         "network": "Leverantören är tillfälligt otillgänglig.",
         "ollama_backend": "Leverantören är tillfälligt otillgänglig.",
+        "ollama_context_too_small": "Phoenix-prompten är ungefär {needed} tokens, men din Ollama-server har läst in den här modellen med en kontext på {context} tokens, så början av prompten skulle tyst falla bort. Inget kördes. Ställ in OLLAMA_CONTEXT_LENGTH (eller modellens num_ctx) på minst {suggested} och starta om Ollama.",
         "outcome_unknown": "Den här åtgärden kan ha körts. Kontrollera Home Assistant och dess godkännandehistorik innan du försöker igen.",
         "output_limit": "Leverantören producerade för mycket utdata under den här turen; stoppad.",
         "provider_after_dispatch": "Den här åtgärden kan ha körts. Kontrollera Home Assistant och dess godkännandehistorik innan du försöker igen.",

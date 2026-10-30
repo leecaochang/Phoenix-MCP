@@ -455,6 +455,27 @@ async def test_voice_turn_gives_up_on_a_silent_provider_and_says_so(language):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "slow"), [("ollama", False), ("ollama_cloud", True), ("claude", True)])
+async def test_voice_waits_for_a_local_ollama_to_load_and_read_the_prompt(kind, slow):
+    class _SlowStart(_MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.kind = kind
+
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(0.2)
+            yield {"type": EV_TEXT, "text": "ready"}
+            yield {"type": EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "ready"}}
+
+    with patch.object(agentcli, "VOICE_FIRST_REPLY_SECONDS", 0.05), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await asyncio.wait_for(async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _SlowStart(), MagicMock(), "http://h", "hi"), 5)
+    assert text == (voice_text("en", "provider_slow") if slow else "ready")
+
+
+@pytest.mark.asyncio
 async def test_voice_turn_provider_error_speaks_the_conversation_language():
     stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \

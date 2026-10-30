@@ -1669,6 +1669,7 @@
         "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。",
         "network": "提供商暂时不可用。",
         "ollama_backend": "提供商暂时不可用。",
+        "ollama_context_too_small": "Phoenix 的提示词约有 {needed} 个 Token，但您的 Ollama 服务器以 {context} 个 Token 的上下文加载了此模型，提示词开头会被静默丢弃。未运行任何操作。请将 OLLAMA_CONTEXT_LENGTH（或模型的 num_ctx）设为至少 {suggested}，然后重启 Ollama。",
         "outcome_unknown": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",
         "output_limit": "提供商本轮生成的内容过多，已停止。",
         "provider_after_dispatch": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",

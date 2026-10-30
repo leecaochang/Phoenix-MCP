@@ -124,6 +124,7 @@ from .const import (
     AGENTCLI_ZAI_CODING_BASE_URL,
     AGENTCLI_DEEPSEEK_MAX_TOKENS,
     AGENTCLI_NVIDIA_MAX_TOKENS,
+    AGENTCLI_PROMPT_CHARS_PER_TOKEN,
     AGENTCLI_DEFAULT_EFFORT,
     AGENTCLI_DEFAULT_MAX_TOKENS,
     AGENTCLI_EFFORT_LEVELS,
@@ -3385,6 +3386,13 @@ class OpenAICompatProvider:
         if self.kind == "nvidia":
             body["max_tokens"] = AGENTCLI_NVIDIA_MAX_TOKENS
         show_thinking = bool(options.get("show_thinking"))
+        # A local Ollama server silently drops the start of a prompt longer than the
+        # context it loaded the model with: the system prompt and tool rules first.
+        prompt_tokens = (_estimated_prompt_tokens(body) if self._is_ollama_local else 0)
+        loaded = await self._loaded_context(session) if prompt_tokens else None
+        if (problem := _ollama_context_problem(prompt_tokens, loaded)) is not None:
+            yield problem
+            return
         try:
             for attempt in range(2):
                 async with session.post(self._chat_url(), headers=self._headers(), json=body,
@@ -3409,13 +3417,42 @@ class OpenAICompatProvider:
                                             api_key=self.cfg.api_key, refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
+                    checked = not prompt_tokens or loaded is not None
                     async for ev in self._parse(resp, show_thinking):
+                        if not checked and ev.get("type") in (EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
+                            # The model was loaded by this request: now its context is
+                            # known, and no call from a cut-off prompt may run.
+                            checked = True
+                            problem = _ollama_context_problem(prompt_tokens, await self._loaded_context(session))
+                            if problem is not None:
+                                yield problem
+                                return
                         yield ev
                     return
         except SocketTimeoutError:
             yield _silent_stream_error()
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
+
+    async def _loaded_context(self, session: ClientSession) -> int | None:
+        """The context length a local Ollama server loaded this model with, or None.
+
+        Read from /api/ps, which lists only loaded models; None when the model is
+        not loaded or the server does not say, so nothing is refused on a guess.
+        """
+        try:
+            async with session.get(f"{self.cfg.base_url}/api/ps", timeout=_PROBE_TIMEOUT,
+                                   allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json(content_type=None)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        for row in data.get("models") or [] if isinstance(data, dict) else []:
+            if isinstance(row, dict) and self.cfg.model in (row.get("name"), row.get("model")):
+                length = row.get("context_length")
+                return length if type(length) is int and length > 0 else None
+        return None
 
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
@@ -3727,6 +3764,30 @@ class OpenAICompatProvider:
             yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
                         input=tool_call["input"])
         yield _norm(EV_DONE, stop_reason=_norm_stop(finish), assistant_msg=assistant_msg)
+
+
+def _estimated_prompt_tokens(body: dict) -> int:
+    """A conservative token estimate for the messages and tools of one request.
+
+    Calibrated on a local Ollama against Phoenix's real requests (see
+    AGENTCLI_PROMPT_CHARS_PER_TOKEN): the estimate errs low, so one above the
+    context means the prompt really does not fit.
+    """
+    size = len(json.dumps(body.get("messages") or [], ensure_ascii=False))
+    size += len(json.dumps(body.get("tools") or [], ensure_ascii=False))
+    return int(size / AGENTCLI_PROMPT_CHARS_PER_TOKEN)
+
+
+def _ollama_context_problem(prompt_tokens: int, context: int | None) -> dict | None:
+    """The refusal for a prompt longer than the loaded Ollama context, or None."""
+    if context is None or prompt_tokens <= context:
+        return None
+    suggested = 1 << max(prompt_tokens * 5 // 4, 1).bit_length()
+    params = {"needed": prompt_tokens, "context": context, "suggested": suggested}
+    return _norm(EV_ERROR, status=0, code="ollama_context_too_small", retryable=False, message_params=params,
+                 message=(f"Phoenix's prompt is about {prompt_tokens} tokens, but the Ollama server loaded this "
+                          f"model with a context of {context} tokens, so it would silently drop the start of the "
+                          f"prompt. Set OLLAMA_CONTEXT_LENGTH (or the model's num_ctx) to at least {suggested}."))
 
 
 # OpenAI model families that reason by default and refuse a sampling temperature
@@ -6416,7 +6477,10 @@ async def async_run_voice_turn(
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
         detect_focus_refusal=home_focused, routing_surface="voice", routing_language=language,
-        first_reply_seconds=VOICE_FIRST_REPLY_SECONDS,
+        # A local Ollama server's first reply includes loading the model and
+        # reading the whole prompt on the operator's own hardware, which can take
+        # minutes; only the silent-stream bound applies there.
+        first_reply_seconds=None if getattr(provider, "kind", "") == "ollama" else VOICE_FIRST_REPLY_SECONDS,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the

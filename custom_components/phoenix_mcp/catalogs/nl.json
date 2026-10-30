@@ -864,6 +864,7 @@
         "model_api_unsupported": "Dit model is niet gevalideerd voor OpenCode Chat Completions. Kies een ondersteund model.",
         "network": "De provider is tijdelijk niet beschikbaar.",
         "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
+        "ollama_context_too_small": "De prompt van Phoenix is ongeveer {needed} tokens, maar je Ollama-server heeft dit model geladen met een context van {context} tokens, waardoor het begin van de prompt ongemerkt wegvalt. Er is niets uitgevoerd. Stel OLLAMA_CONTEXT_LENGTH (of num_ctx van het model) in op minstens {suggested} en start Ollama opnieuw.",
         "outcome_unknown": "Deze actie is mogelijk uitgevoerd. Controleer Home Assistant en de goedkeuringsgeschiedenis voordat je het opnieuw probeert.",
         "output_limit": "De provider produceerde deze beurt te veel uitvoer; gestopt.",
         "provider_after_dispatch": "Deze actie is mogelijk uitgevoerd. Controleer Home Assistant en de goedkeuringsgeschiedenis voordat je het opnieuw probeert.",

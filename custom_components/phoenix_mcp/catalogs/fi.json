@@ -422,6 +422,7 @@
         "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
         "network": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "ollama_backend": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
+        "ollama_context_too_small": "Phoenixin kehote on noin {needed} tokenia, mutta Ollama-palvelimesi latasi tämän mallin {context} tokenin kontekstilla, joten kehotteen alku jäisi huomaamatta pois. Mitään ei suoritettu. Aseta OLLAMA_CONTEXT_LENGTH (tai mallin num_ctx) vähintään arvoon {suggested} ja käynnistä Ollama uudelleen.",
         "outcome_unknown": "Tämä toiminto on saatettu suorittaa. Tarkista Home Assistant ja sen hyväksyntähistoria ennen kuin yrität uudelleen.",
         "output_limit": "Palveluntarjoaja tuotti tällä vuorolla liikaa tulostetta; pysäytetty.",
         "provider_after_dispatch": "Tämä toiminto on saatettu suorittaa. Tarkista Home Assistant ja sen hyväksyntähistoria ennen kuin yrität uudelleen.",

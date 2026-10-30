@@ -81,6 +81,9 @@ class _FakeSession:
         return self._resp
 
     def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
+        if url.endswith("/api/ps"):
+            # A local Ollama's loaded-model list: nothing loaded, so no context check applies.
+            return _FakeResp(200, json_data={"models": []})
         self.calls.append(("GET", {"url": url, "allow_redirects": allow_redirects, "params": params}))
         return self._resp
 
@@ -6298,3 +6301,90 @@ async def test_responses_effort_refusal_is_learned_as_thinking():
     events = await _collect(_responses_provider().stream_turn(_SeqSession(refused), system_prompt="s",
                                                               messages=[], tools=[], options={"effort": "none"}))
     assert events[0]["refused"] == "reasoning_effort"
+
+
+# --------------------------------------------------------------------------- #
+# Local Ollama: a prompt longer than the loaded context
+# --------------------------------------------------------------------------- #
+
+class _OllamaSession:
+    """Answers /api/ps from a queue of loaded-context values and POSTs with one response."""
+
+    def __init__(self, contexts: list[int | None], response: _FakeResp, model: str = "qwen3.8:27b") -> None:
+        self.contexts = list(contexts)
+        self.response = response
+        self.model = model
+        self.posts: list[dict] = []
+        self.ps_calls = 0
+
+    def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
+        assert url.endswith("/api/ps")
+        self.ps_calls += 1
+        context = self.contexts.pop(0) if self.contexts else None
+        rows = [] if context is None else [{"name": self.model, "model": self.model, "context_length": context}]
+        return _FakeResp(200, json_data={"models": rows})
+
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+        self.posts.append(json)
+        return self.response
+
+
+_OLLAMA_TOOL_REPLY = _sse(
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{}"}}]},"finish_reason":null}]}',
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    "data: [DONE]",
+)
+_BIG_PROMPT = [{"role": "user", "content": "x" * 100_000}]   # about 20,000 estimated tokens
+
+
+def _local_ollama(kind: str = "ollama") -> OpenAICompatProvider:
+    return OpenAICompatProvider(ProviderConfig(kind=kind, model="qwen3.8:27b", base_url="http://ollama.test:11434",
+                                               api_key=None if kind == "ollama" else "k"))
+
+
+def test_prompt_estimate_and_context_problem():
+    assert agentcli._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(20_000, rel=0.01)
+    assert agentcli._ollama_context_problem(20_000, None) is None
+    assert agentcli._ollama_context_problem(20_000, 32_768) is None
+    problem = agentcli._ollama_context_problem(20_000, 8_192)
+    assert problem["code"] == "ollama_context_too_small" and problem["retryable"] is False
+    assert problem["message_params"] == {"needed": 20_000, "context": 8_192, "suggested": 32_768}
+
+
+@pytest.mark.asyncio
+async def test_a_loaded_small_context_is_refused_before_sending():
+    session = _OllamaSession([8_192], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert [ev["code"] for ev in events] == ["ollama_context_too_small"]
+    assert session.posts == []
+
+
+@pytest.mark.asyncio
+async def test_a_cold_model_is_checked_before_its_tool_calls_run():
+    # Not loaded before the request; loaded with 4K by it.
+    session = _OllamaSession([None, 4_096], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert len(session.posts) == 1
+    assert not any(ev["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for ev in events)
+    assert events[-1]["code"] == "ollama_context_too_small"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("contexts", [[262_144], [None, 262_144], [None, None]])
+async def test_a_prompt_that_fits_or_an_unknown_context_runs(contexts):
+    session = _OllamaSession(contexts, _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert any(ev["type"] == agentcli.EV_TOOL for ev in events) and events[-1]["type"] == agentcli.EV_DONE
+    # A context found before the request is not asked for again.
+    assert session.ps_calls == (1 if contexts[0] is not None else 2)
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_is_not_checked():
+    session = _OllamaSession([4_096], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama("ollama_cloud").stream_turn(
+        session, system_prompt="s", messages=_BIG_PROMPT, tools=[], options={}))
+    assert session.ps_calls == 0 and events[-1]["type"] == agentcli.EV_DONE

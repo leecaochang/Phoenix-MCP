@@ -422,6 +422,7 @@
         "model_api_unsupported": "Denne model er ikke kvalificeret til OpenCode Chat Completions. Vælg en understøttet model.",
         "network": "Udbyderen er midlertidigt utilgængelig.",
         "ollama_backend": "Udbyderen er midlertidigt utilgængelig.",
+        "ollama_context_too_small": "Phoenix' prompt er på cirka {needed} tokens, men din Ollama-server har indlæst denne model med en kontekst på {context} tokens, så starten af prompten ville stille blive udeladt. Intet blev kørt. Sæt OLLAMA_CONTEXT_LENGTH (eller modellens num_ctx) til mindst {suggested}, og genstart Ollama.",
         "outcome_unknown": "Denne handling er muligvis blevet udført. Kontrollér Home Assistant og dens godkendelseshistorik, før du prøver igen.",
         "output_limit": "Udbyderen genererede for meget output i denne runde; stoppet.",
         "provider_after_dispatch": "Denne handling er muligvis blevet udført. Kontrollér Home Assistant og dens godkendelseshistorik, før du prøver igen.",

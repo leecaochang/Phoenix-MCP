@@ -1130,6 +1130,7 @@
         "model_api_unsupported": "このモデルは OpenCode Chat Completions での動作が確認されていません。対応モデルを選択してください。",
         "network": "プロバイダーは一時的に利用できません。",
         "ollama_backend": "プロバイダーは一時的に利用できません。",
+        "ollama_context_too_small": "Phoenix のプロンプトは約 {needed} トークンですが、Ollama サーバーはこのモデルを {context} トークンのコンテキストで読み込んだため、プロンプトの先頭が通知なしに切り捨てられます。何も実行されていません。OLLAMA_CONTEXT_LENGTH（またはモデルの num_ctx）を {suggested} 以上に設定し、Ollama を再起動してください。",
         "outcome_unknown": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",
         "output_limit": "このターンでプロバイダーの出力が多すぎたため停止しました。",
         "provider_after_dispatch": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",

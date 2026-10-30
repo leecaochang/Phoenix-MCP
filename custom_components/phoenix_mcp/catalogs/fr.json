@@ -1457,6 +1457,7 @@
         "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge.",
         "network": "Le fournisseur est temporairement indisponible.",
         "ollama_backend": "Le fournisseur est temporairement indisponible.",
+        "ollama_context_too_small": "L'invite de Phoenix fait environ {needed} jetons, mais votre serveur Ollama a chargé ce modèle avec un contexte de {context} jetons : le début de l'invite serait supprimé sans avertissement. Rien n'a été exécuté. Définissez OLLAMA_CONTEXT_LENGTH (ou le num_ctx du modèle) à au moins {suggested} et redémarrez Ollama.",
         "outcome_unknown": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",
         "output_limit": "Le fournisseur a produit trop de contenu en sortie ce tour-ci ; arrêté.",
         "provider_after_dispatch": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",

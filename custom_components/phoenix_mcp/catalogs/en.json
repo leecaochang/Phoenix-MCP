@@ -1621,6 +1621,7 @@
         "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
         "network": "The provider is temporarily unavailable.",
         "ollama_backend": "The provider is temporarily unavailable.",
+        "ollama_context_too_small": "Phoenix's prompt is about {needed} tokens, but your Ollama server loaded this model with a context of {context} tokens, so it would silently drop the start of the prompt. Nothing was run. Set OLLAMA_CONTEXT_LENGTH (or the model's num_ctx) to at least {suggested} and restart Ollama.",
         "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again.",
         "output_limit": "The provider produced too much output this turn; stopped.",
         "provider_after_dispatch": "This action may have run. Check Home Assistant and its approval history before trying it again.",

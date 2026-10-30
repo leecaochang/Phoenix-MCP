@@ -157,6 +157,7 @@
         "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
         "network": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "ollama_context_too_small": "Der Prompt von Phoenix umfasst etwa {needed} Tokens, aber Ihr Ollama-Server hat dieses Modell mit einem Kontext von {context} Tokens geladen und würde den Anfang des Prompts stillschweigend verwerfen. Es wurde nichts ausgeführt. Setzen Sie OLLAMA_CONTEXT_LENGTH (oder num_ctx des Modells) auf mindestens {suggested} und starten Sie Ollama neu.",
         "outcome_unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfen Sie Home Assistant und den Genehmigungsverlauf, bevor Sie sie erneut versuchen.",
         "output_limit": "Der Anbieter hat in dieser Runde zu viel Ausgabe erzeugt; gestoppt.",
         "provider_after_dispatch": "Diese Aktion wurde möglicherweise ausgeführt. Prüfen Sie Home Assistant und den Genehmigungsverlauf, bevor Sie sie erneut versuchen.",

@@ -683,6 +683,7 @@
         "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible.",
         "network": "El proveedor no está disponible temporalmente.",
         "ollama_backend": "El proveedor no está disponible temporalmente.",
+        "ollama_context_too_small": "La instrucción de Phoenix tiene unos {needed} tokens, pero tu servidor Ollama cargó este modelo con un contexto de {context} tokens, así que descartaría en silencio el principio de la instrucción. No se ejecutó nada. Establece OLLAMA_CONTEXT_LENGTH (o el num_ctx del modelo) en al menos {suggested} y reinicia Ollama.",
         "outcome_unknown": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",
         "output_limit": "El proveedor generó demasiada salida en este turno; se detuvo.",
         "provider_after_dispatch": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",

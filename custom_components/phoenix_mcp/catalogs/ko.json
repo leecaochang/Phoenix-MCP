@@ -588,6 +588,7 @@
         "model_api_unsupported": "이 모델은 OpenCode Chat Completions에서 검증되지 않았습니다. 지원되는 모델을 선택하세요.",
         "network": "제공업체를 일시적으로 사용할 수 없습니다.",
         "ollama_backend": "제공업체를 일시적으로 사용할 수 없습니다.",
+        "ollama_context_too_small": "Phoenix의 프롬프트는 약 {needed} 토큰이지만 Ollama 서버가 이 모델을 {context} 토큰 컨텍스트로 로드했기 때문에 프롬프트 앞부분이 알림 없이 잘립니다. 아무것도 실행되지 않았습니다. OLLAMA_CONTEXT_LENGTH(또는 모델의 num_ctx)를 {suggested} 이상으로 설정하고 Ollama를 다시 시작하세요.",
         "outcome_unknown": "이 작업은 실행되었을 수 있습니다. 다시 시도하기 전에 Home Assistant와 승인 기록을 확인하세요.",
         "output_limit": "이번 턴에 제공업체가 너무 많은 출력을 생성하여 중지되었습니다.",
         "provider_after_dispatch": "이 작업은 실행되었을 수 있습니다. 다시 시도하기 전에 Home Assistant와 승인 기록을 확인하세요.",

@@ -446,6 +446,11 @@ AGENTCLI_DEEPSEEK_MAX_TOKENS = 32768
 # 4096 is within each documented model range checked. A model that refuses it is
 # retried once without the field.
 AGENTCLI_NVIDIA_MAX_TOKENS = 4096
+# Characters per token for estimating a request's size before a local Ollama
+# server sees it: a whole Phoenix request measured 4.6 (its tool definitions
+# alone 4.7), so 5 estimates about 8% low and an estimate over the loaded
+# context is a real overflow.
+AGENTCLI_PROMPT_CHARS_PER_TOKEN = 5.0
 # How many Ollama /api/show lookups run at once during a capability refresh.
 # Ollama is the only backend whose capabilities cost one request PER MODEL, and a
 # large local library would otherwise arrive as one burst against a machine that
