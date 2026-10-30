@@ -687,6 +687,7 @@
         "output_limit": "El proveedor generó demasiada salida en este turno; se detuvo.",
         "provider_after_dispatch": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",
         "provider_blocked": "El proveedor bloqueó esta respuesta. No se volverá a intentar.",
+        "provider_context_limit": "La conversación es demasiado larga para la ventana de contexto de este modelo. No se ejecutó ninguna herramienta de esta respuesta. Borra el historial o elige un modelo con una ventana de contexto mayor.",
         "provider_incomplete": "La respuesta del proveedor terminó antes de tiempo. No se ejecutó ninguna herramienta de esta respuesta.",
         "provider_malformed": "El proveedor devolvió una respuesta incorrecta. No se ejecutó ninguna herramienta de esta respuesta.",
         "provider_rate_limit_exhausted": "El límite de velocidad del proveedor seguía superado tras reintentar durante unos {seconds} s. Detalle del proveedor: {detail}",
@@ -1747,7 +1748,7 @@
       "agentcliRegionUs": "Estados Unidos",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Pago por uso",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (China)",
       "providersCard": "Proveedores de LLM",
       "providersIntro": "Las cuentas de proveedor de IA que usan Agent Chat, el agente de voz y la tarea IA. Añade una cuenta, elige su modelo o déjala en Automático, y gestiónala aquí.",
       "providerChecksLabel": "Comprobar si hay modelos nuevos",
@@ -1793,7 +1794,9 @@
         "one": "Cada {count} minuto",
         "other": "Cada {count} minutos"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapur)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",

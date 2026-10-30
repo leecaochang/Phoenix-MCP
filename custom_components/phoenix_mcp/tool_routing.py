@@ -19,7 +19,7 @@ from .const import (
     TOOL_ROUTING_MAX_REVIEWS, TOOL_ROUTING_MAX_REPLANS, TOOL_ROUTING_QUALIFIED_MODELS,
     TOOL_ROUTING_REASONS, TOOL_ROUTING_SETTINGS,
 )
-from .decision_history import pending_context_history, history_texts
+from .decision_history import pending_context_history, history_texts, without_thinking
 from .decision_provider import DecisionError, DecisionProvider
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
@@ -75,7 +75,7 @@ def withheld_results(calls: list[dict], review: ToolReview) -> list[dict]:
 
 def _context(hass: Any, access_key: Any, messages: list[dict], calls: list[dict], system: str,
              language: str, catalog: list[dict], secret: str | None) -> dict:
-    history = pending_context_history(messages, calls)
+    history = pending_context_history(without_thinking(messages), calls)
     if history is None:
         raise DecisionError("context_unavailable")
     state: dict[str, Any] = {"history": history, "pending": deepcopy(calls), "constraints": system, "language": language}

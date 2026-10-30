@@ -1510,7 +1510,7 @@
       "agentcliRegionUs": "United States",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Pay as you go",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (China)",
       "providersCard": "LLM Providers",
       "providersIntro": "The AI provider accounts used by Agent Chat, Voice Agent, and AI Task. Add an account, choose its model or leave it on Automatic, and manage it here.",
       "providerChecksLabel": "Check providers for new models",
@@ -1552,7 +1552,9 @@
       "aiTaskDefaultSetToast": "Phoenix MCP AI Task is now the default",
       "aiTaskDefaultReplacedToast": "Phoenix MCP AI Task is now the default, replacing {name}",
       "aiTaskDefaultClearedToast": "Phoenix MCP AI Task is no longer the default",
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapore)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europe)"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -1623,6 +1625,7 @@
         "output_limit": "The provider produced too much output this turn; stopped.",
         "provider_after_dispatch": "This action may have run. Check Home Assistant and its approval history before trying it again.",
         "provider_blocked": "The provider blocked this response. It will not be retried.",
+        "provider_context_limit": "The conversation is too long for this model's context window. No tool from this response was run. Clear the history or choose a model with a larger context window.",
         "provider_incomplete": "The provider response ended early. No tool from this response was run.",
         "provider_malformed": "The provider returned a malformed response. No tool from this response was run.",
         "provider_rate_limit_exhausted": "The provider's rate limit remained exceeded after retrying for about {seconds}s. Provider detail: {detail}",

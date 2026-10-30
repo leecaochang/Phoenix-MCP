@@ -161,6 +161,7 @@
         "output_limit": "Der Anbieter hat in dieser Runde zu viel Ausgabe erzeugt; gestoppt.",
         "provider_after_dispatch": "Diese Aktion wurde möglicherweise ausgeführt. Prüfen Sie Home Assistant und den Genehmigungsverlauf, bevor Sie sie erneut versuchen.",
         "provider_blocked": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
+        "provider_context_limit": "Die Unterhaltung ist für das Kontextfenster dieses Modells zu lang. Kein Werkzeug aus dieser Antwort wurde ausgeführt. Löschen Sie den Verlauf oder wählen Sie ein Modell mit größerem Kontextfenster.",
         "provider_incomplete": "Die Anbieterantwort endete vorzeitig. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
         "provider_malformed": "Der Anbieter hat eine fehlerhafte Antwort geliefert. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
         "provider_rate_limit_exhausted": "Das Ratenlimit des Anbieters blieb nach etwa {seconds}s erneuten Versuchen überschritten. Anbieterdetails: {detail}",
@@ -1236,7 +1237,7 @@
       "agentcliRegionUs": "Vereinigte Staaten",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Nutzungsbasiert",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (China)",
       "providersCard": "LLM-Anbieter",
       "providersIntro": "Die KI-Anbieterkonten, die Agent Chat, Sprachagent und KI-Aufgabe verwenden. Fügen Sie hier ein Konto hinzu, wählen Sie sein Modell oder lassen Sie es auf Automatisch, und verwalten Sie es.",
       "providerChecksLabel": "Anbieter auf neue Modelle prüfen",
@@ -1282,7 +1283,9 @@
         "one": "Alle {count} Minute",
         "other": "Alle {count} Minuten"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapur)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",

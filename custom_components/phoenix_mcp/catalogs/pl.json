@@ -878,6 +878,7 @@
         "output_limit": "Dostawca wygenerował zbyt dużo danych wyjściowych w tej turze; zatrzymano.",
         "provider_after_dispatch": "To działanie mogło zostać wykonane. Przed ponowną próbą sprawdź Home Assistant i historię zatwierdzeń.",
         "provider_blocked": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
+        "provider_context_limit": "Rozmowa jest zbyt długa dla okna kontekstu tego modelu. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione. Wyczyść historię lub wybierz model z większym oknem kontekstu.",
         "provider_incomplete": "Odpowiedź dostawcy zakończyła się przedwcześnie. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
         "provider_malformed": "Dostawca zwrócił nieprawidłową odpowiedź. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
         "provider_rate_limit_exhausted": "Limit szybkości dostawcy pozostał przekroczony po około {seconds} s ponawiania. Szczegóły dostawcy: {detail}",
@@ -1965,7 +1966,7 @@
       "agentcliRegionUs": "Stany Zjednoczone",
       "agentcliZaiChina": "Chiny (BigModel)",
       "agentcliMimoPayg": "Płatność za użycie",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (Chiny)",
       "providersCard": "Dostawcy LLM",
       "providersIntro": "Konta dostawców AI używane przez Agent Chat, agenta głosowego i Zadanie AI. Dodaj konto, wybierz jego model lub zostaw Automatycznie i zarządzaj nim tutaj.",
       "providerChecksLabel": "Sprawdzaj dostawców pod kątem nowych modeli",
@@ -2013,7 +2014,9 @@
         "other": "Co {count} minut",
         "few": "Co {count} minuty",
         "many": "Co {count} minut"
-      }
+      },
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapur)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",

@@ -1342,7 +1342,7 @@
       "agentcliRegionUs": "États-Unis",
       "agentcliZaiChina": "Chine (BigModel)",
       "agentcliMimoPayg": "Paiement à l'usage",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (Chine)",
       "providersCard": "Fournisseurs LLM",
       "providersIntro": "Les comptes de fournisseur d'IA utilisés par Agent Chat, l'agent vocal et la Tâche d'IA. Ajoutez un compte, choisissez son modèle ou laissez-le en Automatique, et gérez-le ici.",
       "providerChecksLabel": "Vérifier les nouveaux modèles",
@@ -1388,7 +1388,9 @@
         "one": "Toutes les {count} min",
         "other": "Toutes les {count} minutes"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapour)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europe)"
     },
     "agentchat": {
       "accessKey": "Clé d’accès",
@@ -1459,6 +1461,7 @@
         "output_limit": "Le fournisseur a produit trop de contenu en sortie ce tour-ci ; arrêté.",
         "provider_after_dispatch": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",
         "provider_blocked": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
+        "provider_context_limit": "La conversation est trop longue pour la fenêtre de contexte de ce modèle. Aucun outil de cette réponse n'a été exécuté. Effacez l'historique ou choisissez un modèle avec une fenêtre de contexte plus grande.",
         "provider_incomplete": "La réponse du fournisseur s’est terminée prématurément. Aucun outil de cette réponse n’a été exécuté.",
         "provider_malformed": "Le fournisseur a renvoyé une réponse mal formée. Aucun outil de cette réponse n’a été exécuté.",
         "provider_rate_limit_exhausted": "La limite de débit du fournisseur est restée dépassée après environ {seconds} s de nouvelles tentatives. Détail du fournisseur : {detail}",

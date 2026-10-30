@@ -161,6 +161,24 @@ def _transcript(messages: list[dict], pending_calls: dict[str, str] | None = Non
     return expected == "user" and not pending
 
 
+def without_thinking(messages: Any) -> Any:
+    """A copy without Anthropic thinking blocks, which a tool loop replays to its provider.
+
+    They hold the model's private reasoning and are needed only until that loop
+    ends, so finished history and decision context never carry them.
+    """
+    if not isinstance(messages, list):
+        return messages
+    out = []
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) and message.get("role") == "assistant" else None
+        if isinstance(content, list):
+            message = {**message, "content": [block for block in content if not (
+                isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))]}
+        out.append(message)
+    return out
+
+
 def structured_context_history(messages: Any) -> list[dict] | None:
     """Accept bounded complete text/tool exchanges, excluding images and opaque blocks."""
     if not isinstance(messages, list) or not messages or len(messages) > DECISION_CONTEXT_MAX_MESSAGES:

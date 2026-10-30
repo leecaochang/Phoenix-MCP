@@ -163,6 +163,8 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.agentcliZaiCoding",
     "panel.settings.agentcliZaiStandard",
     "panel.settings.agentcliMimoTokenPlan",
+    "panel.settings.agentcliMimoTokenPlanSingapore",
+    "panel.settings.agentcliMimoTokenPlanEurope",
     "panel.settings.agentcliOpenCodeConsole",
     "panel.settings.providerAnthropic",
     "panel.settings.providerCerebras",

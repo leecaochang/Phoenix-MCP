@@ -426,6 +426,7 @@
         "output_limit": "Palveluntarjoaja tuotti tällä vuorolla liikaa tulostetta; pysäytetty.",
         "provider_after_dispatch": "Tämä toiminto on saatettu suorittaa. Tarkista Home Assistant ja sen hyväksyntähistoria ennen kuin yrität uudelleen.",
         "provider_blocked": "Palveluntarjoaja esti tämän vastauksen. Sitä ei yritetä uudelleen.",
+        "provider_context_limit": "Keskustelu on liian pitkä tämän mallin kontekstiikkunaan. Mitään tämän vastauksen työkalua ei suoritettu. Tyhjennä historia tai valitse malli, jonka kontekstiikkuna on suurempi.",
         "provider_incomplete": "Palveluntarjoajan vastaus päättyi ennenaikaisesti. Tästä vastauksesta ei suoritettu yhtään työkalua.",
         "provider_malformed": "Palveluntarjoaja palautti virheellisen vastauksen. Tästä vastauksesta ei suoritettu yhtään työkalua.",
         "provider_rate_limit_exhausted": "Palveluntarjoajan pyyntöraja ylittyi edelleen, kun uudelleenyrityksiä oli tehty noin {seconds}s ajan. Palveluntarjoajan lisätiedot: {detail}",
@@ -2010,7 +2011,7 @@
       "agentcliIntro": "Keskustele Home Assistantin kanssa omalla mallipalveluntarjoajallasi. Agent Chat noudattaa valitun käyttöavaimen käyttöoikeuksia, hyväksyntöjä ja MESA-sääntöjä. Lisää palveluntarjoajan tili ja avaa sitten Agent Chat oikeasta yläkulmasta.",
       "agentcliMiMoHint": "Käytä käytön mukaan veloitettavaa Xiaomi MiMo API -avainta. Token Plan -tilausavaimet käyttävät erillisiä päätepisteitä, eikä niitä tueta tässä.",
       "agentcliMimoPayg": "Käytön mukaan veloitettava",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (Kiina)",
       "agentcliModelAuto": "Automaattinen (uusin saatavilla oleva)",
       "agentcliModelNoTools": "{model} (ei työkalujen kutsuntaa)",
       "agentcliModelReplaced": "Tämä palveluntarjoaja ei tarjoa enää mallia {retired}, joten tämä tili käyttää sen sijaan mallia {model}.",
@@ -2269,7 +2270,9 @@
         "one": "{count} minuutin välein",
         "other": "{count} minuutin välein"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapore)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Eurooppa)"
     },
     "shell": {
       "agentChat": "Agent Chat",

@@ -339,8 +339,9 @@ def test_opencode_legacy_allows_qualified_qwen_models_without_opening_the_family
     ids = ["gpt-5.5", "claude-sonnet-5-5", "gemini-3.8-flash", "jev-1.13", "grok-4.7", "muse-spark-1.3",
            "qwen3.8-max", "qwen3.5-plus", "qwen3.8-flash", "qwen-next", "deepseek-flash", "kimi-k3", "glm-5.3",
            "big-pickle", "minimax-m3"]
+    # big-pickle is a free model, which OpenCode refuses outside its own app.
     assert _filter_opencode_models(ids) == [
-        "big-pickle", "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3", "qwen3.5-plus", "qwen3.8-max",
+        "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3", "qwen3.5-plus", "qwen3.8-max",
     ]
 
 
@@ -474,7 +475,8 @@ async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_
     (401, {"type": "CreditsError", "message": "Insufficient balance."}, "quota", False),
     (402, {"message": "No credit."}, "quota", False),
     (429, {"type": "RateLimitError", "message": "Slow down."}, "rate_limit", True),
-    (403, {"type": "FreeTierError", "message": "Free tier requires OpenCode."}, "auth", False),
+    # A free model outside OpenCode's app: a refusal of this request, not a bad key.
+    (403, {"type": "FreeTierError", "message": "Free tier requires OpenCode."}, "provider_rejected", False),
 ])
 async def test_opencode_console_keeps_billing_and_rate_limit_classifications(status, error, code, retryable):
     provider = OpenAICompatProvider(ProviderConfig(

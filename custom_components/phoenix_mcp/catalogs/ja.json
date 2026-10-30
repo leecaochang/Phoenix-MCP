@@ -1134,6 +1134,7 @@
         "output_limit": "このターンでプロバイダーの出力が多すぎたため停止しました。",
         "provider_after_dispatch": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",
         "provider_blocked": "プロバイダーがこの応答をブロックしました。再試行しません。",
+        "provider_context_limit": "会話がこのモデルのコンテキストウィンドウには長すぎます。この応答のツールは実行されていません。履歴を消去するか、より大きなコンテキストウィンドウを持つモデルを選択してください。",
         "provider_incomplete": "プロバイダーの応答が途中で終了しました。この応答のツールは実行されていません。",
         "provider_malformed": "プロバイダーが不正な応答を返しました。この応答のツールは実行されていません。",
         "provider_rate_limit_exhausted": "約 {seconds} 秒間再試行しましたが、プロバイダーのレート制限を引き続き超過しています。プロバイダーの詳細: {detail}",
@@ -1577,7 +1578,7 @@
       "agentcliRegionUs": "米国",
       "agentcliZaiChina": "中国（BigModel）",
       "agentcliMimoPayg": "従量課金",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan（中国）",
       "providersCard": "LLM プロバイダー",
       "providersIntro": "Agent Chat、音声エージェント、AI タスクが使う AI プロバイダーアカウントです。アカウントを追加し、モデルを選ぶか自動のままにして、ここで管理します。",
       "providerChecksLabel": "新しいモデルを確認する",
@@ -1623,7 +1624,9 @@
         "one": "{count} 分ごと",
         "other": "{count} 分ごと"
       },
-      "modelWithMode": "{model}（{mode}）"
+      "modelWithMode": "{model}（{mode}）",
+      "agentcliMimoTokenPlanSingapore": "Token Plan（シンガポール）",
+      "agentcliMimoTokenPlanEurope": "Token Plan（欧州）"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

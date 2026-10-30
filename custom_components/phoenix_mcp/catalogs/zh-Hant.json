@@ -247,6 +247,7 @@
         "output_limit": "提供者本輪生成的內容過多，已停止。",
         "provider_after_dispatch": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
         "provider_blocked": "提供方封鎖了此回應，不會重試。",
+        "provider_context_limit": "對話過長，超出了此模型的上下文視窗。此回應中的工具均未執行。請清除歷史記錄，或選擇上下文視窗更大的模型。",
         "provider_incomplete": "提供方的回應提前結束。此回應中的工具均未執行。",
         "provider_malformed": "提供方傳回了格式錯誤的回應。此回應中的工具均未執行。",
         "provider_rate_limit_exhausted": "重試約 {seconds} 秒後，仍然超出提供者的速率限制。提供者詳情：{detail}",
@@ -1795,7 +1796,7 @@
       "agentcliRegionUs": "美國",
       "agentcliZaiChina": "中國（BigModel）",
       "agentcliMimoPayg": "按用量付費",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan（中國）",
       "providersCard": "LLM 提供者",
       "providersIntro": "Agent Chat、語音代理和 AI 任務使用的 AI 提供者帳戶。在此新增帳戶、選擇其模型或保持自動，並進行管理。",
       "providerChecksLabel": "檢查提供者的新模型",
@@ -1841,7 +1842,9 @@
         "one": "每 {count} 分鐘",
         "other": "每 {count} 分鐘"
       },
-      "modelWithMode": "{model}（{mode}）"
+      "modelWithMode": "{model}（{mode}）",
+      "agentcliMimoTokenPlanSingapore": "Token Plan（新加坡）",
+      "agentcliMimoTokenPlanEurope": "Token Plan（歐洲）"
     },
     "shell": {
       "agentChat": "Agent Chat",

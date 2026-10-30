@@ -1554,7 +1554,7 @@
       "agentcliRegionUs": "美国",
       "agentcliZaiChina": "中国（BigModel）",
       "agentcliMimoPayg": "按量付费",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan（中国）",
       "providersCard": "LLM 提供商",
       "providersIntro": "Agent Chat、语音代理和 AI 任务使用的 AI 提供商账户。在此添加账户、选择其模型或保持自动，并进行管理。",
       "providerChecksLabel": "检查提供商的新模型",
@@ -1600,7 +1600,9 @@
         "one": "每 {count} 分钟",
         "other": "每 {count} 分钟"
       },
-      "modelWithMode": "{model}（{mode}）"
+      "modelWithMode": "{model}（{mode}）",
+      "agentcliMimoTokenPlanSingapore": "Token Plan（新加坡）",
+      "agentcliMimoTokenPlanEurope": "Token Plan（欧洲）"
     },
     "agentchat": {
       "accessKey": "访问密钥",
@@ -1671,6 +1673,7 @@
         "output_limit": "提供商本轮生成的内容过多，已停止。",
         "provider_after_dispatch": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",
         "provider_blocked": "提供商拦截了此响应，不会重试。",
+        "provider_context_limit": "对话过长，超出了此模型的上下文窗口。此响应中的工具均未运行。请清除历史记录，或选择上下文窗口更大的模型。",
         "provider_incomplete": "提供商的响应提前结束。此响应中的工具均未执行。",
         "provider_malformed": "提供商返回了格式错误的响应。此响应中的工具均未执行。",
         "provider_rate_limit_exhausted": "重试约 {seconds} 秒后，仍然超出提供商的速率限制。提供商详情：{detail}",

@@ -424,19 +424,28 @@ AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS = frozenset({"qwen3.8-max", "qwen3.5-pl
 AGENTCLI_KIMI_CHINA_BASE_URL = "https://api.moonshot.cn/v1"
 AGENTCLI_ZAI_CHINA_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL = "https://token-plan-sgp.xiaomimimo.com/v1"
+AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL = "https://token-plan-ams.xiaomimimo.com/v1"
 AGENTCLI_MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai/v1"
 AGENTCLI_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
 AGENTCLI_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
 AGENTCLI_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
 AGENTCLI_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
-AGENTCLI_DEFAULT_MAX_TOKENS = 8192
-# Explicit output cap sent to DeepSeek only. Its undocumented default cap can
-# truncate a large tool call (a whole-dashboard write) mid-JSON; 32K is at or
-# above the defaults for both modes, so it only ever raises the ceiling, and is
-# far under the documented 384K max output. Other OpenAI-compatible kinds are
-# deliberately not sent max_tokens (OpenAI reasoning models reject the field
-# outright).
+# Output cap for Anthropic-format requests. Thinking counts toward it, and a
+# large tool call (a whole-dashboard write) cut off mid-JSON cannot run, so it
+# sits well above a normal answer. Every current Claude model accepts it; a model
+# that refuses it is retried once at the provider's default.
+AGENTCLI_DEFAULT_MAX_TOKENS = 32000
+# Explicit output cap sent to DeepSeek only while thinking is OFF, where its
+# default (8K) can truncate a large tool call mid-JSON. With thinking on, its
+# defaults (64K, 128K at maximum effort) are larger, so nothing is sent. Other
+# OpenAI-compatible kinds are deliberately not sent max_tokens (OpenAI reasoning
+# models reject the field outright), except NVIDIA below.
 AGENTCLI_DEEPSEEK_MAX_TOKENS = 32768
+# NVIDIA's hosted models default as low as 1024 output tokens (Llama 3.3 70B);
+# 4096 is within each documented model range checked. A model that refuses it is
+# retried once without the field.
+AGENTCLI_NVIDIA_MAX_TOKENS = 4096
 # How many Ollama /api/show lookups run at once during a capability refresh.
 # Ollama is the only backend whose capabilities cost one request PER MODEL, and a
 # large local library would otherwise arrive as one burst against a machine that

@@ -101,6 +101,8 @@ from .const import (
     AGENTCLI_KIMI_CHINA_BASE_URL,
     AGENTCLI_ZAI_CHINA_BASE_URL,
     AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL,
+    AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL,
+    AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL,
     AGENTCLI_MISTRAL_EU_BASE_URL,
     AGENTCLI_MISTRAL_US_BASE_URL,
     AGENTCLI_OPENAI_US_BASE_URL,
@@ -121,6 +123,7 @@ from .const import (
     AGENTCLI_ZAI_BASE_URL,
     AGENTCLI_ZAI_CODING_BASE_URL,
     AGENTCLI_DEEPSEEK_MAX_TOKENS,
+    AGENTCLI_NVIDIA_MAX_TOKENS,
     AGENTCLI_DEFAULT_EFFORT,
     AGENTCLI_DEFAULT_MAX_TOKENS,
     AGENTCLI_EFFORT_LEVELS,
@@ -446,7 +449,12 @@ _GROK_ENDPOINTS = (
 )
 _MIMO_ENDPOINTS = (
     ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENTCLI_MIMO_BASE_URL),
-    ProviderChoice("token_plan", "Token Plan", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
+    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
+    # A Token Plan key works only on the host its subscription page names.
+    ProviderChoice("token_plan_sgp", "Token Plan (Singapore)", "settings.agentcliMimoTokenPlanSingapore",
+                   AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL),
+    ProviderChoice("token_plan_ams", "Token Plan (Europe)", "settings.agentcliMimoTokenPlanEurope",
+                   AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL),
 )
 _OPENCODE_ENDPOINTS = (
     ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENTCLI_OPENCODE_BASE_URL),
@@ -1048,14 +1056,36 @@ def _error_envelope(text: str) -> dict | None:
     return obj if isinstance(obj, dict) else None
 
 
+def _detail_text(value: Any) -> str:
+    """A validation detail as one sentence: a string, or a list of {msg, loc} items.
+
+    Mistral and Fireworks answer HTTP 422 with FastAPI-style `detail` lists, which
+    Mistral nests inside `message`.
+    """
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        return _detail_text(value.get("detail"))
+    if isinstance(value, list):
+        parts = []
+        for item in value[:5]:
+            if isinstance(item, dict) and isinstance(item.get("msg"), str):
+                loc = item.get("loc")
+                field = ".".join(str(p) for p in loc if p != "body") if isinstance(loc, list) else ""
+                parts.append(f"{field}: {item['msg']}" if field else item["msg"])
+        return "; ".join(parts)
+    return ""
+
+
 def _envelope_message(obj: dict | None) -> str:
     """The provider's human sentence from an error envelope, unclipped, or ""."""
     if obj is None:
         return ""
     err = obj.get("error")
     for message in ((err.get("message") if isinstance(err, dict) else err), obj.get("message"), obj.get("detail")):
-        if isinstance(message, str) and message.strip():
-            return message.strip()
+        text = _detail_text(message)
+        if text:
+            return text
     return ""
 
 
@@ -1148,6 +1178,41 @@ _QWEN_BILLING = (frozenset({"arrearage", "allocationquota.freetieronly", "prepai
                             "postpaidbilloverdue", "budgetlimitexceeded"}), ("free allocated quota exceeded",))
 # OpenRouter's one temporary 402: requests already in flight hold the budget.
 _OPENROUTER_IN_FLIGHT = "openrouter_in_flight_budget"
+# Quota windows and plan limits a provider sends as HTTP 429 that no short retry
+# clears (Z.ai window, weekly/monthly, fair-use and spend-cap limits; TokenHub's
+# daily token cap). The provider's own sentence, which names the reset, is kept.
+_PROVIDER_NON_RETRYABLE: dict[str, frozenset[str]] = {
+    "zai": frozenset({"1308", "1310", "1313", "1316", "1317", "1318", "1319", "1320", "1321"}),
+    "tencent": frozenset({"429004"}),
+}
+# Refusals of this request that the status alone misnames: Z.ai's model outside
+# the plan, and OpenCode's free models, which answer only OpenCode's own app.
+_PROVIDER_REJECTED: dict[str, frozenset[str]] = {
+    "zai": frozenset({"1311"}),
+    "opencode": frozenset({"freetiererror"}),
+}
+_RETRY_DELAY = re.compile(r"(\d{1,6})(?:\.\d+)?s")
+
+
+def _google_quota(envelope: dict | None) -> tuple[int | None, bool]:
+    """Google's RetryInfo delay and whether a QuotaFailure names a daily quota.
+
+    Gemini reports which quota ran out in `error.details`; a per-day quota is not
+    cleared by any short retry.
+    """
+    err = envelope.get("error") if isinstance(envelope, dict) else None
+    details = err.get("details") if isinstance(err, dict) else None
+    delay, daily = None, False
+    for item in details if isinstance(details, list) else []:
+        if not isinstance(item, dict):
+            continue
+        match = _RETRY_DELAY.fullmatch(str(item.get("retryDelay") or ""))
+        if match:
+            delay = int(match.group(1))
+        for violation in item.get("violations") or [] if isinstance(item.get("violations"), list) else []:
+            if isinstance(violation, dict) and "PerDay" in str(violation.get("quotaId") or ""):
+                daily = True
+    return delay, daily
 
 
 def _billing_refusal(kind: str, status: int, codes: list[str], message: str) -> bool:
@@ -1190,12 +1255,20 @@ def _http_failure(
     """
     envelope = _error_envelope(text)
     codes = _provider_error_codes(envelope)
+    delay, daily = _google_quota(envelope) if kind == "gemini" else (None, False)
     if _billing_refusal(kind, status, codes, _envelope_message(envelope)):
         code, retryable = "quota", False
     elif kind == "openrouter" and _OPENROUTER_IN_FLIGHT in codes:
         code, retryable = "rate_limit", True
-    elif codes and codes[0] in _NON_RETRYABLE_ERROR_CODES:
+    elif _PROVIDER_REJECTED.get(kind, frozenset()) & set(codes):
+        code, retryable = "provider_rejected", False
+    elif (codes and codes[0] in _NON_RETRYABLE_ERROR_CODES) or daily or (
+            _PROVIDER_NON_RETRYABLE.get(kind, frozenset()) & set(codes)):
         retryable = False
+    if delay is not None and status in (429, 503):
+        given = extra.get("rate_limit")
+        limits: dict = given if isinstance(given, dict) else {}
+        extra["rate_limit"] = {**limits, "retry_after_seconds": limits.get("retry_after_seconds", delay)}
     detail = _provider_error_detail(text, api_key)
     machine = next((c for c in codes if re.fullmatch(r"[a-z0-9_.:-]{1,64}", c)), None)
     _LOGGER.log(
@@ -1259,6 +1332,9 @@ def _rate_limit_headers(headers: Any, fields: tuple[tuple[str, str], ...]) -> di
     return out
 
 
+# Statuses that name a temporary condition on every provider: a request timeout,
+# a rate limit, server and gateway failures, and Anthropic's overload.
+_RETRYABLE_STATUSES = frozenset({408, 429, 500, 502, 503, 504, 529})
 # Account and request problems retrying cannot change, besides billing (see
 # _billing_refusal), so surface them immediately instead of spending the
 # connect-retry window (see _stream_turn_resilient) hammering them.
@@ -1358,6 +1434,7 @@ def _provider_failure(code: str, *, retryable: bool = True) -> dict:
         "provider_incomplete": "The provider response ended without a complete message. No tool from this response was run.",
         "provider_blocked": "The provider blocked this response. It will not be retried.",
         "provider_transient": "The provider is temporarily unavailable.",
+        "provider_context_limit": "The conversation is too long for this model's context window. No tool from this response was run.",
         "bad_tool_call": "The model produced an invalid tool call. No tool from this response was run.",
     }
     return _norm(EV_ERROR, status=200, code=code, message=messages[code],
@@ -1379,6 +1456,27 @@ def _total_provider_response(parse: Callable) -> Callable:
     return guarded
 
 
+# HTTP classes that name a temporary condition when a provider reports an error
+# inside an already-started stream. TokenHub uses six-digit codes whose first
+# three digits are the status (429006, 502001); OpenRouter sends the bare status.
+_TRANSIENT_STREAM_STATUSES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
+_TRANSIENT_STREAM_CODES = frozenset({
+    "overloaded_error", "rate_limit_error", "server_error", "internal_server_error", "rate_limit_exceeded",
+    # OpenRouter's typed categories (error.metadata.error_type).
+    "provider_unavailable", "provider_overloaded", "timeout", "server", "rate_limit",
+})
+
+
+def _transient_stream_error(error: dict) -> bool:
+    """Whether an error object inside a 200 stream names a temporary condition."""
+    code = str(error.get("code") or error.get("type") or "").strip().lower()
+    given = error.get("metadata")
+    metadata: dict = given if isinstance(given, dict) else {}
+    return (code in _TRANSIENT_STREAM_CODES
+            or (re.fullmatch(r"\d{3}(?:\d{3})?", code) is not None and code[:3] in _TRANSIENT_STREAM_STATUSES)
+            or str(metadata.get("error_type") or "").strip().lower() in _TRANSIENT_STREAM_CODES)
+
+
 def _provider_object(payload: str) -> dict:
     obj = json.loads(payload)
     if not isinstance(obj, dict):
@@ -1390,10 +1488,7 @@ def _provider_object(payload: str) -> dict:
         {*_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation"}
     ):
         raise _ProviderResponseError("provider_blocked", retryable=False)
-    if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
-        "overloaded_error", "rate_limit_error", "server_error", "internal_server_error",
-        "rate_limit_exceeded", "429", "500", "503", "529",
-    }:
+    if isinstance(error, dict) and _transient_stream_error(error):
         raise _ProviderResponseError("provider_transient")
     if isinstance(error, dict) and error.get("code") == "tool_use_failed":
         # Groq validates a generated call itself and streams this in place of it
@@ -1702,6 +1797,20 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
         effort = options.get("effort", AGENTCLI_DEFAULT_EFFORT)
         if effort in AGENTCLI_EFFORT_LEVELS:
             body["output_config"] = {"effort": effort}
+
+
+# The output cap every Anthropic-format model has accepted; the fallback for a
+# model that refuses AGENTCLI_DEFAULT_MAX_TOKENS.
+_LEGACY_MAX_TOKENS = 8192
+
+
+def _use_smaller_output(body: dict) -> None:
+    """Retry at the legacy output cap, keeping a fixed thinking budget below it."""
+    body["max_tokens"] = _LEGACY_MAX_TOKENS
+    thinking = body.get("thinking")
+    if isinstance(thinking, dict) and thinking.get("type") == "enabled":
+        budget = min(_LEGACY_MAX_TOKENS // 2, 16000)
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
 
 
 def _thinking_type(body: dict) -> str:
@@ -2087,7 +2196,7 @@ class ClaudeProvider:
             _cache_marked(system_prompt, messages) if self.kind == "claude"
             else (system_prompt, messages)
         )
-        body = {
+        body: dict[str, Any] = {
             "model": self.cfg.model,
             "system": system,
             "messages": messages,
@@ -2098,7 +2207,7 @@ class ClaudeProvider:
         if self.cfg.model in _CLAUDE_NO_ADAPTIVE:
             _use_enabled_thinking(body)
         try:
-            for attempt in range(2):
+            for attempt in range(3):
                 async with session.post(
                     f"{self.cfg.base_url}/v1/messages", headers=self._headers(),
                     json=body, timeout=_CHAT_TIMEOUT, allow_redirects=False,
@@ -2114,10 +2223,15 @@ class ClaudeProvider:
                             _CLAUDE_NO_ADAPTIVE.add(self.cfg.model)
                             _use_enabled_thinking(body)
                             continue
+                        if (attempt < 2 and resp.status == 400 and "max_tokens" in msg.lower()
+                                and body["max_tokens"] > _LEGACY_MAX_TOKENS):
+                            # An older model with a smaller output range.
+                            _use_smaller_output(body)
+                            continue
                         rate_limit = (_rate_limit_headers(resp.headers, _RETRY_AFTER_HEADER_FIELDS)
-                                      if resp.status == 429 else {})
+                                      if resp.status in (429, 503, 529) else {})
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
-                                            retryable=resp.status in (429, 500, 502, 503, 504, 529),
+                                            retryable=resp.status in _RETRYABLE_STATUSES,
                                             api_key=self.cfg.api_key,
                                             refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
@@ -2171,7 +2285,11 @@ class ClaudeProvider:
                     blocks[idx] = {"type": "tool_use", "id": cb.get("id"), "name": cb.get("name"), "input": {}}
                     tool_json[idx] = json.dumps(initial_input) if initial_input else ""
                 elif cb.get("type") == "thinking":
-                    blocks[idx] = {"type": "thinking", "thinking": ""}
+                    blocks[idx] = {"type": "thinking", "thinking": "", "signature": ""}
+                elif cb.get("type") == "redacted_thinking":
+                    if not isinstance(cb.get("data"), str):
+                        raise _ProviderResponseError()
+                    blocks[idx] = {"type": "redacted_thinking", "data": cb["data"]}
                 else:
                     blocks[idx] = {"type": "text", "text": ""}
             elif etype == "content_block_delta":
@@ -2185,7 +2303,14 @@ class ClaudeProvider:
                     blocks[idx]["text"] = blocks[idx].get("text", "") + delta.get("text", "")
                     yield _norm(EV_TEXT, text=delta.get("text", ""))
                 elif dtype == "thinking_delta":
+                    if not isinstance(delta.get("thinking", ""), str) or blocks[idx].get("type") != "thinking":
+                        raise _ProviderResponseError()
+                    blocks[idx]["thinking"] += delta.get("thinking", "")
                     yield _norm(EV_THINKING, text=delta.get("thinking", ""))
+                elif dtype == "signature_delta":
+                    if not isinstance(delta.get("signature"), str) or blocks[idx].get("type") != "thinking":
+                        raise _ProviderResponseError()
+                    blocks[idx]["signature"] += delta["signature"]
                 elif dtype == "input_json_delta":
                     tool_json[idx] = tool_json.get(idx, "") + delta.get("partial_json", "")
             elif etype == "content_block_stop":
@@ -2238,6 +2363,8 @@ class ClaudeProvider:
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
         if stop_reason in ("refusal", "content_filter"):
             raise _ProviderResponseError("provider_blocked", retryable=False)
+        if stop_reason == "model_context_window_exceeded":
+            raise _ProviderResponseError("provider_context_limit", retryable=False)
         if stop_reason not in ("end_turn", "tool_use", "max_tokens", "stop_sequence"):
             raise _ProviderResponseError()
         if stop_reason == "tool_use" and not parsed_tools:
@@ -2269,14 +2396,22 @@ class ClaudeProvider:
             raise _ProviderResponseError()
         for tool in parsed_tools:
             blocks[tool["_block_index"]]["input"] = tool["input"]
-        # Assemble the assistant message in block order; drop thinking blocks from
-        # the persisted history (they are display-only and Anthropic re-derives).
+        # Assemble the assistant message in block order. A tool round keeps its
+        # thinking blocks, signature included and unmodified: the API requires
+        # them back with the tool results, and on models using a fixed thinking
+        # budget it refuses the next request without them. A final answer drops
+        # them, and the chat view strips them once the next user message
+        # arrives (decision_history.without_thinking), so finished turns stay
+        # plain history.
         content = []
         for idx in order:
             blk = blocks.get(idx)
             if not blk:
                 continue
-            if blk["type"] == "text" and blk.get("text"):
+            if blk["type"] in ("thinking", "redacted_thinking"):
+                if parsed_tools:
+                    content.append(dict(blk))
+            elif blk["type"] == "text" and blk.get("text"):
                 content.append({"type": "text", "text": blk["text"]})
             elif blk["type"] == "tool_use":
                 content.append({"type": "tool_use", "id": blk["id"], "name": blk["name"], "input": blk["input"]})
@@ -2435,17 +2570,22 @@ _IMAGE_REFUSAL = re.compile(
 )
 
 
+# A refusal of the request as sent: 400, or 422 where a provider validates the
+# body separately (NVIDIA, Mistral, DeepSeek, xAI, Fireworks, Cerebras).
+_REFUSAL_STATUSES = frozenset({400, 422})
+
+
 def _refused_option(status: int, message: str, sent: dict) -> str | None:
     """The request key a provider just refused, when it named one of ours.
 
     Bounded three ways, because a wrong answer here disables a control the
-    operator was using. It must be a 400 (a refusal, not an outage or a quota);
+    operator was using. It must be a 400 or 422 (a refusal, not an outage or a quota);
     the key must be one whose refusal has a single unambiguous consequence; and
     Phoenix must have ACTUALLY SENT it in this request. That last guard is what
     stops an error mentioning "temperature" for some unrelated reason from
     teaching Phoenix that temperature is unsupported.
     """
-    if status != 400 or not message:
+    if status not in _REFUSAL_STATUSES or not message:
         return None
     low = message.lower()
     if _IMAGE_REFUSAL.search(low) and any(
@@ -2543,7 +2683,7 @@ async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> boo
     stripes = _probe_stripes()
     status, text = await build_provider(cfg).probe_image(session, _stripe_png(stripes), _PROBE_IMAGE_QUESTION)
     _LOGGER.debug("Image check for %s %s answered %s with %d characters", cfg.kind, cfg.model, status, len(text))
-    if status == 400 and _IMAGE_REFUSAL.search(text.lower()):
+    if status in _REFUSAL_STATUSES and _IMAGE_REFUSAL.search(text.lower()):
         return False
     if status != 200:
         return None
@@ -2584,10 +2724,10 @@ async def async_probe_capabilities(
     if fragment is not None:
         status = await provider.probe_option(session, fragment)
         calls += 1
-        # Only a 400 is evidence. Unreachable (None) says nothing, and a 200
-        # means the field is ignored or leniently defaulted, which are
-        # indistinguishable and equally useless.
-        if status == 400:
+        # Only a refusal (400 or 422) is evidence. Unreachable (None) says
+        # nothing, and a 200 means the field is ignored or leniently defaulted,
+        # which are indistinguishable and equally useless.
+        if status in _REFUSAL_STATUSES:
             levels = []
             for level in AGENTCLI_EFFORT_LEVEL_ORDER:
                 if calls >= AGENTCLI_PROBE_MAX_CALLS:
@@ -2612,7 +2752,7 @@ async def async_probe_capabilities(
         # accepted temperature may still be ignored.
         status = await provider.probe_option(session, {"temperature": 0.7})
         calls += 1
-        if status == 400:
+        if status in _REFUSAL_STATUSES:
             caps["temperature"] = False
 
     return caps, calls, True
@@ -2708,14 +2848,20 @@ _OPENCODE_OTHER_ENDPOINT_RE = re.compile(
 _MISTRAL_FAMILY_RE = re.compile(r"^(?:mistral|magistral|ministral|devstral|codestral)-", re.I)
 
 
+# OpenCode's free models answer only OpenCode's own app; any other client gets
+# HTTP 403 FreeTierError, so they are never offered or chosen automatically.
+_OPENCODE_FREE_RE = re.compile(r"^big-pickle$|-free$")
+
+
 def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
     """Require Console endpoint evidence and preserve qualified legacy exceptions."""
     known_chat = (AGENTCLI_OPENCODE_CHAT_MODELS if verified_only
                   else AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS)
     return sorted(
         m for m in models
-        if m in known_chat or (not verified_only and not _OPENCODE_OTHER_ENDPOINT_RE.match(m)
-                               and not _NON_CHAT_MODEL_RE.search(m))
+        if not _OPENCODE_FREE_RE.search(m)
+        and (m in known_chat or (not verified_only and not _OPENCODE_OTHER_ENDPOINT_RE.match(m)
+                                 and not _NON_CHAT_MODEL_RE.search(m)))
     )
 
 
@@ -2850,6 +2996,7 @@ class OpenAICompatProvider:
         messages.append(assistant_msg)
 
     def append_tool_results(self, messages: list[dict], results: list[dict]) -> None:
+        parts: list[dict] = []
         for r in results:
             message = {
                 "role": "tool",
@@ -2863,10 +3010,10 @@ class OpenAICompatProvider:
                 del message["name"]
             messages.append(message)
             if self.cfg.vision is True and r.get("images"):
-                parts: list[dict] = [{
+                parts.append({
                     "type": "text",
-                    "text": "The tool returned the following image for visual inspection.",
-                }]
+                    "text": f"The tool call {r['tool_use_id']} returned the following image for visual inspection.",
+                })
                 for image in r["images"]:
                     data_uri = f"data:{image['mime_type']};base64,{image['data']}"
                     parts.append({
@@ -2878,7 +3025,10 @@ class OpenAICompatProvider:
                             else {"url": data_uri}
                         ),
                     })
-                messages.append({"role": "user", "content": parts})
+        # Images go in one user message after EVERY tool result: the API requires
+        # all of a turn's tool messages to follow its assistant message directly.
+        if parts:
+            messages.append({"role": "user", "content": parts})
 
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         async def _probe() -> tuple[bool, str]:
@@ -3136,11 +3286,11 @@ class OpenAICompatProvider:
                 # output appears or does not at any effort level, run to run.
                 # Only the invalid-value probe settles it.
                 body["reasoning_effort"] = effort
-            # DeepSeek's undocumented default output cap can truncate a large tool
-            # call (a whole-dashboard write) mid-JSON. 32K only ever raises the
-            # ceiling; see const.py. Other kinds deliberately get no max_tokens
-            # (OpenAI reasoning models reject the field).
-            body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
+            # With thinking off, DeepSeek's 8K default can truncate a large tool
+            # call mid-JSON; with thinking on (its default) the defaults are
+            # larger than any cap Phoenix would set. See const.py.
+            if thinking is False:
+                body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
         elif self.definition.reasoning == "effort":
             # OpenAI and xAI both take a top-level reasoning_effort on chat
             # completions; sending it marks a reasoning turn (skip temperature).
@@ -3203,9 +3353,13 @@ class OpenAICompatProvider:
         elif self.definition.reasoning == "zai":
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
+                if thinking and tools:
+                    # Preserved thinking: keep earlier rounds' reasoning_content
+                    # (replayed below) instead of discarding it. It is off by
+                    # default on the standard API and lives inside `thinking`.
+                    body["thinking"]["clear_thinking"] = False
             if tools:
                 body["tool_stream"] = True
-                body["clear_thinking"] = False
         elif self.definition.reasoning == "mimo":
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
@@ -3238,6 +3392,8 @@ class OpenAICompatProvider:
             # top_p is 1; the refusal names only top_p, so it cannot be learned.
             if self._mistral_content and body.get("temperature") == 0:
                 body["top_p"] = 1
+        if self.kind == "nvidia":
+            body["max_tokens"] = AGENTCLI_NVIDIA_MAX_TOKENS
         show_thinking = bool(options.get("show_thinking"))
         try:
             for attempt in range(2):
@@ -3251,14 +3407,19 @@ class OpenAICompatProvider:
                             _OPENAI_NO_EFFORT_NONE.add(self.cfg.model)
                             body.pop("reasoning_effort", None)
                             continue
+                        if (attempt == 0 and self.kind == "nvidia" and resp.status in _REFUSAL_STATUSES
+                                and "max_tokens" in msg.lower()):
+                            # This model's range is below Phoenix's cap: use its own default.
+                            body.pop("max_tokens", None)
+                            continue
                         # Ollama commonly 500s on an unknown/hallucinated tool name.
                         code = _http_failure_code(resp.status, "ollama_backend" if self._is_ollama else "upstream")
-                        retryable = resp.status in (429, 500, 502, 503)
+                        retryable = resp.status in _RETRYABLE_STATUSES
                         rate_limit = _rate_limit_headers(
                             resp.headers,
                             _MISTRAL_RATE_LIMIT_HEADER_FIELDS if self.definition.model_filter == "mistral"
                             else _RETRY_AFTER_HEADER_FIELDS,
-                        ) if resp.status == 429 else {}
+                        ) if resp.status in (429, 503, 529) else {}
                         yield _http_failure(self.kind, resp.status, text, code=code, retryable=retryable,
                                             api_key=self.cfg.api_key, refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
@@ -3441,6 +3602,12 @@ class OpenAICompatProvider:
             if choice.get("finish_reason"):
                 finish = choice["finish_reason"]
                 saw_finish = True
+        if finish in _FINISH_FAILURES:
+            code, retryable = _FINISH_FAILURES[finish]
+            raise _ProviderResponseError(code, retryable=retryable)
+        if finish == "repetition_truncation":
+            # MiMo cut a degenerate repetition short: the output stopped early.
+            finish = "length"
         if gemini and finish == "stop" and calls:
             # Gemini ends a tool-call response with "stop" rather than "tool_calls".
             finish = "tool_calls"
@@ -3575,6 +3742,19 @@ class OpenAICompatProvider:
             yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
                         input=tool_call["input"])
         yield _norm(EV_DONE, stop_reason=_norm_stop(finish), assistant_msg=assistant_msg)
+
+
+# Documented finish reasons that end a response without a usable answer. A
+# context overflow resent unchanged overflows again; an upstream fault may pass.
+_FINISH_FAILURES: dict[str, tuple[str, bool]] = {
+    "sensitive": ("provider_blocked", False),
+    "model_context_window_exceeded": ("provider_context_limit", False),
+    "model_length": ("provider_context_limit", False),
+    "insufficient_system_resource": ("provider_transient", True),
+    "network_error": ("provider_transient", True),
+    "aborted": ("provider_transient", True),
+    "error": ("provider_transient", True),
+}
 
 
 def _norm_stop(raw: str) -> str:
@@ -4572,6 +4752,7 @@ async def _stream_turn_resilient(
     # The provider's own account of the failure that started the retries, which
     # the final error keeps: the retry's own failure is often a bare timeout.
     first_detail = ""
+    backoff = _CONNECT_RETRY_BACKOFF_SECONDS
     while not cancel.is_set():
         attempt += 1
         produced = False
@@ -4593,10 +4774,18 @@ async def _stream_turn_resilient(
                 async for ev in events:
                     first_reply.reschedule(None)
                     etype = ev.get("type")
+                    # A provider that names its own wait (Retry-After, Google's
+                    # RetryInfo) is retried only after it, and only when that fits
+                    # the window; an earlier retry is refused again.
+                    wait = _CONNECT_RETRY_BACKOFF_SECONDS
+                    named = (ev.get("rate_limit") or {}).get("retry_after_seconds") if etype == EV_ERROR else None
+                    if isinstance(named, int) and named > wait:
+                        wait = float(named)
                     if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
                             and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
-                            and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
+                            and loop_time() + wait < deadline):
                         retry = True
+                        backoff = wait
                         first_detail = first_detail or _failure_detail(ev)
                         yield {"type": EV_RETRYING, "attempt": attempt + 1, "status": ev.get("status"),
                                "detail": _failure_detail(ev), "detail_code": _failure_detail_code(ev)}
@@ -4623,7 +4812,7 @@ async def _stream_turn_resilient(
         if not retry or cancel.is_set():
             return
         try:
-            await asyncio.wait_for(cancel.wait(), timeout=_CONNECT_RETRY_BACKOFF_SECONDS)
+            await asyncio.wait_for(cancel.wait(), timeout=backoff)
         except asyncio.TimeoutError:
             pass
 
@@ -6332,6 +6521,9 @@ class PhoenixAgentCliChatView(PhoenixView):
                     key="nothingToContinue",
                 )
         else:
+            # A finished turn's tool-loop thinking blocks are no longer needed.
+            from .decision_history import without_thinking
+            messages = without_thinking(messages)
             user_text = str(body.get("user") or "")
             if not user_text.strip() and not images:
                 return _err(

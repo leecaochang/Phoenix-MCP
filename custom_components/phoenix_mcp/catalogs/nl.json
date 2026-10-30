@@ -868,6 +868,7 @@
         "output_limit": "De provider produceerde deze beurt te veel uitvoer; gestopt.",
         "provider_after_dispatch": "Deze actie is mogelijk uitgevoerd. Controleer Home Assistant en de goedkeuringsgeschiedenis voordat je het opnieuw probeert.",
         "provider_blocked": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
+        "provider_context_limit": "Het gesprek is te lang voor het contextvenster van dit model. Er is geen tool uit dit antwoord uitgevoerd. Wis de geschiedenis of kies een model met een groter contextvenster.",
         "provider_incomplete": "De reactie van de provider eindigde voortijdig. Geen hulpmiddel uit deze reactie is uitgevoerd.",
         "provider_malformed": "De provider gaf een ongeldige reactie. Geen hulpmiddel uit deze reactie is uitgevoerd.",
         "provider_rate_limit_exhausted": "De snelheidslimiet van de provider bleef overschreden na ongeveer {seconds} s opnieuw proberen. Providerdetail: {detail}",
@@ -1921,7 +1922,7 @@
       "agentcliRegionUs": "Verenigde Staten",
       "agentcliZaiChina": "China (BigModel)",
       "agentcliMimoPayg": "Betalen naar gebruik",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (China)",
       "providersCard": "LLM-providers",
       "providersIntro": "De AI-provideraccounts die Agent Chat, de spraakagent en de AI-taak gebruiken. Voeg een account toe, kies het model of laat het op Automatisch staan, en beheer het hier.",
       "providerChecksLabel": "Providers controleren op nieuwe modellen",
@@ -1967,7 +1968,9 @@
         "one": "Elke {count} minuut",
         "other": "Elke {count} minuten"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapore)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",

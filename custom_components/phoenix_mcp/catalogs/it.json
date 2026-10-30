@@ -242,6 +242,7 @@
         "output_limit": "Il provider ha prodotto troppo output in questo turno; interrotto.",
         "provider_after_dispatch": "Questa azione potrebbe essere stata eseguita. Verifica Home Assistant e la cronologia delle approvazioni prima di riprovare.",
         "provider_blocked": "Il provider ha bloccato questa risposta. Non verrà ritentata.",
+        "provider_context_limit": "La conversazione è troppo lunga per la finestra di contesto di questo modello. Nessuno strumento di questa risposta è stato eseguito. Cancella la cronologia o scegli un modello con una finestra di contesto più ampia.",
         "provider_incomplete": "La risposta del provider è terminata prematuramente. Nessuno strumento di questa risposta è stato eseguito.",
         "provider_malformed": "Il provider ha restituito una risposta non valida. Nessuno strumento di questa risposta è stato eseguito.",
         "provider_rate_limit_exhausted": "Il limite di frequenza del provider è rimasto superato dopo nuovi tentativi per circa {seconds}s. Dettaglio del provider: {detail}",
@@ -1559,7 +1560,7 @@
       "agentcliRegionUs": "Stati Uniti",
       "agentcliZaiChina": "Cina (BigModel)",
       "agentcliMimoPayg": "A consumo",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (Cina)",
       "providersCard": "Provider LLM",
       "providersIntro": "Gli account dei provider di IA usati da Agent Chat, agente vocale e Attività di IA. Aggiungi un account, scegli il suo modello o lascialo su Automatico, e gestiscilo qui.",
       "providerChecksLabel": "Controlla i provider per nuovi modelli",
@@ -1605,7 +1606,9 @@
         "one": "Ogni {count} minuto",
         "other": "Ogni {count} minuti"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapore)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",

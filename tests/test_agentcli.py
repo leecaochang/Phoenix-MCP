@@ -283,14 +283,26 @@ async def test_retry_after_without_delay_seconds_is_dropped(value):
 
 
 @pytest.mark.asyncio
-async def test_retry_after_outside_a_rate_limit_is_not_reported():
+async def test_retry_after_on_an_overloaded_answer_is_kept_for_pacing():
+    # RFC 9110 defines Retry-After for 503 too; the retry wrapper waits it out.
     cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
     response = _FakeResp(503, text_data="overloaded", headers={"Retry-After": "30"})
 
     events = await _collect(OpenAICompatProvider(cfg).stream_turn(
         _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
 
-    assert events[0]["code"] == "upstream"
+    assert events[0]["code"] == "upstream" and events[0]["retryable"] is True
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 30}
+
+
+@pytest.mark.asyncio
+async def test_retry_after_on_a_server_error_is_not_reported():
+    cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
+    response = _FakeResp(500, text_data="boom", headers={"Retry-After": "30"})
+
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
     assert "rate_limit" not in events[0]
 
 
@@ -824,9 +836,9 @@ async def test_zai_preserves_reasoning_and_enables_streamed_tools():
         options={"thinking": True, "show_thinking": False},
     ))
     sent = session.calls[-1][1]["json"]
-    assert sent["thinking"] == {"type": "enabled"}
+    assert sent["thinking"] == {"type": "enabled", "clear_thinking": False}
     assert sent["tool_stream"] is True
-    assert sent["clear_thinking"] is False
+    assert "clear_thinking" not in sent
     done = next(event for event in events if event["type"] == agentcli.EV_DONE)
     assert done["assistant_msg"]["reasoning_content"] == "check state"
 
@@ -1293,14 +1305,16 @@ async def test_clean_stream_with_bad_json_is_not_reported_as_a_dropped_connectio
 
 @pytest.mark.asyncio
 async def test_deepseek_gets_explicit_max_tokens_other_kinds_do_not():
-    # DeepSeek's undocumented default output cap can truncate a large tool call, so
-    # Phoenix MCP pins an explicit ceiling for DeepSeek only. ChatGPT must NOT get
-    # max_tokens (OpenAI reasoning models reject the field).
+    # DeepSeek's 8K non-thinking default can truncate a large tool call, so Phoenix
+    # MCP raises it while thinking is off. With thinking on, or left at DeepSeek's
+    # default (on), its own larger defaults stand. ChatGPT must NOT get max_tokens
+    # (OpenAI reasoning models reject the field).
     body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
     ds = OpenAICompatProvider(ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k"))
-    session = _FakeSession(_FakeResp(200, body))
-    await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options={"thinking": True}))
-    assert session.calls[-1][1]["json"]["max_tokens"] == AGENTCLI_DEEPSEEK_MAX_TOKENS
+    for options in ({"thinking": True}, {}):
+        session = _FakeSession(_FakeResp(200, body))
+        await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options=options))
+        assert "max_tokens" not in session.calls[-1][1]["json"]
     session = _FakeSession(_FakeResp(200, body))
     await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options={"thinking": False}))
     assert session.calls[-1][1]["json"]["max_tokens"] == AGENTCLI_DEEPSEEK_MAX_TOKENS
@@ -5791,3 +5805,304 @@ async def test_a_stream_that_goes_silent_says_so_instead_of_connection_failed(pr
     assert events == [{"type": agentcli.EV_ERROR, "status": 0, "code": "provider_silent", "retryable": True,
                        "message": "The provider sent nothing for 180s, so the request was stopped.",
                        "message_params": {"seconds": 180}}]
+
+
+# --------------------------------------------------------------------------- #
+# Provider protocol repairs: stream errors, retry pacing, refusals, replay
+# --------------------------------------------------------------------------- #
+
+class _SeqSession:
+    """Answers each POST with the next response, recording the request bodies."""
+
+    def __init__(self, *responses: _FakeResp) -> None:
+        self._responses = list(responses)
+        self.bodies: list[dict] = []
+
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+        self.bodies.append(copy.deepcopy(json))
+        return self._responses.pop(0)
+
+
+def _claude_sse(*events: dict) -> bytes:
+    return _sse(*(f'event: {ev["type"]}\ndata: {json.dumps(ev)}' for ev in events))
+
+
+@pytest.mark.parametrize(("error", "code", "retryable"), [
+    ({"code": 502, "message": "x", "metadata": {"error_type": "provider_unavailable"}}, "provider_transient", True),
+    ({"code": 504, "message": "x"}, "provider_transient", True),
+    ({"code": "408", "message": "x"}, "provider_transient", True),
+    ({"code": "429006", "message": "upstream busy"}, "provider_transient", True),
+    ({"code": 502001, "message": "x"}, "provider_transient", True),
+    ({"code": "x", "metadata": {"error_type": "timeout"}}, "provider_transient", True),
+    ({"code": "451001", "message": "content safety"}, "provider_blocked", False),
+    ({"code": 403, "message": "moderation"}, "provider_blocked", False),
+])
+def test_stream_errors_are_classified_by_their_http_class(error, code, retryable):
+    with pytest.raises(agentcli._ProviderResponseError) as raised:
+        agentcli._provider_object(json.dumps({"error": error}))
+    assert raised.value.code == code and raised.value.retryable is retryable
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("finish", "code", "retryable"), [
+    ("model_context_window_exceeded", "provider_context_limit", False),
+    ("model_length", "provider_context_limit", False),
+    ("sensitive", "provider_blocked", False),
+    ("insufficient_system_resource", "provider_transient", True),
+    ("network_error", "provider_transient", True),
+    ("error", "provider_transient", True),
+])
+async def test_documented_finish_reasons_are_not_called_malformed(finish, code, retryable):
+    body = _sse(f'data: {{"choices":[{{"delta":{{"content":"partial"}},"finish_reason":"{finish}"}}]}}', "data: [DONE]")
+    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model="glm-5.3", base_url="https://z", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    error = events[-1]
+    assert error["type"] == agentcli.EV_ERROR and error["code"] == code and error["retryable"] is retryable
+
+
+@pytest.mark.asyncio
+async def test_a_repetition_cut_is_an_output_limit():
+    body = _sse('data: {"choices":[{"delta":{"content":"again again"},"finish_reason":"repetition_truncation"}]}',
+                "data: [DONE]")
+    provider = OpenAICompatProvider(ProviderConfig(kind="mimo", model="mimo-v2.6-pro", base_url="https://m", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == "max_tokens"
+
+
+@pytest.mark.asyncio
+async def test_claude_context_window_stop_is_not_retried():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "message_delta", "delta": {"stop_reason": "model_context_window_exceeded"}, "usage": {"output_tokens": 0}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    assert events[-1]["code"] == "provider_context_limit" and events[-1]["retryable"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [408, 504, 529])
+async def test_timeouts_and_overload_are_retryable_on_every_adapter(status):
+    for provider in (OpenAICompatProvider(ProviderConfig(kind="groq", model="m", base_url="https://g", api_key="k")),
+                     ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://a", api_key="k"))):
+        events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, text_data="{}")),
+                                                     system_prompt="s", messages=[], tools=[], options={}))
+        assert events[0]["retryable"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "status", "error", "code", "retryable"), [
+    ("zai", 429, {"code": "1308", "message": "Usage limit reached for 5 hour. Resets at 18:00"}, "rate_limit", False),
+    ("zai", 429, {"code": "1302", "message": "Rate limit reached"}, "rate_limit", True),
+    ("zai", 429, {"code": "1311", "message": "Your plan does not include this model"}, "provider_rejected", False),
+    ("tencent", 429, {"code": "429004", "message": "daily token limit"}, "rate_limit", False),
+    ("tencent", 429, {"code": "429001", "message": "rate limit"}, "rate_limit", True),
+])
+async def test_plan_quotas_are_not_retried_as_rate_limits(kind, status, error, code, retryable):
+    provider = OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://p", api_key="test-secret"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, text_data=json.dumps({"error": error}))),
+                                                 system_prompt="s", messages=[], tools=[], options={}))
+    assert events[0]["code"] == code and events[0]["retryable"] is retryable
+    assert events[0]["provider_detail"] == error["message"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_daily_quota_and_retry_delay_are_read_from_details():
+    def body(quota_id: str) -> str:
+        return json.dumps([{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded.", "details": [
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{"quotaId": quota_id}]},
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "37s"},
+        ]}}])
+    provider = OpenAICompatProvider(ProviderConfig(kind="gemini", model="gemini-3-flash", base_url="https://g", api_key="k"))
+    daily = await _collect(provider.stream_turn(_FakeSession(_FakeResp(429, text_data=body(
+        "GenerateRequestsPerDayPerProjectPerModel-FreeTier"))), system_prompt="s", messages=[], tools=[], options={}))
+    minute = await _collect(provider.stream_turn(_FakeSession(_FakeResp(429, text_data=body(
+        "GenerateRequestsPerMinutePerProjectPerModel"))), system_prompt="s", messages=[], tools=[], options={}))
+    assert daily[0]["retryable"] is False
+    assert minute[0]["retryable"] is True and minute[0]["rate_limit"] == {"retry_after_seconds": 37}
+
+
+class _ErrorThenText:
+    cfg = None
+
+    def __init__(self, retry_after: int | None) -> None:
+        self.calls = 0
+        self.retry_after = retry_after
+
+    async def stream_turn(self, session, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            limits = {"rate_limit": {"retry_after_seconds": self.retry_after}} if self.retry_after is not None else {}
+            yield {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit", "retryable": True,
+                   "message": "Provider request failed (HTTP 429).", **limits}
+            return
+        yield {"type": agentcli.EV_TEXT, "text": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_a_named_wait_beyond_the_retry_window_is_not_retried_early():
+    provider = _ErrorThenText(retry_after=30)
+    events = await _collect(agentcli._stream_turn_resilient(
+        provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert provider.calls == 1 and [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+
+
+@pytest.mark.asyncio
+async def test_a_named_wait_inside_the_window_is_waited_out():
+    provider = _ErrorThenText(retry_after=3)
+    waits: list[float] = []
+
+    async def fake_wait_for(awaitable, timeout):
+        waits.append(timeout)
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    with patch.object(agentcli.asyncio, "wait_for", fake_wait_for):
+        events = await _collect(agentcli._stream_turn_resilient(
+            provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert provider.calls == 2 and waits == [3.0]
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_TEXT]
+
+
+def test_validation_refusals_teach_options_on_422_too():
+    assert agentcli._refused_option(422, "temperature: Input should be less than 1", {"temperature": 1.5}) == "temperature"
+    assert agentcli._refused_option(500, "temperature broke", {"temperature": 1.5}) is None
+
+
+@pytest.mark.parametrize(("body", "message"), [
+    ({"object": "error", "message": {"detail": [{"type": "enum", "loc": ["body", "reasoning_effort"],
+                                                 "msg": "Input should be 'none' or 'high'"}]}},
+     "reasoning_effort: Input should be 'none' or 'high'"),
+    ({"detail": [{"loc": ["body", "temperature"], "msg": "too large"}]}, "temperature: too large"),
+    ({"detail": "plain"}, "plain"),
+])
+def test_validation_detail_lists_become_one_sentence(body, message):
+    assert agentcli._envelope_message(body) == message
+
+
+@pytest.mark.asyncio
+async def test_effort_probe_accepts_a_422_refusal(hass):
+    statuses = iter([200, 422, 200, 422, 200, 422, 422, 200])
+
+    async def probe_option(self, session, extra):
+        return next(statuses)
+
+    cfg = ProviderConfig(kind="nvidia", model="openai/gpt-oss-120b", base_url="https://n", api_key="k")
+    with patch.object(OpenAICompatProvider, "probe_option", probe_option):
+        caps, _calls, answered = await agentcli.async_probe_capabilities(MagicMock(), cfg)
+    assert answered is True and caps.get("effort_levels")
+
+
+@pytest.mark.asyncio
+async def test_claude_tool_round_replays_thinking_with_its_signature():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "check it"}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig=="}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "redacted_thinking", "data": "opaque"}},
+        {"type": "content_block_stop", "index": 1},
+        {"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "tu1", "name": "get_state"}},
+        {"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "{}"}},
+        {"type": "content_block_stop", "index": 2},
+        {"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-haiku-4-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    assert done["assistant_msg"]["content"] == [
+        {"type": "thinking", "thinking": "check it", "signature": "sig=="},
+        {"type": "redacted_thinking", "data": "opaque"},
+        {"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_claude_final_answer_keeps_no_thinking():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig=="}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Done."}},
+        {"type": "content_block_stop", "index": 1},
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 3}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    assert done["assistant_msg"]["content"] == [{"type": "text", "text": "Done."}]
+
+
+def test_finished_history_drops_thinking_blocks():
+    from custom_components.phoenix_mcp.decision_history import without_thinking
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [{"type": "thinking", "thinking": "t", "signature": "s"},
+                                          {"type": "redacted_thinking", "data": "d"},
+                                          {"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}}]},
+    ]
+    stripped = without_thinking(history)
+    assert stripped[1]["content"] == [{"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}}]
+    assert history[1]["content"][0]["type"] == "thinking"  # the input is not modified
+
+
+def test_tool_images_follow_every_tool_message():
+    provider = OpenAICompatProvider(ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://o",
+                                                   api_key="k", vision=True))
+    image = {"mime_type": "image/png", "data": "AAAA"}
+    messages: list[dict] = []
+    provider.append_tool_results(messages, [
+        {"tool_use_id": "c1", "tool_name": "camera", "result_text": "one", "images": [image]},
+        {"tool_use_id": "c2", "tool_name": "camera", "result_text": "two", "images": [image]},
+        {"tool_use_id": "c3", "tool_name": "get_state", "result_text": "three"},
+    ])
+    assert [m["role"] for m in messages] == ["tool", "tool", "tool", "user"]
+    parts = messages[-1]["content"]
+    assert [p["type"] for p in parts] == ["text", "image_url", "text", "image_url"]
+    assert "c1" in parts[0]["text"] and "c2" in parts[2]["text"]
+
+
+@pytest.mark.asyncio
+async def test_claude_output_cap_falls_back_for_a_smaller_model():
+    ok = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 1}}},
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+        {"type": "message_stop"},
+    )
+    refused = _FakeResp(400, text_data=json.dumps({"type": "error", "error": {
+        "type": "invalid_request_error", "message": "max_tokens: 32000 > 8192, which is the maximum allowed"}}))
+    session = _SeqSession(refused, _FakeResp(200, ok))
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-old", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert [b["max_tokens"] for b in session.bodies] == [agentcli.AGENTCLI_DEFAULT_MAX_TOKENS, 8192]
+    assert events[-1]["type"] == agentcli.EV_DONE
+
+
+@pytest.mark.asyncio
+async def test_nvidia_gets_an_output_cap_and_drops_it_when_refused():
+    ok = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
+    refused = _FakeResp(422, text_data=json.dumps({"detail": [{"loc": ["body", "max_tokens"], "msg": "too large"}]}))
+    session = _SeqSession(refused, _FakeResp(200, ok))
+    provider = OpenAICompatProvider(ProviderConfig(kind="nvidia", model="meta/llama", base_url="https://n", api_key="k"))
+    events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert session.bodies[0]["max_tokens"] == agentcli.AGENTCLI_NVIDIA_MAX_TOKENS
+    assert "max_tokens" not in session.bodies[1]
+    assert events[-1]["type"] == agentcli.EV_DONE
+
+
+def test_mimo_offers_each_token_plan_region():
+    hosts = {choice.value: choice.base_url for choice in agentcli.PROVIDER_DEFINITIONS["mimo"].endpoints}
+    assert hosts["token_plan"] == "https://token-plan-cn.xiaomimimo.com/v1"
+    assert hosts["token_plan_sgp"] == "https://token-plan-sgp.xiaomimimo.com/v1"
+    assert hosts["token_plan_ams"] == "https://token-plan-ams.xiaomimimo.com/v1"

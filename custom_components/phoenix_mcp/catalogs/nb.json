@@ -426,6 +426,7 @@
         "output_limit": "Leverandøren produserte for mye utdata i denne runden; stoppet.",
         "provider_after_dispatch": "Denne handlingen kan ha blitt utført. Sjekk Home Assistant og godkjenningshistorikken før du prøver den igjen.",
         "provider_blocked": "Leverandøren blokkerte dette svaret. Det vil ikke bli forsøkt på nytt.",
+        "provider_context_limit": "Samtalen er for lang for denne modellens kontekstvindu. Ingen verktøy fra dette svaret ble kjørt. Tøm historikken eller velg en modell med større kontekstvindu.",
         "provider_incomplete": "Leverandørens svar ble avsluttet for tidlig. Ingen verktøy fra dette svaret ble kjørt.",
         "provider_malformed": "Leverandøren returnerte et feilformet svar. Ingen verktøy fra dette svaret ble kjørt.",
         "provider_rate_limit_exhausted": "Leverandørens hastighetsgrense var fortsatt overskredet etter å ha prøvd på nytt i omtrent {seconds}s. Leverandørdetalj: {detail}",
@@ -2010,7 +2011,7 @@
       "agentcliIntro": "Chat med Home Assistant ved hjelp av din egen modellleverandør. Agent Chat følger tillatelsene, godkjenningene og MESA-reglene til den valgte tilgangsnøkkelen. Legg til en leverandørkonto, og åpne deretter Agent Chat fra øvre høyre hjørne.",
       "agentcliMiMoHint": "Bruk en Xiaomi MiMo API-nøkkel med betaling etter bruk. Abonnementsnøkler for Token Plan bruker egne endepunkter og støttes ikke her.",
       "agentcliMimoPayg": "Betal etter bruk",
-      "agentcliMimoTokenPlan": "Token Plan",
+      "agentcliMimoTokenPlan": "Token Plan (Kina)",
       "agentcliModelAuto": "Automatisk (nyeste tilgjengelige)",
       "agentcliModelNoTools": "{model} (ingen verktøykall)",
       "agentcliModelReplaced": "{retired} tilbys ikke lenger av denne leverandøren, så denne kontoen bruker {model} i stedet.",
@@ -2269,7 +2270,9 @@
         "one": "Hvert {count}. minutt",
         "other": "Hvert {count}. minutt"
       },
-      "modelWithMode": "{model} ({mode})"
+      "modelWithMode": "{model} ({mode})",
+      "agentcliMimoTokenPlanSingapore": "Token Plan (Singapore)",
+      "agentcliMimoTokenPlanEurope": "Token Plan (Europa)"
     },
     "shell": {
       "agentChat": "Agent Chat",

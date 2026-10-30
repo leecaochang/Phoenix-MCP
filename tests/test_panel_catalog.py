@@ -261,6 +261,8 @@ async def _get(language: str):
 
 
 async def test_endpoint_serves_the_catalog() -> None:
+    # Another test may have loaded an empty catalog folder; use the shipped one.
+    helpers.load_catalogs()
     resp = await _get("en")
     assert resp.status == 200
     body = json.loads(resp.text)
