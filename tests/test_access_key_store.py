@@ -743,14 +743,6 @@ class TestAccessKeyLookup:
         await access_key_store.async_create_access_key("t1", "u")
         assert access_key_store.get_access_key_by_hash(_sha256("wrong")) is None
 
-    async def test_get_archived_by_hash(self, access_key_store):
-        record, raw = await access_key_store.async_create_access_key("t1", "u")
-        await access_key_store.async_archive_access_key(record.id, revoked=True)
-        presented_hash = _sha256(raw)
-        found = access_key_store.get_archived_by_hash(presented_hash)
-        assert found is not None
-        assert found.id == record.id
-
 
 # ---------------------------------------------------------------------------
 # AccessKeyStore - listing

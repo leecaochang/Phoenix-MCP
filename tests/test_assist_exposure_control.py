@@ -112,7 +112,7 @@ async def test_esphome_listing_decides_scope_on_the_loop(home):
 
 _SCOPE_DECISIONS = {
     "resolve", "resolve_read", "resolve_registry_access", "_resolve_access_key_access", "_assist_exposed",
-    "assist_expose_check", "filter_entities_for_access_key", "build_permitted_states", "build_permitted_entity_ids",
+    "assist_expose_check", "filter_entities_for_access_key", "build_permitted_states",
     "resolve_service_targets", "resolve_intent_entities", "filter_service_response",
     "redact_inaccessible_entity_ids_in_text", "visible_entity_ids", "_esphome_file_in_scope",
 }

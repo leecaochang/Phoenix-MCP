@@ -23,7 +23,6 @@ from custom_components.phoenix_mcp.const import (
     MCP_DISCOVER_TTL_MS,
     MCP_LEGACY_PROTOCOL_VERSION_PREFERRED,
     MCP_LEGACY_PROTOCOL_VERSIONS,
-    MCP_PROTOCOL_VERSION_PREFERRED,
     MCP_PROTOCOL_VERSIONS,
 )
 from custom_components.phoenix_mcp.mcp_view import _MCP_METHODS, _dispatch_mcp
@@ -216,7 +215,6 @@ class TestProtocolVersions:
         assert MCP_LEGACY_PROTOCOL_VERSIONS == ("2025-03-26",)
 
     def test_version_list_is_ordered_newest_first(self):
-        assert MCP_PROTOCOL_VERSION_PREFERRED == MCP_PROTOCOL_VERSIONS[0]
         assert list(MCP_PROTOCOL_VERSIONS) == sorted(MCP_PROTOCOL_VERSIONS, reverse=True)
 
 

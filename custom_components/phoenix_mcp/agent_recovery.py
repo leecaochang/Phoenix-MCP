@@ -210,8 +210,7 @@ class AgentRecovery:
         ran is recorded in the audit log and the approval queue), or when the
         approval queue holds a terminal record for the same request. What is
         left is a write that reached Home Assistant with no outcome recorded
-        anywhere, which is the case Needs Attention exists for (user,
-        2026-10-29): it still blocks the access key until the operator reviews
+        anywhere, which is the case Needs Attention exists for: it still blocks the access key until the operator reviews
         it, because retrying could apply the same change a second time.
         """
         terminal = {
@@ -327,7 +326,6 @@ def tool_is_read_only(name: str) -> bool:
         return _MESA_TOOL_ANNOTATIONS[name]["readOnlyHint"] is True
     canonical = _NATIVE_TOOL_NAMES.get(name, name)
     return _TOOL_ANNOTATIONS.get(canonical, {}).get("readOnlyHint") is True
-
 
 
 async def dispatch_agent_tool(

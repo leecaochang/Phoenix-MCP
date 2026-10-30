@@ -2557,27 +2557,21 @@ async def async_probe_capabilities(
 ) -> tuple[dict, int, bool]:
     """What this model's API actually accepts, established by asking it.
 
-    Returns (capabilities, calls_made, answered). A value is omitted rather than
-    guessed when it could not be established, so a partial or failed probe
-    narrows nothing.
-
-    `answered` is False when the control request below did not answer 200. A key
-    with no credit, a revoked key, a refused model or an unreachable host answers
-    every question the same way, and reporting that as "this provider does not
+    Returns (capabilities, calls_made, answered). A value that could not be
+    established is omitted, never guessed, so a partial or failed probe narrows
+    nothing. `answered` is False when the control request did not answer 200: a
+    key with no credit, a revoked key, a refused model or an unreachable host
+    answers every question alike, and reporting that as "this provider does not
     validate its options" would blame the provider for an account problem.
 
-    TWO STAGES, and the order is the whole method. Stage one sends a
-    deliberately INVALID effort: a 400 proves the server validates the field.
-    Only then does stage two walk the real levels, where a 200 is meaningful.
-    Without stage one, a server that ignores an unknown parameter answers 200 to
-    every level, which reads as "supports all five". A 400 is informative; a 200
-    on its own never is.
-
-    Both stages need a CONTROL first: the same minimal request with no option
-    must answer 200. Without it, a model the endpoint refuses outright (wrong
-    id, wrong plan, an unrelated request rule) answers 400 to everything, and
-    those 400s would be recorded as refused options. A refused control
-    establishes nothing and reports the provider as not answering.
+    TWO STAGES, and the order is the whole method. Stage one sends a deliberately
+    INVALID effort: a 400 proves the server validates the field. Only then does
+    stage two walk the real levels, where a 200 is meaningful; a server that
+    ignores an unknown parameter answers 200 to every level. Both stages need a
+    CONTROL first, the same minimal request with no option answering 200: a model
+    the endpoint refuses outright (wrong id, wrong plan, an unrelated rule)
+    answers 400 to everything, and those 400s would read as refused options. A
+    refused control establishes nothing and reports the provider as not answering.
     """
     provider = build_provider(cfg)
     caps: dict = {}
@@ -3651,20 +3645,6 @@ def build_agent_tool_list(access_key: AccessKeyRecord, data: PhoenixData, surfac
     # Chat already supplies current local time in every turn's system context.
     return deepcopy([tool for tool in tools if surface != "chat"
                      or tool.get("name") not in ("llm__GetDateTime", "GetDateTime")])
-
-
-def catalog_payload_metrics(access_key: AccessKeyRecord, data: PhoenixData) -> dict[str, int]:
-    """Return deterministic byte metrics for the access key's announced catalog."""
-    tools = build_mcp_tool_list(access_key, data)
-    canonical = json.dumps(tools, sort_keys=True, separators=(",", ":")).encode()
-    claude = ClaudeProvider(ProviderConfig("claude", "metrics", "")).format_tools(tools)
-    openai = OpenAICompatProvider(ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
-    return {
-        "tool_count": len(tools),
-        "canonical_bytes": len(canonical),
-        "claude_bytes": len(json.dumps(claude, sort_keys=True, separators=(",", ":")).encode()),
-        "openai_bytes": len(json.dumps(openai, sort_keys=True, separators=(",", ":")).encode()),
-    }
 
 
 def _clip_display(text: str) -> str:

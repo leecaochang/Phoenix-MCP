@@ -111,7 +111,6 @@ class RoutingAuthority:
         return access_key if access_key.settings_version == self.version else None
 
 
-
 def _proposal(result: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *,
               candidates: list[str] | None = None, selected: str | None = None) -> tuple[str, dict | None]:
     """Map only supported, complete HA slots against current Phoenix scope."""

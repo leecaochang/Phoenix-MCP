@@ -165,27 +165,20 @@ class ScopedProfileStore:
     """A read-only ProfileStore view filtered to one access key's permission scope.
 
     Entity-level reads are hidden when the access key cannot read the entity, so the
-    delegated mesa-core handlers and resolver never observe out-of-scope
-    entities. The scoped layers (device, area, integration, domain) and the
-    deployment defaults pass through UNFILTERED, and that direction is
-    load-bearing.
-
-    Every inheritance layer only ever tightens (the device layer cannot loosen at
-    all: loosening overrides are valid at entity scope only), so hiding a layer
-    could only yield a MORE permissive effective profile than the operator
-    authored, and a permission filter that relaxes policy is inverted. Filter on
+    delegated mesa-core handlers and resolver never observe out-of-scope entities.
+    The device, area, integration and domain layers and the deployment defaults pass
+    through UNFILTERED, and that is load-bearing: every inheritance layer only
+    tightens (loosening overrides are valid at entity scope only), so hiding a layer
+    could only yield a MORE permissive profile than the operator authored. Filter on
     which ENTITIES a caller may address, never on which layers contribute to one.
 
     Resolution discloses nothing new, since the caller already receives the merged
-    profile for entities it can see. The real confidentiality surface is
-    ENUMERATION: device_keys / area_keys / integration_keys name objects a caller
-    may have no entity access to, so none is exposed here. If one is ever needed,
-    filter it to keys with at least one visible entity mapping to them.
-
-    Which profiled entities are visible is decided once, on the event loop, when
-    the view is built: mesa-core resolves in a worker thread, where Home
-    Assistant's Assist exposure lookup cannot run and the scope check would fail
-    closed for an access key that filters by exposure.
+    profile for entities it can see. The confidentiality surface is ENUMERATION:
+    device_keys / area_keys / integration_keys can name objects without a visible
+    entity, so none is exposed; if one is needed, filter it to keys with a visible
+    entity. Visibility is decided once, on the event loop, when the view is built:
+    mesa-core resolves in a worker thread, where HA's Assist exposure lookup cannot
+    run and the scope check would fail closed for an exposure-filtered access key.
     """
 
     def __init__(self, inner, access_key: AccessKeyRecord, hass: HomeAssistant) -> None:

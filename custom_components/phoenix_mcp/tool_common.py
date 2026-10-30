@@ -120,7 +120,7 @@ def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
 def fitted_list(rows: list[dict], key: str) -> dict:
     """A whole listing that fits one result, naming by entity_id the rows past it.
 
-    For listings without paging: they used to grow without bound on a large home.
+    For listings without paging, which would otherwise grow without bound on a large home.
     """
     def build(count: int) -> dict:
         body: dict = {"count": count, key: rows[:count]}

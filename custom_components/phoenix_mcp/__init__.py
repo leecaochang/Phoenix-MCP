@@ -308,7 +308,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     """Set up Phoenix MCP from a config entry.
 
     Initialises storage, registers admin views and the panel unconditionally.
-    Proxy and MCP views are only registered when the kill switch is off.
+    MCP views are registered at setup only when the kill switch is off.
     Schedules a periodic flush of last_used_at timestamps and wires registry
     change listeners to invalidate the entity tree cache.
     """

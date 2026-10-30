@@ -732,24 +732,6 @@ def _intent_slots(result: Any) -> dict[str, Any]:
     }
 
 
-def _intent_unmatched_slots(result: Any) -> dict[str, Any]:
-    """Return HA's best unmatched slot guesses, excluding missing context."""
-    unmatched: dict[str, Any] = {}
-    for entity in getattr(result, "unmatched_entities_list", []):
-        name = getattr(entity, "name", None)
-        if not isinstance(name, str) or not name:
-            continue
-        text = getattr(entity, "text", None)
-        if text is not None:
-            if text != "<missing>":
-                unmatched[name] = text
-            continue
-        value = getattr(entity, "value", None)
-        if value is not None:
-            unmatched[name] = value
-    return unmatched
-
-
 def _intent_source(result: Any) -> str:
     """Classify a sentence without exposing its custom-sentence file path."""
     metadata = getattr(result, "intent_metadata", None)
@@ -2218,14 +2200,6 @@ async def _tool_get_repairs(
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-
-
-
-
 def _requires_satisfied(tool_def: dict, hass: HomeAssistant) -> bool:
     """Whether a tool's "requires" precondition holds on this system.
 
@@ -2246,20 +2220,6 @@ def _requires_unavailable_reason(tool_def: dict) -> str:
     if tool_def.get("requires") == "esphome_builder":
         return "The ESPHome Device Builder add-on is not available."
     return "The ESPHome integration is not set up."
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _CHECK_LOCATION_RE = re.compile(r" at (?P<file>[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}\.ya?ml), line (?P<line>\d{1,7})")

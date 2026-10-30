@@ -180,6 +180,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "issue_registry": "0.0.0",
         # Verified absent in 2024.2.5, present in 2024.3.0.
         "label_registry": "2024.3.0",
+        # The llm.API extension point the Assist bridge subclasses at import.
+        # Verified present in 2026.7.0; its first release was not checked.
+        "llm": "2026.7.0",
         "sun": "0.0.0",
         # Module and async_get_translations verified in the 2025.2.0 source.
         "translation": "2025.2.0",

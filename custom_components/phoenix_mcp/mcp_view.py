@@ -757,23 +757,6 @@ def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
     return "dispatch", (method, raw_params or {})
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # One-time in-band advisory appended to a tools/call response when this access key's
 # settings changed after its last tools/list (the stateless transport cannot
 # push notifications/tools/list_changed). Once per staleness epoch.
@@ -808,13 +791,6 @@ _NOTES_REMOVED_NOTICE = (
     "Notice: the operator removed this access key's administrator notes after your "
     "client received its instructions. Disregard the earlier notes."
 )
-
-
-
-
-
-
-
 
 
 def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[Any, Permission]:
@@ -1740,14 +1716,6 @@ async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAs
         return _tool_error(
             "Invalid period. Must be one of: 5minute, hour, day, week, month, year."
         ), "invalid_request", entity_id
-    if period == "year":
-        from awesomeversion import AwesomeVersion
-        from homeassistant.const import __version__ as ha_version
-
-        if AwesomeVersion(ha_version) < AwesomeVersion("2026.3.0"):
-            return _tool_error(
-                "The year statistics period requires Home Assistant 2026.3 or newer."
-            ), "invalid_request", entity_id
 
     valid_types = {"mean", "min", "max", "sum", "state", "change", "last_reset"}
     raw_types = args.get("statistic_types")
@@ -2482,8 +2450,6 @@ async def _tool_get_config(
     from .config_recovery import runtime_identity
     body = {**build_safe_config(hass), "runtime_identity": runtime_identity(hass)}
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_config"
-
-
 
 
 _LOG_INTEGRATION_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -3797,7 +3763,6 @@ def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
         "effective_rule": decision.effective_rule,
         "warnings": decision.warnings,
     }
-
 
 
 def _registry_write_precheck(
@@ -6727,145 +6692,6 @@ async def _tool_watch_entity(
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Integration registry lifecycle (cap_integration_write)
 # ---------------------------------------------------------------------------
@@ -9451,23 +9277,20 @@ def _maybe_append_stale_advisory(
     Returns whether an advisory was added, which the caller records on the audit
     row. This is the stateless transport's substitute for tools/list_changed: the
     notice rides in-band on the next tools/call, once per staleness epoch (a fresh
-    tools/list resets it). The epoch key spans two independent axes, so resolving
-    one does not re-fire the other: the OPERATOR changed this access key
-    (settings_version moved past the version echoed at the last tools/list), and
-    the BUILD changed under a client that already fetched its schemas (catalog
-    fingerprint differs; an empty stored fingerprint means never recorded, so
-    never stale).
-
-    Changed administrator notes are a third axis with its own counter: the
-    notice carries the current notes and records them as delivered, which
-    instructions also do at initialize and server/discover. A Home Companion
-    access key never gets it, because its notes reach the inner turn on every
-    request instead.
+    tools/list resets it). The epoch spans two independent axes, so resolving one
+    does not re-fire the other: the OPERATOR changed this access key
+    (settings_version moved past the one echoed at the last tools/list), and the
+    BUILD changed under a client that already fetched its schemas (catalog
+    fingerprint differs; an empty stored fingerprint was never recorded, so never
+    stale). Changed administrator notes are a third axis with its own counter: the
+    notice carries the current notes and records them delivered, as instructions
+    also do at initialize and server/discover. A Home Companion access key never
+    gets it; its notes reach the inner turn on every request.
 
     Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild their tool list and instructions every turn from the live access key
-    and have no external MCP server to reconnect. Nothing is marked for them, so a
-    real external client sharing the access key still gets advised.
+    rebuild tools and instructions every turn from the live access key and have no
+    MCP server to reconnect. Nothing is marked for them, so an external client
+    sharing the access key still gets advised.
     """
     from .home_companion import is_companion
     internal = client_ip in (
@@ -11085,8 +10908,6 @@ ALL_MCP_VIEWS: list[type[PhoenixView]] = [
 # Each builder produces the structured payload shown in the admin Approvals UI.
 # Diffs are best-effort: anything missing or non-fatal renders an empty preview
 # rather than blocking creation of the pending approval.
-
-
 
 
 def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:

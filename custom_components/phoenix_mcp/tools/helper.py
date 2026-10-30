@@ -408,12 +408,11 @@ def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -
     registry = er.async_get(hass)
     if existing := registry.async_get_entity_id("tag", "tag", tag_id):
         return existing
-    deleted = getattr(registry, "deleted_entities", {}).get(("tag", "tag", tag_id))
+    deleted = registry.deleted_entities.get(("tag", "tag", tag_id))
     if (deleted is not None and registry.async_get(deleted.entity_id) is None
             and hass.states.async_available(deleted.entity_id)):
         return str(deleted.entity_id)
-    available = getattr(registry, "async_get_available_entity_id", None) or registry.async_generate_entity_id
-    return str(available("tag", slugify(name) if name else tag_id))
+    return str(registry.async_get_available_entity_id("tag", slugify(name) if name else tag_id))
 
 
 def _restored_helper_entity_id(hass: HomeAssistant, helper_type: str, storage_id: str) -> str:

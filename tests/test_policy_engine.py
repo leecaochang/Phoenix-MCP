@@ -704,18 +704,6 @@ class TestResolveRegistryAccess:
             == Permission.WRITE
         )
 
-    async def test_recorder_entity_ids_use_the_same_registry_scope(
-        self, hass, registered_env
-    ):
-        from custom_components.phoenix_mcp.helpers import build_permitted_entity_ids
-
-        entity_id = registered_env["lights"]["kitchen"].entity_id
-        hass.states.async_remove(entity_id)
-        entity_only = _make_access_key(entities={entity_id: "GREEN"})
-        domain_read = _make_access_key(domains={"light": "YELLOW"})
-        assert entity_id not in build_permitted_entity_ids(entity_only, hass)
-        assert entity_id in build_permitted_entity_ids(domain_read, hass)
-
 
 class TestResolveGhostAndBlocklist:
     async def test_ghost_entity_returns_not_found(self, hass):

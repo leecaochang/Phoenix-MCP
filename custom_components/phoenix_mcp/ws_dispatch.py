@@ -187,8 +187,8 @@ class _CapturingConnection(ActiveConnection):
 
     def __init__(self, hass: HomeAssistant, user: Any) -> None:
         # Pass only the constructor kwargs the live ActiveConnection accepts, so
-        # this works across supported HA versions (parameters are added over time,
-        # e.g. `remote` in HA 2026.6). Read names from the code object, never
+        # this works across supported HA versions (parameters are added over
+        # time). Read names from the code object, never
         # inspect.signature, which on Python 3.14 evaluates ActiveConnection's
         # TYPE_CHECKING-only annotations and raises NameError.
         available: dict[str, Any] = {
@@ -603,8 +603,8 @@ async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
     (5-60s+, longer for sleepy battery devices); there is no completion
     signal to await. Raises WsDispatchError when ZHA is unavailable or the
     device is not on the network. HA-coupling point: get_zha_gateway and the
-    gateway API come from the zha-lib extraction (~HA 2024.8); on older HA this
-    degrades to a clean per-call error.
+    gateway API are ZHA internals; if they move, this degrades to a clean
+    per-call error.
     """
     try:
         from homeassistant.components.zha.helpers import get_zha_gateway  # noqa: PLC0415

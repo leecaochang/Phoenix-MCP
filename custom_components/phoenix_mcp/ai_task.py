@@ -34,14 +34,14 @@ from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
 
-# ai_task shipped in HA 2025.7 and its import chain reaches camera and then turbojpeg,
-# which a minimal environment may not have. Guard it so Phoenix MCP setup never crashes;
+# ai_task's import chain reaches camera and then turbojpeg, which an install that
+# never loaded camera may not have. Guard it so Phoenix MCP setup never crashes;
 # the entity class is defined only when it imports, and async_setup_entry no-ops otherwise.
 try:
     from homeassistant.components import ai_task as _ai_task
 
     _AI_TASK_AVAILABLE = True
-except ImportError:  # pragma: no cover - absent only on older/minimal HA
+except ImportError:  # pragma: no cover - camera requirement not installed
     _ai_task = None  # type: ignore[assignment]
     _AI_TASK_AVAILABLE = False
 
@@ -79,7 +79,7 @@ def _ai_task_preferences(hass: HomeAssistant) -> Any:
     """HA's AITaskPreferences object (holds gen_data_entity_id), or None."""
     try:
         from homeassistant.components.ai_task.const import DATA_PREFERENCES  # noqa: PLC0415
-    except ImportError:  # pragma: no cover - older/minimal HA
+    except ImportError:  # pragma: no cover - camera requirement not installed
         return None
     return hass.data.get(DATA_PREFERENCES)
 
@@ -477,7 +477,7 @@ if _AI_TASK_AVAILABLE:
                 data=result,
             )
 
-else:  # pragma: no cover - ai_task absent only on older/minimal HA
+else:  # pragma: no cover - camera requirement not installed
     PhoenixAITaskEntity = None  # type: ignore[assignment,misc]
 
 

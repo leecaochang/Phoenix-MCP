@@ -164,8 +164,8 @@ def append_fitting_results(access_key: Any, system: str, messages: list[dict], r
                            append: Any) -> None:
     """Append a round's results, withholding the largest reads the request has no room for.
 
-    One full-size result can fill this persona's whole context, which used to end
-    the request. A withheld read comes back as an error naming its size, so the
+    One full-size result can fill this persona's whole context and end the
+    request. A withheld read comes back as an error naming its size, so the
     model can ask again for less. A control result is never withheld: it is the
     evidence of what ran. If the rest still does not fit, the next round's context
     check ends the request as before.
@@ -249,8 +249,7 @@ def ambiguous_control(access_key: Any, hass: Any, name: str, arguments: Any = No
             continue
         label = state.attributes.get('friendly_name', state.entity_id)
         entry = registry.async_get(state.entity_id)
-        aliases = [] if entry is None else (er.async_get_entity_aliases(hass, entry)
-            if hasattr(er, 'async_get_entity_aliases') else [alias for alias in entry.aliases if isinstance(alias, str)])
+        aliases = [] if entry is None else er.async_get_entity_aliases(hass, entry)
         labels = [str(label), state.entity_id, *aliases]
         area_id = effective_entity_area_id(entry, devices)
         if area_id and (area := areas.async_get_area(area_id)):

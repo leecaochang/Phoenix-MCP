@@ -53,7 +53,6 @@ from .policy_engine import (
     is_sensitive_key,
     parse_relative_time,
     resolve,
-    resolve_registry_access,
     template_blocklist_vars,
 )
 from .locales import canonical_language
@@ -95,27 +94,6 @@ def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> 
         for s in hass.states.async_all()
         if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(s.entity_id))
-    }
-
-
-def build_permitted_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set:
-    """Return the entity IDs accessible to an access key, including registry-only entities.
-
-    Unlike build_permitted_states, this unions live states with the entity registry
-    so history and statistics can query recorder data for entities that are offline
-    or disabled. Also applies use_assist_exposure filtering for pass_through access keys.
-    """
-    from homeassistant.helpers import entity_registry as er_mod
-
-    registry = er_mod.async_get(hass)
-    candidate_ids: set[str] = {s.entity_id for s in hass.states.async_all()}
-    candidate_ids.update(entry.entity_id for entry in registry.entities.values())
-
-    expose = assist_expose_check(access_key, hass)
-    return {
-        eid for eid in candidate_ids
-        if resolve_registry_access(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
-        and (expose is None or expose(eid))
     }
 
 

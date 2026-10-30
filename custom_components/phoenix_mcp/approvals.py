@@ -495,7 +495,7 @@ async def async_cancel_queued_approvals_at_startup(
     waiting for a decision and never ran. The conversation that asked for it
     ended with the previous run: approving it now would apply a change whose
     requester can never see the result, and the agent would retry its request
-    instead (user, 2026-10-29). Cancelling is the fail-closed outcome and keeps
+    instead. Cancelling is the fail-closed outcome and keeps
     the record in the queue with its reason, so the operator sees what was
     dropped. Caller must hold store.async_lock, and must dismiss each returned
     record's notification and fire phoenix_mcp_approval_resolved outside it.

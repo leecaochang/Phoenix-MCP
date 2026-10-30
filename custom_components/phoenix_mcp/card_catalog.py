@@ -1,27 +1,22 @@
 """Dashboard card catalog: which Lovelace cards this instance can actually render.
 
-Phoenix MCP's dashboard write tools accept any card dict with a non-empty string
-`type`, so an agent authoring a dashboard cannot learn which custom cards are
-installed. This module holds a cached catalog of every card type the instance can
-render, with a one-line description, a documentation URL, and a worked stub config.
+Dashboard write tools accept any card dict with a non-empty string `type`, so an
+agent cannot otherwise learn which custom cards are installed. This module caches
+every card type the instance can render, with a one-line description, a
+documentation URL and a worked stub config.
 
-The catalog is HARVESTED IN A BROWSER, not read off disk. A card announces itself by
-pushing onto `window.customCards` (the registry HA's own card picker reads) at runtime.
-A static parse of the plugin JS yields nothing for cards that build their type strings
-by concatenation or never register in the picker, and cannot recover descriptions or
-stub configs, so it finds far fewer cards and would give a misleading catalog.
+The catalog is HARVESTED IN A BROWSER, not read off disk: a card announces itself
+by pushing onto `window.customCards` (the registry HA's card picker reads) at
+runtime. A static parse of plugin JS misses cards that build their type strings by
+concatenation and cannot recover descriptions or stubs. Harvested payloads come
+from third-party card code, so every field is coerced, bounded and dropped on doubt.
 
-The frontend harvester posts here through the admin API. The payload is assembled
-from third-party card code, so every field is coerced, bounded, and dropped on doubt.
-
-A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE. `harvested_at is None` means no browser
-has reported yet, and callers must say so rather than report zero cards: an agent told
-"you have no custom cards" avoids every custom card on the system.
-
-A HARVESTED CATALOG IS NOT NECESSARILY A COMPLETE ONE. Each harvest records a
-fingerprint of the dashboard resources registered when it reported, so a reader can
-tell whether resources changed since; `assess_freshness` combines that with failed
-imports into the evidence a "not seen" answer may rely on.
+A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE: `harvested_at is None` means no
+browser has reported, and callers must say so, since "no custom cards" makes an
+agent avoid every custom card. A HARVESTED CATALOG IS NOT NECESSARILY COMPLETE:
+each harvest records a fingerprint of the registered dashboard resources, and
+`assess_freshness` combines it with failed imports into the evidence a "not seen"
+answer may rely on.
 """
 
 from __future__ import annotations
@@ -95,10 +90,6 @@ class CardCatalog:
         """True once a browser has reported, even if it found nothing."""
         return self.harvested_at is not None
 
-
-# Why a harvested catalog may not have seen every installed card. The order is
-# the order reasons are reported in.
-FRESHNESS_REASONS = ("provenance_unknown", "resources_changed", "failed_imports")
 
 _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 

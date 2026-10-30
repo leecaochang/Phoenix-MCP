@@ -457,12 +457,11 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
     Backs mesa-core's ``mesa_get_profile(include_semantic_moments=True)``.
     ``async_get_triggers_for_target``/``async_get_conditions_for_target`` resolve
     which apply to an entity from each integration's triggers.yaml/conditions.yaml.
-    Purpose-specific triggers are default from HA 2026.7; on 2026.6 with the Labs
-    flag off the sets are smaller or empty, still a valid answer.
+    An integration that declares none yields a smaller or empty set, still a valid answer.
 
     HA-COUPLING POINT alongside ws_dispatch, the injector and mesa_suggestions:
-    imports sit inside the function and ANY failure (including the module missing
-    on older HA) degrades to None, which mesa-core renders as the field being
+    imports sit inside the function and ANY failure (including a moved or missing
+    module) degrades to None, which mesa-core renders as the field being
     omitted. Re-verify on HA upgrades. Consumed live, never consulted by enforcement.
 
     Each moment carries an ``example`` or its ``schema``. The schema (HA's

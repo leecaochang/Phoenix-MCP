@@ -32,6 +32,21 @@ _DESTRUCTIVE_BY_NAME_EXTRA = {"restart_ha"}
 _OPEN_WORLD_EXPECTED = {"list_blueprints", "get_blueprint"}
 
 
+def _catalog_payload_metrics(access_key, data) -> dict[str, int]:
+    """Deterministic byte metrics for the access key's announced catalog, per wire format."""
+    import json
+
+    tools = agentcli.build_mcp_tool_list(access_key, data)
+
+    def size(value) -> int:
+        return len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+    claude = agentcli.ClaudeProvider(agentcli.ProviderConfig("claude", "metrics", "")).format_tools(tools)
+    openai = agentcli.OpenAICompatProvider(agentcli.ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
+    return {"tool_count": len(tools), "canonical_bytes": size(tools), "claude_bytes": size(claude), "openai_bytes": size(openai)}
+
+
+
 def _static_defs() -> list[dict]:
     return [
         *mcp_view._ENTITY_TOOL_DEFS,
@@ -186,7 +201,7 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         "announce_all": announce_all,
     }
     metrics = {
-        name: agentcli.catalog_payload_metrics(access_key, _make_data(access_key))
+        name: _catalog_payload_metrics(access_key, _make_data(access_key))
         for name, access_key in profiles.items()
     }
     assert metrics == {

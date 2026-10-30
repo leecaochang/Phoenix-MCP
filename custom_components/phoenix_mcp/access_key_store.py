@@ -1160,12 +1160,6 @@ class AccessKeyStore:
                 return access_key
         return None
 
-    def get_archived_by_hash(self, access_key_hash: str) -> ArchivedAccessKeyRecord | None:
-        for record in self._archived.values():
-            if hmac_compare(record.access_key_hash, access_key_hash):
-                return record
-        return None
-
     def list_access_keys(self) -> list[AccessKeyRecord]:
         return list(self._access_keys.values())
 
