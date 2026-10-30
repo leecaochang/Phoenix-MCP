@@ -235,7 +235,7 @@ HELPER_TEMPLATE_PURE_FUNCTIONS = frozenset({
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt",
     "log", "average", "median", "clamp", "wrap", "remap",
     "now", "utcnow", "today_at", "as_datetime", "as_local", "as_timestamp",
-    "timedelta", "strptime",
+    "timedelta", "strptime", "iif", "is_number",
 })
 HELPER_TEMPLATE_TIME_FUNCTIONS = frozenset({
     "now", "utcnow", "today_at", "as_datetime", "as_local", "timedelta", "strptime",
@@ -252,18 +252,27 @@ HELPER_TEMPLATE_PURE_FILTERS = frozenset({
     "sum", "average", "median", "sqrt", "log", "sin", "cos", "tan",
     "lower", "upper", "title", "capitalize", "trim", "replace",
     "default", "d", "length", "count", "first", "last", "list", "join",
-    "to_json", "from_json",
+    "to_json", "from_json", "iif", "is_number", "format",
+    "regex_replace", "regex_match", "regex_search", "regex_findall", "regex_findall_index",
 })
 HELPER_TEMPLATE_PURE_TESTS = frozenset({
     "defined", "undefined", "none", "boolean", "true", "false", "number",
     "integer", "float", "string", "mapping", "sequence", "iterable",
     "even", "odd", "divisibleby", "equalto", "eq", "ne", "lt", "le", "gt", "ge", "in",
+    "is_number", "match", "search",
+})
+# String methods, allowed on any receiver except a states.* path, whose state
+# objects stay out of reach; read a value with states() first.
+HELPER_TEMPLATE_STRING_METHODS = frozenset({
+    "strip", "lstrip", "rstrip", "removeprefix", "removesuffix", "split",
+    "startswith", "endswith", "replace", "lower", "upper",
 })
 HELPER_TEMPLATE_NODE_TYPES = frozenset({
     "Template", "Output", "TemplateData", "Const", "List", "Tuple", "Dict", "Pair",
     "Add", "Sub", "Mul", "Div", "FloorDiv", "Mod", "Pow", "Neg", "Pos",
     "And", "Or", "Not", "Compare", "Operand", "CondExpr", "Concat", "Keyword",
     "Call", "Filter", "Test", "Name", "Getattr", "Getitem", "If",
+    "Assign", "AssignBlock", "For",
 })
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.

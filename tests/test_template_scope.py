@@ -331,3 +331,158 @@ async def test_authorized_source_cannot_launder_scrubbed_attributes(hass, expres
     assert outcome == "denied", result
     assert "attributes" in result["content"][0]["text"]
     assert not hass.config_entries.async_entries("template")
+
+
+@pytest.mark.parametrize("expression,entities", [
+    ("{{ iif(is_state('sensor.source', '7'), 'on', 'off') }}", {"sensor.source"}),
+    ("{{ is_state('sensor.source', '7') | iif('yes', 'no') }}", {"sensor.source"}),
+    ("{{ is_number(states('sensor.source')) }}", {"sensor.source"}),
+    ("{{ states('sensor.source') | is_number }}", {"sensor.source"}),
+    ("{{ states('sensor.source') is is_number }}", {"sensor.source"}),
+    ("{{ states('sensor.text').strip() }}", {"sensor.text"}),
+    ("{{ states('sensor.text').rstrip('.') }}", {"sensor.text"}),
+    ("{{ states('sensor.text').split(',')[0] }}", {"sensor.text"}),
+    ("{{ state_attr('sensor.source', 'label').lstrip().removeprefix('x').removesuffix('.') }}", {"sensor.source"}),
+    ("{{ 'a.b'.startswith('a') and 'a.b'.endswith('b') }}", set()),
+    ("{{ 'Ab'.lower() ~ 'ab'.upper() ~ 'ab'.replace('a', 'c') }}", set()),
+    ("{{ now().strftime('%H').strip() }}", set()),
+    ("{{ now().replace(hour=0).hour }}", set()),
+    ("{{ states('sensor.text') | regex_replace(',', ';') }}", {"sensor.text"}),
+    ("{{ states('sensor.text') | regex_match('^a') or states('sensor.text') | regex_search('b') }}", {"sensor.text"}),
+    ("{{ states('sensor.text') | regex_findall('[a-z]') | length }}", {"sensor.text"}),
+    ("{{ states('sensor.text') | regex_findall_index('[a-z]', 0) }}", {"sensor.text"}),
+    ("{{ states('sensor.text') is match('a') and states('sensor.text') is search('b') }}", {"sensor.text"}),
+    ("{{ '%.1f' | format(states('sensor.source') | float(0)) }}", {"sensor.source"}),
+    ("{% set x = states('sensor.source') | float(0) %}{{ x * 2 }}", {"sensor.source"}),
+    ("{% set a, b = states('sensor.source'), states('sensor.other') %}{{ a ~ b }}", {"sensor.source", "sensor.other"}),
+    ("{% set label %}{{ states('sensor.source') }}{% endset %}{{ label | trim }}", {"sensor.source"}),
+    ("{% for part in states('sensor.text').split(',') if part %}{{ part.strip() }}{% else %}none{% endfor %}",
+     {"sensor.text"}),
+    ("{% for n in [1, 2] %}{% set y = n * states('sensor.other') | int(0) %}{{ y }}{% endfor %}", {"sensor.other"}),
+])
+async def test_newly_allowed_forms_keep_their_exact_dependencies(hass, expression, entities):
+    """Each newly allowed form renders in installed HA and reports exactly the entities it reads."""
+    hass.states.async_set("sensor.source", "7", {"label": " x7."})
+    hass.states.async_set("sensor.other", "2")
+    hass.states.async_set("sensor.text", "a, b.")
+    assert template_entities(expression) == entities
+    Template(expression, hass).async_render()
+
+
+@pytest.mark.parametrize("expression", [
+    "{{ states.sensor.source.state.strip() }}",
+    "{{ states['sensor.source'].state.split(',') }}",
+    "{{ states.sensor.source.attributes.label.rstrip('.') }}",
+    "{{ states.strip() }}",
+    "{{ states('sensor.source').format(1) }}",
+    "{{ states('sensor.source').__class__ }}",
+    "{{ 'x'.title() }}",
+    "{% set x = states %}{{ x.sensor.source.state }}",
+    "{% set x = states.sensor.source %}{{ x }}",
+    "{% set x = 'sensor.source' %}{{ x | states }}",
+    "{% set x = 'sensor.source' %}{{ is_state(x, '7') }}",
+    "{% set x = 'source' %}{{ states.sensor[x].state }}",
+    "{% set states = 'x' %}{{ states }}",
+    "{% set float = 1 %}{{ float }}",
+    "{% set _x = 1 %}{{ _x }}",
+    "{% set ns = namespace(x=1) %}{{ ns.x }}",
+    "{% set ns.x = 1 %}",
+    "{{ y }}{% set y = 1 %}",
+    "{% for x in [1] %}{{ loop.index }}{% endfor %}",
+    "{% for s in states.sensor %}{{ s }}{% endfor %}",
+    "{% for s in states %}{{ s }}{% endfor %}",
+    "{% for e in state_attr('group.all', 'entity_id') %}{{ states(e) }}{% endfor %}",
+    "{% for a, b in [[1, 2]] %}{{ a.b }}{% endfor %}",
+    "{{ 'sensor.source' | regex_replace('x', 'y') | states }}",
+])
+def test_names_methods_and_loops_never_reach_unchecked_state(expression):
+    with pytest.raises(HelperScopeError):
+        template_entities(expression)
+
+
+@pytest.mark.parametrize("expression,construct", [
+    ("{{ unknown('x') }}", "the function 'unknown'"),
+    ("{{ 'x' | slugify }}", "the filter 'slugify'"),
+    ("{{ 1 is sameas 1 }}", "the test 'sameas'"),
+    ("{{ 'x'.title() }}", "the method 'title'"),
+    ("{{ states.sensor.source.state.upper() }}", "the method 'upper' on a states.* path"),
+    ("{% macro m() %}{% endmacro %}", "the Macro construct"),
+    ("{{ lookup }}", "the name 'lookup'"),
+    ("{% set states = 1 %}", "the reserved name 'states'"),
+    ("{{ states('sensor.' ~ 'x') }}", "'states' without a literal entity ID"),
+    ("{{ states[x] }}", "a computed states[...] lookup"),
+    ("{{ states.sensor }}", "the broad lookup states.sensor"),
+    ("{{ states('sensor.x') ", "a template that does not parse"),
+])
+def test_a_refusal_names_the_construct_and_lists_what_is_allowed(expression, construct):
+    with pytest.raises(HelperScopeError) as caught:
+        template_entities(expression)
+    message = str(caught.value)
+    assert f"{construct}" in message and "dependencies cannot be safely established" in message
+    assert "Functions: " in message and "Filters: " in message and "iif" in message and "rstrip" in message
+
+
+def test_the_listed_sets_are_the_enforced_ones():
+    """The refusal lists the allow-lists from the constants the checker enforces, so neither can drift."""
+    from custom_components.phoenix_mcp import const
+    from custom_components.phoenix_mcp.template_scope import scope_refusal
+    message = scope_refusal("x")
+    listed = {}
+    for label, values in (("Allowed state functions", const.HELPER_TEMPLATE_STATE_FUNCTIONS),
+                          ("Functions", const.HELPER_TEMPLATE_PURE_FUNCTIONS),
+                          ("Filters", const.HELPER_TEMPLATE_PURE_FILTERS),
+                          ("Tests", const.HELPER_TEMPLATE_PURE_TESTS),
+                          ("String methods, not on a states.* path", const.HELPER_TEMPLATE_STRING_METHODS),
+                          ("Date and time methods", const.HELPER_TEMPLATE_TIME_METHODS)):
+        section = message.split(f"{label}: ", 1)[1].split(". ", 1)[0]
+        listed[label] = set(section.split(", "))
+        assert listed[label] == set(values), label
+    # Every name each set allows really passes the checker.
+    for name in const.HELPER_TEMPLATE_PURE_FUNCTIONS - const.HELPER_TEMPLATE_TIME_FUNCTIONS:
+        assert template_entities(f"{{{{ {name}(1) }}}}") == set()
+    for name in const.HELPER_TEMPLATE_PURE_FILTERS:
+        assert template_entities(f"{{{{ 1 | {name} }}}}") == set()
+    for name in const.HELPER_TEMPLATE_PURE_TESTS:
+        assert template_entities(f"{{{{ 1 is {name} }}}}") == set()
+    for name in const.HELPER_TEMPLATE_STRING_METHODS:
+        assert template_entities(f"{{{{ 'a'.{name}() }}}}") == set()
+
+
+async def test_every_added_name_exists_in_installed_ha(hass):
+    """Each function, filter and test added for pure string and regex work is one HA's environment provides."""
+    from homeassistant.helpers.template import TemplateEnvironment
+    env = TemplateEnvironment(hass)
+    assert {"iif", "is_number"} <= set(env.globals)
+    assert {"iif", "is_number", "format", "regex_replace", "regex_match", "regex_search", "regex_findall",
+            "regex_findall_index"} <= set(env.filters)
+    assert {"is_number", "match", "search"} <= set(env.tests)
+
+
+@pytest.mark.parametrize("expression", [
+    "{% set x = states('sensor.source') %}{{ x }}",
+    "{{ iif(true, states('sensor.source'), 'off') }}",
+    "{% for part in states('sensor.source').split(',') %}{{ part }}{% endfor %}",
+    "{{ states('sensor.source').rstrip('.') }}",
+])
+async def test_newly_allowed_forms_still_require_write_on_their_source(hass, expression):
+    assert await async_setup_component(hass, "homeassistant", {})
+    hass.states.async_set("sensor.source", "314159")
+    access_key = agent(cap_helper_write="confirm")
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+    data = runtime()
+    data.approvals = MagicMock(async_create=AsyncMock())
+    result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps(expression)},
+                                          access_key, hass, data)
+    assert outcome == "denied" and "outside this access key's write scope" in result["content"][0]["text"]
+    data.approvals.async_create.assert_not_awaited()
+    assert not hass.config_entries.async_entries("template")
+
+
+async def test_a_refused_template_names_the_construct_through_creation(hass):
+    assert await async_setup_component(hass, "homeassistant", {})
+    result, outcome, _ = await _call_tool(
+        "create_helper", {"helper_type": "template", "flow_steps": steps("{{ states('sensor.source') | slugify }}")},
+        agent(), hass, runtime())
+    text = result["content"][0]["text"]
+    assert outcome == "denied" and "the filter 'slugify'" in text and "regex_replace" in text
+    assert not hass.config_entries.async_entries("template")
