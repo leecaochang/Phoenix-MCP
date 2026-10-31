@@ -1,14 +1,14 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { BusyButton } from "./BusyButton";
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "../api";
 import { ActionButton } from "../ui/ActionButton";
-import { InlineConfirm } from "../ui/InlineConfirm";
+import { useClickAway } from "../ui/useClickAway";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { effortLevelLabel, formatDateTime } from "../utils";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
 import { t } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
+import { tPlain } from "../i18n/rich";
 import { ProviderAddForm } from "./ProviderAddForm";
 
 // Which account warnings the operator has closed. Persisted so a closed
@@ -146,7 +146,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   const [instances, setInstances] = useState<AgentCliInstance[] | null>(null);
   const [providerTypes, setProviderTypes] = useState<AgentCliProviderType[]>([]);
   const [busy, setBusy] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState<AgentCliInstance | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Each account's live model list, keyed by instance id. Absent means "not
@@ -262,7 +262,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   // everything else on this card it spends the operator's credit: a handful of
   // one-token completions against the selected model.
   const [probing, setProbing] = useState<string | null>(null);
-  const [confirmProbe, setConfirmProbe] = useState<AgentCliInstance | null>(null);
+  const [confirmProbe, setConfirmProbe] = useState<string | null>(null);
 
   /** Run the check and REPORT it, whichever path asked for it.
    *
@@ -320,7 +320,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   };
 
   const providerCreated = async (instance: AgentCliInstance, probe: boolean) => {
-    // A new account is shown below the table, so the result of its check lands where it can be read.
+    // A new account's options open under it, so the result of its check lands where it can be read.
     if (instance.id) setSelectedId(instance.id);
     if (probe && instance.id) await runProbe(instance.id);
     await load();
@@ -367,24 +367,40 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   useEffect(() => () => window.clearTimeout(hoursTimer.current), []);
   const checksOn = settings.provider_catalog_refresh_enabled !== false;
 
-  // The account shown below the table: the one picked there, else the first.
-  const selected = (instances ?? []).find((inst) => inst.id === selectedId) ?? instances?.[0] ?? null;
-  const pick = (id: string) => {
-    if (id === selected?.id) return;
-    setSelectedId(id);
+  // The account whose options show under its row; none until one is picked (user, 2026-10-31).
+  const selected = (instances ?? []).find((inst) => inst.id === selectedId) ?? null;
+  const closeOptions = () => {
     setEditing(null);
     setModelError(null);
     setConfirmProbe(null);
     setConfirmRemove(null);
     setRemoveError(null);
   };
+  // Picking the open account again closes its options.
+  const pick = (id: string) => {
+    setSelectedId(id === selected?.id ? null : id);
+    closeOptions();
+  };
+  // A click anywhere but the options or their row closes them; a running action keeps them open.
+  // Each waits for the click, so a row or control below still gets it after the options above fold away.
+  const root = useRef<HTMLDivElement | null>(null);
+  const panel = useRef<HTMLElement | null>(null);
+  const selectedRow = useMemo<RefObject<HTMLElement | null>>(() => ({
+    get current() { return root.current?.querySelector<HTMLElement>("tr.is-selected") ?? null; },
+  }), []);
+  useClickAway(panel, () => { setSelectedId(null); closeOptions(); },
+    selected !== null && !busy && probing === null && refreshing === null, selectedRow, "click");
+  // Changing the model, and a Remove or Check Options waiting for its answer, cancel on a click elsewhere.
+  const editBox = useRef<HTMLDivElement | null>(null);
+  useClickAway(editBox, () => { setEditing(null); setModelError(null); }, editing !== null && !busy && refreshing === null, undefined, "click");
+  const askBox = useRef<HTMLSpanElement | null>(null);
+  useClickAway(askBox, () => { setConfirmProbe(null); setConfirmRemove(null); setRemoveError(null); },
+    (confirmProbe !== null || confirmRemove !== null) && !busy && probing === null, undefined, "click");
+
   const typeLabel = (kind: string) => {
     const type = providerTypes.find((p) => p.kind === kind);
     return type ? (type.label_key ? t(type.label_key) : type.label) : kind;
   };
-  const modelText = (inst: AgentCliInstance) => inst.model_mode === "auto"
-    ? (inst.model ? t("settings.agentcliDefaultModelAuto", { model: inst.model }) : t("settings.agentcliDefaultModelAutoPending"))
-    : t("settings.agentcliDefaultModel", { model: inst.model || t("settings.agentcliNotSet") });
   const columns: Column<AgentCliInstance>[] = [
     { id: "name", label: t("settings.colAccount"), maxWidth: 300, cell: (inst) => inst.name, title: (inst) => inst.name, sortValue: (inst) => inst.name },
     { id: "provider", label: t("settings.colProvider"), cell: (inst) => typeLabel(inst.kind), sortValue: (inst) => typeLabel(inst.kind) },
@@ -394,20 +410,145 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
     },
   ];
 
+  /** The chosen account's options, under its row: a line for what an action found, then the actions. */
+  const options = (inst: AgentCliInstance) => {
+    const probeHelp = tPlain("settings.agentcliProbeBody", { model: inst.model, name: inst.name });
+    const removeHelp = tPlain("settings.agentcliRemoveBody", { name: inst.name });
+    const retiredBadge = modelIsStale(inst) && isDismissed(inst, "retired");
+    const noToolsBadge = Boolean(inst.model && cannotCallTools(inst, inst.model) && isDismissed(inst, "notools"));
+    return (
+      <section ref={panel} className="phx-provider-account" aria-label={inst.name}>
+        {modelIsStale(inst) && !isDismissed(inst, "retired") && (
+          <DismissibleWarning
+            text={t("settings.agentcliModelRetired", { model: inst.model })}
+            onDismiss={() => setDismissedFlag(inst, "retired", true)}
+          />
+        )}
+        {inst.model && cannotCallTools(inst, inst.model) && !isDismissed(inst, "notools") && (
+          <DismissibleWarning
+            text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
+            onDismiss={() => setDismissedFlag(inst, "notools", true)}
+          />
+        )}
+        {/* What the last action found; the line is hidden while there is nothing to say. */}
+        <div className="agentcli-settings-hint phx-provider-info" role="status">
+          {inst.model_replaced_from && <p>{t("settings.agentcliModelReplaced", { retired: inst.model_replaced_from, model: inst.model })}</p>}
+          {refreshResult[inst.id] && <p>{cardResultText(refreshResult[inst.id]!)}</p>}
+          {retiredBadge && (
+            <WarningBadge text={t("settings.agentcliModelRetired", { model: inst.model })}
+                          onShow={() => setDismissedFlag(inst, "retired", false)} />
+          )}
+          {noToolsBadge && (
+            <WarningBadge text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
+                          onShow={() => setDismissedFlag(inst, "notools", false)} />
+          )}
+        </div>
+        {editing === inst.id ? (
+          <div ref={editBox} className="agentcli-settings-model-edit">
+            {/* Refresh Models sits beside the model it refreshes (user, 2026-10-31). */}
+            <div className="agentcli-add-inline">
+              <BusySelect className="input input-auto" value={modelDraft} busy={busy || refreshing !== null}
+                      aria-label={t("settings.agentcliSelectModel")}
+                      onChange={(e) => setModelDraft(e.target.value)}>
+                <option value={AUTO_MODEL}>{t("settings.agentcliModelAuto")}</option>
+                {(liveModels[inst.id] ?? []).map((m) => (
+                  <option key={m} value={m} disabled={cannotCallTools(inst, m)}>
+                    {cannotCallTools(inst, m) ? t("settings.agentcliModelNoTools", { model: m }) : m}
+                  </option>
+                ))}
+                {/* The stored model when the provider no longer lists it. It has
+                    to be PRESENT or the select silently displays some other
+                    model as though it were the configured one, and DISABLED or
+                    a deleted model could be re-selected. */}
+                {modelIsStale(inst) && (
+                  <option value={inst.model} disabled>
+                    {t("settings.agentcliModelUnavailable", { model: inst.model })}
+                  </option>
+                )}
+              </BusySelect>
+              <ActionButton icon="refresh" className="btn btn-outline btn-sm"
+                label={refreshing === inst.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
+                busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
+            </div>
+            <div className="agentcli-settings-probe-opt" {...helpRow(t("settings.agentcliProbeOnAdd"))}>
+              <label className="toggle-switch" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
+                <input id={`agentcli-probe-on-save-${inst.id}`} type="checkbox" checked={probeOnSave}
+                       onChange={(e) => setProbeOnSave(e.target.checked)} />
+                <span className="toggle-switch-track" />
+              </label>
+              <label className="agentcli-settings-probe-copy" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
+                {t("settings.agentcliVerifyOptions")}
+                <span className="sr-only">{t("settings.agentcliProbeOnAdd")}</span>
+              </label>
+            </div>
+            {modelError && <div className="banner banner-error" role="alert">{modelError}</div>}
+            <div className="agentcli-settings-form-actions">
+              <ActionButton icon="save" label={t("common.save")} className="btn btn-outline btn-sm"
+                busy={busy || refreshing !== null} disabled={modelDraft === currentDraft(inst)}
+                onClick={() => void saveModel(inst.id)} />
+              <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy}
+                onClick={() => { setEditing(null); setModelError(null); }} />
+            </div>
+          </div>
+        ) : (
+          <div className="phx-window-actions agentcli-account-actions">
+            <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy}
+              onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); setConfirmProbe(null); setConfirmRemove(null); }} />
+            {/* Unlike everything else here, the check spends the operator's credit, so it asks first,
+                in place, as Remove does; what it costs reads in Help (user, 2026-10-31). The last-checked
+                time rides on the button's tooltip. */}
+            {confirmProbe === inst.id ? (
+              <span className="row-actions" ref={askBox}>
+                <ActionButton icon="probe" label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.agentcliProbeRun")}
+                  className="btn btn-outline btn-sm" helpText={probeHelp} busy={busy || probing !== null}
+                  onClick={() => void probeCaps(inst)} />
+                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={probing !== null}
+                  onClick={() => setConfirmProbe(null)} />
+              </span>
+            ) : (
+              <ActionButton icon="probe" className="btn btn-outline btn-sm"
+                label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.accountCheckOptions")}
+                title={inst.capabilities_checked_at
+                  ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
+                  : t("settings.agentcliProbeCaps")}
+                helpText={probeHelp}
+                busy={busy || probing !== null} disabled={!inst.model}
+                onClick={() => { setConfirmProbe(inst.id); setConfirmRemove(null); }} />
+            )}
+            {confirmRemove === inst.id ? (
+              <span className="row-actions" ref={askBox}>
+                <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: inst.name })}
+                  className="btn btn-danger btn-sm" helpText={removeHelp} busy={busy}
+                  onClick={() => void remove(inst.id)} />
+                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy}
+                  onClick={() => { setConfirmRemove(null); setRemoveError(null); }} />
+              </span>
+            ) : (
+              <ActionButton icon="delete" className="btn btn-outline btn-sm phx-action-danger"
+                label={t("settings.agentcliRemoveAccount", { name: inst.name })} helpText={removeHelp}
+                busy={busy} onClick={() => { setConfirmRemove(inst.id); setConfirmProbe(null); }} />
+            )}
+          </div>
+        )}
+        {removeError && <div className="banner banner-error" role="alert">{removeError}</div>}
+      </section>
+    );
+  };
+
   return (
-    <div className="phx-providers" data-settings-anchor="providers">
-      <p className="settings-info-note phx-settings-intro">{t("settings.providersIntro")}</p>
+    // What the accounts are for shows in Help over the window's empty space (user, 2026-10-31).
+    <div ref={root} className="phx-providers" data-settings-anchor="providers" data-help-text={t("settings.providersIntro")}>
 
       <ProviderAddForm
         providerTypes={providerTypes}
         allowAutomatic
+        compact
         disabled={busy}
         completeLabel={t("settings.agentcliDone")}
-        addingLabelKey="settings.agentcliAdding"
         onCreated={providerCreated}
       />
 
-      {/* Configured accounts; the selected one is shown, changed and checked below. */}
+      {/* Configured accounts; the chosen one's options open under its row. */}
       <ConfigTable
         id="settingsProviders"
         label={t("settings.providersCard")}
@@ -418,141 +559,14 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
         onSelect={(inst) => pick(inst.id)}
         rowLabel={(inst) => `${inst.name}, ${typeLabel(inst.kind)}`}
         empty={instances ? <p className="audit-empty">{t("settings.agentcliNoAccounts")}</p> : null}
+        detail={options}
       />
-
-      {selected && (() => {
-        const inst = selected;
-        return (
-          <section className="phx-provider-account" aria-label={inst.name}>
-            <h3 className="phx-section-title">{inst.name}</h3>
-            {modelIsStale(inst) && !isDismissed(inst, "retired") && (
-              <DismissibleWarning
-                text={t("settings.agentcliModelRetired", { model: inst.model })}
-                onDismiss={() => setDismissedFlag(inst, "retired", true)}
-              />
-            )}
-            {inst.model_replaced_from && (
-              <div className="agentcli-settings-hint" role="status">
-                {t("settings.agentcliModelReplaced", { retired: inst.model_replaced_from, model: inst.model })}
-              </div>
-            )}
-            {editing === inst.id ? (
-              <div className="agentcli-settings-model-edit">
-                <BusySelect className="input input-auto" value={modelDraft} busy={busy}
-                        aria-label={t("settings.agentcliSelectModel")}
-                        onChange={(e) => setModelDraft(e.target.value)}>
-                  <option value={AUTO_MODEL}>{t("settings.agentcliModelAuto")}</option>
-                  {(liveModels[inst.id] ?? []).map((m) => (
-                    <option key={m} value={m} disabled={cannotCallTools(inst, m)}>
-                      {cannotCallTools(inst, m) ? t("settings.agentcliModelNoTools", { model: m }) : m}
-                    </option>
-                  ))}
-                  {/* The stored model when the provider no longer lists it. It has
-                      to be PRESENT or the select silently displays some other
-                      model as though it were the configured one, and DISABLED or
-                      a deleted model could be re-selected. */}
-                  {modelIsStale(inst) && (
-                    <option value={inst.model} disabled>
-                      {t("settings.agentcliModelUnavailable", { model: inst.model })}
-                    </option>
-                  )}
-                </BusySelect>
-                <div className="agentcli-settings-model-actions">
-                  <div className="agentcli-settings-probe-opt">
-                    <label className="toggle-switch" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
-                      <input id={`agentcli-probe-on-save-${inst.id}`} type="checkbox" checked={probeOnSave}
-                             onChange={(e) => setProbeOnSave(e.target.checked)} />
-                      <span className="toggle-switch-track" />
-                    </label>
-                    <label className="agentcli-settings-probe-copy" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
-                      {t("settings.agentcliProbeOnAdd")}
-                    </label>
-                  </div>
-                  <div className="agentcli-settings-form-actions">
-                    <BusyButton className="btn btn-primary btn-sm"
-                            busy={busy} disabled={modelDraft === currentDraft(inst)}
-                            onClick={() => void saveModel(inst.id)}>{t("common.save")}</BusyButton>
-                    <BusyButton className="btn btn-text btn-sm" busy={busy}
-                            onClick={() => { setEditing(null); setModelError(null); }}>{t("settings.cancel")}</BusyButton>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <span className="agentcli-settings-model">
-                  {modelText(inst)}
-                  {modelIsStale(inst) && isDismissed(inst, "retired") && (
-                    <WarningBadge text={t("settings.agentcliModelRetired", { model: inst.model })}
-                                  onShow={() => setDismissedFlag(inst, "retired", false)} />
-                  )}
-                  {inst.model && cannotCallTools(inst, inst.model) && isDismissed(inst, "notools") && (
-                    <WarningBadge text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
-                                  onShow={() => setDismissedFlag(inst, "notools", false)} />
-                  )}
-              </span>
-            )}
-            {refreshResult[inst.id] && (
-              <div className="agentcli-settings-hint" role="status">
-                {cardResultText(refreshResult[inst.id]!)}
-              </div>
-            )}
-            {inst.model && cannotCallTools(inst, inst.model) && !isDismissed(inst, "notools") && (
-              <DismissibleWarning
-                text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
-                onDismiss={() => setDismissedFlag(inst, "notools", true)}
-              />
-            )}
-            {editing === inst.id && modelError && (
-              <div className="banner banner-error" role="alert">{modelError}</div>
-            )}
-            {editing !== inst.id && !confirmProbe && !confirmRemove && (
-              <div className="phx-window-actions agentcli-account-actions">
-                <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy}
-                  onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); }} />
-                <ActionButton icon="refresh" className="btn btn-outline btn-sm"
-                  label={refreshing === inst.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
-                  busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
-                {/* The last-checked time rides on this button's own tooltip rather
-                    than a separate status line, to keep the account uncluttered. */}
-                <ActionButton icon="probe" className="btn btn-outline btn-sm"
-                  label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.accountCheckOptions")}
-                  title={inst.capabilities_checked_at
-                    ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
-                    : t("settings.agentcliProbeCaps")}
-                  busy={busy || probing !== null} disabled={!inst.model}
-                  onClick={() => setConfirmProbe(inst)} />
-                <ActionButton icon="delete" className="btn btn-outline btn-sm phx-action-danger"
-                  label={t("settings.agentcliRemoveAccount", { name: inst.name })}
-                  busy={busy} onClick={() => setConfirmRemove(inst)} />
-              </div>
-            )}
-            {/* Unlike everything else here, the check spends the operator's credit, so it says so first. */}
-            {confirmProbe && (
-              <InlineConfirm label={t("settings.agentcliProbeTitle")} confirmLabel={t("settings.agentcliProbeRun")} confirmIcon="probe"
-                cancelLabel={t("settings.cancel")} busy={busy || probing !== null}
-                onConfirm={() => void probeCaps(confirmProbe)} onCancel={() => setConfirmProbe(null)}>
-                <p>{tRich("settings.agentcliProbeBody", { strong: (c) => <strong>{c}</strong> },
-                        { model: confirmProbe.model, name: confirmProbe.name })}</p>
-              </InlineConfirm>
-            )}
-            {confirmRemove && (
-              <InlineConfirm label={t("settings.agentcliRemoveTitle")} tone="danger" confirmLabel={t("settings.remove")} confirmIcon="delete"
-                confirmClassName="btn btn-danger btn-sm" cancelLabel={t("settings.cancel")} busy={busy} error={removeError}
-                onConfirm={() => void remove(confirmRemove.id)} onCancel={() => { setConfirmRemove(null); setRemoveError(null); }}>
-                <p>{tRich("settings.agentcliRemoveBody", { strong: (c) => <strong>{c}</strong> }, { name: confirmRemove.name })}</p>
-              </InlineConfirm>
-            )}
-          </section>
-        );
-      })()}
 
       <details className="phx-disclosure">
         <summary>{t("settings.catalogChecks")}</summary>
         <div className="phx-disclosure-body">
-          <div className="toggle-row toggle-row-plain">
-            <div className="toggle-label">
-              <span>{t("settings.providerChecksLabel")}</span>
-              <small>{t("settings.providerChecksHelp")}</small>
-            </div>
+          <div className="toggle-row toggle-row-plain" {...helpRow(t("settings.providerChecksHelp"))}>
+            <SettingLabel help={t("settings.providerChecksHelp")}><span>{t("settings.providerChecksLabel")}</span></SettingLabel>
             <label className={`toggle-switch${saving ? " disabled" : ""}`}>
               <BusyInput
                 type="checkbox"
@@ -564,11 +578,10 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
               <span className="toggle-switch-track" />
             </label>
           </div>
-          <div className="toggle-row toggle-row-plain settings-toggle-mt">
-            <div className="toggle-label">
+          <div className="toggle-row toggle-row-plain settings-toggle-mt" {...helpRow(t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX }))}>
+            <SettingLabel help={t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}>
               <span>{t("settings.providerChecksHoursLabel")}</span>
-              <small>{t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}</small>
-            </div>
+            </SettingLabel>
             <BusyInput
               className="input input-auto"
               type="number" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}

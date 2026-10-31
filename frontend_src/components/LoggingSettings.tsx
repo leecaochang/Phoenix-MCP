@@ -1,6 +1,7 @@
 import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 type LogToggle = "disable_all_logging" | "log_allowed" | "log_denied" | "log_rate_limited" | "log_entity_names" | "log_client_ip";
 
@@ -66,11 +67,11 @@ export function LoggingSettings({ settings, onToggle, saving, only }: Props) {
           <div
             key={key}
             className={`toggle-row${greyed ? " toggle-row-greyed" : ""}`}
+            {...helpRow(t(descriptionKey))}
           >
-            <div className="toggle-label">
+            <SettingLabel help={t(descriptionKey)}>
               <span className={master ? "toggle-label-master" : undefined}>{t(labelKey)}</span>
-              <small>{t(descriptionKey)}</small>
-            </div>
+            </SettingLabel>
             <label className={`toggle-switch${(saving || greyed) ? " disabled" : ""}`}>
               <BusyInput
                 type="checkbox"

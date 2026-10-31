@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { ArchivedAccessKeyRecord } from "../types";
 import { api } from "../api";
-import { formatDate } from "../utils";
+import { accessKeyStatusLabel, formatDate } from "../utils";
 import { t } from "../i18n";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { ActionButton } from "../ui/ActionButton";
@@ -20,6 +20,8 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A row can be chosen, so Up and Down step through a long list and keep the row in view (user, 2026-10-31).
+  const [chosen, setChosen] = useState<string | null>(null);
   // A click anywhere else cancels a delete waiting for its confirmation.
   const confirming = useRef<HTMLSpanElement | null>(null);
   useClickAway(confirming, () => setConfirmId(null), !!confirmId && !deleting);
@@ -44,7 +46,8 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
 
   const statusOf = (k: ArchivedAccessKeyRecord) => (k.revoked ? "Revoked" : "Expired");
   const columns: Column<ArchivedAccessKeyRecord>[] = [
-    { id: "name", label: t("accessKeys.colName"), width: 200, maxWidth: 320, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name, cell: (k) => k.name },
+    // Up to 16 characters of a name show, as in the key list (user, 2026-10-31).
+    { id: "name", label: t("accessKeys.colName"), width: 160, maxWidth: 320, maxChars: 16, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name, cell: (k) => k.name },
     { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: statusOf, cell: (k) => <AccessKeyStatus status={statusOf(k)} /> },
     { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "", cell: (k) => formatDate(k.created_at) },
     { id: "archived", label: t("accessKeys.colArchivedOn"), width: 120, sortValue: (k) => k.revoked_at ?? "", cell: (k) => formatDate(k.revoked_at) },
@@ -73,6 +76,9 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
         columns={columns}
         rows={accessKeys}
         rowKey={(k) => k.id}
+        selectedKey={chosen}
+        onSelect={(k) => setChosen(k.id)}
+        rowLabel={(k) => `${k.name}, ${accessKeyStatusLabel(statusOf(k))}`}
       />
     </div>
   );

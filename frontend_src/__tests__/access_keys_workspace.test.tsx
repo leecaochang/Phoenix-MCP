@@ -181,12 +181,17 @@ describe("Access Keys workspace", () => {
     const again = await screen.findByRole("textbox", { name: "Access key name (editable)" });
     fireEvent.change(again, { target: { value: "no spaces allowed" } });
     fireEvent.keyDown(again, { key: "Enter" });
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // The refusal reads in a row of its own under the key's, not cut off inside it (user, 2026-10-31).
+    const alert = await screen.findByRole("alert");
+    expect(alert.closest("tr")).toHaveClass("phx-table-detail");
+    expect(alert.closest("tr")!.previousElementSibling).toBe(keyRow("kitchen_agent"));
+    expect(again).toHaveAttribute("aria-describedby", alert.id);
     expect(api.patchAccessKey).not.toHaveBeenCalled();
     fireEvent.change(again, { target: { value: "kitchen_helper" } });
     fireEvent.keyDown(again, { key: "Enter" });
     await waitFor(() => expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { name: "kitchen_helper" }));
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Access key name (editable)" })).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("offers pass-through only to a scoped key, and revokes only after confirmation", async () => {
@@ -205,6 +210,10 @@ describe("Access Keys workspace", () => {
     const inline = await screen.findByRole("group", { name: "Revoke Access Key" });
     const confirm = within(inline).getByRole("button", { name: "Revoke Access Key" });
     expect(confirm).toBeDisabled();
+    // What revoking does reads in Help, for the box and its controls, not in it (user, 2026-10-31).
+    expect(within(inline).queryByText(/Revoking permanently/)).toBeNull();
+    expect(inline.getAttribute("data-help-text")).toMatch(/^Revoking permanently deactivates/);
+    expect(inline).toHaveAttribute("data-help-controls");
     expect(within(inline).getByRole("checkbox")).toHaveFocus();
     expect(api.revokeAccessKey).not.toHaveBeenCalled();
     fireEvent.click(within(inline).getByRole("checkbox"));
@@ -249,6 +258,10 @@ describe("Access Keys workspace", () => {
     const inline = await screen.findByRole("group", { name: "Rotate Access Key" });
     const confirm = within(inline).getByRole("button", { name: "Rotate Access Key" });
     expect(confirm).toBeDisabled();
+    // In Help, not in the box, and confirmed in the same gold as Enable Pass-Through (user, 2026-10-31).
+    expect(within(inline).queryByText(/Rotating immediately/)).toBeNull();
+    expect(inline.getAttribute("data-help-text")).toMatch(/^Rotating immediately invalidates/);
+    expect(confirm).toHaveClass("btn-warning");
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(confirm);
     await waitFor(() => expect(api.rotateAccessKey).toHaveBeenCalledWith("k1"));
@@ -271,6 +284,8 @@ describe("Access Keys workspace", () => {
 
     await keyAction(registry, "passThrough");
     const inline = await screen.findByRole("group", { name: "Enable Pass-Through Mode" });
+    expect(within(inline).queryByText(/broad entity and service access/)).toBeNull();
+    expect(inline.getAttribute("data-help-text")).toMatch(/^Pass-through gives this access key broad entity and service access\. Configuration changes/);
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(within(inline).getByRole("button", { name: "Enable Pass-Through" }));
     expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { pass_through: true, confirm_pass_through: true });
@@ -295,8 +310,15 @@ describe("Access Keys workspace", () => {
     // Select By narrows the tree beside its filter; it is not a toolbar tool any more.
     expect(tool(registry, "permissions", "selectBy")).toBeUndefined();
 
-    act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
+    // The tool opens and closes the confirmation, showing pressed while it is open (user, 2026-10-31).
     const permissions = within(screen.getByRole("region", { name: "Permissions window" }));
+    act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
+    await permissions.findByRole("group", { name: "Clear All Permissions" });
+    await waitFor(() => expect(tool(registry, "permissions", "clearAll")!.pressed).toBe(true));
+    act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
+    await waitFor(() => expect(permissions.queryByRole("group", { name: "Clear All Permissions" })).toBeNull());
+    await waitFor(() => expect(tool(registry, "permissions", "clearAll")!.pressed).toBe(false));
+    act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
     const inline = await permissions.findByRole("group", { name: "Clear All Permissions" });
     fireEvent.click(within(inline).getByRole("button", { name: "Clear All" }));
     expect(await within(inline).findByRole("alert")).toHaveTextContent("Storage is busy.");

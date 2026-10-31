@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
@@ -95,20 +96,13 @@ export function AiTaskSettings({
 
   const defaultReady = !!pref?.entity_id;
   return (
-    <div className="phx-settings-form">
-      <p className="settings-info-note phx-settings-intro">
-        {t("settings.aiTaskIntro")}
-      </p>
+    <div className="phx-settings-form" data-help-text={t("settings.aiTaskIntro")}>
       <div className="phx-setting-checks">
-        <div className="toggle-row">
-          <div className="toggle-label">
+        <div className="toggle-row" {...helpRow(t("settings.aiTaskEnableHelp"))}>
+          <SettingLabel help={t("settings.aiTaskEnableHelp")}>
             <span>{t("settings.aiTaskEnableLabel")}</span>
-            <small>
-              {supported
-                ? t("settings.aiTaskEnableHelp")
-                : t("settings.aiTaskUnsupported")}
-            </small>
-          </div>
+            {!supported && <small>{t("settings.aiTaskUnsupported")}</small>}
+          </SettingLabel>
           <label className={`toggle-switch${saving || !supported ? " disabled" : ""}`}>
             <BusyInput
               type="checkbox"
@@ -122,15 +116,12 @@ export function AiTaskSettings({
           </label>
         </div>
         {supported && (pref?.supported ?? false) && (
-          <div className={`toggle-row${!defaultReady && !pref?.is_preferred ? " toggle-row-greyed" : ""}`}>
-            <div className="toggle-label">
+          <div className={`toggle-row${!defaultReady && !pref?.is_preferred ? " toggle-row-greyed" : ""}`}
+            {...helpRow(t(pref?.is_preferred ? "settings.aiTaskDefaultOn" : "settings.aiTaskDefaultOff"))}>
+            <SettingLabel help={t(pref?.is_preferred ? "settings.aiTaskDefaultOn" : "settings.aiTaskDefaultOff")}>
               <span>{t("settings.aiTaskDefaultLabel")}</span>
-              <small>
-                {pref?.is_preferred
-                  ? t("settings.aiTaskDefaultOn")
-                  : defaultReady ? t("settings.aiTaskDefaultOff") : t("settings.aiTaskConfigureFirst")}
-              </small>
-            </div>
+              {!pref?.is_preferred && !defaultReady && <small>{t("settings.aiTaskConfigureFirst")}</small>}
+            </SettingLabel>
             <label className="toggle-switch">
               <BusyInput
                 type="checkbox"
@@ -147,11 +138,8 @@ export function AiTaskSettings({
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.accessKey")}</span>
-          <small>{t("settings.aiTaskAccessKeyHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.aiTaskAccessKeyHelp"))}>
+        <SettingLabel help={t("settings.aiTaskAccessKeyHelp")}><span>{t("settings.accessKey")}</span></SettingLabel>
         <BusySelect
           aria-label={t("settings.aiTaskAccessKeyAria")}
           className="input input-auto"
@@ -166,11 +154,11 @@ export function AiTaskSettings({
         </BusySelect>
       </div>
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.aiTaskProviderHelp"))}>
+        <SettingLabel help={t("settings.aiTaskProviderHelp")}>
           <span>{t("settings.providerAccount")}</span>
-          <small>{noProviders ? t("settings.addProviderFirst") : t("settings.aiTaskProviderHelp")}</small>
-        </div>
+          {noProviders && <small>{t("settings.addProviderFirst")}</small>}
+        </SettingLabel>
         <BusySelect
           aria-label={t("settings.aiTaskProviderAria")}
           className="input input-auto"
@@ -185,11 +173,8 @@ export function AiTaskSettings({
         </BusySelect>
       </div>
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.model")}</span>
-          <small>{t("settings.aiTaskModelHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.aiTaskModelHelp"))}>
+        <SettingLabel help={t("settings.aiTaskModelHelp")}><span>{t("settings.model")}</span></SettingLabel>
         <BusySelect
           aria-label={t("settings.aiTaskModelAria")}
           className="input input-auto"

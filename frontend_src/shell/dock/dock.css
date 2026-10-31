@@ -65,6 +65,7 @@
 .phx-grid-edge:hover, .phx-grid-edge.is-dragging { background-color: var(--phx-hover); }
 .phx-fits > .phx-grid-edge, .phx-workspace:not(:has(.dv-groupview)) > .phx-grid-edge { display: none; }
 .phx-canvas-host.phx-resizing, .phx-canvas-host.phx-resizing * { cursor: ns-resize !important; user-select: none; }
+.phx-canvas-host.phx-resizing.phx-resizing-columns, .phx-canvas-host.phx-resizing.phx-resizing-columns * { cursor: ew-resize !important; }
 
 /* Pinned bands are as tall as their windows (up to a share of the workspace) and do not scroll with the grid. */
 .phx-band {
@@ -183,11 +184,11 @@
 .phx-window-resize-hint { padding: 0 6px; font-size: 12px; color: var(--phx-text-2); white-space: nowrap; }
 
 .phx-window-body { box-sizing: border-box; height: 100%; overflow: auto; padding: 0 16px 16px; }
-/* Windows that follow their content (Access Keys) are as tall as it, never scrolling inside, unless one is maximized. */
+/* Windows that follow their content (Access Keys, Settings) are as tall as it, never scrolling inside, unless one is maximized.
+   Dragging a border gives a window a height of its own (user, 2026-10-31). */
 .phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body { height: auto; overflow: hidden; }
-/* Their heights come from the content, so the borders between stacked windows do not drag; side-by-side ones still do. */
-.phx-workspace.phx-content-sized .dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash { pointer-events: none; cursor: default; }
-.phx-workspace.phx-content-sized > .phx-grid-edge { display: none; }
+/* One held to its share of the visible height (the key list) scrolls inside instead. */
+.phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body.phx-window-capped { max-height: var(--phx-window-cap); overflow: auto; }
 /* A window taller than its content ends its frame at the content; the rest of its place is empty workspace. */
 /* Dockview sets the frame's height inline; a maximum shortens it without fighting that. */
 .phx-workspace .phx-dock .dv-groupview { max-height: calc(100% - var(--phx-slack, 0px)); }

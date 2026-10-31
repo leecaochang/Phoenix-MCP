@@ -4,13 +4,15 @@
  * clears), a failed change is reported in the window where it was made, every
  * Find Setting entry still finds its control, a reveal opens the window's tab
  * or folded section and focuses the setting, Find Setting searches and picks
- * from the toolbar, and Data Management chooses what a wipe deletes before the
- * typed confirmation.
+ * from the toolbar, Data Management chooses what a wipe deletes before the
+ * typed confirmation, and what a setting does is in Help rather than the window.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
-import { hasMessage } from "../i18n";
+import { hasMessage, t } from "../i18n";
+import { tPlain } from "../i18n/rich";
+import { helpFor } from "../shell/help";
 import { blockInjectSession, startInjectSession } from "../inject/compatibility";
 import { findControl } from "../shell/settings";
 import { SETTING_INDEX } from "../shell/settingsIndex";
@@ -391,11 +393,11 @@ describe("AI Providers", () => {
     const catalog = providers.getByText("Model Catalog Checks").closest("details")!;
     expect(decision.open).toBe(false);
     expect(catalog.open).toBe(false);
-    expect(within(decision).getByRole("checkbox", { name: "Use decision provider" })).toBeInTheDocument();
+    expect(within(decision).getByRole("radio", { name: "No decision provider" })).toBeInTheDocument();
     expect(within(catalog).getByRole("checkbox", { name: "Check providers for new models" })).toBeInTheDocument();
   });
 
-  it("lists accounts in a table and shows the chosen one below it", async () => {
+  it("lists accounts in a table and opens the chosen one's options under its row", async () => {
     vi.mocked(api.getAgentCliProviders).mockResolvedValue({
       instances: [
         { id: "a1", kind: "claude", name: "Work Anthropic", model: "claude-opus-5" },
@@ -412,10 +414,54 @@ describe("AI Providers", () => {
       ["Work Anthropic", "Anthropic", "claude-opus-5"],
       ["Kitchen Ollama", "Ollama", "qwen3 (automatic)"],
     ]);
-    expect(providers.getByRole("region", { name: "Work Anthropic" })).toBeVisible();
+    // Nothing is open until an account is chosen (user, 2026-10-31).
+    expect(providers.queryByRole("region", { name: "Work Anthropic" })).toBeNull();
+    fireEvent.click(rows[0]);
+    expect(rows[0].nextElementSibling?.contains(providers.getByRole("region", { name: "Work Anthropic" }))).toBe(true);
     fireEvent.click(rows[1]);
-    expect(providers.getByRole("region", { name: "Kitchen Ollama" })).toHaveTextContent("Default model: automatic, currently qwen3");
+    const options = providers.getByRole("region", { name: "Kitchen Ollama" });
+    expect(rows[1].nextElementSibling?.contains(options)).toBe(true);
+    // No heading naming the account and no model line above the actions.
+    expect(within(options).queryByRole("heading")).toBeNull();
+    expect(options).not.toHaveTextContent(/Default model/);
     expect(providers.queryByRole("region", { name: "Work Anthropic" })).toBeNull();
     expect(providers.getByRole("button", { name: "Remove Kitchen Ollama" })).toBeVisible();
+    fireEvent.click(rows[1]);
+    expect(providers.queryByRole("region", { name: "Kitchen Ollama" })).toBeNull();
+  });
+});
+
+describe("help in the Help window", () => {
+  it("leaves no explanation in the windows, only why a setting is unavailable", async () => {
+    renderSettings();
+    await screen.findByRole("checkbox", { name: t("settings.aiTaskEnableLabel"), hidden: true });
+    expect(document.querySelector(".phx-settings-intro")).toBeNull();
+    // With nothing configured, the only words beside a setting's name say why it cannot be used yet.
+    const status = new Set(["settings.addProviderFirst", "settings.voiceConfigureFirst", "settings.aiTaskConfigureFirst"].map((k) => t(k)));
+    const shown = [...document.querySelectorAll(".toggle-label small")].map((el) => el.textContent);
+    expect(shown.length).toBeGreaterThan(0);
+    for (const text of shown) expect(status).toContain(text);
+    for (const key of ["settings.killSwitchInactiveHelp", "settings.mesaModeHelp", "settings.languageHelp", "settings.agentcliIntro", "settings.voiceEnableHelp"]) {
+      // Screen readers still read it beside the name; nobody sees it.
+      expect(screen.queryAllByText(t(key)).filter((el) => !el.closest(".sr-only"))).toEqual([]);
+    }
+  });
+
+  it("shows a setting's help for its row and the controls in it, and each tab's purpose over the tab", async () => {
+    renderSettings();
+    const safety = settingsWindow("Safety");
+    expect(helpFor(safety.getByRole("checkbox", { name: "Disable all Phoenix MCP endpoints" }))).toBe(t("settings.killSwitchInactiveHelp"));
+    expect(helpFor(safety.getByText(t("settings.mesaModeLabel")))).toBe(t("settings.mesaModeHelp"));
+    expect(helpFor(safety.getByRole("combobox", { name: t("settings.mesaModeAria") }))).toBe(t("settings.mesaModeHelp"));
+    const general = settingsWindow("General");
+    expect(helpFor(general.getByRole("button", { name: t("settings.themeDark") }))).toBe(t("settings.themeHelp"));
+    expect(helpFor(general.getByRole("combobox", { name: t("settings.languageLabel") }))).toBe(t("settings.languageHelp"));
+    const home = settingsWindow("Home Assistant");
+    expect(helpFor(home.getByRole("tab", { name: "Assist Tool Provider" }))).toBe(tPlain("settings.assistIntro"));
+    expect(tPlain("settings.assistIntro")).not.toMatch(/<strong>/);
+    expect(helpFor(settingsWindow("Agent Chat").getByRole("checkbox", { name: t("settings.agentcliGlobalAria") }))).toBe(t("settings.agentcliGlobalHelp"));
+    // A control with help of its own keeps it, and the explanation is still read to screen readers.
+    const routing = settingsWindow("Agent Chat").getByRole("checkbox", { name: t("routing.enableChat") });
+    expect(routing).toHaveAccessibleDescription(t("routing.commandHelp"));
   });
 });

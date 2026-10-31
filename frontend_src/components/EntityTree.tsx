@@ -89,6 +89,10 @@ function domainInScope(scope: TreeScope | null, domainData: DomainTree): boolean
  * expansion choices. Capture the state only when entering search and restore it
  * only when leaving, so changing one non-empty query to another does not keep
  * moving the snapshot. Select By opens it the same way.
+ *
+ * A layout effect, so the tree never draws the in-between state: the filter gone
+ * but every branch still open. Firefox and Safari measured that frame (50,000
+ * pixels of tree) and the workspace sized itself to it (user, 2026-10-31).
  */
 function useTemporarySearchExpansion(
   isSearching: boolean,
@@ -98,7 +102,7 @@ function useTemporarySearchExpansion(
   const wasSearching = React.useRef(false);
   const expandedBeforeSearch = React.useRef(false);
 
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     if (isSearching === wasSearching.current) return;
 
     if (isSearching) {

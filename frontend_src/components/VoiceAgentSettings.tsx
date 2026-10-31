@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
@@ -111,16 +112,10 @@ export function VoiceAgentSettings({
   );
 
   return (
-    <div className="phx-settings-form">
-      <p className="settings-info-note phx-settings-intro">
-        {t("settings.voiceIntro")}
-      </p>
+    <div className="phx-settings-form" data-help-text={t("settings.voiceIntro")}>
       <div className="phx-setting-checks">
-        <div className="toggle-row">
-          <div className="toggle-label">
-            <span>{t("settings.voiceEnableLabel")}</span>
-            <small>{t("settings.voiceEnableHelp")}</small>
-          </div>
+        <div className="toggle-row" {...helpRow(t("settings.voiceEnableHelp"))}>
+          <SettingLabel help={t("settings.voiceEnableHelp")}><span>{t("settings.voiceEnableLabel")}</span></SettingLabel>
           <label className="toggle-switch">
             <BusyInput
               type="checkbox"
@@ -134,15 +129,12 @@ export function VoiceAgentSettings({
           </label>
         </div>
         {pipelineSupported && (
-          <div className={`toggle-row${!pipelineId && !fullyConfigured ? " toggle-row-greyed" : ""}`}>
-            <div className="toggle-label">
+          <div className={`toggle-row${!pipelineId && !fullyConfigured ? " toggle-row-greyed" : ""}`}
+            {...helpRow(t(pipelineId ? "settings.voiceAssistSetupCreated" : "settings.voiceAssistSetupNone"))}>
+            <SettingLabel help={t(pipelineId ? "settings.voiceAssistSetupCreated" : "settings.voiceAssistSetupNone")}>
               <span>{t("settings.voiceAssistSetup")}</span>
-              <small>
-                {pipelineId
-                  ? t("settings.voiceAssistSetupCreated")
-                  : fullyConfigured ? t("settings.voiceAssistSetupNone") : t("settings.voiceConfigureFirst")}
-              </small>
-            </div>
+              {!pipelineId && !fullyConfigured && <small>{t("settings.voiceConfigureFirst")}</small>}
+            </SettingLabel>
             <label className="toggle-switch">
               <BusyInput
                 type="checkbox"
@@ -157,11 +149,8 @@ export function VoiceAgentSettings({
           </div>
         )}
         {pipelineSupported && (
-          <div className={`toggle-row${!pipelineId ? " toggle-row-greyed" : ""}`}>
-            <div className="toggle-label">
-              <span>{t("settings.voicePreferredLabel")}</span>
-              <small>{t("settings.voicePreferredHelp")}</small>
-            </div>
+          <div className={`toggle-row${!pipelineId ? " toggle-row-greyed" : ""}`} {...helpRow(t("settings.voicePreferredHelp"))}>
+            <SettingLabel help={t("settings.voicePreferredHelp")}><span>{t("settings.voicePreferredLabel")}</span></SettingLabel>
             <label className="toggle-switch">
               <BusyInput
                 type="checkbox"
@@ -178,11 +167,8 @@ export function VoiceAgentSettings({
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.accessKey")}</span>
-          <small>{t("settings.voiceAccessKeyHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.voiceAccessKeyHelp"))}>
+        <SettingLabel help={t("settings.voiceAccessKeyHelp")}><span>{t("settings.accessKey")}</span></SettingLabel>
         <BusySelect
           aria-label={t("settings.voiceAccessKeyAria")}
           className="input input-auto"
@@ -197,11 +183,11 @@ export function VoiceAgentSettings({
         </BusySelect>
       </div>
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.voiceProviderHelp"))}>
+        <SettingLabel help={t("settings.voiceProviderHelp")}>
           <span>{t("settings.providerAccount")}</span>
-          <small>{instances.length === 0 ? t("settings.addProviderFirst") : t("settings.voiceProviderHelp")}</small>
-        </div>
+          {instances.length === 0 && <small>{t("settings.addProviderFirst")}</small>}
+        </SettingLabel>
         <BusySelect
           aria-label={t("settings.voiceProviderAria")}
           className="input input-auto"
@@ -216,11 +202,8 @@ export function VoiceAgentSettings({
         </BusySelect>
       </div>
 
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.model")}</span>
-          <small>{t("settings.voiceModelHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.voiceModelHelp"))}>
+        <SettingLabel help={t("settings.voiceModelHelp")}><span>{t("settings.model")}</span></SettingLabel>
         <BusySelect
           aria-label={t("settings.voiceModelAria")}
           className="input input-auto"

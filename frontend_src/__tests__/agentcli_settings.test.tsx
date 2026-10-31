@@ -84,6 +84,11 @@ async function beginAdd(kind = "claude") {
   fireEvent.change(picker, { target: { value: kind } });
 }
 
+/** Open the first account's options, which show under its row once it is picked (user, 2026-10-31). */
+async function openAccount() {
+  fireEvent.click((await screen.findAllByRole("row", { name: /, / }))[0]);
+}
+
 const onSettingChange = vi.fn();
 
 function renderCard(settings: Partial<GlobalSettings> = {}) {
@@ -268,26 +273,30 @@ describe("AgentCliSettings", () => {
 
   it("Remove asks for confirmation before deleting the instance", async () => {
     renderCard();
+    await openAccount();
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /^Remove / }));
-    await waitFor(() => expect(screen.getByRole("group", { name: "Remove Provider" })).toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: "Remove DeepSeek" }));
+    // It turns into a red Confirm Remove beside Cancel, as elsewhere in Phoenix, and what
+    // removing does reads in Help (user, 2026-10-31).
+    const confirm = await screen.findByRole("button", { name: "Confirm Remove DeepSeek" });
+    expect(confirm).toHaveClass("btn-danger");
+    expect(confirm.getAttribute("data-help-text")).toMatch(/Agent Chat can no longer use it\. If the Voice Agent or AI Task uses this account/);
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     expect(deleteAgentCliProvider).not.toHaveBeenCalled();
-    const removeButtons = screen.getAllByText("Remove");
-    fireEvent.click(removeButtons[removeButtons.length - 1]);
+    fireEvent.click(confirm);
     await waitFor(() => expect(deleteAgentCliProvider).toHaveBeenCalledWith("i1"));
   });
 
   it("surfaces a failed removal and keeps the confirmation open", async () => {
     deleteAgentCliProvider.mockRejectedValueOnce(new Error("server unreachable"));
     renderCard();
+    await openAccount();
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /^Remove / }));
-    await waitFor(() => expect(screen.getByRole("group", { name: "Remove Provider" })).toBeInTheDocument());
-    const removeButtons = screen.getAllByText("Remove");
-    fireEvent.click(removeButtons[removeButtons.length - 1]);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove DeepSeek" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm Remove DeepSeek" }));
     // The error is shown and the confirmation stays (not silently closed as success).
     await waitFor(() => expect(screen.getByText("server unreachable")).toBeInTheDocument());
-    expect(screen.getByRole("group", { name: "Remove Provider" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm Remove DeepSeek" })).toBeInTheDocument();
   });
 
   it("supports adding a second account of an existing kind (Ollama URL field)", async () => {
@@ -456,13 +465,16 @@ describe("AgentCliSettings default model", () => {
 
   it("changes the default model without touching the credential", async () => {
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:");
     const editor = select.closest(".agentcli-settings-model-edit") as HTMLElement;
     expect(editor).toHaveClass("agentcli-settings-model-edit");
-    expect(editor.querySelector(".agentcli-settings-model-actions")).toBeTruthy();
+    // Refresh Models sits beside the model it refreshes, and Save is not in inverse colours (user, 2026-10-31).
+    expect(select.closest(".agentcli-add-inline")?.textContent).toContain("Refresh Models");
     expect(editor.querySelector("input[type='checkbox']")?.closest(".toggle-switch")).toBeTruthy();
-    expect(editor.querySelector(".agentcli-settings-model-actions button")?.textContent).toBe("Save");
+    expect(editor.querySelector(".agentcli-settings-form-actions button")?.textContent).toBe("Save");
+    expect(editor.querySelector(".btn-primary")).toBeNull();
     fireEvent.change(select, { target: { value: "deepseek-v4-pro" } });
     fireEvent.click(screen.getByText("Save"));
     await waitFor(() => expect(setAgentCliProviderModel).toHaveBeenCalledWith("i1", "deepseek-v4-pro"));
@@ -477,7 +489,9 @@ describe("AgentCliSettings default model", () => {
       instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-v4-pro", model_mode: "auto" }],
     });
     renderCard();
-    expect(await screen.findByText("Default model: automatic, currently deepseek-v4-pro")).toBeTruthy();
+    await openAccount();
+    // The table's Model column says so; the options no longer repeat the model (user, 2026-10-31).
+    expect((await screen.findByRole("row", { name: /^DeepSeek,/ })).textContent).toContain("deepseek-v4-pro (automatic)");
     // An automatic account is never flagged as holding a retired model.
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
@@ -490,6 +504,7 @@ describe("AgentCliSettings default model", () => {
   it("switches a fixed account back to automatic without sending a model", async () => {
     setAgentCliProviderAuto.mockResolvedValue({ instance: { id: "i1", model: "deepseek-v4-pro", model_mode: "auto" } });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:");
     fireEvent.change(select, { target: { value: "" } });
@@ -505,6 +520,7 @@ describe("AgentCliSettings default model", () => {
     });
     getAgentCliModels.mockResolvedValue({ models: ["deepseek-flash", "deepseek-v4-pro"] });
     renderCard();
+    await openAccount();
     expect(await screen.findByText(
       "deepseek-v4-flash is no longer offered by this provider, so this account is using deepseek-flash instead.",
     )).toBeTruthy();
@@ -515,11 +531,13 @@ describe("AgentCliSettings default model", () => {
       instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-chat" }],
     });
     renderCard();
+    await openAccount();
     expect(await screen.findByText(/deepseek-chat is not in this provider's current model list/)).toBeTruthy();
   });
 
   it("says nothing when the configured model is still offered", async () => {
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
@@ -534,6 +552,7 @@ describe("AgentCliSettings default model", () => {
     });
     getAgentCliModels.mockRejectedValue(new Error("connection refused"));
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
@@ -545,6 +564,7 @@ describe("AgentCliSettings default model", () => {
     });
     getAgentCliModels.mockResolvedValue({ models: [] });
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
@@ -560,6 +580,7 @@ describe("AgentCliSettings default model", () => {
     });
     getAgentCliModels.mockResolvedValue({ models: ["still-here:8b"] });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:") as HTMLSelectElement;
     expect(select.value).toBe("gone:8b");
@@ -569,7 +590,7 @@ describe("AgentCliSettings default model", () => {
     expect(stale!.text).toContain("no longer available");
     // Nothing changed, so there is nothing to save: Save would only re-commit
     // the dead model.
-    expect((screen.getByText("Save") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText("Save").closest("button") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("a model still on offer is selectable and saveable", async () => {
@@ -578,11 +599,12 @@ describe("AgentCliSettings default model", () => {
     });
     getAgentCliModels.mockResolvedValue({ models: ["a:8b", "b:8b"] });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:") as HTMLSelectElement;
     expect([...select.options].every((o) => !o.disabled)).toBe(true);
     fireEvent.change(select, { target: { value: "b:8b" } });
-    expect((screen.getByText("Save") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("Save").closest("button") as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
@@ -604,6 +626,7 @@ describe("AgentCliSettings tool-calling capability", () => {
   it("marks an unusable model on its own option instead of in a banner", async () => {
     withCaps("good", ["good", "notools"], { good: { tools: true }, notools: { tools: false } });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:") as HTMLSelectElement;
     const bad = [...select.options].find((o) => o.value === "notools")!;
@@ -617,6 +640,7 @@ describe("AgentCliSettings tool-calling capability", () => {
     // to fix and nothing to dismiss, so it must not appear.
     withCaps("good", ["good", "notools"], { good: { tools: true }, notools: { tools: false } });
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByText(/cannot call tools/)).toBeNull();
@@ -625,6 +649,7 @@ describe("AgentCliSettings tool-calling capability", () => {
   it("banners only when the account's OWN default cannot call tools", async () => {
     withCaps("notools", ["good", "notools"], { good: { tools: true }, notools: { tools: false } });
     renderCard();
+    await openAccount();
     expect(await screen.findByText(/notools cannot call tools/)).toBeTruthy();
   });
 
@@ -632,6 +657,7 @@ describe("AgentCliSettings tool-calling capability", () => {
     // Most providers publish nothing. An undeclared model is not an unusable one.
     withCaps("mystery", ["mystery"], {});
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const select = await screen.findByLabelText("Select default model:") as HTMLSelectElement;
     expect([...select.options].every((o) => !o.disabled)).toBe(true);
@@ -653,6 +679,7 @@ describe("AgentCliSettings dismissible warnings", () => {
 
   it("closes on the X and leaves a marker that brings it back", async () => {
     const { unmount } = renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByLabelText("Dismiss this warning"));
     await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
 
@@ -666,6 +693,7 @@ describe("AgentCliSettings dismissible warnings", () => {
     await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
     unmount();
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
     expect(await screen.findByLabelText(/gone:8b is not in this provider's current model list/)).toBeTruthy();
@@ -675,6 +703,7 @@ describe("AgentCliSettings dismissible warnings", () => {
     // Dismissing acknowledges one statement about one model, not the whole
     // category: a NEW broken model must warn on its own.
     const { unmount } = renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByLabelText("Dismiss this warning"));
     await waitFor(() => expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull());
     unmount();
@@ -683,6 +712,7 @@ describe("AgentCliSettings dismissible warnings", () => {
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "alsogone:8b" }],
     });
     renderCard();
+    await openAccount();
     expect(await screen.findByText(/alsogone:8b is not in this provider's current model list/)).toBeTruthy();
   });
 
@@ -691,6 +721,7 @@ describe("AgentCliSettings dismissible warnings", () => {
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "here:8b" }],
     });
     renderCard();
+    await openAccount();
     await screen.findByRole("button", { name: "Change Model" });
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     expect(screen.queryByLabelText("Dismiss this warning")).toBeNull();
@@ -716,23 +747,31 @@ describe("AgentCliSettings capability probe", () => {
 
   it("asks before spending anything, and says so", async () => {
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
-    // The confirmation must name the cost: it is what separates this button
-    // from the free refresh beside it.
-    expect(await screen.findByText(/uses your own API credit/)).toBeTruthy();
+    // Check Options turns into Check Now beside Cancel, and the cost is named in Help over
+    // both, not in the window (user, 2026-10-31): it is what separates this button from the
+    // free refresh.
+    const now = await screen.findByRole("button", { name: "Check Now" });
+    expect(now.getAttribute("data-help-text")).toMatch(/uses your own API credit/);
+    expect(now).not.toHaveClass("btn-primary");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.queryByText(/uses your own API credit/)).toBeNull();
     expect(probeAgentCliCapabilities).not.toHaveBeenCalled();
   });
 
   it("cancelling spends nothing", async () => {
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Cancel"));
-    await waitFor(() => expect(screen.queryByText(/uses your own API credit/)).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Check Now" })).toBeNull());
     expect(probeAgentCliCapabilities).not.toHaveBeenCalled();
   });
 
   it("reports the levels it established and how many calls it took", async () => {
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
@@ -747,6 +786,7 @@ describe("AgentCliSettings capability probe", () => {
       model: "m", probed: {}, calls: 2, checked_at: "2026-08-04T00:00:00Z", effort_checkable: true, answered: true,
     });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/does not validate the options/)).toBeTruthy();
@@ -762,8 +802,9 @@ describe("AgentCliSettings capability probe", () => {
       answered: true, vision_checked: true,
     });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
-    expect(await screen.findByText(/test image and reads the answer/)).toBeTruthy();
+    expect((await screen.findByRole("button", { name: "Check Now" })).getAttribute("data-help-text")).toMatch(/test image and reads the answer/);
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(finding)).toBeTruthy();
   });
@@ -774,6 +815,7 @@ describe("AgentCliSettings capability probe", () => {
       answered: true, vision_checked: false,
     });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/3 requests/)).toBeTruthy();
@@ -785,6 +827,7 @@ describe("AgentCliSettings capability probe", () => {
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "" }],
     });
     renderCard();
+    await openAccount();
     expect((await screen.findByRole("button", { name: "Check Options" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -797,6 +840,7 @@ describe("AgentCliSettings capability probe", () => {
       effort_checkable: false, answered: true,
     });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/no levels to check/)).toBeTruthy();
@@ -814,6 +858,7 @@ describe("AgentCliSettings capability probe", () => {
     // a failure or a crash.
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
@@ -836,6 +881,7 @@ describe("AgentCliSettings capability probe", () => {
     // passing while vitest still exits non-zero.
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("i1"));
@@ -862,16 +908,56 @@ describe("AgentCliSettings account actions", () => {
 
   it("every action is named in words, beside its icon", async () => {
     renderCard();
+    await openAccount();
     expect(await screen.findByRole("button", { name: "Change Model" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Refresh Models" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Check Options" })).toBeTruthy();
     // Naming the account matters here: "Remove" alone does not say what is about to be removed.
     expect(screen.getByRole("button", { name: "Remove DeepSeek" })).toBeTruthy();
+    // Refresh Models moved into Change Model, beside the model (user, 2026-10-31).
+    expect(screen.queryByRole("button", { name: "Refresh Models" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
+    expect(await screen.findByRole("button", { name: "Refresh Models" })).toBeTruthy();
+  });
+
+  it("opens an account's options under its row when it is picked, and closes them again", async () => {
+    renderCard();
+    const row = await screen.findByRole("row", { name: /^DeepSeek,/ });
+    // Nothing is open until an account is picked (user, 2026-10-31).
+    expect(screen.queryByRole("button", { name: "Change Model" })).toBeNull();
+    fireEvent.click(row);
+    const change = await screen.findByRole("button", { name: "Change Model" });
+    expect(row.nextElementSibling?.contains(change)).toBe(true);
+    // The account's name and model are not repeated above the actions.
+    expect(row.nextElementSibling?.textContent).not.toMatch(/Default model/);
+    // Picking it again closes them, and so does a click anywhere else.
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Change Model" })).toBeNull());
+    fireEvent.click(row);
+    await screen.findByRole("button", { name: "Change Model" });
+    // Only the click closes them: closing on the press would move the rows below
+    // out from under the pointer before the click lands (user, 2026-10-31).
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole("button", { name: "Change Model" })).toBeTruthy();
+    fireEvent.click(document.body);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Change Model" })).toBeNull());
+  });
+
+  it("a click elsewhere in the options cancels a Remove waiting for its answer", async () => {
+    renderCard();
+    await openAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove DeepSeek" }));
+    await screen.findByRole("button", { name: "Confirm Remove DeepSeek" });
+    fireEvent.click(screen.getByRole("region", { name: "DeepSeek" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Confirm Remove DeepSeek" })).toBeNull());
+    // The options stay open; only the question was dropped.
+    expect(screen.getByRole("button", { name: "Remove DeepSeek" })).toBeTruthy();
+    expect(deleteAgentCliProvider).not.toHaveBeenCalled();
   });
 
   it("the last-checked time rides on the button it belongs to", async () => {
     // It is not a separate status line.
     renderCard();
+    await openAccount();
     const probe = await screen.findByRole("button", { name: "Check Options" });
     expect(probe.getAttribute("title")).toMatch(/^Check options \(last checked/);
     expect(screen.queryByText(/Capabilities last checked/)).toBeNull();
@@ -881,6 +967,8 @@ describe("AgentCliSettings account actions", () => {
     let release: (v: unknown) => void = () => {};
     refreshAgentCliProvider.mockReturnValue(new Promise((r) => { release = r; }));
     renderCard();
+    await openAccount();
+    fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     const button = await screen.findByRole("button", { name: "Refresh Models" });
     button.focus();
     fireEvent.click(button);
@@ -908,9 +996,12 @@ describe("AgentCliSettings account actions", () => {
     await beginAdd();
     fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-test" } });
     fireEvent.click(screen.getByText("Validate"));
-    const probe = await screen.findByLabelText(/Check which options this model accepts/);
+    const probe = await screen.findByLabelText(/Verify model options with provider/);
     expect(probe.closest(".toggle-switch")).toBeTruthy();
-    expect(probe.closest(".agentcli-settings-model-actions")?.querySelector("button")?.textContent).toBe("Done");
+    // Done sits beside the model and is not in inverse colours (user, 2026-10-31).
+    const done = screen.getByRole("button", { name: "Done" });
+    expect(done.closest(".agentcli-add-inline")?.querySelector("select")).toBeTruthy();
+    expect(done).not.toHaveClass("btn-primary");
     fireEvent.click(await screen.findByText("Done"));
     await waitFor(() => expect(probeAgentCliCapabilities).toHaveBeenCalledWith("new1"));
   });
@@ -921,7 +1012,7 @@ describe("AgentCliSettings account actions", () => {
     await beginAdd();
     fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-test" } });
     fireEvent.click(screen.getByText("Validate"));
-    fireEvent.click(await screen.findByLabelText(/Check which options this model accepts/));
+    fireEvent.click(await screen.findByLabelText(/Verify model options with provider/));
     fireEvent.click(screen.getByText("Done"));
     await waitFor(() => expect(createAgentCliProvider).toHaveBeenCalled());
     expect(probeAgentCliCapabilities).not.toHaveBeenCalled();
@@ -960,6 +1051,7 @@ describe("AgentCliSettings probe could not run", () => {
       effort_checkable: false, answered: false,
     });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(/declined every one/)).toBeTruthy();
@@ -975,6 +1067,7 @@ describe("AgentCliSettings probe could not run", () => {
     });
     getAgentCliModels.mockResolvedValue({ models: ["openai/gpt-5", "openai/gpt-5-mini"] });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     fireEvent.change(await screen.findByLabelText("Select default model:"),
                      { target: { value: "openai/gpt-5-mini" } });
@@ -986,8 +1079,9 @@ describe("AgentCliSettings probe could not run", () => {
     setAgentCliProviderModel.mockResolvedValue({ instance: { id: "i1", model: "openai/gpt-5-mini" } });
     getAgentCliModels.mockResolvedValue({ models: ["openai/gpt-5", "openai/gpt-5-mini"] });
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
-    fireEvent.click(await screen.findByLabelText(/Check which options this model accepts/));
+    fireEvent.click(await screen.findByLabelText(/Verify model options with provider/));
     fireEvent.change(await screen.findByLabelText("Select default model:"),
                      { target: { value: "openai/gpt-5-mini" } });
     fireEvent.click(screen.getByText("Save"));
@@ -1015,6 +1109,7 @@ describe("AgentCliSettings reports every check", () => {
 
   it("shows the result after changing the default model", async () => {
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     fireEvent.change(await screen.findByLabelText("Select default model:"), { target: { value: "a/two" } });
     fireEvent.click(screen.getByText("Save"));
@@ -1040,6 +1135,7 @@ describe("AgentCliSettings reports every check", () => {
   it("a failed check is reported rather than swallowed", async () => {
     probeAgentCliCapabilities.mockRejectedValue(new Error("rate limited"));
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
     fireEvent.change(await screen.findByLabelText("Select default model:"), { target: { value: "a/two" } });
     fireEvent.click(screen.getByText("Save"));
@@ -1069,6 +1165,7 @@ describe("AgentCliSettings announces capability changes", () => {
     const seen = vi.fn();
     window.addEventListener("phx-agentcli-providers-changed", seen);
     renderCard();
+    await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     fireEvent.click(await screen.findByText("Check Now"));
     // Without this the chat window keeps its old accounts, so a Thinking control

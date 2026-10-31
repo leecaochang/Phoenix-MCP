@@ -8,14 +8,14 @@
  * and a hairline with a heading, no coloured accents.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ActionButton } from "./ActionButton";
 import type { IconName } from "./Icon";
 import { useClickAway } from "./useClickAway";
 
 export function InlineConfirm({
-  label, title, tone = "warning", children, help, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
-  cancelLabel, busy = false, error = null, onConfirm, onCancel,
+  label, title, tone = "warning", children, help, lendHelp = false, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
+  cancelLabel, busy = false, error = null, onConfirm, onCancel, opener,
 }: {
   /** Accessible name of the confirmation, usually the action's name. */
   label: string;
@@ -26,6 +26,10 @@ export function InlineConfirm({
   children?: ReactNode;
   /** What the action will do, read in the Help window rather than shown in the box. */
   help?: string;
+  /** The help also reads for the box's own buttons and acknowledgement, rather than their names. */
+  lendHelp?: boolean;
+  /** The control that opened the box: a click on it is not a click elsewhere, so it can close the box itself. */
+  opener?: RefObject<HTMLElement | null>;
   /** An acknowledgement to tick before Confirm is available. */
   acknowledge?: string;
   confirmLabel: string;
@@ -40,12 +44,13 @@ export function InlineConfirm({
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
-  useClickAway(root, onCancel, !busy);
+  useClickAway(root, onCancel, !busy, opener);
   useEffect(() => {
     root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus();
   }, []);
   return (
     <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} data-help-text={help}
+      data-help-controls={help && lendHelp ? "" : undefined}
       onKeyDown={(e) => {
         if (e.key !== "Escape" || busy) return;
         e.preventDefault();

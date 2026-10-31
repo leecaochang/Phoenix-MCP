@@ -10,7 +10,7 @@
  */
 
 import type { AddPanelOptions, DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
-import { FoldStore, MIN_WINDOW_HEIGHT, foldWindow, reapplyCollapsed, settleFolds, toggleFold, type FoldSnapshot } from "./fold";
+import { FoldStore, MIN_WINDOW_HEIGHT, TITLE_BAR_HEIGHT, foldWindow, reapplyCollapsed, settleFolds, toggleFold, type FoldSnapshot } from "./fold";
 import { TableSettingsStore, type TableSettings } from "../../ui/table/settings";
 import { largestGridGroup, moveWindow, neighbor, rowOf, slotOf, type Direction, type Side, type Slot } from "./geometry";
 import { sanitizeLayout } from "./sanitize";
@@ -55,6 +55,8 @@ export interface WorkspaceLayout extends DisplaySnapshot {
   version?: number;
   /** Where each window last floated, and its size there, for the next time it floats. */
   floatBoxes?: Record<string, FloatBox>;
+  /** Windows whose height the user chose, which keep it rather than following their content. */
+  held?: string[];
   /** Windows the user closed, which do not open by themselves until reopened or the workspace is reset. */
   dismissed?: string[];
 }
@@ -141,8 +143,14 @@ export interface WorkspaceExtras {
    * below it takes the space left (user, 2026-10-29).
    */
   contentWindows?: readonly string[];
-  /** The most of the visible height one of those windows may take, as a fraction of it. */
+  /**
+   * The most of the visible height a window following its content may take,
+   * as a fraction of it; a docked window held to it scrolls inside. Needs
+   * Attention's share applies only while it floats.
+   */
   contentMax?: Readonly<Record<string, number>>;
+  /** The width a window opens at when it floats for the first time, within the workspace's own. */
+  floatWidths?: Readonly<Record<string, number>>;
   /**
    * Windows that open beside a partner in its pinned band, at its height, rather
    * than along the bottom: { notifications: "help" } puts Notifications to the
@@ -150,6 +158,19 @@ export interface WorkspaceExtras {
    * window takes the bottom band at the partner's height.
    */
   pairs?: Readonly<Record<string, string>>;
+}
+
+/** The first window of each top-level column, when the grid is split into columns. */
+function rootColumns(api: DockviewApi): string[] {
+  const grid = api.toJSON().grid;
+  // Dockview may keep a root from the arrangement before, holding the real split one level down.
+  let node = grid.root as { type: string; data: unknown };
+  let horizontal = grid.orientation === "HORIZONTAL";
+  while (Array.isArray(node.data) && node.data.length === 1 && (node.data[0] as { type: string }).type === "branch") {
+    node = node.data[0] as typeof node;
+    horizontal = !horizontal;
+  }
+  return horizontal ? leafOrderByChild(node) : [];
 }
 
 export class WorkspaceController {
@@ -175,6 +196,8 @@ export class WorkspaceController {
   private hosts: Partial<Record<HostId, Host>> = {};
   /** Whether a window is maximized over the visible area by this workspace. */
   private maximizedHere = false;
+  /** The window kept maximized while it is all there is to show (see `holdMaximized`). */
+  private heldMaximized: string | null = null;
   private floatedFrom = new Map<string, Slot | null>();
   private pinnedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
@@ -191,13 +214,24 @@ export class WorkspaceController {
   private shown = true;
   /** Windows the user resized or moved this session; sizing them to their content may only make them smaller. */
   private userSized = new Set<string>();
+  /**
+   * Windows whose height the user dragged or set from the keyboard: they keep it
+   * instead of following their content, scrolling inside when it needs more,
+   * until the workspace is reset (user, 2026-10-31: Review and Suggested
+   * Profiles snapped back, and Access Keys and Settings windows could not be
+   * resized at all).
+   */
+  private heldHeights = new Set<string>();
   /** Windows hidden in place, keeping their spot in the arrangement (see `setHiddenWindows`). */
   private hiddenIds: ReadonlySet<string> = new Set();
   /** Each window's content height, while windows follow their content. */
   private natural = new Map<string, number>();
+  /** The height each window held to its share of the visible height may take (see `contentMax`). */
+  private caps = new Map<string, number>();
   /** Each host's side-by-side shares from before windows were hidden, given back when they show again. */
   private hiddenShares = new Map<HostId, RowShares[]>();
   private naturalFrame = 0;
+  private slackFrame = 0;
   /** The windows changed while the workspace was hidden or not yet laid out. */
   private windowsChanged = false;
 
@@ -294,19 +328,47 @@ export class WorkspaceController {
       if (this.hostOf(id) === "float") { this.sizeFloating(id, h); continue; }
       const group = api.getPanel(id)?.group;
       if (!group || this.folds.isFolded(id) || this.hiddenIds.has(id)) continue;
+      if (this.heldHeights.has(id)) {
+        const held = Math.round(canvas.intended[id] ?? group.height);
+        this.caps.delete(id);
+        this.markCapped(id, group, h > held ? held : 0);
+        continue;
+      }
       let target = Math.max(MIN_WINDOW_HEIGHT, h);
       // A window the workspace names may shrink to its content, but never take room another
       // window needs: a long request must not resize Needs Attention (user, 2026-10-29).
       // Needs Attention itself is not held back, so what it holds is always shown.
-      if (this.contentOwn.has(id)) {
-        const share = this.extras.contentMax?.[id];
-        const cap = share ? Math.round(canvas.visibleHeight() * share) : 0;
-        target = Math.min(target, canvas.roomFor(id), ...(cap > MIN_WINDOW_HEIGHT ? [cap] : []));
-      }
+      if (this.contentOwn.has(id)) target = Math.min(target, canvas.roomFor(id));
+      // Held to its share of the visible height, a window scrolls inside (user, 2026-10-31: the key list).
+      const share = this.transient.has(id) ? undefined : this.extras.contentMax?.[id];
+      const cap = share ? Math.round(canvas.visibleHeight() * share) : 0;
+      if (cap > MIN_WINDOW_HEIGHT) { target = Math.min(target, cap); this.caps.set(id, cap); } else this.caps.delete(id);
+      this.markCapped(id, group, cap > MIN_WINDOW_HEIGHT && h > cap ? cap : 0);
       if (Math.abs((canvas.intended[id] ?? 0) - target) >= 2) targets[id] = target;
     }
     if (Object.keys(targets).length) this.batch(() => canvas.apply(targets));
     this.markSlack();
+    // Once the grid has settled: a frame ended against heights from a passing layout
+    // would stay cut off until something else moved (user, 2026-10-31, every window
+    // drawn 2 pixels tall in Firefox and Safari).
+    if (typeof requestAnimationFrame === "function") {
+      cancelAnimationFrame(this.slackFrame);
+      this.slackFrame = requestAnimationFrame(() => { this.slackFrame = 0; this.markSlack(); });
+    }
+  }
+
+  /**
+   * A window held to its share scrolls inside: its content sits in Dockview's
+   * render layer rather than in the window's frame, so the content itself is
+   * held to the height left under the title bar.
+   */
+  private markCapped(id: string, group: DockviewGroupPanel, cap: number): void {
+    group.element.classList.toggle("phx-window-capped", cap > 0);
+    const body = this.canvas?.host.querySelector<HTMLElement>(`.phx-window-body[data-phx-window="${id}"]`);
+    if (!body) return;
+    body.classList.toggle("phx-window-capped", cap > 0);
+    if (cap > 0) body.style.setProperty("--phx-window-cap", `${cap - TITLE_BAR_HEIGHT - 2}px`);
+    else body.style.removeProperty("--phx-window-cap");
   }
 
   /**
@@ -348,7 +410,15 @@ export class WorkspaceController {
     const maximized = api.hasMaximizedGroup();
     for (const group of api.groups) {
       const id = group.activePanel?.id;
-      const natural = id && this.followsContent(id) ? this.natural.get(id) : undefined;
+      // A height the user chose ends the frame there, rather than at the content: the last
+      // window of a shorter column is stretched by the grid, and that stretch is not theirs.
+      const chosen = id && this.heldHeights.has(id) ? this.canvas?.intended[id] : undefined;
+      // Content taller than the chosen height scrolls inside, at the height chosen so far.
+      if (id && chosen !== undefined) this.markCapped(id, group, (this.natural.get(id) ?? 0) > chosen ? chosen : 0);
+      const content = chosen ?? (id && this.followsContent(id) ? this.natural.get(id) : undefined);
+      // A window held to its share ends there even when it is the last of its column, and scrolls inside.
+      const cap = id ? this.caps.get(id) : undefined;
+      const natural = content && cap && chosen === undefined ? Math.min(content, cap) : content;
       const slack = !maximized && natural && id && !this.folds.isFolded(id) && !this.hiddenIds.has(id) ? Math.round(group.height - natural) : 0;
       if (slack > 2) group.element.style.setProperty("--phx-slack", `${slack}px`);
       else group.element.style.removeProperty("--phx-slack");
@@ -451,7 +521,10 @@ export class WorkspaceController {
 
   /** Record that the user resized or moved these windows. */
   markUserSized(ids: Iterable<string>): void {
-    for (const id of ids) this.noteUserSized(id);
+    for (const id of ids) {
+      this.noteUserSized(id);
+      this.heldHeights.add(id);
+    }
   }
 
   /** Called once the user resized or moved a window and its new size is laid out. */
@@ -523,6 +596,7 @@ export class WorkspaceController {
       // there is something to measure (user, 2026-10-30, a band that came back empty).
       for (const [, host] of this.attached(LAYOUT_ORDER)) host.canvas?.apply();
       this.followContent();
+      this.applyHeldMaximized();
     }
     if (!shown || !this.windowsChanged || !this.api) return;
     this.windowsChanged = false;
@@ -782,7 +856,9 @@ export class WorkspaceController {
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
           this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
           this.dismissed = new Set((Array.isArray(saved?.dismissed) ? saved.dismissed : []).filter((id) => typeof id === "string" && known.has(id)));
+          this.heldHeights = new Set((Array.isArray(saved?.held) ? saved.held : []).filter((id) => typeof id === "string" && known.has(id)));
           this.folds.restore(saved?.folds, (id) => used.has(id));
+          this.keepArrangedShares(false);
           this.tables.restore(saved?.tables);
           for (const [, host] of this.attached()) reapplyCollapsed(host.api, this.folds);
           this.moveFloatsToLayer();
@@ -795,6 +871,7 @@ export class WorkspaceController {
           this.collectAll();
           this.applyHidden();
         });
+        this.applyHeldMaximized();
         return;
       } catch {
         // A layout Dockview cannot load falls through to the default arrangement.
@@ -808,6 +885,25 @@ export class WorkspaceController {
     if (!canvas) return;
     canvas.intended = Object.fromEntries(Object.entries(heights ?? {}).filter(([id, h]) => known.has(id) && validHeight(h) !== undefined));
     canvas.setCanvas(0);
+  }
+
+  /**
+   * Windows hidden in place come back at the widths of the arrangement just laid
+   * out, not at shares remembered from the one before it: after Reset This
+   * Workspace the Access Keys columns came back at the old dragged widths
+   * (user, 2026-10-31). A reset's columns share the width equally (see
+   * `equalizeColumns`); that is recorded as intended rather than measured, since
+   * Dockview sizes columns unreliably while some of their windows are hidden.
+   * A loaded arrangement keeps the shares it was saved with.
+   */
+  private keepArrangedShares(equal: boolean): void {
+    this.hiddenShares.clear();
+    for (const [host, h] of this.attached()) {
+      if (host === "float") continue;
+      const columns = equal && host === "main" ? rootColumns(h.api) : [];
+      if (columns.length > 1) this.hiddenShares.set(host, [{ members: columns, shares: columns.map(() => 1 / columns.length) }]);
+      else if (!equal) this.hiddenShares.set(host, sideBySide(h.api.toJSON().grid));
+    }
   }
 
   /** Load one band or the float layer, leaving out windows another host already holds. */
@@ -845,6 +941,8 @@ export class WorkspaceController {
     for (const listener of [...this.resetListeners]) listener();
     this.batch(() => {
       const keep = [...this.transient].filter((id) => this.hostOf(id));
+      // Shares remembered for hidden windows belong to the arrangement being replaced.
+      this.hiddenShares.clear();
       for (const [, host] of this.attached()) host.api.clear();
       this.folds.restore(undefined, () => false);
       this.tables.restore(undefined);
@@ -858,6 +956,7 @@ export class WorkspaceController {
       this.pairLeft.clear();
       this.pairShare.clear();
       this.dismissed.clear();
+      this.heldHeights.clear();
       this.maximizedHere = false;
       this.display.restore(undefined, () => false);
       this.canvas?.setFit(this.fits);
@@ -877,6 +976,7 @@ export class WorkspaceController {
       }
       // With the pinned windows out of the grid, its columns share the width equally.
       this.equalizeColumns(api);
+      this.keepArrangedShares(true);
       // Pinning recorded the grid's heights mid-arrangement; keep only the arrangement's own,
       // so windows without one still share the space left over.
       if (this.canvas) {
@@ -892,6 +992,27 @@ export class WorkspaceController {
       // Bands emptied above are measured again, so an empty band takes no space.
       for (const band of BANDS) this.canvasOf(band)?.apply();
     });
+    this.applyHeldMaximized();
+  }
+
+  /**
+   * Keep a window maximized while it is all there is to show, as the key list
+   * is until a key is chosen (user, 2026-10-31); null gives the arrangement
+   * back. It is maximized again whenever the workspace is shown or reset.
+   */
+  holdMaximized(id: string | null): void {
+    const was = this.heldMaximized;
+    if (was === id) return;
+    this.heldMaximized = id;
+    if (id) { this.applyHeldMaximized(); return; }
+    const group = was ? this.groupOf(was) : null;
+    if (group?.api.isMaximized()) this.restoreMaximized(group);
+  }
+
+  private applyHeldMaximized(): void {
+    if (!this.heldMaximized || !this.api || !this.shown) return;
+    const group = this.groupOf(this.heldMaximized);
+    if (group && this.hostOfGroup(group) === "main" && !group.api.isMaximized() && !this.api.hasMaximizedGroup()) this.maximize(group);
   }
 
   /** Keep a window open or closed whatever the arrangement says; undefined lets the arrangement decide. */
@@ -969,7 +1090,8 @@ export class WorkspaceController {
     for (const id of this.apiOf("float")?.panels.map((p) => p.id) ?? []) this.rememberFloat(id);
     const floatBoxes = this.floatBoxes.size ? Object.fromEntries([...this.floatBoxes].filter(([id]) => saved.has(id))) : undefined;
     const dismissed = [...this.dismissed].filter((id) => saved.has(id));
-    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), ...this.display.snapshot(saved), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}), ...(floatBoxes ? { floatBoxes } : {}), ...(dismissed.length ? { dismissed } : {}) };
+    const held = [...this.heldHeights].filter((id) => saved.has(id));
+    const out: WorkspaceLayout = { dock, folds: this.folds.snapshot(), ...this.display.snapshot(saved), closed: Object.fromEntries(this.closed), ...(heights ? { heights } : {}), ...(tables ? { tables } : {}), ...(version ? { version } : {}), ...(floatBoxes ? { floatBoxes } : {}), ...(dismissed.length ? { dismissed } : {}), ...(held.length ? { held } : {}) };
     const bands: Partial<Record<Band, BandLayout>> = {};
     for (const band of BANDS) {
       const bandApi = this.apiOf(band);
@@ -1018,9 +1140,7 @@ export class WorkspaceController {
 
   /** Make a docked or pinned window taller or shorter from the keyboard, moving the windows below it. */
   resizeHeight(group: DockviewGroupPanel, delta: number): void {
-    // Windows that follow their content keep its height.
-    if (this.contentSized && this.hostOfGroup(group) === "main") return;
-    if (group.activePanel) this.noteUserSized(group.activePanel.id);
+    if (group.activePanel) this.markUserSized([group.activePanel.id]);
     const host = this.hostOfGroup(group);
     const api = host && this.apiOf(host);
     if (!api || group.api.location.type !== "grid") return;
@@ -1153,7 +1273,11 @@ export class WorkspaceController {
       }
       if (slot?.host === "float" && this.apiOf("float")) {
         this.floatedFrom.set(id, slot.from !== undefined ? slot.from : slot.neighbor ? { neighbor: slot.neighbor, side: slot.side, height } : null);
-        this.addFloating(id, FLOAT_BOUNDS.minWidth + 120, Math.min(FLOAT_BOUNDS.maxHeight, height));
+        // A window with a width of its own (a wide table) takes it, as far as the workspace allows.
+        const wide = this.extras.floatWidths?.[id];
+        const room = (this.canvas?.host.clientWidth ?? 0) - 2 * FLOAT_BOUNDS.left;
+        if (wide) this.addFloating(id, Math.max(FLOAT_BOUNDS.minWidth, room > 0 ? Math.min(wide, room) : wide), Math.min(FLOAT_BOUNDS.maxHeight, height), true);
+        else this.addFloating(id, FLOAT_BOUNDS.minWidth + 120, Math.min(FLOAT_BOUNDS.maxHeight, height));
         return;
       }
       const anchor = slot?.neighbor ? api.getPanel(slot.neighbor) : undefined;
@@ -1219,16 +1343,7 @@ export class WorkspaceController {
    * proportions it last had, so an arrangement rebuilt over a rearranged one would otherwise come back uneven.
    */
   private equalizeColumns(api: DockviewApi): void {
-    const grid = api.toJSON().grid;
-    // Dockview may keep a root from the arrangement before, holding the real split one level down.
-    let node = grid.root as { type: string; data: unknown };
-    let horizontal = grid.orientation === "HORIZONTAL";
-    while (Array.isArray(node.data) && node.data.length === 1 && (node.data[0] as { type: string }).type === "branch") {
-      node = node.data[0] as typeof node;
-      horizontal = !horizontal;
-    }
-    if (!horizontal) return;
-    const columns = leafOrderByChild(node);
+    const columns = rootColumns(api);
     if (columns.length < 2 || api.width <= 0) return;
     const width = Math.floor(api.width / columns.length);
     for (const first of columns.slice(0, -1)) api.getPanel(first)?.group.api.setSize({ width });

@@ -293,8 +293,10 @@ const sectionOpen: Record<string, boolean> = {};
 function Section({ id, label, defaultOpen, children }: { id: string; label: string; defaultOpen: boolean; children: () => ReactNode }) {
   const [open, setOpen] = useState(sectionOpen[id] ?? defaultOpen);
   const toggle = (next: boolean) => { sectionOpen[id] = next; setOpen(next); };
+  // Reset This Workspace forgets every section's choice, including those of sections not shown now (user, 2026-10-31).
+  useWorkspaceReset(() => { for (const key of Object.keys(sectionOpen)) delete sectionOpen[key]; });
   return (
-    <details className="phx-request-section" open={open} onToggle={(e) => toggle(e.currentTarget.open)}>
+    <details className="phx-request-section" open={open} data-default-open={defaultOpen ? "" : undefined} onToggle={(e) => toggle(e.currentTarget.open)}>
       <summary>{label}</summary>
       {open && <div className="phx-request-section-body">{children()}</div>}
     </details>

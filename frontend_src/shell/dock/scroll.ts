@@ -464,7 +464,23 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
       return;
     }
     const line = sash.getBoundingClientRect();
-    if (line.width <= line.height) return;
+    if (line.width <= line.height) {
+      // A border between columns stays Dockview's own, but nothing else lays the windows out
+      // while it moves: windows following their content would re-lay the grid under every step
+      // as their text rewraps, and the drag lost the pointer (user, 2026-10-31). They settle once it ends.
+      host.classList.add("phx-resizing", "phx-resizing-columns");
+      const done = () => {
+        window.removeEventListener("pointerup", done, true);
+        window.removeEventListener("pointercancel", done, true);
+        requestAnimationFrame(() => {
+          host.classList.remove("phx-resizing", "phx-resizing-columns");
+          onEnd();
+        });
+      };
+      window.addEventListener("pointerup", done, true);
+      window.addEventListener("pointercancel", done, true);
+      return;
+    }
     const y = line.top + line.height / 2;
     const above = api.groups.filter((g) => {
       if (!isGrid(g) || !g.activePanel) return false;
@@ -515,9 +531,13 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
       }
       frame = requestAnimationFrame(tick);
     };
+    // The windows being resized take the user's height from the first move, so their frames and
+    // content follow the border while it moves, not only once it is let go (user, 2026-10-31).
+    let marked = false;
     const move = (ev: PointerEvent) => {
       lastY = ev.clientY;
       if (lastY > startY + ARM_DISTANCE) armed = true;
+      if (!marked) { marked = true; onResized?.(ids); }
       apply();
     };
     const end = () => {
@@ -629,9 +649,13 @@ export function bottomEdgeResizing(api: DockviewApi, canvas: WorkspaceCanvas, ed
       }
       frame = requestAnimationFrame(tick);
     };
+    // The windows being resized take the user's height from the first move, so their frames and
+    // content follow the border while it moves, not only once it is let go (user, 2026-10-31).
+    let marked = false;
     const move = (ev: PointerEvent) => {
       lastY = ev.clientY;
       if (lastY > startY + ARM_DISTANCE) armed = true;
+      if (!marked) { marked = true; onResized?.(ids); }
       apply();
     };
     const end = () => {

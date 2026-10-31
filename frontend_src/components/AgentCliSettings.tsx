@@ -4,6 +4,7 @@ import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useRef, useState } from "react";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
 interface Props {
@@ -80,21 +81,13 @@ export function AgentCliSettings({
   useEffect(() => () => window.clearTimeout(maxIterTimer.current), []);
 
   return (
-    <div className="phx-settings-form">
-      <p className="settings-info-note phx-settings-intro">
-        {t("settings.agentcliIntro")}
-      </p>
-
+    // What Agent Chat is shows in Help over the window's empty space (user, 2026-10-31).
+    <div className="phx-settings-form" data-help-text={t("settings.agentcliIntro")}>
       <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} />
 
       <hr className="settings-divider" />
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
-          <span>{t("settings.agentcliGlobalLabel")}</span>
-          <small>
-            {t("settings.agentcliGlobalHelp")}
-          </small>
-        </div>
+      <div className="toggle-row toggle-row-plain" {...helpRow(t("settings.agentcliGlobalHelp"))}>
+        <SettingLabel help={t("settings.agentcliGlobalHelp")}><span>{t("settings.agentcliGlobalLabel")}</span></SettingLabel>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
@@ -106,13 +99,8 @@ export function AgentCliSettings({
           <span className="toggle-switch-track" />
         </label>
       </div>
-      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }}>
-        <div className="toggle-label">
-          <span>{t("settings.agentcliScrollbackLabel")}</span>
-          <small>
-            {t("settings.agentcliScrollbackHelp")}
-          </small>
-        </div>
+      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }} {...helpRow(t("settings.agentcliScrollbackHelp"))}>
+        <SettingLabel help={t("settings.agentcliScrollbackHelp")}><span>{t("settings.agentcliScrollbackLabel")}</span></SettingLabel>
         <BusyInput
           className="input input-auto"
           type="number" min={0} max={5000} step={100}
@@ -124,13 +112,8 @@ export function AgentCliSettings({
           onKeyDown={(e) => { if (e.key === "Enter") commitNow(scrollInput); }}
         />
       </div>
-      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }}>
-        <div className="toggle-label">
-          <span>{t("settings.agentcliStepsLabel")}</span>
-          <small>
-            {t("settings.agentcliStepsHelp")}
-          </small>
-        </div>
+      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }} {...helpRow(t("settings.agentcliStepsHelp"))}>
+        <SettingLabel help={t("settings.agentcliStepsHelp")}><span>{t("settings.agentcliStepsLabel")}</span></SettingLabel>
         <BusyInput
           className="input input-auto"
           type="number" min={3} max={100} step={1}

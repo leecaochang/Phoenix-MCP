@@ -44,3 +44,8 @@ export function tRich(
 
   return parts.map((node, i) => <Fragment key={i}>{node}</Fragment>);
 }
+
+/** The same sentence as plain text, its tags dropped and their words kept, for places that show no markup. */
+export function tPlain(key: string, params?: Params): string {
+  return interpolate(rawMessage(key).replace(/<(\w+)>([\s\S]*?)<\/\1>/g, "$2"), params);
+}

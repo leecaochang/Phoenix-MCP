@@ -1,6 +1,7 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 const STYLES: ConversationStyle[] = ["direct", "warm", "calm_guide", "lively", "technical"];
 const DETAILS: DetailLevel[] = ["concise", "balanced", "detailed"];
@@ -54,14 +55,12 @@ export function ConversationBehaviorControls({
   onHomeFocusedChange?: (value: boolean) => void;
   aiTaskFreeTextOnly?: boolean;
 }) {
+  const detailHelp = t(DETAIL_HELP[detail]) + (aiTaskFreeTextOnly ? `${t("common.sentenceSeparator")}${t("settings.aiTaskBehaviorFreeTextOnly")}` : "");
   return (
     <>
       <hr className="settings-divider" />
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.conversationStyle")}</span>
-          <small>{t(STYLE_HELP[style])}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t(STYLE_HELP[style]))}>
+        <SettingLabel help={t(STYLE_HELP[style])}><span>{t("settings.conversationStyle")}</span></SettingLabel>
         <BusySelect
           className="input input-auto"
           value={style}
@@ -74,14 +73,8 @@ export function ConversationBehaviorControls({
           ))}
         </BusySelect>
       </div>
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.detailLevel")}</span>
-          <small>
-            {t(DETAIL_HELP[detail])}
-            {aiTaskFreeTextOnly ? `${t("common.sentenceSeparator")}${t("settings.aiTaskBehaviorFreeTextOnly")}` : ""}
-          </small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(detailHelp)}>
+        <SettingLabel help={detailHelp}><span>{t("settings.detailLevel")}</span></SettingLabel>
         <BusySelect
           className="input input-auto"
           value={detail}
@@ -95,11 +88,8 @@ export function ConversationBehaviorControls({
         </BusySelect>
       </div>
       {homeFocused !== undefined && onHomeFocusedChange && (
-        <div className="toggle-row">
-          <div className="toggle-label">
-            <span>{t("settings.homeFocused")}</span>
-            <small>{t("settings.homeFocusedHelp")}</small>
-          </div>
+        <div className="toggle-row" {...helpRow(t("settings.homeFocusedHelp"))}>
+          <SettingLabel help={t("settings.homeFocusedHelp")}><span>{t("settings.homeFocused")}</span></SettingLabel>
           <label className={`toggle-switch${saving ? " disabled" : ""}`}>
             <BusyInput
               type="checkbox"

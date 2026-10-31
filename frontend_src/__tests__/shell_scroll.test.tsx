@@ -47,9 +47,9 @@ describe("canvas geometry", () => {
 type Arrange = (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void;
 
 /** A workspace with a stubbed visible height, the way WorkspaceDock wires it. */
-function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean; contentHeights?: boolean } = {}) {
+function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean; contentHeights?: boolean; contentMax?: Record<string, number>; contentWindows?: string[] } = {}) {
   let visible = opts.visible ?? 600;
-  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit, contentHeights: opts.contentHeights });
+  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit, contentHeights: opts.contentHeights, contentMax: opts.contentMax, contentWindows: opts.contentWindows });
   const components = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
   let hostEl: HTMLElement | null = null;
   render(
@@ -289,6 +289,23 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
     add("caps", { referencePanel: "persona", direction: "below" });
   };
 
+  it("come back at the arrangement's widths after a reset, not the ones from before it (user, 2026-10-31)", () => {
+    const columns: Arrange = (_, add) => {
+      add("list");
+      add("tree", { referencePanel: "list", direction: "right" });
+      add("persona", { referencePanel: "list", direction: "below" });
+    };
+    const w = mount(["list", "persona", "tree"], columns, { heights: { list: 300, persona: 400, tree: 700 } });
+    const width = (id: string) => Math.round(w.controller.api!.getPanel(id)!.group.width);
+    const equal = width("list");
+    w.controller.api!.getPanel("list")!.group.api.setSize({ width: 700 });
+    expect(width("list")).toBe(700);
+    w.controller.setHiddenWindows(["persona", "tree"]);
+    w.controller.restoreOriginal();
+    w.controller.setHiddenWindows([]);
+    expect(width("list")).toBe(equal);
+  });
+
   it("take no space, keep their places and heights, and come back when shown", () => {
     const w = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
     expect(w.canvas.height).toBe(300 + 900);
@@ -301,6 +318,26 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
     w.controller.setHiddenWindows([]);
     expect(w.heights()).toEqual({ list: 300, persona: 400, tree: 900, caps: 500 });
     expect(w.canvas.height).toBe(1200);
+  });
+
+  it("keep the list maximized while it is held so, and give the arrangement back after (user, 2026-10-31)", () => {
+    const w = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
+    w.controller.setShown(true);
+    w.controller.setHiddenWindows(["persona", "tree", "caps"]);
+    w.controller.holdMaximized("list");
+    expect(w.controller.api!.getPanel("list")!.group.api.isMaximized()).toBe(true);
+    // A key is chosen: its windows show again once the list is restored.
+    w.controller.setHiddenWindows([]);
+    w.controller.holdMaximized(null);
+    w.controller.maximizedChanged();
+    expect(w.controller.api!.hasMaximizedGroup()).toBe(false);
+    expect(w.heights()).toMatchObject({ list: 300, persona: 400, tree: 900, caps: 500 });
+    // Held again (no key), a reset maximizes it once more.
+    w.controller.holdMaximized("list");
+    w.controller.restoreMaximized();
+    w.controller.maximizedChanged();
+    w.controller.restoreOriginal();
+    expect(w.controller.api!.getPanel("list")!.group.api.isMaximized()).toBe(true);
   });
 
   it("stay hidden after a window is maximized and restored, and are never saved hidden", () => {
@@ -320,7 +357,7 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
 });
 
 describe("windows that follow their content (Access Keys)", () => {
-  it("take the height their content reports, and keyboard resizing leaves them alone", async () => {
+  it("take the height their content reports until the user gives one a height of its own (user, 2026-10-31)", async () => {
     const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true });
     expect(w.controller.contentSized).toBe(true);
     w.controller.contentResized("a", 520);
@@ -328,12 +365,73 @@ describe("windows that follow their content (Access Keys)", () => {
     await nextFrame();
     expect(w.heights()).toEqual({ a: 520, b: 940 });
     expect(w.canvas.height).toBe(1460);
-    w.controller.resizeHeight(w.controller.api!.getPanel("a")!.group, 40);
-    expect(w.heights().a).toBe(520);
     // Content that shrinks makes the window shorter too.
     w.controller.contentResized("b", 400);
     await nextFrame();
     expect(w.heights()).toEqual({ a: 520, b: 400 });
+    // Resized by the user, a window keeps that height whatever its content does, and says so when saved.
+    const a = w.controller.api!.getPanel("a")!.group;
+    w.controller.resizeHeight(a, 80);
+    expect(w.heights().a).toBe(600);
+    w.controller.contentResized("a", 900);
+    await nextFrame();
+    expect(w.heights().a).toBe(600);
+    // Content taller than the chosen height scrolls inside the window.
+    expect(a.element.classList.contains("phx-window-capped")).toBe(true);
+    w.controller.contentResized("a", 200);
+    await nextFrame();
+    expect(w.heights().a).toBe(600);
+    expect(a.element.classList.contains("phx-window-capped")).toBe(false);
+    expect(w.controller.layout()!.held).toEqual(["a"]);
+    // A reset gives the height back to the content.
+    w.controller.restoreOriginal();
+    w.controller.contentResized("a", 260);
+    await nextFrame();
+    expect(w.heights().a).toBe(260);
+    expect(w.controller.layout()!.held).toBeUndefined();
+  });
+
+  it("in a fitted workspace, keep the height the user gave a window that follows its content (Review, Suggested Profiles)", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, fit: true, contentWindows: ["a"] });
+    w.controller.contentResized("a", 200);
+    await nextFrame();
+    expect(w.heights().a).toBe(200);
+    // The user drags the border under it down: both windows changed, and a keeps its new height.
+    w.controller.api!.getPanel("a")!.group.api.setSize({ height: 320 });
+    w.controller.markUserSized(["a", "b"]);
+    w.controller.contentResized("a", 180);
+    await nextFrame();
+    expect(w.heights().a).toBe(320);
+  });
+
+  it("keep a dragged height after a reload of the arrangement", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true });
+    w.controller.contentResized("a", 300);
+    await nextFrame();
+    w.controller.markUserSized(["a"]);
+    const saved = w.controller.layout()!;
+    const again = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true });
+    again.controller.load(saved);
+    again.controller.contentResized("a", 700);
+    await nextFrame();
+    expect(again.heights().a).toBe(300);
+  });
+
+  it("hold a window to its share of the visible height, scrolling inside beyond it (user, 2026-10-31: the key list)", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true, contentMax: { a: 1 / 2 } });
+    w.controller.contentResized("a", 900);
+    w.controller.contentResized("b", 900);
+    await nextFrame();
+    // Half of the 600 pixels shown, not half of the workspace's whole height.
+    expect(w.heights()).toEqual({ a: 300, b: 900 });
+    const a = w.controller.api!.getPanel("a")!.group;
+    expect(a.element.classList.contains("phx-window-capped")).toBe(true);
+    expect(w.controller.api!.getPanel("b")!.group.element.classList.contains("phx-window-capped")).toBe(false);
+    // Content shorter than the share takes its own height and stops scrolling inside.
+    w.controller.contentResized("a", 200);
+    await nextFrame();
+    expect(w.heights().a).toBe(200);
+    expect(a.element.classList.contains("phx-window-capped")).toBe(false);
   });
 
   it("leave a folded window folded, and other workspaces ignore content sizes", async () => {

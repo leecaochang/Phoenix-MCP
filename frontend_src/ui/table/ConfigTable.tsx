@@ -9,7 +9,7 @@
  * on a row ticks it, and ticking never changes the chosen row.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { compareStrings, t } from "../../i18n";
 import { Icon } from "../Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../Menu";
@@ -27,6 +27,8 @@ export interface Column<Row> {
   hidden?: boolean;
   /** In a table that fits its columns, the widest this column grows to fit its contents; longer text is cut off. */
   maxWidth?: number;
+  /** In a table that fits its columns, the most characters of a cell's text the column grows to show; the rest is cut off. */
+  maxChars?: number;
   /** Full text for a cell that may be cut short. */
   title?: (row: Row) => string | undefined;
   className?: string;
@@ -84,7 +86,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection, fitColumns = true }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection, detail, fitColumns = true }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -103,6 +105,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   empty?: ReactNode;
   /** Tick boxes in a fixed first column, while picking several rows. */
   selection?: TableSelection<Row>;
+  /** What the chosen row offers, shown in a row of its own right under it; nothing when it returns null. */
+  detail?: (row: Row) => ReactNode;
   /**
    * Size each column to its header and contents (up to its maxWidth), unless the user set its width;
    * spare width goes to an empty column at the end instead of stretching the others. On by default
@@ -275,10 +279,26 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   const centred = useRef<string | null>(null);
   // Where the mouse last was: the browser reports a "move" when rows scroll under a still pointer.
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * What scrolls the rows: the table's own box, or else the window around it
+   * (a floating window, or one held to a share of the screen), so the rule
+   * holds wherever the table sits (user, 2026-10-31). Never the workspace.
+   */
+  const rowScroller = (): HTMLElement | null => {
+    const own = wrap.current;
+    if (!own || own.scrollHeight > own.clientHeight + 1) return own;
+    const body = own.closest<HTMLElement>(".phx-window-body");
+    for (let el = own.parentElement; el && body?.contains(el); el = el.parentElement) {
+      const y = getComputedStyle(el).overflowY;
+      if ((y === "auto" || y === "scroll") && el.scrollHeight > el.clientHeight + 1) return el;
+    }
+    return own;
+  };
   const centre = (tr: HTMLElement) => {
-    const scroller = wrap.current;
+    const scroller = rowScroller();
     if (!scroller) return;
-    const head = scroller.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+    // Only the table's own box keeps its header in view while it scrolls.
+    const head = scroller === wrap.current ? scroller.querySelector("thead")?.getBoundingClientRect().height ?? 0 : 0;
     const r = tr.getBoundingClientRect();
     const box = scroller.getBoundingClientRect();
     const middle = box.top + head + (scroller.clientHeight - head) / 2;
@@ -287,7 +307,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   useEffect(() => {
     if (!selectedKey) return;
     const tr = [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === selectedKey);
-    const scroller = wrap.current;
+    const scroller = rowScroller();
     const byPointer = pointerChoice.current;
     pointerChoice.current = false;
     if (!tr) return;
@@ -299,8 +319,13 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   // a centred row is centred again, until the user scrolls the list themselves.
   useEffect(() => {
     const scroller = wrap.current;
-    if (!scroller || typeof ResizeObserver === "undefined") return;
+    if (!scroller) return;
+    // A chosen row's detail stays within the visible width while a wide table scrolls sideways.
+    const visibleWidth = () => scroller.style.setProperty("--phx-table-visible", `${scroller.clientWidth}px`);
+    visibleWidth();
+    if (typeof ResizeObserver === "undefined") return;
     const again = () => {
+      visibleWidth();
       const tr = centred.current ? [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === centred.current) : null;
       if (tr) centre(tr);
     };
@@ -357,6 +382,12 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
         const td = tr.children[i + offset];
         if (!td) continue;
         range.selectNodeContents(td);
+        // Only the first characters of a long text count; the rest is cut off.
+        const first = col.maxChars ? document.createTreeWalker(td, NodeFilter.SHOW_TEXT).nextNode() as Text | null : null;
+        if (first && col.maxChars && first.length > col.maxChars) {
+          range.setStart(first, 0);
+          range.setEnd(first, col.maxChars);
+        }
         need = Math.max(need, Math.ceil(range.getBoundingClientRect().width) + CELL_EXTRA);
       }
       const width = Math.max(MIN_COLUMN_WIDTH, Math.min(col.maxWidth ?? FIT_MAX, need));
@@ -419,24 +450,32 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
           {sorted.map((row, index) => {
             const key = rowKey(row);
             const selected = selectedKey === key;
+            const shown = selected && detail ? detail(row) : null;
             return (
-              <tr key={key} data-row={key}
-                className={`${rowClass?.(row) ?? ""}${selected ? " is-selected" : ""}`.trim() || undefined}
-                aria-selected={onSelect ? selected : undefined}
-                aria-label={rowLabel?.(row)}
-                tabIndex={onSelect ? (key === focusKey ? 0 : -1) : undefined}
-                onClick={onSelect ? () => { pointerChoice.current = true; choose(row, false); } : undefined}
-                onKeyDown={onSelect ? rowKeys(index) : undefined}>
-                {selection && (
-                  // Ticking stays apart from choosing: a click on the box never picks the row for review.
-                  <td className="phx-table-pick" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" tabIndex={-1} checked={selection.picked.has(key)} disabled={!selection.selectable(row)}
-                      aria-label={selection.label(row)} onChange={() => selection.onToggle(key)} />
-                  </td>
+              <Fragment key={key}>
+                <tr data-row={key}
+                  className={`${rowClass?.(row) ?? ""}${selected ? " is-selected" : ""}`.trim() || undefined}
+                  aria-selected={onSelect ? selected : undefined}
+                  aria-label={rowLabel?.(row)}
+                  tabIndex={onSelect ? (key === focusKey ? 0 : -1) : undefined}
+                  onClick={onSelect ? () => { pointerChoice.current = true; choose(row, false); } : undefined}
+                  onKeyDown={onSelect ? rowKeys(index) : undefined}>
+                  {selection && (
+                    // Ticking stays apart from choosing: a click on the box never picks the row for review.
+                    <td className="phx-table-pick" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" tabIndex={-1} checked={selection.picked.has(key)} disabled={!selection.selectable(row)}
+                        aria-label={selection.label(row)} onChange={() => selection.onToggle(key)} />
+                    </td>
+                  )}
+                  {visible.map((col) => <td key={col.id} className={col.className} title={col.title?.(row)}>{col.cell(row)}</td>)}
+                  {fitColumns && <td className="phx-td-fill" aria-hidden="true" />}
+                </tr>
+                {shown && (
+                  <tr className="phx-table-detail" data-detail-for={key}>
+                    <td colSpan={visible.length + (selection ? 1 : 0) + (fitColumns ? 1 : 0)}>{shown}</td>
+                  </tr>
                 )}
-                {visible.map((col) => <td key={col.id} className={col.className} title={col.title?.(row)}>{col.cell(row)}</td>)}
-                {fitColumns && <td className="phx-td-fill" aria-hidden="true" />}
-              </tr>
+              </Fragment>
             );
           })}
         </tbody>

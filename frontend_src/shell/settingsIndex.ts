@@ -45,7 +45,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "providerAdd", labelKey: "settings.addAccount", window: "settingsProviders", aria: ["settings.agentcliProviderType"] },
   { id: "providerChecks", labelKey: "settings.providerChecksLabel", window: "settingsProviders", aria: ["settings.providerChecksLabel"] },
   { id: "providerChecksHours", labelKey: "settings.providerChecksHoursLabel", window: "settingsProviders", aria: ["settings.providerChecksHoursAria"] },
-  { id: "decisionProvider", labelKey: "routing.useProvider", window: "settingsProviders", selector: '[aria-labelledby="routing-use-label"]' },
+  { id: "decisionProvider", labelKey: "routing.providerSection", window: "settingsProviders", selector: 'input[name="decision-account"]' },
   { id: "decisionTimeout", labelKey: "routing.decisionBudget", window: "settingsProviders", selector: "#routing-decision-timeout", optional: true },
   { id: "decisionRequestLimit", labelKey: "routing.requestLimit", window: "settingsProviders", selector: "#routing-request-limit", optional: true },
 

@@ -1,13 +1,16 @@
 /**
  * The Help window and what feeds it. The shell follows the pointer and the
  * keyboard focus; Help shows short help for the control under the pointer, or
- * else the focused one: its `data-help` catalog key when it has one, otherwise
- * its accessible name. Pointing at the Help window itself keeps the current
- * text, so it can be read.
+ * else the focused one: its `data-help` catalog key or `data-help-text` when it
+ * has one, otherwise its accessible name. A settings row marked
+ * `data-help-controls` lends its help to the controls in it that have none of
+ * their own. Pointing at the Help window itself keeps the current text, so it
+ * can be read.
  */
 
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { hasMessage, t } from "../i18n";
+import { tPlain } from "../i18n/rich";
 
 /** The Help window's id in every workspace. */
 export const HELP_WINDOW = "help";
@@ -39,13 +42,29 @@ function accessibleName(el: Element): string {
   return (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
 }
 
-/** Short help for whatever an event landed on: the nearest `data-help` or control, whichever is closer. */
+/** An element's own help: undefined when it has none, null when its catalog key is unknown. */
+function ownHelp(el: Element): string | null | undefined {
+  const text = el.getAttribute("data-help-text")?.trim();
+  if (text) return text;
+  const key = el.getAttribute("data-help");
+  if (key) return hasMessage(key) ? tPlain(key) : null;
+  return undefined;
+}
+
+/**
+ * Short help for whatever an event landed on: the nearest help or control,
+ * whichever is closer. A control without help of its own inside a settings row
+ * shows the row's help, which says more than the name beside it.
+ */
 export function helpFor(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) return null;
-  const el = target.closest(`[data-help], ${CONTROL}`);
+  const el = target.closest(`[data-help], [data-help-text], ${CONTROL}`);
   if (!el) return null;
-  const key = el.getAttribute("data-help");
-  if (key) return hasMessage(key) ? t(key) : null;
+  const own = ownHelp(el);
+  if (own !== undefined) return own;
+  const row = el.parentElement?.closest("[data-help-controls]");
+  const lent = row ? ownHelp(row) : undefined;
+  if (lent) return lent;
   return accessibleName(el) || null;
 }
 

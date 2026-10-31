@@ -32,6 +32,24 @@ describe("what Help says", () => {
     expect(helpFor(el("unknown"))).toBeNull();
   });
 
+  it("reads data-help-text, and lends a settings row's help to the controls in it that have none", () => {
+    document.body.innerHTML = `
+      <div id="text" data-help-text="Typed help."></div>
+      <div data-help-text="What this setting does." data-help-controls>
+        <span id="name">Setting</span>
+        <input id="switch" type="checkbox" aria-label="Setting">
+        <button id="own" data-help="help.fold">Fold</button>
+      </div>
+      <div data-help-text="Window intro."><button id="plain">Save</button></div>`;
+    const el = (id: string) => document.getElementById(id);
+    expect(helpFor(el("text"))).toBe("Typed help.");
+    expect(helpFor(el("name"))).toBe("What this setting does.");
+    expect(helpFor(el("switch"))).toBe("What this setting does.");
+    expect(helpFor(el("own"))).toBe("Fold this window into its title bar, or unfold it.");
+    // Help over a region without data-help-controls does not replace a control's own name.
+    expect(helpFor(el("plain"))).toBe("Save");
+  });
+
   it("follows the pointer, falls back to the focused control, and keeps its text while the pointer is on Help", () => {
     const tracker = new HelpTracker();
     render(

@@ -1,5 +1,5 @@
 import { BusyInput, BusySelect } from "../components/BusyButton";
-import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AccessKeyRecord, EntityTree as EntityTreeData, PatchAccessKeyBody, PermissionTree } from "../types";
 import { api } from "../api";
 import { Loading, ErrorMsg } from "../components/common";
@@ -17,7 +17,7 @@ import { EntityTree, rememberEntityTree } from "../components/EntityTree";
 import { PermissionSummary } from "../components/PermissionSummary";
 import { ProfileEditor } from "./MesaView";
 import { t, tn } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { tPlain, tRich } from "../i18n/rich";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
 import type { MenuEntry } from "../ui/Menu";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -494,18 +494,28 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
 // reject a name that clashes with another access key. Escape cancels.
 const ACCESS_KEY_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
 
-export function EditableAccessKeyName({ accessKey, onRenamed, onDone }: {
+export function EditableAccessKeyName({ accessKey, onRenamed, onDone, onError }: {
   accessKey: AccessKeyRecord;
   onRenamed: (t: AccessKeyRecord) => void;
   /** Called when editing ends: saved, unchanged, cancelled or refused. */
   onDone?: () => void;
+  /**
+   * Where a refused name is said, when not in the field's own small line: the
+   * key list shows it under the row, where it is not cut off (user, 2026-10-31).
+   * Called with null once there is nothing to say.
+   */
+  onError?: (message: string | null) => void;
 }) {
   const [value, setValue] = useState(accessKey.name);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErrState] = useState<string | null>(null);
+  const reportError = useRef(onError);
+  reportError.current = onError;
+  const setErr = useCallback((message: string | null) => { setErrState(message); reportError.current?.(message); }, []);
+  useEffect(() => () => reportError.current?.(null), []);
   const [saving, setSaving] = useState(false);
   const input = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => { setValue(accessKey.name); setErr(null); }, [accessKey.name]);
+  useEffect(() => { setValue(accessKey.name); setErr(null); }, [accessKey.name, setErr]);
   useEffect(() => { input.current?.focus(); input.current?.select(); }, []);
 
   async function commit() {
@@ -540,6 +550,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone }: {
         maxLength={32}
         aria-label={t("accessKeys.accessKeyNameAria")}
         aria-invalid={!!err}
+        aria-describedby={err && onError ? "access-key-rename-error" : undefined}
         title={t("accessKeys.accessKeyRenameTitle")}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
@@ -548,7 +559,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone }: {
           else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setValue(accessKey.name); setErr(null); onDone?.(); }
         }}
       />
-      {err && <span className="access-key-name-error" role="alert">{err}</span>}
+      {err && !onError && <span className="access-key-name-error" role="alert">{err}</span>}
     </span>
   );
 }
@@ -913,39 +924,54 @@ function useLoadedKey(): { detail: AccessKeyDetail; accessKey: AccessKeyRecord }
   return { detail, accessKey: detail.accessKey };
 }
 
-/** Rotate, Revoke or Enable Pass-Through awaiting confirmation, shown above the key list. */
+/**
+ * Rotate, Revoke or Enable Pass-Through awaiting confirmation, shown above the
+ * key list. What each does reads in Help, for the box and its controls, not in
+ * it; Rotate confirms in the same gold as Enable Pass-Through (user, 2026-10-31).
+ */
 function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
   if (!a || a.kind === "clearPerms") return null;
   const text = a.kind === "rotate" ? {
-    title: t("accessKeys.rotateAccessKeyTitle"), body: t("accessKeys.rotateBody"), check: t("accessKeys.rotateCheck"),
-    confirm: t("accessKeys.rotateAccessKeyTitle"), icon: "check" as const, className: "btn btn-primary btn-sm", tone: "warning" as const,
+    title: t("accessKeys.rotateAccessKeyTitle"), help: t("accessKeys.rotateBody"), check: t("accessKeys.rotateCheck"),
+    confirm: t("accessKeys.rotateAccessKeyTitle"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
   } : a.kind === "revoke" ? {
-    title: t("accessKeys.revokeAccessKeyTitle"), body: t("accessKeys.revokeBody"), check: t("accessKeys.revokeCheck"),
+    title: t("accessKeys.revokeAccessKeyTitle"), help: t("accessKeys.revokeBody"), check: t("accessKeys.revokeCheck"),
     confirm: t("accessKeys.revokeAccessKeyTitle"), icon: "denied" as const, className: "btn btn-danger btn-sm", tone: "danger" as const,
   } : {
-    title: t("accessKeys.enablePtTitle"), body: tRich("accessKeys.enablePtBody", { strong: (c) => <strong>{c}</strong> }), check: t("accessKeys.enablePtCheck"),
+    title: t("accessKeys.enablePtTitle"), help: tPlain("accessKeys.enablePtBody"), check: t("accessKeys.enablePtCheck"),
     confirm: t("accessKeys.enablePtLabel"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
   };
   return (
-    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check}
+    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} help={text.help} lendHelp
       confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
-      cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction}>
-      <p>{text.body}</p>
-    </InlineConfirm>
+      cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction} />
   );
 }
 
-/** Clear All Permissions awaiting confirmation, shown above the Permissions tree. */
+/**
+ * Clear All Permissions awaiting confirmation, shown above the Permissions tree.
+ * The toolbar's Clear All Permissions opens and closes it (user, 2026-10-31), so
+ * a click on that tool is not a click elsewhere.
+ */
 function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const tool = useMemo<RefObject<HTMLElement | null>>(() => ({
+    get current() {
+      const root = box.current?.getRootNode() as Document | ShadowRoot | undefined;
+      return root?.querySelector<HTMLElement>('.phx-toolbar-button[data-tool="clearAll"]') ?? null;
+    },
+  }), []);
   const a = detail.action;
   if (a?.kind !== "clearPerms") return null;
   return (
-    <InlineConfirm label={t("workspace.clearAllPermissions")} title={t("accessKeys.clearPermsTitle")} tone="danger" confirmLabel={t("accessKeys.clearAll")}
-      confirmIcon="clearPermissions" confirmClassName="btn btn-danger btn-sm" cancelLabel={t("accessKeys.cancel")} busy={a.busy} error={a.error}
-      onConfirm={detail.runAction} onCancel={detail.cancelAction}>
-      <p>{t("accessKeys.clearPermsBody")}</p>
-    </InlineConfirm>
+    <div ref={box}>
+      <InlineConfirm label={t("workspace.clearAllPermissions")} title={t("accessKeys.clearPermsTitle")} tone="danger" confirmLabel={t("accessKeys.clearAll")}
+        confirmIcon="clearPermissions" confirmClassName="btn btn-danger btn-sm" cancelLabel={t("accessKeys.cancel")} busy={a.busy} error={a.error}
+        onConfirm={detail.runAction} onCancel={detail.cancelAction} opener={tool}>
+        <p>{t("accessKeys.clearPermsBody")}</p>
+      </InlineConfirm>
+    </div>
   );
 }
 
@@ -1060,7 +1086,9 @@ export function PermissionsWindow() {
     label: t("accessKeys.permissionsTree"),
     tools: [
       // Clearing is not deleting, and like the other destructive buttons it turns red only to confirm (user, 2026-10-28).
-      { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "clearPermissions", disabled: detail.stale, onSelect: () => detail.openAction("clearPerms") },
+      { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "clearPermissions", disabled: detail.stale,
+        pressed: detail.action?.kind === "clearPerms",
+        onSelect: () => (detail.action?.kind === "clearPerms" ? detail.cancelAction() : detail.openAction("clearPerms")) },
     ],
   }] : []);
   if ("placeholder" in k) return <>{k.placeholder}</>;

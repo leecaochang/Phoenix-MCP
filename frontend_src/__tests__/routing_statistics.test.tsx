@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const get = vi.fn(), reset = vi.fn();
 vi.mock("../api", () => ({ api: { getRoutingStatistics: (...args: unknown[]) => get(...args), resetRoutingStatistics: (...args: unknown[]) => reset(...args) } }));
 import { RoutingStatistics } from "../components/RoutingStatistics";
+import { helpFor } from "../shell/help";
 const empty = { since: "2026-09-25T00:00:00Z", outcomes: { local: 0, decision: 0, provider: 0, pending: 0, failed: 0, cancelled: 0 }, provider_turns: 0, provider_usage: { requests: 0, reports: 0, input_tokens: 0, output_tokens: 0 }, decision_usage: { requests: 0, reports: 0, input_tokens: 0, output_tokens: 0 } };
 beforeEach(() => { get.mockReset(); reset.mockReset(); });
 function expand() { const details = screen.getByText("Routing Statistics").parentElement!; details.setAttribute("open", ""); fireEvent(details, new Event("toggle")); }
@@ -13,7 +14,9 @@ it("loads only on expansion and never presents missing usage as zero", async () 
   expect(await screen.findByText("50% of requests completed without the conversational model.")).toBeVisible();
   expect(screen.getByText("Unavailable")).toBeVisible();
   expect(screen.getByText("1 request missing usage")).toBeVisible();
-  expect(screen.getByText(/External MCP clients/)).toBeVisible();
+  // What the counts cover is in Help, not in the window.
+  expect(screen.queryByText(/External MCP clients/)).toBeNull();
+  expect(helpFor(screen.getByText("Routing Statistics").parentElement!.querySelector("dl"))).toMatch(/External MCP clients.*Reported tokens only/);
 });
 it("confirms in place and resets only the selected surface", async () => {
   get.mockResolvedValue({ voice: empty }); reset.mockResolvedValue({ voice: empty });

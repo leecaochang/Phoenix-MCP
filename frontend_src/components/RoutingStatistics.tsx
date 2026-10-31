@@ -45,7 +45,8 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
       `${localeNumber(usage.input_tokens)} / ${localeNumber(usage.output_tokens)}`}
       {missing > 0 && <small>{tn("routingStats.missing", missing, { count: localeNumber(missing) })}</small>}</>;
   }
-  return <details className="routing-statistics" open={open} onToggle={event => {
+  // What the counts cover shows in Help over the statistics (user, 2026-10-31).
+  return <details className="routing-statistics" data-help-text={`${t("routingStats.scope")}${t("common.sentenceSeparator")}${t("routingStats.note")}`} open={open} onToggle={event => {
     const expanded = event.currentTarget.open;
     if (expanded === open) return;
     setOpen(expanded);
@@ -53,7 +54,6 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
   }}>
     <summary>{t("routingStats.title")}</summary>
     {open && <div className="routing-statistics-content" aria-busy={busy}>
-      <p className="agentcli-settings-hint">{t("routingStats.scope")}</p>
       {stats && <>
         <p>{total ? t("routingStats.headline", { percent: localeNumber(percent) }) : t("routingStats.empty")}</p>
         <p className="agentcli-settings-hint">{t("routingStats.since", { date: localeDateTime(stats.since) })}</p>
@@ -63,7 +63,6 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
           <dt>{t("routingStats.decisionTokens")}</dt><dd>{tokens(stats.decision_usage)}</dd>
           <dt>{t("routingStats.providerTokens")}</dt><dd>{tokens(stats.provider_usage)}</dd>
         </dl>
-        <p className="agentcli-settings-hint">{t("routingStats.note")}</p>
       </>}
       {busy && <p role="status">{t("common.loading")}</p>}
       {error && !confirm && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}

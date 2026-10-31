@@ -29,8 +29,8 @@ const stacked: Arrange = (_, add) => {
 };
 
 /** A controller with all four hosts, each a real Dockview instance with a stubbed size. */
-function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number; pairs?: Record<string, string>; closedAt?: Record<string, { neighbor: string; side: "bottom" }>; arrange?: Arrange } = {}) {
-  const controller = new WorkspaceController("test", WINDOWS, opts.arrange ?? stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned, pairs: opts.pairs, closedAt: opts.closedAt });
+function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number; pairs?: Record<string, string>; closedAt?: Record<string, { neighbor: string; side: "bottom"; host?: "float" }>; arrange?: Arrange; floatWidths?: Record<string, number> } = {}) {
+  const controller = new WorkspaceController("test", WINDOWS, opts.arrange ?? stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned, pairs: opts.pairs, closedAt: opts.closedAt, floatWidths: opts.floatWidths });
   const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div>{id}</div>]));
   const hosts: Partial<Record<HostId, HTMLElement>> = {};
   const apis: Partial<Record<HostId, DockviewApi>> = {};
@@ -200,6 +200,14 @@ describe("pinned bands and the floating layer", () => {
     w.controller.float(w.group("c"));
     w.controller.dock(w.group("c"));
     expect(shape()).toEqual({ orientation: "HORIZONTAL", kinds: ["branch", "leaf"], last: ["c"] });
+  });
+
+  it("floats a window the arrangement floats at its own width, wider than other floating windows (Archived Access Keys)", () => {
+    const twoOpen: Arrange = (_, add) => { add("a"); add("b", { referencePanel: "a", direction: "below" }); };
+    const w = mount({ arrange: twoOpen, closedAt: { c: { neighbor: "a", side: "bottom", host: "float" } }, floatWidths: { c: 960 } });
+    w.controller.want("c", true);
+    expect(w.controller.hostOf("c")).toBe("float");
+    expect(w.group("c").element.closest<HTMLElement>(".dv-resize-container")?.style.width).toBe("960px");
   });
 
   it("opens a window by itself until the user closes it, then only after a reopen or a reset", () => {

@@ -99,6 +99,7 @@ function WorkspaceArea({ menu, children }: { menu: (() => MenuEntry[]) | null; c
 export function Shell() {
   const d = usePanelData();
   const setShowArchived = d.setShowArchived;
+  const deselectKey = d.deselectKey;
   const root = useRef<HTMLDivElement | null>(null);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   // Stable, so React never detaches the root between renders: an inline callback left root.current
@@ -148,7 +149,7 @@ export function Shell() {
     let controller = controllers.get(id);
     if (!controller) {
       const def = WORKSPACES[id];
-      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, contentHeights: def.contentHeights, contentWindows: def.contentWindows, contentMax: { [ATTENTION_WINDOW]: 1 / 3, ...def.contentMax }, pairs: { ...SHARED_PAIRS, ...def.pairs } };
+      const extras = { transient: TRANSIENT, folded: def.folded, conditional: def.conditional, heights: def.heights, pinned: def.pinned, closedAt: def.closedAt, layoutVersion: def.layoutVersion, fit: def.fit, contentHeights: def.contentHeights, contentWindows: def.contentWindows, contentMax: { [ATTENTION_WINDOW]: 1 / 3, ...def.contentMax }, floatWidths: def.floatWidths, pairs: { ...SHARED_PAIRS, ...def.pairs } };
       // My Workspace holds the windows the user added, laid out in the order added.
       controller = id === "my"
         ? new WorkspaceController(id, myWorkspaceWindows(myWindowsRef.current), def.arrange, windowTitle,
@@ -176,9 +177,14 @@ export function Shell() {
     return controller;
   }, [controllers, setShowArchived]);
 
-  // While no key is chosen Access Keys shows only its list; the key's windows keep their places for the next one.
+  // While no key is chosen Access Keys shows only its list, maximized (user, 2026-10-31); the key's windows
+  // keep their places for the next one, and choosing a key returns the list to its own size.
   const keyChosen = d.accessKeyView.name === "detail";
-  useEffect(() => { controllerFor("accessKeys").setHiddenWindows(keyChosen ? [] : KEY_WINDOWS); }, [keyChosen, controllerFor]);
+  useEffect(() => {
+    const keys = controllerFor("accessKeys");
+    keys.setHiddenWindows(keyChosen ? [] : KEY_WINDOWS);
+    keys.holdMaximized(keyChosen ? null : "accessKeys");
+  }, [keyChosen, controllerFor]);
 
   const registry = useMemo(() => new ToolRegistry(), []);
   // Open (or unfold) a window and bring it into view: in My Workspace when it is shown there and holds it,
@@ -478,6 +484,7 @@ export function Shell() {
     // My Workspace goes back to empty, as Reset This Workspace leaves it.
     clearMy();
     setShowArchived(false);
+    deselectKey();
     for (const controller of controllers.values()) {
       controller.want(HELP_WINDOW, true);
       controller.restoreOriginal();
@@ -491,7 +498,7 @@ export function Shell() {
     markChanged(sections, true);
     if (rec) commit(WORKSPACE_IDS.filter((id) => !controllers.has(id)).map((id) => `ws:${id}` as Section), true);
     notify(t("workspace.panelDefaultsRestored"));
-  }, [clearMy, commit, controllers, markChanged, notify, setShowArchived]);
+  }, [clearMy, commit, controllers, deselectKey, markChanged, notify, setShowArchived]);
 
   const actions = useMemo<WorkspaceActions>(() => ({
     saveMyDefault: (controller) => {
@@ -516,17 +523,26 @@ export function Shell() {
       // My Workspace goes back to its original, empty state (user, 2026-10-27).
       const mine = controller.id === "my";
       if (mine) clearMy();
-      // The key list's Show Archived is part of how the workspace looks (user, 2026-10-28).
-      if (controller.id === "accessKeys") setShowArchived(false);
+      // The key list's Show Archived is part of how the workspace looks (user, 2026-10-28), and a
+      // reset leaves no key chosen, so the list is maximized again (user, 2026-10-31).
+      if (controller.id === "accessKeys") {
+        setShowArchived(false);
+        deselectKey();
+      }
       // A reset brings Needs Attention back while items are still waiting (user, 2026-10-29).
       attentionRef.current.showAttentionIn(controller.id as WorkspaceId);
       controller.restoreOriginal();
       markChanged([`ws:${controller.id as WorkspaceId}`, ...(mine ? ["myWindows" as const] : [])], true);
     },
     restorePanelDefaults,
+    // Archived Access Keys follows Show Archived, so it opens by turning that on; the others open in their place.
+    openToolWindow: (controller, id) => {
+      if (id === ARCHIVED_WINDOW) setShowArchived(true);
+      else controller.reopen(id);
+    },
     attentionHidden: (controller) => attentionRef.current.waiting && !attentionRef.current.attentionShownIn(controller.id as WorkspaceId),
     showAttention: (controller) => attentionRef.current.showAttentionIn(controller.id as WorkspaceId),
-  }), [clearMy, commit, markChanged, notify, restorePanelDefaults, setShowArchived]);
+  }), [clearMy, commit, deselectKey, markChanged, notify, restorePanelDefaults, setShowArchived]);
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");

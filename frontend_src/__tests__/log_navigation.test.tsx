@@ -50,6 +50,28 @@ describe("moving through a log", () => {
     expect(row(container, "r11").scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it("keeps the row in the middle of the window when the window scrolls rather than the table (user, 2026-10-31)", () => {
+    const { container } = render(<div className="phx-window-body" style={{ overflowY: "auto" }}><Table /></div>);
+    const body = container.querySelector<HTMLElement>(".phx-window-body")!;
+    const wrap = container.querySelector<HTMLElement>(".phx-table-wrap")!;
+    // The table is as tall as its rows; the window around it shows 300 px of them.
+    Object.defineProperty(wrap, "clientHeight", { configurable: true, get: () => 30 + ROWS.length * ROW_H });
+    Object.defineProperty(wrap, "scrollHeight", { configurable: true, get: () => 30 + ROWS.length * ROW_H });
+    Object.defineProperty(body, "clientHeight", { configurable: true, get: () => 300 });
+    Object.defineProperty(body, "scrollHeight", { configurable: true, get: () => 30 + ROWS.length * ROW_H });
+    body.getBoundingClientRect = () => ({ top: 0, bottom: 300, height: 300, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) });
+    container.querySelectorAll<HTMLElement>("tbody tr[data-row]").forEach((tr, i) => {
+      tr.getBoundingClientRect = () => {
+        const top = 30 + i * ROW_H - body.scrollTop;
+        return { top, bottom: top + ROW_H, height: ROW_H, left: 0, right: 500, width: 500, x: 0, y: top, toJSON: () => ({}) };
+      };
+      tr.scrollIntoView = vi.fn();
+    });
+    fireEvent.keyDown(row(container, "r10"), { key: "ArrowDown" });
+    // r11's middle (375) lines up with the middle of the window (150); the header scrolled away with the rows.
+    expect(body.scrollTop).toBe(225);
+  });
+
   it("marks the table as keyboard-driven until the mouse moves, so a row under a still pointer is not hovered", () => {
     const { container } = render(<Table />);
     const wrap = layout(container);

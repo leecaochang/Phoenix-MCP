@@ -259,18 +259,20 @@ describe("Custom persona", () => {
 });
 
 describe("Confirmations", () => {
-  it("asks before switching a pass-through key to scoped, in a plain box with an icon on Cancel", async () => {
+  it("shows Switch to Scoped Mode at once for a pass-through key, its explanation in Help (user, 2026-10-31)", async () => {
     current = accessKey({ pass_through: true });
+    vi.mocked(api.patchAccessKey).mockResolvedValue(accessKey({ pass_through: false }) as never);
     const { container } = show(<PermissionsWindow />);
-    fireEvent.click(await screen.findByRole("button", { name: "Switch to Scoped Mode" }));
-    const confirm = screen.getByRole("group", { name: "Switch to Scoped Mode" });
-    expect(confirm.querySelector(".phx-inline-confirm-title")?.textContent).toBe("Switch to Scoped Mode");
-    expect(confirm.querySelector(".phx-inline-confirm-title svg")).toBeNull();
-    expect(within(confirm).getByRole("button", { name: "Cancel" }).querySelector("svg")).not.toBeNull();
-    expect(container.querySelector(".pass-through-convert-card")).toBeNull();
-    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("group", { name: "Switch to Scoped Mode" })).toBeNull();
-    expect(api.patchAccessKey).not.toHaveBeenCalled();
+    const panel = await screen.findByRole("group", { name: "Switch to Scoped Mode" });
+    expect(panel.querySelector(".phx-inline-confirm-title")?.textContent).toBe("Switch to Scoped Mode");
+    // No prose in the window: it reads in Help, for the panel and its button.
+    expect(container.querySelector("p")).toBeNull();
+    expect(panel.getAttribute("data-help-text")).toMatch(/^Pass-through access key\. .*permission tree immediately/);
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    const button = within(panel).getByRole("button", { name: "Switch to Scoped Mode" });
+    expect(button).not.toHaveClass("btn-primary");
+    fireEvent.click(button);
+    await waitFor(() => expect(api.patchAccessKey).toHaveBeenCalledWith(current.id, { pass_through: false }));
   });
 
   it("offers Clear All with an eraser, red only once it asks to confirm", async () => {
@@ -302,6 +304,21 @@ describe("Archived keys", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm Delete" }));
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("a1"));
     expect(api.deleteArchivedAccessKey).toHaveBeenCalledWith("a1");
+  });
+
+  it("chooses a row with a click, and Up and Down step through the rows (user, 2026-10-31)", () => {
+    const three = [...archived, { ...archived[0], id: "a2", name: "older_agent" }, { ...archived[0], id: "a3", name: "oldest_agent", revoked: false }];
+    render(<ArchivedAccessKeyTable accessKeys={three as never} onDeleted={vi.fn()} />);
+    const row = (name: RegExp) => screen.getByRole("row", { name });
+    fireEvent.click(row(/^old_agent,/));
+    expect(row(/^old_agent,/)).toHaveAttribute("aria-selected", "true");
+    const order = screen.getAllByRole("row").filter((r) => r.hasAttribute("data-row"));
+    const at = order.findIndex((r) => r.getAttribute("aria-selected") === "true");
+    fireEvent.keyDown(order[at], { key: at < order.length - 1 ? "ArrowDown" : "ArrowUp" });
+    const moved = order[at < order.length - 1 ? at + 1 : at - 1];
+    expect(moved).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(moved);
+    expect(screen.getByRole("row", { name: /^oldest_agent, Expired$/ })).toBeInTheDocument();
   });
 
   it("cancels the confirmation on a click anywhere else, not on one inside it (user, 2026-10-28)", () => {

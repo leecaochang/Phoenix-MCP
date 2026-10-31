@@ -1,7 +1,7 @@
 /**
  * Workspace Options: Notification History is offered only while its window is
- * closed, a window a toolbar tool opens (Log Settings in Logs) is not
- * offered there, other closed windows are offered to reopen (Request Details
+ * closed, a window a toolbar tool opens (Log Settings in Logs) is offered
+ * while hidden and opens as its tool would, other closed windows are offered to reopen (Request Details
  * among them), and the two resets say what they reset.
  */
 import { describe, expect, it } from "vitest";
@@ -41,7 +41,7 @@ describe("Workspace Options", () => {
   it("names the two resets for what they reset, and says more in their hints", () => {
     const c = mount();
     const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {},
-      restorePanelDefaults: () => {}, attentionHidden: () => false, showAttention: () => {} };
+      restorePanelDefaults: () => {}, attentionHidden: () => false, showAttention: () => {}, openToolWindow: () => {} };
     const all = workspaceMenu(c, actions).filter((e): e is Item => e !== "separator");
     expect(all.find((i) => i.id === "restore")).toMatchObject({ label: "Reset This Workspace", hint: expect.stringContaining("Other workspaces") });
     expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, the Help Bar and the Guide") });
@@ -49,7 +49,7 @@ describe("Workspace Options", () => {
 
   it("offers Needs Attention back, in this workspace, while items are waiting (user, 2026-10-29)", () => {
     const c = mount();
-    const base = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {} };
+    const base = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {}, openToolWindow: () => {} };
     const entry = (hidden: boolean, show = () => {}) =>
       workspaceMenu(c, { ...base, attentionHidden: () => hidden, showAttention: show })
         .filter((e): e is Item => e !== "separator").find((i) => i.id === "show-attention");
@@ -75,10 +75,20 @@ describe("Workspace Options", () => {
     expect(items(c).map((i) => i.id)).toContain("reopen-requestDetails");
   });
 
-  it("does not offer to reopen a window a toolbar tool opens here, and offers other closed windows", () => {
+  it("offers a hidden window a toolbar tool opens, once, opening it as the tool would (user, 2026-10-31)", () => {
     const c = mount();
-    const ids = items(c).map((i) => i.id);
-    expect(ids).not.toContain("reopen-settingsLogs");
-    expect(ids).toContain("reopen-attention");
+    const opened: string[] = [];
+    const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {},
+      restorePanelDefaults: () => {}, attentionHidden: () => false, showAttention: () => {}, openToolWindow: (_: WorkspaceController, id: string) => { opened.push(id); } };
+    const all = workspaceMenu(c, actions).filter((e): e is Item => e !== "separator");
+    const entries = all.filter((i) => i.id === "reopen-settingsLogs");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].label).toBe("Show Logs and Notifications");
+    entries[0].onSelect!();
+    expect(opened).toEqual(["settingsLogs"]);
+    expect(all.map((i) => i.id)).toContain("reopen-attention");
+    // Open, it is not offered.
+    c.reopen("settingsLogs");
+    expect(items(c).some((i) => i.id === "reopen-settingsLogs")).toBe(false);
   });
 });

@@ -85,6 +85,8 @@ interface Props {
   renamingId?: string | null;
   onRenamed?: (updated: AccessKeyRecord) => void;
   onRenameEnd?: () => void;
+  /** Start renaming a key, as a double-click on its name does (user, 2026-10-31). */
+  onStartRename?: (id: string) => void;
   /** Tools for the selected key, offered on the toolbar after the list's own. */
   selectedKeyTools?: ToolGroup | null;
   /** Notices about the selected key, shown above the list. */
@@ -93,9 +95,12 @@ interface Props {
 
 export function AccessKeyListView({
   accessKeys, loading, error, onRefresh, onUpdate, showArchived: keptArchived, onShowArchived, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings,
-  selectedId = null, renamingId = null, onRenamed, onRenameEnd, selectedKeyTools = null, notices = null,
+  selectedId = null, renamingId = null, onRenamed, onRenameEnd, onStartRename, selectedKeyTools = null, notices = null,
 }: Props) {
   const [filter, setFilter] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  // A key is being created, or its secret is shown: the form must stay open.
+  const [createBusy, setCreateBusy] = useState(false);
   const [ownArchived, setOwnArchived] = useState(false);
   const showArchived = keptArchived ?? ownArchived;
   const setShowArchived = onShowArchived ?? setOwnArchived;
@@ -117,10 +122,13 @@ export function AccessKeyListView({
 
   // The list as a configurable table like the other workspaces' lists (user, 2026-10-28).
   const columns: Column<AccessKeyRecord>[] = [
-    { id: "name", label: t("accessKeys.colName"), width: 200, maxWidth: 320, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name,
+    // Up to 16 characters of a name show; a longer one is cut off (user, 2026-10-31).
+    { id: "name", label: t("accessKeys.colName"), width: 160, maxWidth: 320, maxChars: 16, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name,
       cell: (k) => (k.id === renamingId && onRenamed
-        ? <EditableAccessKeyName accessKey={k} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} />
-        : <span className="access-key-name">{k.name}</span>) },
+        ? <EditableAccessKeyName accessKey={k} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} onError={setRenameError} />
+        // A double-click on a name renames it; the second press does not select the text.
+        : <span className="access-key-name" onDoubleClick={onStartRename ? () => onStartRename(k.id) : undefined}
+          onMouseDown={(e) => { if (e.detail > 1 && onStartRename) e.preventDefault(); }}>{k.name}</span>) },
     { id: "mode", label: t("accessKeys.colMode"), width: 130, sortValue: (k) => (k.pass_through ? 1 : 0), cell: (k) => <AccessKeyMode passThrough={k.pass_through} /> },
     { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: (k) => accessKeyStatusLabel(accessKeyStatus(k)), cell: (k) => <AccessKeyStatus status={accessKeyStatus(k)} /> },
     { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "",
@@ -140,8 +148,10 @@ export function AccessKeyListView({
       tools: [
         { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
         { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived(!showArchived) },
-        // Not a toggle: closing the form from here while a key is being created would lose its one-time secret.
-        { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", onSelect: onOpenCreate },
+        // Opens and closes the form (user, 2026-10-31), except while a key is being created or its
+        // one-time secret is shown: closing then would lose the secret.
+        { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", pressed: showCreate,
+          onSelect: () => { if (!showCreate) onOpenCreate(); else if (!createBusy) onCloseCreate(); } },
       ],
     },
     ...(selectedKeyTools ? [selectedKeyTools] : []),
@@ -161,6 +171,7 @@ export function AccessKeyListView({
       onCreated={handleCreated}
       onClose={onCloseCreate}
       onOpenSettings={onOpenSettings}
+      onBusyChange={setCreateBusy}
     />
   );
 
@@ -214,6 +225,9 @@ export function AccessKeyListView({
           // Choosing an active key hides the archived ones (user, 2026-10-28).
           onSelect={(k) => { setShowArchived(false); onOpenDetail(k.id); }}
           rowLabel={(k) => `${k.name}, ${k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")}, ${accessKeyStatusLabel(accessKeyStatus(k))}`}
+          // A refused new name reads under the row being renamed, not squeezed into it.
+          detail={(k) => (k.id === renamingId && renameError
+            ? <div id="access-key-rename-error" className="banner banner-error access-key-rename-error" role="alert">{renameError}</div> : null)}
           empty={<p className="audit-empty">{filter ? t("accessKeys.emptyFiltered") : t("accessKeys.empty")}</p>}
         />
       )}

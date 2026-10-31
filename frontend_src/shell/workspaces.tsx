@@ -3,7 +3,7 @@
  * the windows: each keeps its own behavior, data loading and safety checks.
  */
 
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FunctionComponent, type ReactNode } from "react";
 import type { AddPanelOptions, DockviewApi, IDockviewPanelProps, IWatermarkPanelProps } from "dockview-react";
 import { AttentionList } from "../components/AttentionPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -109,8 +109,10 @@ export interface WorkspaceDef {
   contentHeights?: boolean;
   /** Windows as tall as their content although the rest of the workspace is not. */
   contentWindows?: readonly WindowId[];
-  /** The most of the visible height one of those windows takes, as a fraction. */
+  /** The most of the visible height a window following its content takes, as a fraction; beyond it the window scrolls inside. */
   contentMax?: Partial<Record<WindowId, number>>;
+  /** The width a window opens at when it floats for the first time, within the workspace's own. */
+  floatWidths?: Partial<Record<WindowId, number>>;
   /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
   pairs?: Readonly<Record<string, string>>;
 }
@@ -146,26 +148,32 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsAccessKeys",
     icon: "accessKeys",
     windows: ["accessKeys", "archivedAccessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
-    // The key list across the top; the selected key's windows below it, editing on the
-    // left and the Permissions tree on the right, in two equal columns. Every window is
-    // as tall as its content and none starts folded (user, 2026-10-28): the workspace scrolls.
-    arrange: (_, add) => {
+    // Two equal columns (user, 2026-10-31): the key list over the selected key's
+    // Persona, Presets, Capabilities and Key Settings on the left, its Permissions
+    // Tree over the Permissions Summary on the right. Every window is as tall as its
+    // content and none starts folded: the workspace scrolls.
+    arrange: (api, add) => {
       add("accessKeys");
-      add("persona", { direction: "below" });
-      add("permissions", { referencePanel: "persona", direction: "right" });
+      add("permissions", { referencePanel: "accessKeys", direction: "right" });
+      add("persona", { referencePanel: "accessKeys", direction: "below" });
       add("capabilities", { referencePanel: "persona", direction: "below" });
       add("keySettings", { referencePanel: "capabilities", direction: "below" });
       add("permissionSummary", { referencePanel: "permissions", direction: "below" });
+      share(api, "accessKeys", 0.5);
     },
-    conditional: { presets: { neighbor: "keySettings", side: "bottom" } },
-    // Archived Access Keys opens under the key list from Show Archived, and closes again with it.
-    closedAt: { archivedAccessKeys: { neighbor: "accessKeys", side: "bottom" } },
+    conditional: { presets: { neighbor: "persona", side: "bottom" } },
+    // Archived Access Keys floats over the workspace from Show Archived, wide enough for
+    // its Actions column, and closes again with it.
+    closedAt: { archivedAccessKeys: { neighbor: "accessKeys", side: "bottom", host: "float" } },
+    floatWidths: { archivedAccessKeys: 960 },
     toolWindows: [ARCHIVED_WINDOW as WindowId],
     // Heights until the content is measured.
     heights: { accessKeys: 300, archivedAccessKeys: 300, persona: 420, capabilities: 600, keySettings: 420, presets: 320, permissions: 760, permissionSummary: 320 },
     contentHeights: true,
-    // 2: content heights, equal columns and nothing folded replaced the folded arrangement.
-    layoutVersion: 2,
+    // The key lists are as tall as their rows up to half the visible height, and scroll inside beyond it.
+    contentMax: { accessKeys: 1 / 2, archivedAccessKeys: 1 / 2 },
+    // 3: two columns from the top, with Archived Access Keys floating.
+    layoutVersion: 3,
   },
   approvals: {
     labelKey: "shell.tabApprovals",
@@ -274,21 +282,24 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsSettings",
     icon: "settings",
     windows: ["settingsProviders", "settingsChat", "settingsHome", "settingsSafety", "settingsLogs", "settingsGeneral", "attention"],
-    // AI Providers over Home Assistant on the left, Agent Chat over Safety on the right;
-    // Logs and Notifications and General along the bottom, folded, as accepted for Settings.
+    // Three equal columns (user, 2026-10-31): AI Providers alone on the left; Home Assistant over
+    // Logs and Notifications in the middle; Agent Chat over Safety over General on the right.
+    // Every window is as tall as its content and the workspace scrolls (user, 2026-10-31).
     arrange: (api, add) => {
       add("settingsProviders");
-      add("settingsChat", { referencePanel: "settingsProviders", direction: "right" });
-      add("settingsHome", { referencePanel: "settingsProviders", direction: "below" });
+      add("settingsHome", { referencePanel: "settingsProviders", direction: "right" });
+      add("settingsChat", { referencePanel: "settingsHome", direction: "right" });
+      add("settingsLogs", { referencePanel: "settingsHome", direction: "below" });
       add("settingsSafety", { referencePanel: "settingsChat", direction: "below" });
-      add("settingsLogs", { direction: "below" });
-      add("settingsGeneral", { referencePanel: "settingsLogs", direction: "below" });
-      share(api, "settingsProviders", 0.55);
+      add("settingsGeneral", { referencePanel: "settingsSafety", direction: "below" });
+      share(api, "settingsProviders", 1 / 3);
+      share(api, "settingsHome", 1 / 3);
     },
-    folded: ["settingsLogs", "settingsGeneral"],
+    // Heights until the content is measured.
     heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520 },
-    // 2: the Settings windows replaced the single Settings window.
-    layoutVersion: 2,
+    contentHeights: true,
+    // 4: three columns, nothing folded, replaced the two columns with folded windows along the bottom.
+    layoutVersion: 4,
   },
 };
 
@@ -379,14 +390,18 @@ function neededHeight(el: HTMLElement): number {
   const column = style.display.endsWith("flex") && style.flexDirection.startsWith("column");
   if (!scrolls && !column) return el.offsetHeight;
   let inner = 0;
+  let placed = 0;
   for (const child of Array.from(el.children) as HTMLElement[]) {
     // Absent, absolutely placed, or the heading only screen readers hear: no room of its own.
     if (!child.offsetHeight && !child.offsetWidth) continue;
     const box = getComputedStyle(child);
     if (box.position === "absolute" || box.position === "fixed") continue;
     inner += neededHeight(child) + px(box.marginTop) + px(box.marginBottom);
+    placed++;
   }
-  return px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth) + inner;
+  // A flex column's gaps take room too: Review asked for 24 pixels too few (user, 2026-10-31).
+  const gaps = column && placed > 1 ? px(style.rowGap) * (placed - 1) : 0;
+  return px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth) + inner + gaps;
 }
 
 /** The height a window's content needs, frame included. */
@@ -422,6 +437,17 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   // While this window follows its content, report the height that content needs.
   const body = useRef<HTMLDivElement | null>(null);
   const followsContent = !!controller && controller.followsContent(id);
+  // Reset This Workspace puts every disclosure in the window back to how it opens by default:
+  // closed, or open where it says `data-default-open` (user, 2026-10-31). A disclosure that
+  // keeps its own state hears the change through its toggle event. Agent Chat's conversation is not
+  // part of the arrangement, so its messages keep theirs.
+  useEffect(() => controller?.onReset(() => {
+    if (id === CHAT_WINDOW) return;
+    for (const d of Array.from(body.current?.querySelectorAll("details") ?? [])) {
+      const open = d.hasAttribute("data-default-open");
+      if (d.open !== open) d.open = open;
+    }
+  }), [controller, id]);
   useLayoutEffect(() => {
     const el = body.current;
     if (!followsContent || !controller || !el || typeof ResizeObserver === "undefined") return undefined;
@@ -464,6 +490,14 @@ function AccessKeysContent() {
   const edited = detail && !detail.stale ? detail.accessKey?.updated_at : undefined;
   const updateList = d.updateAccessKeys;
   useEffect(() => { if (edited) void updateList(); }, [edited, updateList]);
+  // A double-click on a name chooses the key and renames it once its record is here (user, 2026-10-31).
+  const [renameNext, setRenameNext] = useState<string | null>(null);
+  useEffect(() => {
+    if (renameNext && detail && !detail.stale && detail.accessKey && detail.accessKeyId === renameNext) {
+      detail.setRenaming(true);
+      setRenameNext(null);
+    }
+  }, [renameNext, detail]);
   // Setting up an agent needs room: the key list window fills the workspace until the wizard ends.
   useEffect(() => {
     const panel = controller?.api?.getPanel("accessKeys");
@@ -492,6 +526,7 @@ function AccessKeysContent() {
           renamingId={detail?.renaming && !detail.stale ? detail.accessKeyId : null}
           onRenamed={(updated) => { detail?.applyUpdate(updated); d.refreshAccessKeys(); }}
           onRenameEnd={() => detail?.setRenaming(false)}
+          onStartRename={setRenameNext}
           selectedKeyTools={keyActions}
           notices={<AccessKeyNotices />}
         />

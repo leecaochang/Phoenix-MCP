@@ -23,12 +23,13 @@ import { NotificationSettings } from "../components/NotificationSettings";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { DEFAULT_WIPE_SCOPES, WIPE_SCOPES, WipeConfirmModal, type WipeScopes } from "../components/WipeConfirmModal";
 import { LANGUAGES, LANGUAGE_AUTO, t, tn } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { tPlain } from "../i18n/rich";
 import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/compatibility";
 import { useFindSettingTool, useSettings, useSettingsChange, type Theme } from "../shell/settings";
 import { HOME_TAB_LABEL_KEYS, HOME_TABS, SETTINGS_WINDOW_TITLE_KEYS, type HomeTab, type SettingsWindowId } from "../shell/settingsIndex";
 import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
 import { ActionButton } from "../ui/ActionButton";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { JS_BUILD } from "../version";
 
 // The theme values stay lowercase internally (they are the stored setting), so
@@ -112,6 +113,8 @@ export function AgentChatSettingsWindow() {
 }
 
 const tabId = (tab: HomeTab) => `phx-home-tab-${tab}`;
+/** What each tab is for, shown in Help over the tab and its empty space. */
+const HOME_TAB_HELP_KEYS: Record<HomeTab, string> = { voice: "settings.voiceIntro", aiTask: "settings.aiTaskIntro", assist: "settings.assistIntro" };
 const panelId = (tab: HomeTab) => `phx-home-panel-${tab}`;
 
 /** Voice Agent, AI Task and Assist Tool Provider on local tabs; each tab keeps its state while another is shown. */
@@ -136,6 +139,7 @@ export function HomeAssistantWindow() {
       <div className="phx-local-tabs" role="tablist" aria-label={t("workspace.homeAssistant")}>
         {HOME_TABS.map((tab) => (
           <button key={tab} id={tabId(tab)} type="button" role="tab" className="phx-local-tab" aria-selected={tab === current}
+            data-help-text={tPlain(HOME_TAB_HELP_KEYS[tab])}
             aria-controls={panelId(tab)} tabIndex={tab === current ? 0 : -1} onClick={() => s.setHomeTab(tab)} onKeyDown={onKeyDown}>
             {t(HOME_TAB_LABEL_KEYS[tab])}
           </button>
@@ -166,11 +170,8 @@ export function SafetyWindow() {
       <div id="phx-kill-switch-card" className="phx-kill-switch">
         <KillSwitch settings={settings} onToggle={(value) => change("kill_switch", value)} saving={saving} />
       </div>
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.mesaModeLabel")}</span>
-          <small>{t("settings.mesaModeHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.mesaModeHelp"))}>
+        <SettingLabel help={t("settings.mesaModeHelp")}><span>{t("settings.mesaModeLabel")}</span></SettingLabel>
         <BusySelect aria-label={t("settings.mesaModeAria")} className="input input-auto" value={settings.mesa_mode} busy={saving}
           onChange={(e) => change("mesa_mode", e.target.value)}>
           <option value="off">{t("settings.mesaModeOff")}</option>
@@ -182,11 +183,8 @@ export function SafetyWindow() {
       <Disclosure title={t("settings.dataCard")}>
         <p className="settings-info-note">{t("settings.wipeWarning")}</p>
         {WIPE_SCOPES.map((scope) => (
-          <div key={scope.key} className="toggle-row">
-            <div className="toggle-label">
-              <span>{t(scope.labelKey)}</span>
-              <small>{t(scope.helpKey)}</small>
-            </div>
+          <div key={scope.key} className="toggle-row" {...helpRow(t(scope.helpKey))}>
+            <SettingLabel help={t(scope.helpKey)}><span>{t(scope.labelKey)}</span></SettingLabel>
             <label className="toggle-switch">
               <input type="checkbox" aria-label={t(scope.labelKey)} checked={scopes[scope.key]}
                 onChange={(e) => setScopes((prev) => ({ ...prev, [scope.key]: e.target.checked }))} />
@@ -215,22 +213,16 @@ export function LogsSettingsWindow() {
         <section aria-labelledby="phx-settings-audit">
           <h3 id="phx-settings-audit" className="phx-section-title">{t("shell.tabAudit")}</h3>
           <LoggingSettings settings={settings} onToggle={change} saving={saving} only={AUDIT_TOGGLES} />
-          <div className={`toggle-row toggle-row-stacked-control${greyed}`}>
-            <div className="toggle-label">
-              <span>{t("settings.flushIntervalLabel")}</span>
-              <small>{t("settings.flushIntervalHelp")}</small>
-            </div>
+          <div className={`toggle-row toggle-row-stacked-control${greyed}`} {...helpRow(t("settings.flushIntervalHelp"))}>
+            <SettingLabel help={t("settings.flushIntervalHelp")}><span>{t("settings.flushIntervalLabel")}</span></SettingLabel>
             <BusySelect aria-label={t("settings.flushIntervalLabel")} className="input input-auto" value={settings.audit_flush_interval}
               busy={saving} disabled={settings.disable_all_logging} onChange={(e) => change("audit_flush_interval", Number(e.target.value))}>
               <option value={0}>{t("common.never")}</option>
               {[5, 10, 15, 30, 60].map((n) => <option key={n} value={n}>{tn("settings.flushEveryMinutes", n)}</option>)}
             </BusySelect>
           </div>
-          <div className={`toggle-row toggle-row-stacked-control${greyed}`}>
-            <div className="toggle-label">
-              <span>{t("settings.maxLogEntriesLabel")}</span>
-              <small>{t("settings.maxLogEntriesHelp")}</small>
-            </div>
+          <div className={`toggle-row toggle-row-stacked-control${greyed}`} {...helpRow(t("settings.maxLogEntriesHelp"))}>
+            <SettingLabel help={t("settings.maxLogEntriesHelp")}><span>{t("settings.maxLogEntriesLabel")}</span></SettingLabel>
             <BusySelect aria-label={t("settings.maxLogEntriesLabel")} className="input input-auto" value={settings.audit_log_maxlen}
               busy={saving} disabled={settings.disable_all_logging} onChange={(e) => change("audit_log_maxlen", Number(e.target.value))}>
               <option value={100}>100</option>
@@ -264,11 +256,8 @@ export function GeneralSettingsWindow() {
   const info = s.info;
   return (
     <SettingsBody error={error}>
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
-          <span>{t("settings.languageLabel")}</span>
-          <small>{t("settings.languageHelp")}</small>
-        </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.languageHelp"))}>
+        <SettingLabel help={t("settings.languageHelp")}><span>{t("settings.languageLabel")}</span></SettingLabel>
         <select aria-label={t("settings.languageLabel")} className="input input-auto" value={s.language} onChange={(e) => s.onLanguageChange(e.target.value)}>
           {/* Each language is named in itself, so someone who cannot read
               the current UI language can still find their own. */}
@@ -276,11 +265,8 @@ export function GeneralSettingsWindow() {
           {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.endonym}</option>)}
         </select>
       </div>
-      <div className="toggle-row">
-        <div className="toggle-label">
-          <span>{t("settings.themeLabel")}</span>
-          <small>{t("settings.themeHelp")}</small>
-        </div>
+      <div className="toggle-row" {...helpRow(t("settings.themeHelp"))}>
+        <SettingLabel help={t("settings.themeHelp")}><span>{t("settings.themeLabel")}</span></SettingLabel>
         <div className="theme-toggle">
           {(["light", "auto", "dark"] as Theme[]).map((mode) => (
             <button key={mode} type="button" className={`theme-toggle-btn${s.theme === mode ? " active" : ""}`} aria-pressed={s.theme === mode}
@@ -292,22 +278,20 @@ export function GeneralSettingsWindow() {
       </div>
       <section className="phx-settings-section" aria-labelledby="phx-settings-experimental">
         <h3 id="phx-settings-experimental" className="phx-section-title">{t("settings.experimentalCard")}</h3>
-        <div className="toggle-row">
-          <div className="toggle-label">
-            <span>{t("settings.presetsLabel")}</span>
-            <small>{t("settings.presetsHelp")}</small>
-          </div>
+        <div className="toggle-row" {...helpRow(t("settings.presetsHelp"))}>
+          <SettingLabel help={t("settings.presetsHelp")}><span>{t("settings.presetsLabel")}</span></SettingLabel>
           <label className={`toggle-switch${saving ? " disabled" : ""}`}>
             <BusyInput type="checkbox" aria-label={t("settings.presetsLabel")} checked={settings.access_key_presets_enabled} busy={saving}
               onChange={(e) => change("access_key_presets_enabled", e.target.checked)} />
             <span className="toggle-switch-track" />
           </label>
         </div>
-        <div className="toggle-row">
-          <div className="toggle-label">
+        <div className="toggle-row" {...helpRow(t("settings.injectHelp"))}>
+          {/* Why the switch is off stays in the window; what it does is in Help. */}
+          <SettingLabel help={injectBlocked ? null : t("settings.injectHelp")} helpId="phx-inject-help">
             <span>{t("settings.injectLabel")}</span>
-            <small id="phx-inject-help">{t(injectBlocked ? "settings.injectUnavailable" : "settings.injectHelp")}</small>
-          </div>
+            {injectBlocked && <small id="phx-inject-help">{t("settings.injectUnavailable")}</small>}
+          </SettingLabel>
           <label className={`toggle-switch${saving || injectBlocked ? " disabled" : ""}`}>
             <BusyInput type="checkbox" aria-label={t("settings.injectLabel")} aria-describedby="phx-inject-help"
               checked={settings.mesa_inject_enabled && !injectBlocked} busy={saving} disabled={injectBlocked}
@@ -318,14 +302,13 @@ export function GeneralSettingsWindow() {
       </section>
       <details className="phx-disclosure">
         <summary data-settings-anchor="about">{t("settings.about")}</summary>
-        <div className="phx-disclosure-body settings-info-list">
+        <div className="phx-disclosure-body settings-info-list" data-help-text={tPlain("settings.infoStorageNote")}>
           <div><strong>{t("settings.infoVersionLabel")}</strong> {info?.version ?? "..."}</div>
           <div><strong>{t("settings.infoJsBuildLabel")}</strong> {JS_BUILD}</div>
           <div><strong>{t("settings.infoMinHaLabel")}</strong> {info?.minHaVersion ?? "..."}</div>
           <div>
             <a href={info?.githubUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="settings-info-link">{t("settings.infoGithubLink")}</a>
           </div>
-          <div className="settings-info-note">{tRich("settings.infoStorageNote", { code: (c) => <code>{c}</code> })}</div>
         </div>
       </details>
     </SettingsBody>

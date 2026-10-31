@@ -25,7 +25,8 @@ import { useClickAway } from "../ui/useClickAway";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { matchesListSearch } from "../utils/list_search";
 import {
-  ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_LABEL_KEYS, deleteProfile, isEnforced, profileSource, rawControlMode, tagsOf,
+  ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_LABEL_KEYS, deleteProfile, isEnforced, profileSource, rawControlMode,
+  resetProfileEditorDisclosures, tagsOf,
 } from "./MesaView";
 
 const CONTROL_FILTERS = ["confirm", "prohibited", "read_only", "autonomous", "inherited"] as const;
@@ -111,7 +112,7 @@ export function MesaProfilesWindow() {
   const filtersApply = !useOnToolbar() || filtersOpen;
   const activeFilters = filtersApply ? (scope ? 1 : 0) + (control ? 1 : 0) + (enforcement ? 1 : 0) : 0;
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
-  useWorkspaceReset(() => { m?.open(null); m?.selectSuggestion(null); });
+  useWorkspaceReset(() => { m?.open(null); m?.selectSuggestion(null); resetProfileEditorDisclosures(); });
 
   const openNew = (s: MesaProfileScope) => { m?.open({ scope: s, key: null, isNew: true }); ensureOpen("mesaEditor"); };
   const showImport = (open: boolean) => { setImporting(open); if (open) m?.cancelExport(); };

@@ -514,6 +514,11 @@ function effectiveModes(detail: MesaProfileDetail): { control_mode: string; enfo
  */
 let explainLeftOpen = false;
 
+/** Forget the explanation's open state, as Reset This Workspace does (user, 2026-10-31). */
+export function resetProfileEditorDisclosures(): void {
+  explainLeftOpen = false;
+}
+
 export function ProfileEditor({
   scope,
   profileKey,

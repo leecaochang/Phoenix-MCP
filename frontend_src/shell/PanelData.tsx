@@ -95,6 +95,8 @@ export interface PanelData {
   openDetail: (id: string) => void;
   openWizard: () => void;
   goBack: () => void;
+  /** Leave the chosen key, as a workspace reset does; the wizard and the list stay as they are. */
+  deselectKey: () => void;
   goToSettings: () => void;
   showCreate: boolean;
   setShowCreate: (open: boolean) => void;
@@ -502,6 +504,10 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     void refreshAccessKeys();
   }, [refreshAccessKeys]);
 
+  const deselectKey = useCallback(() => {
+    setView((v) => (v.name === "detail" ? { name: "list" } : v));
+  }, []);
+
   // Jump to Settings (used by the "Use Agent Chat"/"Setup Agent Chat" options in
   // the create/connect flows). Refresh access keys first so an access key just
   // made in the wizard is listed when the user returns to Access Keys.
@@ -533,7 +539,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     hass, narrow, theme, onThemeChange, language, onLanguageChange,
     workspace, navigate,
     accessKeys, loadingAccessKeys, accessKeysError, refreshAccessKeys, updateAccessKeys,
-    accessKeyView, openDetail, openWizard, goBack, goToSettings, showCreate, setShowCreate, showArchived, setShowArchived,
+    accessKeyView, openDetail, openWizard, goBack, deselectKey, goToSettings, showCreate, setShowCreate, showArchived, setShowArchived,
     settings, setSettings,
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,

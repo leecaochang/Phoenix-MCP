@@ -5,7 +5,7 @@
  * moving a window.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
@@ -15,6 +15,7 @@ import { Modal } from "./Modal";
 import { ConnectInstructions, CopyCodeBox } from "./ConnectInstructions";
 import { ActionButton } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
+import { useClickAway } from "../ui/useClickAway";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -23,6 +24,8 @@ interface Props {
   onCreated: (accessKey: AccessKeyRecord, rawAccessKey: string) => void;
   onClose: () => void;
   onOpenSettings: () => void;
+  /** Told whether a key is being created or its one-time secret is shown, when closing the form would lose it. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 type TtlUnit = "minutes" | "hours" | "days" | "weeks" | "none";
@@ -71,7 +74,7 @@ export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: stri
 interface PostCreateProps {
   rawAccessKey: string;
   accessKeyName: string;
-  onOpenSettings: () => void;   // "Setup Agent Chat" -> closes this modal, opens Settings
+  onOpenSettings: () => void;   // "Use This Access Key in Home Assistant" closes this dialog and opens Settings
   onDone: () => void;           // finish -> refresh + open the new access key's detail page
 }
 
@@ -147,7 +150,7 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
   );
 }
 
-export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenSettings }: Props) {
+export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenSettings, onBusyChange }: Props) {
   const [name, setName] = useState("");
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
@@ -158,6 +161,21 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdAccessKey, setCreatedAccessKey] = useState<{ record: AccessKeyRecord; raw: string } | null>(null);
+  // A click anywhere else dismisses the form, as other forms in Phoenix do (user, 2026-10-31); never
+  // while the key is being created. It waits for the click, so the row below the form still gets it,
+  // and the toolbar's Create Access Key, which opened it, leaves it open.
+  const form = useRef<HTMLElement | null>(null);
+  const createTool = useMemo<RefObject<HTMLElement | null>>(() => ({
+    get current() {
+      const root = form.current?.getRootNode() as Document | ShadowRoot | undefined;
+      return root?.querySelector<HTMLElement>('.phx-toolbar-button[data-tool="create"]') ?? null;
+    },
+  }), []);
+  useClickAway(form, onClose, !saving && !createdAccessKey, createTool, "click");
+  // Whether closing the form now would lose a key being created or its one-time secret.
+  const busy = saving || !!createdAccessKey;
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   const nameError = (() => {
     if (!name) return null;
@@ -226,7 +244,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   }
 
   return (
-    <section className="phx-inline-form" aria-labelledby="create-access-key-title"
+    <section ref={form} className="phx-inline-form" aria-labelledby="create-access-key-title"
       onKeyDown={(e) => {
         if (e.key !== "Escape" || saving) return;
         e.preventDefault();

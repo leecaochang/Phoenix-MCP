@@ -148,7 +148,8 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     controller.setActiveWindow(main.activeGroup?.activePanel?.id ?? null);
 
     const resized = (ids: string[]) => controller.markUserSized(ids);
-    out.push(pushDownResizing(main, mainCanvas, () => onChange.current(), resized));
+    // After a drag the windows that follow their content take the heights it now needs.
+    out.push(pushDownResizing(main, mainCanvas, () => { onChange.current(); controller.requestFollow(); }, resized));
     const bottomEdge = mainEl.querySelector<HTMLElement>(".phx-grid-edge");
     if (bottomEdge) out.push(bottomEdgeResizing(main, mainCanvas, bottomEdge, () => onChange.current(), resized));
     for (const band of ["top", "bottom"] as const) {

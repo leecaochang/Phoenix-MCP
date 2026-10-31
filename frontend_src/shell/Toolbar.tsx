@@ -33,6 +33,8 @@ export interface WorkspaceActions {
   /** Items are waiting and Needs Attention was closed in this workspace: offer it back (user, 2026-10-29). */
   attentionHidden: (controller: WorkspaceController) => boolean;
   showAttention: (controller: WorkspaceController) => void;
+  /** Open a window a toolbar tool opens (Archived Access Keys, Log Settings), as its tool would. */
+  openToolWindow: (controller: WorkspaceController, id: string) => void;
 }
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);
 
@@ -49,6 +51,12 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
     label: t("workspace.reopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
+  // A window a toolbar tool opens is offered here too while it is hidden (user, 2026-10-31).
+  for (const id of toolWindows) {
+    if (!controller.groupOf(id) && controller.windows.includes(id)) {
+      items.push({ id: `reopen-${id}`, label: t("workspace.reopen", { window: windowTitle(id) }), onSelect: () => (actions ? actions.openToolWindow(controller, id) : controller.reopen(id)) });
+    }
+  }
   // Needs Attention is closed per workspace: while items wait, every workspace offers it back.
   if (actions?.attentionHidden(controller)) {
     items.push({ id: "show-attention", label: t("workspace.showAttention"), onSelect: () => actions.showAttention(controller) });

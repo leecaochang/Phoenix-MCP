@@ -682,8 +682,6 @@
 .phx-inline-confirm-ack { flex: 1 1 100%; padding: 8px 0 0; border-top: 1px solid var(--phx-divider); border-bottom: none; }
 .phx-inline-confirm > .banner { flex: 1 1 100%; margin: 0; }
 .phx-inline-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-/* Access Keys' cautions are the same plain box. */
-.amber-block, .pass-through-header-banner { border: 1px solid var(--phx-border); background: var(--phx-surface); }
 .phx-inline-confirm-title { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
 
 /* Settings windows: native field rows, folded sections, local tabs, Find Setting. */
@@ -695,9 +693,21 @@
 .phx-disclosure > summary { padding: 12px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .phx-disclosure > summary:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 2px; border-radius: var(--phx-radius-xs); }
 .phx-disclosure-body { padding: 0 0 12px; }
-.phx-provider-account { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); }
-.phx-provider-account > * + * { margin-top: 6px; }
-.phx-provider-account .phx-inline-confirm { margin: 8px 0 0; }
+/* An account's options: what the last action found, hidden while there is none, then the actions.
+   AI Providers opens them in a row under the account's own, joined to it by the row's grey
+   (user, 2026-10-31); a decision account opens them under its choice. */
+.phx-provider-account {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface);
+}
+.phx-provider-account > .phx-provider-info:empty { display: none; }
+.phx-provider-info > p { margin: 0; }
+.phx-provider-account .agentcli-account-actions,
+.phx-provider-account .agentcli-settings-model-edit { margin: 0; }
+.phx-table tbody tr.phx-table-detail > td { padding: 0 10px 10px; white-space: normal; overflow: visible; background: var(--phx-accent-lt); }
+.phx-table tbody tr.phx-table-detail > td > * {
+  position: sticky; left: 10px; box-sizing: border-box; max-width: calc(var(--phx-table-visible, 100%) - 20px);
+}
 .phx-action.phx-action-danger { color: var(--phx-error); }
 .phx-local-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--phx-border); }
 .phx-local-tab { margin-bottom: -1px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--phx-radius-sm) var(--phx-radius-sm) 0 0; background: none; color: var(--phx-text-2); font: 500 13px var(--phx-font); cursor: pointer; }
@@ -1228,10 +1238,11 @@ select.input {
 .access-key-notes-count.field-error { color: var(--phx-error); }
 .access-key-notes-actions { display: flex; gap: 8px; margin-left: auto; }
 .toggle-row-plain { border: none; padding: 0; }
-.toggle-row-greyed { opacity: 0.45; pointer-events: none; }
-/* Select-backed settings need the full line length for explanatory copy. The
-   label and help therefore form one block above the control, while switch rows
-   keep their compact side-by-side relationship. */
+/* A greyed row's controls are disabled; it still takes the pointer so Help can explain it. */
+.toggle-row-greyed { opacity: 0.45; }
+/* Select-backed settings: the name beside the control on wide screens, above it
+   on narrow ones. What a setting does is in Help, so the name is centred on the
+   control. */
 .toggle-row-stacked-control { flex-direction: column; align-items: stretch; gap: 8px; }
 .toggle-row-stacked-control > .input { align-self: flex-start; max-width: 100%; }
 @media (min-width: 901px) {
@@ -1239,7 +1250,7 @@ select.input {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
     column-gap: 24px;
-    align-items: start;
+    align-items: center;
   }
   .toggle-row-stacked-control > .toggle-label { grid-column: 1; }
   .toggle-row-stacked-control > .input {
@@ -1317,20 +1328,16 @@ select.input {
 /* ============================================================
    Warning / info blocks
    ============================================================ */
+/* Access Keys' cautions are the same plain box as an inline confirmation. */
 .amber-block {
+  border: 1px solid var(--phx-border);
+  background: var(--phx-surface);
   border-radius: var(--phx-radius-sm);
   padding: 10px 12px;
   margin: 12px 0;
 }
 .amber-block p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
 .amber-block strong { color: var(--phx-text); font-weight: 600; }
-.pass-through-header-banner {
-  border-radius: var(--phx-radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 12px;
-}
-.pass-through-header-banner p { margin: 3px 0; font-size: 13px; color: var(--phx-text-2); }
-.pass-through-header-banner strong { color: var(--phx-text); font-weight: 600; }
 
 /* ============================================================
    Banners
@@ -1857,6 +1864,7 @@ select.input {
 .access-key-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
 .access-key-name-input:disabled, .access-key-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
 .access-key-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
+.access-key-rename-error { margin: 0; }
 
 /* Access key settings presets (workspace model) */
 .preset-list { display: flex; flex-direction: column; gap: 8px; }
@@ -3050,22 +3058,8 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .agentcli-resize-sw { bottom: -3px; left: -3px; width: 12px; height: 12px; cursor: nesw-resize; }
 
 /* agentCLI settings card */
-.agentcli-settings-providers { display: flex; flex-direction: column; gap: 8px; }
-/* The card is a row: everything readable on the left, the actions anchored to the
-   BOTTOM right. Aligning them to the model line instead left the icons floating at
-   different heights from card to card, since some carry a status line or a warning
-   underneath and some do not. Wraps on a narrow panel so the icons drop below the
-   text rather than squeezing it. */
-.agentcli-settings-provider {
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); padding: 8px 10px;
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap;
-}
-.agentcli-settings-provider-main { flex: 1 1 240px; min-width: 0; }
-.agentcli-settings-provider-head { display: flex; align-items: center; justify-content: space-between; }
 .agentcli-badge { font-size: 11px; color: var(--phx-text-2); border: 1px solid var(--phx-border); border-radius: 999px; padding: 1px 8px; }
 .agentcli-badge.ok { color: var(--phx-accent); border-color: var(--phx-accent); }
-.agentcli-settings-model { display: block; margin-top: 6px; font-size: 12px; color: var(--phx-text-2); }
 .agentcli-settings-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .agentcli-settings-form .banner-error { white-space: pre-line; }
 .agentcli-settings-form input {
@@ -3078,6 +3072,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .agentcli-settings-field > input,
 .agentcli-settings-field > select { width: 100%; min-width: 0; }
 .agentcli-settings-form-actions { display: flex; gap: 6px; }
+.agentcli-add { display: contents; }
 .agentcli-add-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .agentcli-add-row select { flex: 0 1 auto; }
 .agentcli-add-form { border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-sm); padding: 10px; margin-bottom: 10px; }
@@ -3089,6 +3084,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .routing-account-choice input[type="radio"] { accent-color: var(--phx-accent); flex: none; }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
+/* No Decision Provider and the accounts are one radio group; an account's options open under it. */
+.routing-choices { display: flex; flex-direction: column; gap: 8px; }
+.routing-choice > .phx-provider-account { margin: 8px 0 0 24px; }
 .routing-disclosure { border-top: 1px solid var(--phx-divider); margin-top: 12px; }
 .routing-disclosure > summary { padding: 14px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .routing-disclosure > summary:hover { color: var(--phx-accent); }
@@ -3097,7 +3095,6 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 
 /* A provider account's actions: labelled buttons below its model line. */
 .agentcli-account-actions { margin: 8px 0 0; }
-.agentcli-settings-provider > .phx-inline-confirm { flex: 1 1 100%; margin: 0; }
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   color: var(--phx-text-2); line-height: 1.4;
@@ -3137,6 +3134,10 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   display: flex; align-items: center; gap: 12px; width: 100%; flex-wrap: wrap;
 }
 .agentcli-settings-model-actions > .agentcli-settings-probe-opt { flex: 1 1 280px; }
+/* In Settings a row's buttons sit beside it, along the bottom of its field (user, 2026-10-31). */
+.agentcli-add-inline { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
+.agentcli-add-inline > :is(.agentcli-settings-field, .agentcli-settings-model-row) { flex: 1 1 220px; min-width: 0; }
+.agentcli-add-inline > select { flex: 1 1 140px; width: auto; min-width: 0; max-width: 320px; }
 .agentcli-settings-model-row {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   font-size: 13px;

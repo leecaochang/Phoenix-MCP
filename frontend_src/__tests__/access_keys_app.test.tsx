@@ -60,6 +60,10 @@ const { apiMock } = vi.hoisted(() => {
     getEntityHints: async () => ({ entity_hints: {} }),
     // Agent Chat is on the toolbar only with a provider to talk to.
     getAgentCliProviders: async () => ({ instances: [{ id: "p1", kind: "anthropic", name: "Claude", model: "model-1" }], default_instance_id: "p1" }),
+    // One branch, so the tree has a triangle to open.
+    getEntityTree: async () => ({ sensor: { devices: {}, deviceless_entities: ["sensor.outdoor"],
+      entity_details: { "sensor.outdoor": { entity_id: "sensor.outdoor", friendly_name: "Outdoor temperature", device_id: null, area_id: null, area_name: null, labels: [] } } } }),
+    createAccessKey: vi.fn(),
     listArchivedAccessKeys: async () => [{ id: "arch-1", name: "old_agent", revoked: true, created_at: "2026-01-01T00:00:00Z", revoked_at: "2026-02-01T00:00:00Z", last_used_at: null }],
   };
   return { apiMock };
@@ -126,7 +130,7 @@ describe("Access Keys", () => {
     expect(shown(el, "Persona")).toBe(true);
   });
 
-  it("gives the archived keys a window of their own, closed until Show Archived opens it (user, 2026-10-28)", async () => {
+  it("gives the archived keys a floating window of their own, closed until Show Archived opens it (user, 2026-10-28)", async () => {
     const el = mountPanel();
     await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
     const archivedTool = () => [...sr(el).querySelectorAll<HTMLButtonElement>(".phx-toolbar-tools button")].find((b) => /^(Show|Hide) Archived$/.test(b.getAttribute("aria-label") ?? ""));
@@ -151,9 +155,11 @@ describe("Access Keys", () => {
     act(() => { archivedTool()!.click(); });
     await waitFor(() => expect(visible(el, "archivedAccessKeys")).not.toBeNull());
 
-    // It opens under the key list, above the chosen key's windows.
-    const titles = [...frame(el)!.querySelectorAll<HTMLElement>(".dv-view .phx-window-title-text")].map((t) => t.textContent);
-    expect(titles.slice(0, 2)).toEqual(["Access Keys", "Archived Access Keys"]);
+    // It floats over the workspace rather than pushing the chosen key's windows down (user, 2026-10-31).
+    const floating = [...frame(el)!.querySelectorAll<HTMLElement>(".phx-float-layer .phx-window-title-text")].map((t) => t.textContent);
+    expect(floating).toContain("Archived Access Keys");
+    const docked = [...frame(el)!.querySelectorAll<HTMLElement>(".phx-workspace .phx-window-title-text")].map((t) => t.textContent);
+    expect(docked).not.toContain("Archived Access Keys");
   });
 
   it("keeps the archived window out of the phone stack and Workspace Options until Show Archived is on", () => {
@@ -174,6 +180,92 @@ describe("Access Keys", () => {
     act(() => { reset.click(); });
     await waitFor(() => expect(visible(el, "archivedAccessKeys")).toBeNull());
     expect(archivedTool()).toHaveAttribute("aria-label", "Show Archived");
+  });
+
+  it("leaves no key chosen on Reset This Workspace, so the tree starts folded again (user, 2026-10-31)", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    act(() => { fireEvent.click(keyRow(el)); });
+    const branch = () => visible(el, "permissions")?.querySelector<HTMLButtonElement>("button.tree-expand") ?? null;
+    await waitFor(() => expect(branch()).not.toBeNull());
+    act(() => { branch()!.click(); });
+    await waitFor(() => expect(branch()).toHaveAttribute("aria-expanded", "true"));
+    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
+    const reset = [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].find((i) => i.textContent?.trim() === "Reset This Workspace")!;
+    act(() => { reset.click(); });
+    await waitFor(() => expect(keyRow(el)).toHaveAttribute("aria-selected", "false"));
+    await waitFor(() => expect(shown(el, "Persona")).toBe(false));
+    act(() => { fireEvent.click(keyRow(el)); });
+    await waitFor(() => expect(branch()).toHaveAttribute("aria-expanded", "false"));
+  });
+
+  it("renames a key from a double-click on its name (user, 2026-10-31)", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    const name = () => keyRow(el).querySelector<HTMLElement>(".access-key-name")!;
+    act(() => { fireEvent.click(keyRow(el)); });
+    act(() => { fireEvent.doubleClick(name()); });
+    const field = await waitFor(() => {
+      const input = keyRow(el).querySelector<HTMLInputElement>("input.access-key-name-input");
+      expect(input).not.toBeNull();
+      return input!;
+    });
+    expect(field.value).toBe("shell-access-key");
+  });
+
+  it("offers the hidden archived keys in Workspace Options, opening them as Show Archived does (user, 2026-10-31)", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    const archivedTool = () => [...sr(el).querySelectorAll<HTMLButtonElement>(".phx-toolbar-tools button")].find((b) => /^(Show|Hide) Archived$/.test(b.getAttribute("aria-label") ?? ""));
+    await waitFor(() => expect(archivedTool()).toBeDefined());
+    const entry = () => [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].find((i) => i.textContent?.trim() === "Show Archived Access Keys");
+    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
+    act(() => { entry()!.click(); });
+    await waitFor(() => expect(visible(el, "archivedAccessKeys")).not.toBeNull());
+    expect(archivedTool()).toHaveAttribute("aria-label", "Hide Archived");
+    act(() => { sr(el).querySelector<HTMLButtonElement>('[aria-label="Workspace Options"]')!.click(); });
+    expect(entry()).toBeUndefined();
+  });
+
+  it("opens and closes Create Access Key from its tool, and dismisses it on a click elsewhere (user, 2026-10-31)", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    const create = () => [...sr(el).querySelectorAll<HTMLButtonElement>(".phx-toolbar-tools button")].find((b) => b.getAttribute("aria-label") === "Create Access Key");
+    await waitFor(() => expect(create()).toBeDefined());
+    const form = () => visible(el, "accessKeys")!.querySelector("section.phx-inline-form");
+    act(() => { create()!.click(); });
+    await waitFor(() => expect(form()).not.toBeNull());
+    await waitFor(() => expect(create()).toHaveAttribute("aria-pressed", "true"));
+    // A click inside keeps it; the tool closes it and opens it again.
+    act(() => { fireEvent.click(form()!.querySelector("input")!); });
+    expect(form()).not.toBeNull();
+    act(() => { create()!.click(); });
+    await waitFor(() => expect(form()).toBeNull());
+    await waitFor(() => expect(create()).toHaveAttribute("aria-pressed", "false"));
+    act(() => { create()!.click(); });
+    await waitFor(() => expect(form()).not.toBeNull());
+    act(() => { fireEvent.click(keyRow(el)); });
+    await waitFor(() => expect(form()).toBeNull());
+  });
+
+  it("keeps Create Access Key open from its tool while the key is being created (user, 2026-10-31)", async () => {
+    let finish: (value: unknown) => void = () => {};
+    apiMock.createAccessKey.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    const create = () => [...sr(el).querySelectorAll<HTMLButtonElement>(".phx-toolbar-tools button")].find((b) => b.getAttribute("aria-label") === "Create Access Key");
+    await waitFor(() => expect(create()).toBeDefined());
+    const form = () => visible(el, "accessKeys")!.querySelector("section.phx-inline-form");
+    act(() => { create()!.click(); });
+    await waitFor(() => expect(form()).not.toBeNull());
+    const name = form()!.querySelector<HTMLInputElement>("#access-key-name-input")!;
+    act(() => { fireEvent.change(name, { target: { value: "new_agent" } }); });
+    const submit = [...form()!.querySelectorAll<HTMLButtonElement>("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent?.trim()) === "Create")!;
+    act(() => { fireEvent.click(submit); });
+    await waitFor(() => expect(apiMock.createAccessKey).toHaveBeenCalled());
+    act(() => { create()!.click(); });
+    expect(form()).not.toBeNull();
+    await act(async () => { finish({ ...{ id: "k9", name: "new_agent" }, access_key: "phx_" + "c".repeat(64) }); });
   });
 
   it("hides the archived keys when an active key is chosen (user, 2026-10-28)", async () => {

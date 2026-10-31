@@ -125,6 +125,24 @@ describe("configurable table", () => {
     void t;
   });
 
+  it("shows what the chosen row offers in a row of its own right under it, across every column", () => {
+    render(
+      <TableSettingsContext.Provider value={new TableSettingsStore()}>
+        <ConfigTable id="things" label="Things" columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} onSelect={() => {}} selectedKey="b"
+          detail={(r) => <button type="button">Act on {r.name}</button>} />
+      </TableSettingsContext.Provider>,
+    );
+    const chosen = screen.getByRole("row", { selected: true });
+    const detail = chosen.nextElementSibling as HTMLElement;
+    expect(detail).toHaveClass("phx-table-detail");
+    expect(within(detail).getByRole("button", { name: "Act on alpha" })).toBeTruthy();
+    // Two shown columns and the spare one at the end.
+    expect(detail.querySelector("td")).toHaveAttribute("colspan", "3");
+    expect(document.querySelectorAll(".phx-table-detail")).toHaveLength(1);
+    // It is not a row of its own to step through or fit columns to.
+    expect(detail).not.toHaveAttribute("data-row");
+  });
+
   it("keeps settings in the workspace's store, so a new table with the same id picks them up", () => {
     const store = new TableSettingsStore();
     const first = mount(store);

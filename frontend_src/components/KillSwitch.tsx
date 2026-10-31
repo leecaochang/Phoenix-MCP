@@ -1,6 +1,7 @@
 import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 interface Props {
   settings: GlobalSettings;
@@ -10,20 +11,16 @@ interface Props {
 
 export function KillSwitch({ settings, onToggle, saving }: Props) {
   const active = settings.kill_switch;
+  const help = active ? t("settings.killSwitchActiveHelp") : t("settings.killSwitchInactiveHelp");
 
   return (
     <div className={active ? "kill-switch-active" : ""}>
-      <div className="toggle-row toggle-row-plain">
-        <div className="toggle-label">
+      <div className="toggle-row toggle-row-plain" {...helpRow(help)}>
+        <SettingLabel help={help}>
           <span className={active ? "kill-switch-label-active" : "kill-switch-label"}>
             {active ? t("settings.killSwitchActiveLabel") : t("settings.killSwitchDisableLabel")}
           </span>
-          <small>
-            {active
-              ? t("settings.killSwitchActiveHelp")
-              : t("settings.killSwitchInactiveHelp")}
-          </small>
-        </div>
+        </SettingLabel>
         <label className={`toggle-switch toggle-switch-danger${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"

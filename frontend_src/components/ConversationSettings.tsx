@@ -5,6 +5,7 @@ import type { GlobalSettings } from "../types";
 import { api } from "../api";
 import { localeNumber } from "../i18n/format";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 interface Props {
   settings: GlobalSettings;
@@ -35,8 +36,8 @@ export function ConversationSettings({ settings, saving, onChange, onSave }: Pro
   const changed = draft.some((value, index) => Number(value) !== [entries, days, mb][index]);
   const discard = () => setDraft([String(entries), String(days), String(mb)]);
   return <div className="phx-settings-form">
-    <div className="toggle-row">
-      <div className="toggle-label"><span>{t("conversations.enable")}</span><small>{t("conversations.enableHelp")}</small></div>
+    <div className="toggle-row" {...helpRow(t("conversations.enableHelp"))}>
+      <SettingLabel help={t("conversations.enableHelp")}><span>{t("conversations.enable")}</span></SettingLabel>
       <label className="toggle-switch">
         <BusyInput type="checkbox" aria-label={t("conversations.enable")} data-help="conversations.privacyHelp" checked={settings.conversation_log_enabled ?? false}
           busy={saving} disabled={settings.disable_all_logging} onChange={e => onChange("conversation_log_enabled", e.target.checked)} />
