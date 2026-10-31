@@ -155,6 +155,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "Event": "0.0.0",
         "HomeAssistant": "0.0.0",
         "State": "0.0.0",
+        # Verified absent in 2024.5.0, present in 2024.10.0.
+        "async_get_hass_or_none": "2024.10.0",
         "callback": "0.0.0",
         "valid_entity_id": "0.0.0",
     },
@@ -201,6 +203,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_call_later": "0.0.0",
         "async_track_state_change_event": "0.0.0",
         "async_track_time_interval": "0.0.0",
+    },
+    "homeassistant.helpers.network": {
+        "get_url": "0.0.0",
     },
     "homeassistant.helpers.storage": {
         "Store": "0.0.0",

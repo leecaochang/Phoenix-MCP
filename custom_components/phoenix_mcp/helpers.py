@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import math
@@ -20,9 +21,11 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
-from homeassistant.core import HomeAssistant, callback
+import yarl
+from homeassistant.core import HomeAssistant, async_get_hass_or_none, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.network import get_url
 from homeassistant.util.dt import get_default_time_zone, parse_datetime, utcnow
 
 from .const import (
@@ -851,7 +854,14 @@ _PRIVATE_IPV4_RE = re.compile(
     r"|169\.254\.\d{1,3}\.\d{1,3}"                   # link-local 169.254.0.0/16
     r"|192\.168\.\d{1,3}\.\d{1,3}"                   # 192.168.0.0/16
     r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"  # 172.16.0.0/12
+    r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}"  # shared/Tailscale 100.64.0.0/10
     r")\b"
+)
+# Hostnames that only name private infrastructure: a .lan LAN name, a Tailscale
+# MagicDNS name, and a plex.direct name, whose first label encodes the address.
+# At least one label must precede the suffix, so wlan0 and sports.net stay.
+_PRIVATE_HOST_RE = re.compile(
+    r"(?<![\w.-])(?:[a-z0-9-]+\.)+(?:lan|ts\.net|plex\.direct)(?![\w-]|\.[\w-])", re.IGNORECASE
 )
 # Link-local (fe80::/10) and unique-local (fc00::/7) IPv6.
 _PRIVATE_IPV6_RE = re.compile(
@@ -866,9 +876,80 @@ _UNIX_PATH_RE = re.compile(r"(?<![\w/])/(?:[\w.\-]+/)+[\w.\-]+")
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\(?:[\w.\-]+\\?){2,}")
 
 
-def _scrub_network_topology(text: str) -> str:
-    """Replace LAN IPs, bare URLs, and absolute filesystem paths with placeholders."""
+# Exact-value (host, address) patterns for this instance's own identifiers.
+_IdentifierPatterns = tuple[re.Pattern[str] | None, re.Pattern[str] | None]
+
+
+@lru_cache(maxsize=8)
+def _exact_identifier_patterns(hosts: tuple[str, ...], addresses: tuple[str, ...]) -> _IdentifierPatterns:
+    """Compile exact-value patterns that never match inside a longer hostname or address."""
+    def alternation(values: Iterable[str]) -> str:
+        return "|".join(re.escape(value) for value in sorted(values, key=len, reverse=True))
+
+    host_re = (re.compile(rf"(?<![\w.-])(?:{alternation(hosts)})(?![\w-]|\.[\w-])", re.IGNORECASE)
+               if hosts else None)
+    ipv4 = [value for value in addresses if ":" not in value]
+    ipv6 = [value for value in addresses if ":" in value]
+    parts = [rf"(?<![\w.-])(?:{alternation(ipv4)})(?![\w-]|\.[\w-])"] if ipv4 else []
+    if ipv6:
+        parts.append(rf"(?<![\w:.])(?:{alternation(ipv6)})(?![\w:]|\.\w)")
+    address_re = re.compile("|".join(parts), re.IGNORECASE) if parts else None
+    return host_re, address_re
+
+
+def _instance_identifier_patterns(hass: HomeAssistant | None) -> _IdentifierPatterns:
+    """This instance's own URL hosts and interface addresses as exact-value patterns.
+
+    Read from Home Assistant on each call: the internal, external and Cloud URL
+    hosts and every network adapter address. Loopback addresses and single-label
+    names stay readable. Any failed read leaves that value out and never raises,
+    so a scrub cannot fail the tool. Event loop only; without hass nothing is added.
+    """
+    if hass is None:
+        return None, None
+    values: set[str] = set()
+    for options in ({"allow_external": False, "allow_cloud": False},
+                    {"allow_internal": False, "allow_cloud": False},
+                    {"require_cloud": True}):
+        try:
+            values.add(str(yarl.URL(get_url(hass, allow_ip=True, **options)).host or ""))
+        except Exception:
+            continue
+    try:
+        from homeassistant.components.network import async_get_loaded_adapters
+        for adapter in async_get_loaded_adapters(hass):
+            for entry in (*(adapter.get("ipv4") or ()), *(adapter.get("ipv6") or ())):
+                values.add(str(entry.get("address") or ""))
+    except Exception:
+        _LOGGER.debug("Network adapters are unavailable to the diagnostics scrub", exc_info=True)
+    hosts: set[str] = set()
+    addresses: set[str] = set()
+    for value in values:
+        value = value.strip("[]").lower()
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError:
+            if "." in value.strip("."):
+                hosts.add(value.rstrip("."))
+            continue
+        if not (address.is_loopback or address.is_unspecified):
+            addresses.add(address.compressed)
+    return _exact_identifier_patterns(tuple(sorted(hosts)), tuple(sorted(addresses)))
+
+
+def _scrub_network_topology(text: str, identifiers: _IdentifierPatterns | None = None) -> str:
+    """Replace LAN IPs and hosts, bare URLs, this instance's identifiers and absolute paths.
+
+    `identifiers` lets a caller scrubbing many strings read them once; without
+    it they are read from the Home Assistant instance running this event loop.
+    """
     text = _BARE_URL_RE.sub("<redacted-url>", text)
+    host_re, address_re = identifiers or _instance_identifier_patterns(async_get_hass_or_none())
+    if host_re is not None:
+        text = host_re.sub("<redacted-host>", text)
+    if address_re is not None:
+        text = address_re.sub("<redacted-ip>", text)
+    text = _PRIVATE_HOST_RE.sub("<redacted-host>", text)
     text = _PRIVATE_IPV4_RE.sub("<redacted-ip>", text)
     text = _PRIVATE_IPV6_RE.sub("<redacted-ip>", text)
     text = _WIN_PATH_RE.sub("<redacted-path>", text)
@@ -876,33 +957,37 @@ def _scrub_network_topology(text: str) -> str:
     return text
 
 
-def _scrub_diagnostic_str(text: str) -> str:
+def _scrub_diagnostic_str(text: str, identifiers: _IdentifierPatterns | None = None) -> str:
     """Full diagnostic-string scrub: embedded credentials/JWTs then network topology."""
-    return _scrub_network_topology(redact_secrets_in_text(text) or "")
+    return _scrub_network_topology(redact_secrets_in_text(text) or "", identifiers)
 
 
-def redact_diagnostics(obj: Any, _depth: int = 0) -> Any:
+def redact_diagnostics(obj: Any, _depth: int = 0, _identifiers: _IdentifierPatterns | None = None) -> Any:
     """redact_structure plus a conservative network-topology scrub for diagnostics.
 
-    Each string is also scrubbed for private/loopback/link-local IPs, bare URLs
-    and absolute paths. Integration-defined payloads are free-form, so dict KEYS
-    get the same string scrub as values (an integration may key its health data by
+    Each string is also scrubbed for private/loopback/link-local/shared IPs, LAN,
+    Tailscale and plex.direct hostnames, this instance's own URL hosts and
+    interface addresses (read once per call), bare URLs and absolute paths.
+    Integration-defined payloads are free-form, so dict KEYS get the same string
+    scrub as values (an integration may key its health data by
     a URL, LAN IP or path); a sensitive-named key still redacts its value.
     cap_diagnostics is an elevated read, so some over-redaction is acceptable; the
     diagnostic shape is preserved.
     """
     if _depth > 25:
         return "<redacted>"
+    if _identifiers is None:
+        _identifiers = _instance_identifier_patterns(async_get_hass_or_none())
     if isinstance(obj, dict):
         return {
-            (_scrub_diagnostic_str(k) if isinstance(k, str) else k):
-                "<redacted>" if is_sensitive_key(k) else redact_diagnostics(v, _depth + 1)
+            (_scrub_diagnostic_str(k, _identifiers) if isinstance(k, str) else k):
+                "<redacted>" if is_sensitive_key(k) else redact_diagnostics(v, _depth + 1, _identifiers)
             for k, v in obj.items()
         }
     if isinstance(obj, list):
-        return [redact_diagnostics(item, _depth + 1) for item in obj]
+        return [redact_diagnostics(item, _depth + 1, _identifiers) for item in obj]
     if isinstance(obj, str):
-        return _scrub_diagnostic_str(obj)
+        return _scrub_diagnostic_str(obj, _identifiers)
     return obj
 
 

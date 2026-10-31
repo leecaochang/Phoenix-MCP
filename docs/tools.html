@@ -285,7 +285,7 @@
 
           <article class="tool" data-cap="discovery" data-search="get_system_health version integrations">
             <div class="tool-head"><span class="tool-name">get_system_health</span><span class="badge badge-cap">Diagnostics</span></div>
-            <p class="tool-desc">Home Assistant version and per-integration system health. Secret-keyed values and URL-embedded credentials in the integration data are scrubbed before they are returned, as are network-topology details (LAN IP addresses, hostnames inside URLs, and filesystem paths) that Phoenix MCP withholds elsewhere. This is an elevated read; treat <code>cap_diagnostics</code> accordingly.</p>
+            <p class="tool-desc">Home Assistant version and per-integration system health. Secret-keyed values and URL-embedded credentials in the integration data are scrubbed before they are returned, as are network-topology details that Phoenix MCP withholds elsewhere: private and Tailscale IP addresses, <code>.lan</code>, Tailscale and <code>plex.direct</code> hostnames, this instance's own URL hostnames and network addresses other than loopback and single-label names, hostnames inside URLs, and filesystem paths. This is an elevated read; treat <code>cap_diagnostics</code> accordingly.</p>
           </article>
 
           <article class="tool" data-cap="discovery" data-search="get_repairs repairs issues warnings errors ignored diagnostics">
