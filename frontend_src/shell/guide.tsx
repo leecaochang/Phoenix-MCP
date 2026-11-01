@@ -464,6 +464,8 @@ function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
   );
 }
 
+const NO_WINDOWS: ReadonlySet<string> = new Set();
+
 /** How far one arrow key moves or resizes the Guide. */
 const KEY_STEP = 24;
 const MIN_W = 320;
@@ -475,7 +477,7 @@ const MIN_H = 280;
  * menu with keyboard Move and Resize, Maximize and Close, but no Dock, since
  * a Guide docked in one workspace would not fit the others.
  */
-export function GuideWindow({ workspace, controller, language, rect, onRect, onClose, folded = false, onFold, topicId = null, follow = null }: {
+export function GuideWindow({ workspace, controller, language, rect, onRect, onClose, folded = false, onFold, topicId = null, follow = null, opensItself = NO_WINDOWS }: {
   workspace: string;
   controller: WorkspaceController | null;
   language: string;
@@ -489,9 +491,16 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   topicId?: string | null;
   /** The wizard step to sit beside: the Guide is pinned there, and cannot be moved or closed. */
   follow?: WizardGuideStep | null;
+  /**
+   * Windows the shell opens by itself, such as Needs Attention while items wait. Their opening is
+   * not the reader turning to them, so they lead the Guide only when the reader selects something
+   * in them; otherwise the workspace's own page stays.
+   */
+  opensItself?: ReadonlySet<string>;
 }) {
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
-  const guide = useGuideTopic(workspace, controller?.activeWindow ?? null, language, topicId);
+  const active = controller?.activeWindow ?? null;
+  const guide = useGuideTopic(workspace, active && opensItself.has(active) ? null : active, language, topicId);
   const [live, setLive] = useState<GuideRect>(() => rect ?? defaultGuideRect(window.innerWidth, window.innerHeight));
   // A saved place applies unless the Guide is pinned beside the wizard; after the wizard it returns there.
   const following = !!follow;

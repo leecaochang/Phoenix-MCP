@@ -238,6 +238,23 @@ describe("the Guide window with sections, Contents and Search", () => {
     expect(document.querySelector('[data-guide-section="decision-provider"]')).toHaveClass("is-target");
   });
 
+  it("keeps the workspace's page when the shell opens a window by itself, until the reader selects in it", async () => {
+    const withAttention = { ...topics, "window.attention": { title: "Needs Attention", body: "Things to check.", anchors: [], parent: "workspace.settings" } };
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics: withAttention }) })));
+    const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
+    const tracker = new GuideTargetTracker();
+    document.body.innerHTML = '<div id="root"><div data-phx-window="attention"><button id="b">Mark Reviewed</button></div></div>';
+    tracker.attach(document.getElementById("root")!);
+    render(<GuideTargetContext.Provider value={tracker}>
+      <GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} opensItself={new Set(["attention"])} />
+    </GuideTargetContext.Provider>);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
+    act(() => { controller.setActiveWindow("attention"); });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings");
+    act(() => { fireEvent.focusIn(document.getElementById("b")!); });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Needs Attention");
+  });
+
   it("lists every page in Contents and finds a section in Search, with Back returning", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
     const controller = new WorkspaceController("settings", [], () => {}, (id) => id);

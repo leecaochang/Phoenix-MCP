@@ -12,7 +12,7 @@ export function NotificationsWindow() {
   const items = center?.history ?? [];
   if (!items.length) return <p className="phx-notifications-empty">{t("notifications.empty")}</p>;
   return (
-    <ul className="phx-notifications">
+    <ul className="phx-notifications" data-guide="window.notifications#history">
       {items.map((n) => (
         <li key={n.id} className="phx-notification">
           <div className="phx-notification-text">

@@ -69,6 +69,7 @@ describe("the shipped Guide", () => {
         expect(bundle.topics[`window.${id}`], `window.${id}`).toBeDefined();
       }
     }
+    for (const id of SHARED) expect(bundle.topics[`window.${id}`], `window.${id}`).toBeDefined();
   });
 
   it("has a section for every setting Find Setting knows, on its window's page", () => {

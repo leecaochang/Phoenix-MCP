@@ -735,7 +735,7 @@ export function Shell() {
             rect={guide.rect} onRect={(rect) => updateGuide({ rect })} onClose={() => updateGuide({ open: false })}
             folded={!!guide.folded} onFold={(folded) => updateGuide({ folded })}
             topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null}
-            follow={wizardGuideShown ? wizardStep : null} />
+            follow={wizardGuideShown ? wizardStep : null} opensItself={TRANSIENT} />
         )}
         <Toasts center={notifications} />
         {/* Home Assistant away: one notice over the panel, cleared when it answers again. */}

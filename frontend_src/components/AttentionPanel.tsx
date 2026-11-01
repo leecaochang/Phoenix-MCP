@@ -93,19 +93,21 @@ export function AttentionList({ state, onShowRequest }: {
     {items.map(item => {
       const key = `${item.kind}:${item.id}`;
       const reviewable = item.kind === "agent" || item.kind === "calendar";
-      return <article className="phx-attention-item" key={key}>
+      return <article className="phx-attention-item" key={key} data-guide={reviewable ? "window.attention#actions" : "window.attention#problems"}>
         <h3 className="phx-attention-item-title">{TITLES[item.kind] ? t(TITLES[item.kind]) : item.kind}</h3>
         {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
         <p className="phx-attention-help">{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
         {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t("attention.request")}</span> <code>{item.id}</code></p>}
         {reviewable && (confirming === key ? (
+          <div className="log-group" data-guide="window.attention#review">
           <InlineConfirm label={t("attention.continue")} acknowledge={t("attention.checked")}
             confirmLabel={t("attention.continue")} cancelLabel={t("common.cancel")}
             busy={busy === key} onConfirm={() => { void review(item); setConfirming(null); }} onCancel={() => setConfirming(null)}>
             <p>{t("attention.noReplay")}</p>
           </InlineConfirm>
+          </div>
         ) : (
-          <div className="phx-attention-actions">
+          <div className="phx-attention-actions" data-guide="window.attention#review">
             <code className="phx-attention-ref">{item.tool}{item.entity_id && ` / ${item.entity_id}`}</code>
             <span className="phx-attention-buttons">
               {onShowRequest && item.kind === "agent" && (
