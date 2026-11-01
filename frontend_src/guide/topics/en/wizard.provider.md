@@ -1,8 +1,8 @@
 ---
-{ "id": "wizard.provider", "title": "Setting Up the Model Provider" }
+{ "id": "wizard.provider", "title": "Setting Up the Model Provider", "parent": "workspace.accessKeys", "order": 104 }
 ---
-Agent Chat sends the conversation to the model provider you choose, using your own account with it.
+Agent Chat sends the conversation to the model provider you choose, using your own account.
 
-Pick an account you have already added, or add one: choose its type, enter the API key or the Ollama server's address, and validate it. Nothing is saved until it validates.
+Pick an account you've already added, or add one: choose the provider, enter the API key or Ollama server address, and validate it. Nothing is saved until it validates.
 
-**{{label:wizard.tryNow}}** clears Agent Chat's conversation and opens it on the new key, with a test question typed in.
+**{{label:wizard.tryNow}}** clears Agent Chat's conversation and opens it with the new key, with a test question already typed in.

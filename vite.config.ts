@@ -1,13 +1,16 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { compileGuide } from "./frontend_src/guide/compile.ts";
+import { compileGuide, translationProblems, type GuideBundle } from "./frontend_src/guide/compile.ts";
 
 const GUIDE_TOPICS = resolve(__dirname, "frontend_src/guide/topics");
 const CATALOG = resolve(__dirname, "custom_components/phoenix_mcp/catalogs/en.json");
 
-/** Compile each language's Guide topics into guide/<language>.json beside the panel bundle; a broken topic fails the build. */
+/**
+ * Compile each language's Guide topics into guide/<language>.json beside the panel bundle; a broken topic,
+ * or a translation whose topics and sections differ from English, fails the build.
+ */
 function guideTopics(): Plugin {
   return {
     name: "phoenix-guide-topics",
@@ -18,6 +21,8 @@ function guideTopics(): Plugin {
         for (const part of key.split(".")) node = node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined;
         return typeof node === "string";
       };
+      const fileExists = (path: string) => !path.startsWith("/") && !path.includes("..") && existsSync(resolve(__dirname, path));
+      const bundles: GuideBundle[] = [];
       for (const language of readdirSync(GUIDE_TOPICS)) {
         const dir = resolve(GUIDE_TOPICS, language);
         const files = readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => {
@@ -25,10 +30,14 @@ function guideTopics(): Plugin {
           this.addWatchFile(path);
           return { file: `${language}/${f}`, source: readFileSync(path, "utf8") };
         });
-        const { bundle, problems } = compileGuide(language, files, labelExists);
+        const { bundle, problems } = compileGuide(language, files, labelExists, fileExists);
         if (problems.length) this.error(`Guide topics:\n${problems.join("\n")}`);
+        bundles.push(bundle);
         this.emitFile({ type: "asset", fileName: `guide/${language}.json`, source: JSON.stringify(bundle) });
       }
+      const english = bundles.find((b) => b.language === "en");
+      const mismatched = english ? bundles.filter((b) => b !== english).flatMap((b) => translationProblems(english, b)) : ["Guide topics: there are no English topics"];
+      if (mismatched.length) this.error(`Guide translations:\n${mismatched.join("\n")}`);
     },
   };
 }

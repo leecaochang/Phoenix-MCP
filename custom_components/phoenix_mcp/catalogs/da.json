@@ -2476,6 +2476,8 @@
       "logsNotifications": "Logge og notifikationer",
       "mesaProfiles": "Profiler",
       "moveDown": "Flyt ned",
+      "moveHint": "Piletasterne flytter. Tryk på Esc for at afslutte.",
+      "moveKeyboard": "Flyt med tastaturet",
       "moveLeft": "Flyt til venstre",
       "moveRight": "Flyt til højre",
       "moveToolbar": "Flyt værktøjslinjen",
@@ -2566,13 +2568,22 @@
       "toolbarOptions": "Vælg, hvordan værktøjslinjens knapper vises, fastgør den til en kant eller gør den flydende, stil den lodret eller vandret, eller fold den sammen.",
       "persona": "En persona fastlægger de første funktioner. Ret enkelte funktioner i vinduet Funktioner; personaen skifter til Brugerdefineret, når indstillingerne ikke længere matcher en persona.",
       "guidance": "Vejledning til alle agenter, der bruger denne adgangsnøgle, fx hvad rum og enheder hedder, hvem der bruger den, eller hvor husstandens dokumentation ligger. Phoenix MCP tilføjer den til hver agents instruktioner og skjuler entitets-id'er uden for denne adgangsnøgles omfang. Den er kun vejledende: Den giver aldrig adgang, ændrer ikke funktioner og omgår ikke godkendelser, og en model kan ignorere den. Agenter og deres modeludbydere modtager dette, og alle, der taler med en agent, kan få det gentaget. Skriv aldrig adgangskoder eller andre hemmeligheder her.",
-      "inlineWait": "Hvor længe et kald fra en ekstern MCP-klient, der kræver bekræftelse, venter på din beslutning, før det returnerer et afventende svar. Fra, som er standard, returnerer, så snart godkendelsen er sat i kø. Agent Chat, stemme og AI-opgave ignorerer dette: de sætter altid i kø med det samme og venter på deres egen måde."
+      "inlineWait": "Hvor længe et kald fra en ekstern MCP-klient, der kræver bekræftelse, venter på din beslutning, før det returnerer et afventende svar. Fra, som er standard, returnerer, så snart godkendelsen er sat i kø. Agent Chat, stemme og AI-opgave ignorerer dette: de sætter altid i kø med det samme og venter på deres egen måde.",
+      "guideMenu": "Flyt guiden, eller tilpas størrelsen med tastaturet, fold den sammen, maksimer den, eller luk den.",
+      "closeGuide": "Luk guiden i alle arbejdsområder. Åbn den igen fra menuen Dokumentation."
     },
     "guide": {
       "title": "Guide",
       "back": "Tilbage",
       "unavailable": "Guiden kunne ikke indlæses. Genindlæs siden for at prøve igen.",
-      "noTopic": "Der er endnu intet emne i guiden for dette arbejdsområde."
+      "noTopic": "Der er endnu intet emne i guiden for dette arbejdsområde.",
+      "more": "Indhold og søgning",
+      "contents": "Indhold",
+      "search": "Søg",
+      "searchPlaceholder": "Søg i guiden",
+      "noResults": "Intet i guiden matcher.",
+      "forward": "Frem",
+      "breadcrumbs": "Hvor siden hører til"
     },
     "logs": {
       "filters": "Filtre",

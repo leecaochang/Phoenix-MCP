@@ -1,14 +1,16 @@
 ---
-{ "id": "workspace.accessKeys", "title": "Access Keys" }
+{ "id": "workspace.accessKeys", "title": "Access Keys", "order": 10 }
 ---
-Every agent connects to Phoenix with its own access key, and the key decides what that agent may do in Home Assistant.
+Each agent connects to Phoenix with its own access key. The key decides what that agent can do in Home Assistant.
 
-- **{{label:accessKeys.setUpAgent}}** walks you through creating a key and connecting a client.
-- Select a key in the list to show it in the windows below: **{{label:accessKeys.cardPersona}}**, **{{label:accessKeys.cardCapabilities}}**, **{{label:workspace.keySettings}}** and the **{{label:accessKeys.permissionsTree}}**, with the **{{label:accessKeys.permissionSummary}}** summing up what it may reach. Until a key is selected, only the list is shown. The key stays selected when you come back from another workspace, and the list keeps itself up to date while it is shown.
-- Each window is as tall as what it shows, so the workspace scrolls instead of the windows.
-- The **{{label:accessKeys.permissionsTree}}** follows Home Assistant by itself as entities, devices, areas and labels change. **{{label:selectBy.menu}}** narrows it to one area, label or integration.
+- **{{label:accessKeys.setUpAgent}}** walks you through creating a key and connecting an app.
+- Select a key in the list to show its **{{label:accessKeys.cardPersona}}**, **{{label:accessKeys.cardCapabilities}}**, **{{label:workspace.keySettings}}** and **{{label:accessKeys.permissionsTree}}** windows.
+- **{{label:accessKeys.permissionSummary}}** sums up everything the key can reach.
+- Until you select a key, only the list is shown. The key stays selected when you come back from another workspace.
+- Each window grows to fit its content, so the workspace scrolls instead of the windows.
+- The **{{label:accessKeys.permissionsTree}}** keeps up with Home Assistant as entities, devices, areas and labels change. **{{label:selectBy.menu}}** narrows it to one area, label or integration.
 - **{{label:workspace.keyActions}}** on the toolbar renames, rotates or revokes the selected key.
-- **{{label:accessKeys.showArchived}}** opens **{{label:accessKeys.archivedTitle}}** under the list, holding the revoked and expired keys. It closes again when you select a key.
-- Choosing **{{label:personas.custom.label}}** again after trying another persona brings back the key's custom capabilities, until the panel is closed.
+- **{{label:accessKeys.showArchived}}** opens **{{label:accessKeys.archivedTitle}}** under the list, with the revoked and expired keys. It closes when you select a key.
+- If you try another persona, choosing **{{label:personas.custom.label}}** again brings back the key's custom capabilities, until you close the panel.
 
-Capabilities set to confirm send an agent's changes to [Approvals](guide:workspace.approvals) before anything runs.
+When a capability is set to confirm, the agent's changes go to [Approvals](guide:workspace.approvals) first, and nothing runs until you decide.

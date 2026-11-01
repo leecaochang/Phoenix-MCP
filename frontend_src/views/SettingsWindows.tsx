@@ -61,11 +61,14 @@ function SettingsBody({ error, children }: { error: string | null; children: Rea
   );
 }
 
-/** A section folded into its title until opened; Find Setting opens it to reach a setting inside. */
-function Disclosure({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * A section folded into its title until opened; Find Setting opens it to reach a setting inside.
+ * Its title names its Guide section; the settings inside name their own.
+ */
+function Disclosure({ title, guide, children }: { title: string; guide: string; children: ReactNode }) {
   return (
     <details className="phx-disclosure">
-      <summary>{title}</summary>
+      <summary data-guide={guide}>{title}</summary>
       <div className="phx-disclosure-body">{children}</div>
     </details>
   );
@@ -85,7 +88,7 @@ export function AiProvidersWindow() {
   return (
     <SettingsBody error={error}>
       <LlmProviderSettings settings={settings} onChange={change} saving={saving} adding={adding} onAddingChange={setAdding} />
-      <Disclosure title={t("routing.providerSection")}>
+      <Disclosure title={t("routing.providerSection")} guide="window.settingsProviders#decision-provider">
         <DecisionProviderSettings settings={settings} onChange={change} saving={saving} />
       </Disclosure>
     </SettingsBody>
@@ -134,7 +137,7 @@ function RoutingStatisticsButton({ surface }: { surface: "voice" | "chat" }) {
   const controller = useContext(ControllerContext);
   if (!toggle || !controller?.windows.includes(id)) return <RoutingStatistics surface={surface} />;
   return (
-    <div className="phx-window-actions phx-window-actions-end">
+    <div className="phx-window-actions phx-window-actions-end routing-statistics-open">
       <ActionButton icon="statistics" label={t("routingStats.show")} className="btn btn-outline btn-sm"
         pressed={toggle.open} onClick={toggle.toggle} />
     </div>
@@ -153,6 +156,8 @@ const tabId = (tab: HomeTab) => `phx-home-tab-${tab}`;
 /** What each tab is for, shown in Help over the tab and its empty space. */
 const HOME_TAB_HELP_KEYS: Record<HomeTab, string> = { voice: "settings.voiceIntro", aiTask: "settings.aiTaskIntro", assist: "settings.assistIntro" };
 const panelId = (tab: HomeTab) => `phx-home-panel-${tab}`;
+/** Each tab's section on the Home Assistant page of the Guide. */
+const HOME_TAB_GUIDE: Record<HomeTab, string> = { voice: "window.settingsHome#voice-agent", aiTask: "window.settingsHome#ai-task", assist: "window.settingsHome#assist-tool-provider" };
 
 /** Voice Agent, AI Task and Assist Tool Provider on local tabs; each tab keeps its state while another is shown. */
 export function HomeAssistantWindow() {
@@ -175,7 +180,7 @@ export function HomeAssistantWindow() {
     <SettingsBody error={error}>
       <div className="phx-local-tabs" role="tablist" aria-label={t("workspace.homeAssistant")}>
         {HOME_TABS.map((tab) => (
-          <button key={tab} id={tabId(tab)} type="button" role="tab" className="phx-local-tab" aria-selected={tab === current}
+          <button key={tab} id={tabId(tab)} type="button" role="tab" className="phx-local-tab" aria-selected={tab === current} data-guide={HOME_TAB_GUIDE[tab]}
             data-help-text={tPlain(HOME_TAB_HELP_KEYS[tab])}
             aria-controls={panelId(tab)} tabIndex={tab === current ? 0 : -1} onClick={() => s.setHomeTab(tab)} onKeyDown={onKeyDown}>
             {t(HOME_TAB_LABEL_KEYS[tab])}
@@ -219,7 +224,7 @@ export function SafetyWindow() {
           <option value="enforced">{t("settings.mesaModeEnforced")}</option>
         </BusySelect>
       </div>
-      <Disclosure title={t("settings.dataCard")}>
+      <Disclosure title={t("settings.dataCard")} guide="window.settingsSafety#data-management">
         {/* The choices form one group, without rules between them (user, 2026-10-31). */}
         <div className="phx-setting-checks">
           {WIPE_SCOPES.map((scope) => (
@@ -274,14 +279,14 @@ export function LogsSettingsWindow() {
           </div>
         </section>
         {/* The Conversation Log's settings fold under its name (user, 2026-10-31). */}
-        <Disclosure title={t("conversations.title")}>
+        <Disclosure title={t("conversations.title")} guide="window.settingsLogs#conversation-log">
           <ConversationSettings settings={settings} saving={saving} onChange={change} />
         </Disclosure>
       </div>
-      <Disclosure title={t("settings.privacySection")}>
+      <Disclosure title={t("settings.privacySection")} guide="window.settingsLogs#privacy">
         <LoggingSettings settings={settings} onToggle={change} saving={saving} only={PRIVACY_TOGGLES} />
       </Disclosure>
-      <Disclosure title={t("settings.haNotifications")}>
+      <Disclosure title={t("settings.haNotifications")} guide="window.settingsLogs#notifications">
         <NotificationSettings settings={settings} onToggle={change} saving={saving} />
       </Disclosure>
     </SettingsBody>

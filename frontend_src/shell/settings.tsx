@@ -81,6 +81,32 @@ export function entryPlace(entry: SettingEntry): string {
   return entry.tab ? [window, t(HOME_TAB_LABEL_KEYS[entry.tab])].join(t("common.listSeparator")) : window;
 }
 
+/** The Guide section about a setting: its index id written as an anchor (`decisionProvider` is `decision-provider`). */
+export const settingAnchor = (id: string): string => id.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+
+/** What counts as a setting's place in its window: its row, field or folded section. */
+const SETTING_ROW = ".toggle-row, .agentcli-settings-field, .conversation-limit, .routing-choices, .agentcli-add, .phx-kill-switch, .phx-window-actions";
+
+/**
+ * The Guide section for a control in a Settings window (user, 2026-11-01): the
+ * indexed setting whose row holds the control. When several hold it (the AI
+ * Providers accounts surround the rest of that window) the closest wins.
+ */
+export function settingsGuideAnchor(el: Element, windowId: string): string | null {
+  const windowEl = el.closest(`[data-phx-window="${windowId}"]`);
+  if (!windowEl) return null;
+  let best: { anchor: string; row: Element } | null = null;
+  for (const entry of SETTING_INDEX) {
+    if (entry.window !== windowId) continue;
+    const control = findControl(windowEl, entry);
+    if (!control) continue;
+    const row = control.tagName === "SUMMARY" ? control.parentElement ?? control : control.closest(SETTING_ROW) ?? control;
+    if (!row.contains(el) || (best && !best.row.contains(row))) continue;
+    best = { anchor: settingAnchor(entry.id), row };
+  }
+  return best?.anchor ?? null;
+}
+
 /** The control an entry points at, inside its window's content; null while it is not drawn yet. */
 export function findControl(windowEl: Element, entry: SettingEntry): HTMLElement | null {
   if (entry.selector) return windowEl.querySelector<HTMLElement>(entry.selector);

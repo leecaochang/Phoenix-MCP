@@ -2476,6 +2476,8 @@
       "logsNotifications": "Loggar och aviseringar",
       "mesaProfiles": "Profiler",
       "moveDown": "Flytta nedåt",
+      "moveHint": "Piltangenterna flyttar. Tryck på Esc för att avsluta.",
+      "moveKeyboard": "Flytta med tangentbordet",
       "moveLeft": "Flytta åt vänster",
       "moveRight": "Flytta åt höger",
       "moveToolbar": "Flytta verktygsfältet",
@@ -2566,13 +2568,22 @@
       "toolbarOptions": "Välj hur verktygsfältets knappar visas, docka det vid en kant eller gör det flytande, ställ det lodrätt eller vågrätt, eller fäll ihop det.",
       "persona": "En persona anger de inledande funktionerna. Ändra enskilda funktioner i fönstret Funktioner; personan blir Anpassad när inställningarna inte längre matchar någon persona.",
       "guidance": "Vägledning för alla agenter som använder den här åtkomstnyckeln, till exempel vad rum och enheter heter, vem som använder den eller var hushållets dokumentation finns. Phoenix MCP lägger till den i varje agents instruktioner och döljer entitets-ID:n utanför den här åtkomstnyckelns omfång. Den är endast rådgivande: den ger aldrig åtkomst, ändrar inte funktioner och kringgår inte godkännanden, och en modell kan ignorera den. Agenter och deras modellleverantörer tar emot detta, och alla som pratar med en agent kan få det upprepat. Skriv aldrig lösenord eller andra hemligheter här.",
-      "inlineWait": "Hur länge ett bekräftelsebegränsat anrop från en extern MCP-klient väntar på ditt beslut innan det returnerar ett väntande svar. Med Av, som är standard, återkommer anropet så snart godkännandet har köats. Agent Chat, röst och AI-uppgift ignorerar detta: de köar alltid omedelbart och väntar på sitt eget sätt."
+      "inlineWait": "Hur länge ett bekräftelsebegränsat anrop från en extern MCP-klient väntar på ditt beslut innan det returnerar ett väntande svar. Med Av, som är standard, återkommer anropet så snart godkännandet har köats. Agent Chat, röst och AI-uppgift ignorerar detta: de köar alltid omedelbart och väntar på sitt eget sätt.",
+      "guideMenu": "Flytta guiden eller ändra storleken med tangentbordet, fäll ihop den, maximera den eller stäng den.",
+      "closeGuide": "Stäng guiden i alla arbetsytor. Öppna den igen från menyn Dokumentation."
     },
     "guide": {
       "title": "Guide",
       "back": "Tillbaka",
       "unavailable": "Guiden kunde inte läsas in. Läs in sidan igen för att försöka på nytt.",
-      "noTopic": "Det finns ännu inget guideavsnitt för den här arbetsytan."
+      "noTopic": "Det finns ännu inget guideavsnitt för den här arbetsytan.",
+      "more": "Innehåll och sökning",
+      "contents": "Innehåll",
+      "search": "Sök",
+      "searchPlaceholder": "Sök i guiden",
+      "noResults": "Inget i guiden matchar.",
+      "forward": "Framåt",
+      "breadcrumbs": "Var sidan hör hemma"
     },
     "logs": {
       "filters": "Filter",

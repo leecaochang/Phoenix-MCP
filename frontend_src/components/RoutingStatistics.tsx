@@ -68,7 +68,7 @@ export function RoutingStatisticsContent({ surface }: { surface: "voice" | "chat
       confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={busy}
       error={error ? t("routingStats.error") : null} onConfirm={() => void load(true)} onCancel={() => setConfirm(false)}>
       <p>{t("routingStats.confirm")}</p>
-    </InlineConfirm> : <div className="routing-statistics-actions">
+    </InlineConfirm> : <div className="routing-statistics-actions" data-guide="topic.routingStatistics#refresh-and-reset">
       <ActionButton icon="refresh" label={t("common.refresh")} className="btn btn-outline btn-sm" busy={busy} onClick={() => void load()} />
       <ActionButton icon="restoreVersion" label={t("routingStats.reset")} className="btn btn-outline btn-sm phx-action-danger" busy={busy}
         disabled={!stats} onClick={() => setConfirm(true)} />

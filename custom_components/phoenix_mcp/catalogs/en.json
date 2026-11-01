@@ -551,6 +551,8 @@
       "logsNotifications": "Logs and Notifications",
       "mesaProfiles": "Profiles",
       "moveDown": "Move Down",
+      "moveHint": "Arrow keys move. Esc to finish.",
+      "moveKeyboard": "Move with Keyboard",
       "moveLeft": "Move Left",
       "moveRight": "Move Right",
       "moveToolbar": "Move toolbar",
@@ -641,13 +643,22 @@
       "wsMy": "Your own workspace: windows you added from the other workspaces, and Agent Chat if you docked it here.",
       "persona": "A persona sets the starting capabilities. Change single capabilities in the Capabilities window; the persona becomes Custom when the settings no longer match one.",
       "guidance": "Guidance for every agent that uses this access key, such as what rooms and devices are called, who uses it, or where household documentation is kept. Phoenix MCP adds it to each agent's instructions and hides entity IDs outside this access key's scope. It is advisory: it never grants access, changes capabilities or bypasses approvals, and a model may ignore it. Agents and their model providers receive this, and anyone who talks to an agent can get it repeated. Never put passwords or other secrets here.",
-      "inlineWait": "How long a confirm-gated call from an external MCP client waits for your decision before returning a pending response. Off, the default, returns as soon as the approval is queued. Agent Chat, voice and AI Task ignore this: they always queue immediately and wait their own way."
+      "inlineWait": "How long a confirm-gated call from an external MCP client waits for your decision before returning a pending response. Off, the default, returns as soon as the approval is queued. Agent Chat, voice and AI Task ignore this: they always queue immediately and wait their own way.",
+      "guideMenu": "Move or resize the Guide with the keyboard, fold it, maximize it, or close it.",
+      "closeGuide": "Close the Guide in every workspace. Open it again from the Documentation menu."
     },
     "guide": {
       "title": "Guide",
       "back": "Back",
+      "forward": "Forward",
+      "breadcrumbs": "Where this page sits",
       "unavailable": "The Guide could not be loaded. Reload the page to try again.",
-      "noTopic": "There is no Guide topic for this workspace yet."
+      "noTopic": "There is no Guide topic for this workspace yet.",
+      "more": "Contents and Search",
+      "contents": "Contents",
+      "search": "Search",
+      "searchPlaceholder": "Search the Guide",
+      "noResults": "Nothing in the Guide matches."
     },
     "logs": {
       "filters": "Filters",

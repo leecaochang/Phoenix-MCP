@@ -1,10 +1,12 @@
 ---
-{ "id": "workspace.my", "title": "My Workspace" }
+{ "id": "workspace.my", "title": "My Workspace", "order": 70 }
 ---
-My Workspace holds the windows you use most, gathered from the other workspaces.
+My Workspace gathers the windows you use most from the other workspaces.
 
-- **{{label:workspace.addToMy}}** in a window's menu adds it here. It stays in its own workspace too, and both copies show the same selection. Each window added takes the next place: beside the first, then a row or column at a time.
-- Closing a window here takes it away. To bring it back, add it again from its own workspace.
-- **{{label:workspace.verticalScrolling}}** in any window's menu here lets the workspace grow taller than the screen and scroll. Turned on, every window gets back the height it had before, or its usual height. Drag the border under a window, or the bottom edge of the workspace, to make it taller. Turned off, every window shrinks to fit the screen.
+- **{{label:workspace.addToMy}}** in a window's menu adds it here. It stays in its own workspace too, and both copies show the same selection.
+- Each new window goes in the next place: beside the first, then a row or column at a time.
+- Closing a window here removes it. To bring it back, add it again from its own workspace.
+- **{{label:workspace.verticalScrolling}}**, in any window's menu here, lets the workspace grow taller than the screen and scroll. Every window gets back its earlier height, or its usual height.
+- With it on, drag the border under a window, or the workspace's bottom edge, to make it taller. With it off, every window shrinks to fit the screen.
 - **{{label:workspace.restoreOriginal}}** empties My Workspace.
-- **{{label:shell.agentChat}}** docks here from its own menu. While another workspace is shown, Chat floats over it, and it returns here when you come back. **{{label:agentchat.floatChat}}** undocks it.
+- **{{label:shell.agentChat}}** docks here from its own menu. While another workspace is shown, Chat floats over it, and it comes back here when you return. **{{label:agentchat.floatChat}}** undocks it.

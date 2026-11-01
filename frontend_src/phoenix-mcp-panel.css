@@ -519,14 +519,20 @@
   align-items: center;
   gap: 4px;
   height: 36px;
-  padding: 0 4px 0 8px;
+  padding: 0 4px;
   border-bottom: 1px solid var(--phx-border);
   cursor: move;
   user-select: none;
   touch-action: none;
 }
 /* Pinned beside the wizard: it cannot be moved. */
-.phx-guide.is-pinned .phx-guide-titlebar { cursor: default; padding-right: 8px; }
+.phx-guide.is-pinned .phx-guide-titlebar { cursor: default; padding: 0 8px; }
+/* Folded into its title bar, or maximized over the workspace area, where it does not move. */
+.phx-guide.is-folded { min-height: 0; }
+.phx-guide.is-folded .phx-guide-titlebar { border-bottom: 0; }
+.phx-guide.is-maximized .phx-guide-titlebar { cursor: default; }
+/* Maximized, the text keeps a readable line length instead of running across the screen. */
+.phx-guide.is-maximized .phx-guide-body > * { max-width: 760px; }
 .phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -536,6 +542,28 @@
 .phx-guide-topic li + li { margin-top: 4px; }
 .phx-guide-topic a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .phx-guide-missing { color: var(--phx-error); }
+/* Breadcrumbs: the pages above this one in Contents (user, 2026-11-01). */
+.phx-guide-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 0 4px; font-size: 12px; color: var(--phx-text-2); }
+.phx-guide-crumb { display: inline-flex; align-items: center; gap: 4px; }
+.phx-guide-crumb-sep { color: var(--phx-text-2); flex: none; }
+/* Sections: the one the reader selected is marked until something else is (user, 2026-11-01). */
+.phx-guide-topic h4 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
+.phx-guide-topic h5 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; }
+.phx-guide-section { margin: 0 -8px; padding: 0 8px; border-left: 2px solid transparent; border-radius: var(--phx-radius-xs); transition: background 0.2s; }
+.phx-guide-section.is-target { background: var(--phx-accent-lt); border-left-color: var(--phx-accent); }
+.phx-guide-section.is-target .phx-guide-section.is-target { background: none; }
+/* Contents and Search, folded at the top of every page. */
+.phx-guide-tools { margin: 0 0 10px; font-size: 12px; color: var(--phx-text-2); }
+.phx-guide-tools > summary { cursor: pointer; width: fit-content; }
+.phx-guide-tools-links { display: flex; gap: 12px; margin-top: 6px; }
+.phx-guide-tool { padding: 0; border: none; background: none; color: var(--phx-accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.phx-guide-contents { list-style: none; margin: 0; padding-left: 0; }
+.phx-guide-contents .phx-guide-contents { padding-left: 16px; }
+.phx-guide-contents li { margin: 4px 0 0; }
+.phx-guide-search { width: 100%; margin: 0 0 10px; }
+.phx-guide-results { list-style: none; margin: 0; padding: 0; }
+.phx-guide-results li + li { margin-top: 10px; }
+.phx-guide-snippet { margin: 2px 0 0; color: var(--phx-text-2); font-size: 12px; }
 .phx-guide-note { margin: 0; color: var(--phx-text-2); }
 .phx-guide-phone .phx-phone-title .phx-window-title-text { flex: 1; }
 .phx-guide-phone .phx-phone-body { padding: 0 12px 12px; }

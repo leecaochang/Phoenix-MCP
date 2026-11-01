@@ -7,14 +7,18 @@
 // It is intentionally small: it covers the common Markdown an assistant emits
 // (headings, emphasis, code, lists, links, blockquotes, tables) and renders
 // anything it does not recognise as plain text. The Guide also turns
-// `guide:<topic id>` links into in-panel topic links (`guideLinks`).
+// `guide:<topic id>`, `guide:<topic id>#<section>` and `guide:#<section>` links
+// into in-panel links (`guideLinks`).
 
 export interface MarkdownOptions {
-  /** Render `[text](guide:<topic id>)` as a link the Guide follows itself. */
+  /** Render `[text](guide:<topic id>#<section>)` as a link the Guide follows itself. */
   guideLinks?: boolean;
 }
-/** A Guide topic id as it may appear in a `guide:` link: letters, digits, dot, dash and underscore only. */
-const GUIDE_TOPIC_RE = /^guide:([A-Za-z0-9][A-Za-z0-9._-]*)$/;
+/**
+ * A `guide:` link: a topic id (letters, digits, dot, dash and underscore), a
+ * section anchor (lower-case words joined by dashes), or both.
+ */
+const GUIDE_TOPIC_RE = /^guide:([A-Za-z0-9][A-Za-z0-9._-]*)?(?:#([a-z0-9]+(?:-[a-z0-9]+)*))?$/;
 
 // Non-text control characters (keep tab \x09, newline \x0A, carriage return
 // \x0D). Built via RegExp() with escaped strings so no literal control bytes
@@ -75,7 +79,11 @@ function inline(s: string, opts: MarkdownOptions = {}): string {
       return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     }
     const topic = opts.guideLinks ? GUIDE_TOPIC_RE.exec(url) : null;
-    if (topic) return `<a href="#" class="phx-guide-link" data-guide-topic="${topic[1]}">${text}</a>`;
+    if (topic && (topic[1] || topic[2])) {
+      const to = topic[1] ? ` data-guide-topic="${topic[1]}"` : "";
+      const at = topic[2] ? ` data-guide-anchor="${topic[2]}"` : "";
+      return `<a href="#" class="phx-guide-link"${to}${at}>${text}</a>`;
+    }
     return text;
   });
   return s;

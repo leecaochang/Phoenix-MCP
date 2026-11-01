@@ -2476,6 +2476,8 @@
       "logsNotifications": "Logger og varsler",
       "mesaProfiles": "Profiler",
       "moveDown": "Flytt ned",
+      "moveHint": "Piltastene flytter. Trykk Esc for å avslutte.",
+      "moveKeyboard": "Flytt med tastaturet",
       "moveLeft": "Flytt til venstre",
       "moveRight": "Flytt til høyre",
       "moveToolbar": "Flytt verktøylinjen",
@@ -2566,13 +2568,22 @@
       "toolbarOptions": "Velg hvordan verktøylinjens knapper vises, fest den til en kant eller gjør den flytende, still den loddrett eller vannrett, eller skjul den.",
       "persona": "En persona angir de første kapabilitetene. Endre enkeltkapabiliteter i vinduet Kapabiliteter; personaen blir Tilpasset når innstillingene ikke lenger samsvarer med noen persona.",
       "guidance": "Veiledning for alle agenter som bruker denne tilgangsnøkkelen, for eksempel hva rom og enheter heter, hvem som bruker den, eller hvor husstandens dokumentasjon ligger. Phoenix MCP legger den til i hver agents instruksjoner og skjuler entitets-ID-er utenfor omfanget til denne tilgangsnøkkelen. Den er bare rådgivende: Den gir aldri tilgang, endrer ikke kapabiliteter og omgår ikke godkjenninger, og en modell kan ignorere den. Agenter og modellleverandørene deres mottar dette, og alle som snakker med en agent, kan få det gjentatt. Skriv aldri passord eller andre hemmeligheter her.",
-      "inlineWait": "Hvor lenge et bekreftelsesstyrt kall fra en ekstern MCP-klient venter på avgjørelsen din før det returnerer et ventende svar. Med Av, som er standard, returnerer kallet så snart godkjenningen er satt i kø. Agent Chat, tale og AI-oppgaver ignorerer dette: de settes alltid umiddelbart i kø og venter på sin egen måte."
+      "inlineWait": "Hvor lenge et bekreftelsesstyrt kall fra en ekstern MCP-klient venter på avgjørelsen din før det returnerer et ventende svar. Med Av, som er standard, returnerer kallet så snart godkjenningen er satt i kø. Agent Chat, tale og AI-oppgaver ignorerer dette: de settes alltid umiddelbart i kø og venter på sin egen måte.",
+      "guideMenu": "Flytt veiledningen eller endre størrelsen med tastaturet, brett den sammen, maksimer den eller lukk den.",
+      "closeGuide": "Lukk veiledningen i alle arbeidsområder. Åpne den igjen fra menyen Dokumentasjon."
     },
     "guide": {
       "title": "Veiledning",
       "back": "Tilbake",
       "unavailable": "Veiledningen kunne ikke lastes inn. Last inn siden på nytt for å prøve igjen.",
-      "noTopic": "Det finnes ennå ikke noe emne i veiledningen for dette arbeidsområdet."
+      "noTopic": "Det finnes ennå ikke noe emne i veiledningen for dette arbeidsområdet.",
+      "more": "Innhold og søk",
+      "contents": "Innhold",
+      "search": "Søk",
+      "searchPlaceholder": "Søk i veiledningen",
+      "noResults": "Ingenting i veiledningen samsvarer.",
+      "forward": "Frem",
+      "breadcrumbs": "Hvor denne siden hører til"
     },
     "logs": {
       "filters": "Filtre",

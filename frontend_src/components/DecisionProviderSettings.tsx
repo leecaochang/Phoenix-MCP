@@ -243,7 +243,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         await load();
       }} />}
     {inUse && <details className="routing-disclosure">
-      <summary>{t("routing.connectionSettings")}</summary>
+      <summary data-guide="window.settingsProviders#decision-connection">{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor="routing-decision-timeout" {...helpRow(t("routing.timeoutHint"))}>
         <span>{t("routing.decisionBudget")}</span>
         <BusyInput id="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}

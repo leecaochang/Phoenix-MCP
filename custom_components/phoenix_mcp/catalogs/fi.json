@@ -2476,6 +2476,8 @@
       "logsNotifications": "Lokit ja ilmoitukset",
       "mesaProfiles": "Profiilit",
       "moveDown": "Siirrä alaspäin",
+      "moveHint": "Nuolinäppäimet siirtävät. Lopeta painamalla Esc.",
+      "moveKeyboard": "Siirrä näppäimistöllä",
       "moveLeft": "Siirrä vasemmalle",
       "moveRight": "Siirrä oikealle",
       "moveToolbar": "Siirrä työkaluriviä",
@@ -2566,13 +2568,22 @@
       "toolbarOptions": "Valitse, miten työkalurivin painikkeet näkyvät, kiinnitä se reunaan tai irrota se, aseta se pysty- tai vaakasuoraan tai pienennä se.",
       "persona": "Persona asettaa alkuperäiset ominaisuudet. Muuta yksittäisiä ominaisuuksia Ominaisuudet-ikkunassa; persona vaihtuu arvoon Mukautettu, kun asetukset eivät enää vastaa mitään personaa.",
       "guidance": "Ohjeita kaikille agenteille, jotka käyttävät tätä käyttöavainta, esimerkiksi mitä huoneita ja laitteita kutsutaan miksikin, kuka avainta käyttää tai missä kodin dokumentaatio on. Phoenix MCP lisää ne jokaisen agentin ohjeisiin ja piilottaa entiteettien tunnukset, jotka ovat tämän käyttöavaimen rajauksen ulkopuolella. Ne ovat vain ohjeellisia: ne eivät koskaan myönnä käyttöoikeutta, muuta ominaisuuksia tai ohita hyväksyntöjä, ja malli voi jättää ne huomiotta. Agentit ja niiden mallipalveluntarjoajat saavat tämän, ja kuka tahansa agentin kanssa keskusteleva voi saada sen toistetuksi. Älä koskaan kirjoita tähän salasanoja tai muita salaisuuksia.",
-      "inlineWait": "Kuinka kauan ulkoisen MCP-asiakkaan vahvistusta edellyttävä kutsu odottaa päätöstäsi ennen kuin se palauttaa odottavan vastauksen. Oletusarvolla Pois kutsu palautuu heti, kun hyväksyntä on asetettu jonoon. Agent Chat, ääniagentti ja tekoälytehtävä eivät huomioi tätä: ne asettavat aina heti jonoon ja odottavat omalla tavallaan."
+      "inlineWait": "Kuinka kauan ulkoisen MCP-asiakkaan vahvistusta edellyttävä kutsu odottaa päätöstäsi ennen kuin se palauttaa odottavan vastauksen. Oletusarvolla Pois kutsu palautuu heti, kun hyväksyntä on asetettu jonoon. Agent Chat, ääniagentti ja tekoälytehtävä eivät huomioi tätä: ne asettavat aina heti jonoon ja odottavat omalla tavallaan.",
+      "guideMenu": "Siirrä opasta tai muuta sen kokoa näppäimistöllä, taita se, suurenna se tai sulje se.",
+      "closeGuide": "Sulje opas kaikissa työtiloissa. Avaa se uudelleen Dokumentaatio-valikosta."
     },
     "guide": {
       "title": "Opas",
       "back": "Takaisin",
       "unavailable": "Opasta ei voitu ladata. Yritä uudelleen lataamalla sivu uudelleen.",
-      "noTopic": "Tälle työtilalle ei ole vielä oppaan aihetta."
+      "noTopic": "Tälle työtilalle ei ole vielä oppaan aihetta.",
+      "more": "Sisällys ja haku",
+      "contents": "Sisällys",
+      "search": "Hae",
+      "searchPlaceholder": "Hae oppaasta",
+      "noResults": "Oppaasta ei löytynyt osumia.",
+      "forward": "Eteenpäin",
+      "breadcrumbs": "Missä tämä sivu on"
     },
     "logs": {
       "filters": "Suodattimet",

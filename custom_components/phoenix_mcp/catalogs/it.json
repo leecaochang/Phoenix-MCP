@@ -2471,6 +2471,8 @@
       "logsNotifications": "Registri e notifiche",
       "mesaProfiles": "Profili",
       "moveDown": "Sposta sotto",
+      "moveHint": "I tasti freccia spostano. Premi Esc per terminare.",
+      "moveKeyboard": "Sposta con la tastiera",
       "moveLeft": "Sposta a sinistra",
       "moveRight": "Sposta a destra",
       "moveToolbar": "Sposta la barra degli strumenti",
@@ -2561,13 +2563,22 @@
       "toolbarOptions": "Scegli come mostrare i pulsanti della barra degli strumenti, agganciala a un bordo o sganciala, mettila in verticale o in orizzontale, oppure comprimila.",
       "persona": "Una persona imposta le capacità iniziali. Modifica le singole capacità nella finestra Capacità; la persona diventa Personalizzato quando le impostazioni non corrispondono più a nessuna.",
       "guidance": "Indicazioni per ogni agente che usa questa chiave di accesso, ad esempio come si chiamano stanze e dispositivi, chi la usa o dove si trova la documentazione della casa. Phoenix MCP le aggiunge alle istruzioni di ogni agente e nasconde gli ID delle entità fuori dall'ambito di questa chiave di accesso. Sono solo indicative: non concedono mai l'accesso, non modificano le capacità né aggirano le approvazioni, e un modello può ignorarle. Gli agenti e i loro provider di modelli ricevono questo testo, e chiunque parli con un agente può farselo ripetere. Non inserire mai password o altri segreti.",
-      "inlineWait": "Per quanto tempo una chiamata soggetta a conferma da un client MCP esterno attende la tua decisione prima di restituire una risposta in attesa. Con l'impostazione predefinita, disattivata, la chiamata ritorna non appena l'approvazione viene messa in coda. Agent Chat, voce e Attività di IA ignorano questa impostazione: mettono sempre in coda immediatamente e attendono a modo loro."
+      "inlineWait": "Per quanto tempo una chiamata soggetta a conferma da un client MCP esterno attende la tua decisione prima di restituire una risposta in attesa. Con l'impostazione predefinita, disattivata, la chiamata ritorna non appena l'approvazione viene messa in coda. Agent Chat, voce e Attività di IA ignorano questa impostazione: mettono sempre in coda immediatamente e attendono a modo loro.",
+      "guideMenu": "Sposta o ridimensiona la guida con la tastiera, comprimila, ingrandiscila o chiudila.",
+      "closeGuide": "Chiude la guida in tutte le aree di lavoro. Riaprila dal menu Documentazione."
     },
     "guide": {
       "title": "Guida",
       "back": "Indietro",
       "unavailable": "Impossibile caricare la guida. Ricarica la pagina per riprovare.",
-      "noTopic": "Non c'è ancora un argomento della guida per quest'area di lavoro."
+      "noTopic": "Non c'è ancora un argomento della guida per quest'area di lavoro.",
+      "more": "Indice e ricerca",
+      "contents": "Indice",
+      "search": "Cerca",
+      "searchPlaceholder": "Cerca nella guida",
+      "noResults": "Nessun risultato nella guida.",
+      "forward": "Avanti",
+      "breadcrumbs": "Dove si trova questa pagina"
     },
     "logs": {
       "filters": "Filtri",

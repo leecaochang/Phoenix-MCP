@@ -17,7 +17,7 @@ import { WorkspaceController } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
-import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
+import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, GUIDE_CLOSED, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
@@ -26,10 +26,11 @@ import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
 import { attachToggleNames } from "../ui/toggleNames";
-import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
+import { GuideTargetTracker } from "./guideTarget";
+import { GuideTargetContext, GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
 import { Reconnecting } from "./Reconnecting";
 import { MesaProvider, type MesaFindings } from "./mesa";
-import { SettingsProvider } from "./settings";
+import { SettingsProvider, settingsGuideAnchor } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
 import { DOCS_BASE_URL } from "../components/common";
 import {
@@ -123,9 +124,9 @@ export function Shell() {
   useEffect(() => { setHelp(record?.help ?? DEFAULT_HELP); }, [record]);
   const helpRef = useRef(help);
   helpRef.current = help;
-  // The Guide in each workspace: open or not, and where it was put.
-  const [guide, setGuide] = useState<Partial<Record<WorkspaceId, GuideState>>>(() => record?.guide ?? {});
-  useEffect(() => { setGuide(record?.guide ?? {}); }, [record]);
+  // The Guide, one window over every workspace: open or not, where it was put, folded or not.
+  const [guide, setGuide] = useState<GuideState>(() => record?.guide ?? GUIDE_CLOSED);
+  useEffect(() => { setGuide(record?.guide ?? GUIDE_CLOSED); }, [record]);
   const guideRef = useRef(guide);
   guideRef.current = guide;
   // The windows added to My Workspace, in the order added.
@@ -308,7 +309,7 @@ export function Shell() {
       } else if (section === "help") {
         if (!same(rec.help, helpRef.current)) { rec.help = helpRef.current; changed.push(section); }
       } else if (section === "guide") {
-        if (!same(rec.guide ?? {}, guideRef.current)) { rec.guide = guideRef.current; changed.push(section); }
+        if (!same(rec.guide ?? GUIDE_CLOSED, guideRef.current)) { rec.guide = guideRef.current; changed.push(section); }
       } else if (section === "lastWorkspace") {
         if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
       } else if (section === "myWindows") {
@@ -388,22 +389,19 @@ export function Shell() {
     if (!same(help, recordRef.current?.help ?? DEFAULT_HELP)) markChanged(["help"]);
   }, [help, controllers, markChanged]);
   useEffect(() => {
-    if (!same(guide, recordRef.current?.guide ?? {})) markChanged(["guide"]);
+    if (!same(guide, recordRef.current?.guide ?? GUIDE_CLOSED)) markChanged(["guide"]);
   }, [guide, markChanged]);
   useEffect(() => {
     controllers.get("my")?.setWindows(myWorkspaceWindows(myWindows));
     if (!same(myWindows, recordRef.current?.myWindows ?? [])) markChanged(["myWindows"]);
   }, [myWindows, controllers, markChanged]);
-  const setGuideIn = useCallback((id: WorkspaceId, next: Partial<GuideState>) => {
-    setGuide((prev) => ({ ...prev, [id]: { open: false, ...prev[id], ...next } }));
-  }, []);
+  const updateGuide = useCallback((next: Partial<GuideState>) => setGuide((prev) => ({ ...prev, ...next })), []);
 
   // The setup wizard runs in Access Keys and shows the Guide there while it runs; see useWizardGuide.
   const wizard = useWizardGuide();
   const wizardStep = wizard.step;
   const wizardRef = useRef(wizardStep);
   wizardRef.current = wizardStep;
-  const userSetGuide = useCallback((id: WorkspaceId, open: boolean) => setGuideIn(id, { open }), [setGuideIn]);
   const lastSeenWorkspace = useRef(d.workspace);
   useEffect(() => {
     if (lastSeenWorkspace.current === d.workspace) return;
@@ -417,6 +415,10 @@ export function Shell() {
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
   useEffect(() => (rootEl ? attachToggleNames(rootEl) : undefined), [rootEl]);
+  // The Guide follows the control the reader selects; Settings maps its controls through the Find Setting index.
+  const guideTargets = useMemo(() => new GuideTargetTracker(), []);
+  useEffect(() => guideTargets.addResolver(settingsGuideAnchor), [guideTargets]);
+  useEffect(() => (rootEl ? guideTargets.attach(rootEl) : undefined), [rootEl, guideTargets]);
   const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
 
   // My Workspace: Add to My Workspace in every window's menu, Remove from My Workspace there.
@@ -458,7 +460,7 @@ export function Shell() {
     return items;
   }, [env, addToMy, removeFromMy]);
 
-  // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (this workspace) and the website.
+  // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (every workspace) and the website.
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
@@ -469,11 +471,11 @@ export function Shell() {
     const here = workspaceRef.current;
     // The wizard keeps the Guide shown in Access Keys until it ends.
     const pinned = here === "accessKeys" && !!wizardRef.current;
-    const guideOpen = pinned || !!guideRef.current[here]?.open;
-    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, disabled: pinned, onSelect: () => userSetGuide(here, !guideOpen) });
+    const guideOpen = pinned || guideRef.current.open;
+    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, disabled: pinned, onSelect: () => updateGuide({ open: !guideOpen }) });
     items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
     return items;
-  }, [env, userSetGuide]);
+  }, [env, updateGuide]);
 
   // Reset All Workspaces applies at once (user, 2026-10-26): it changes presentation only, and says so in a toast.
   const restorePanelDefaults = useCallback(() => {
@@ -481,8 +483,8 @@ export function Shell() {
     setToolbar(DEFAULT_TOOLBAR);
     setHelp(DEFAULT_HELP);
     helpRef.current = DEFAULT_HELP;
-    setGuide({});
-    guideRef.current = {};
+    setGuide(GUIDE_CLOSED);
+    guideRef.current = GUIDE_CLOSED;
     // My Workspace goes back to empty, as Reset This Workspace leaves it.
     clearMy();
     setShowArchived(false);
@@ -643,7 +645,7 @@ export function Shell() {
   const dock = env === "mobile" ? "top" : toolbar.dock;
   // The wizard's Guide: shown in Access Keys while the wizard runs, and on a desktop the wizard makes room for it.
   const wizardGuideShown = active === "accessKeys" && !!wizardStep;
-  const guideShown = wizardGuideShown || !!guide[active]?.open;
+  const guideShown = wizardGuideShown || guide.open;
   const guideBeside = env === "desktop" && wizardGuideShown;
   const wizardGuide = useMemo(() => ({ report: wizard.report, guideBeside }), [wizard.report, guideBeside]);
   return (
@@ -653,6 +655,7 @@ export function Shell() {
     <NotificationsContext.Provider value={notifications}>
     <DisplayModeContext.Provider value={toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
+    <GuideTargetContext.Provider value={guideTargets}>
     <AuditFocusContext.Provider value={auditFocus}>
     <LogSelectionContext.Provider value={logSelection}>
     <ApprovalsProvider
@@ -705,7 +708,7 @@ export function Shell() {
               </WorkspaceVisibleContext.Provider>
             ))
             : <PhoneStack workspace={active} showAttention={attentionShownIn(active)} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
-              guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => userSetGuide(active, false)}
+              guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => updateGuide({ open: false })}
                 topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
 
@@ -729,8 +732,9 @@ export function Shell() {
           </ErrorBoundary>
         )}
         {env === "desktop" && guideShown && (
-          <GuideWindow key={active} workspace={active} controller={visited.has(active) ? controllerFor(active) : null} language={language}
-            rect={guide[active]?.rect} onRect={(rect) => setGuideIn(active, { rect })} onClose={() => userSetGuide(active, false)}
+          <GuideWindow workspace={active} controller={visited.has(active) ? controllerFor(active) : null} language={language}
+            rect={guide.rect} onRect={(rect) => updateGuide({ rect })} onClose={() => updateGuide({ open: false })}
+            folded={!!guide.folded} onFold={(folded) => updateGuide({ folded })}
             topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null}
             follow={wizardGuideShown ? wizardStep : null} />
         )}
@@ -749,6 +753,7 @@ export function Shell() {
     </ApprovalsProvider>
     </LogSelectionContext.Provider>
     </AuditFocusContext.Provider>
+    </GuideTargetContext.Provider>
     </HelpContext.Provider>
     </DisplayModeContext.Provider>
     </NotificationsContext.Provider>

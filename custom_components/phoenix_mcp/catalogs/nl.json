@@ -2550,6 +2550,8 @@
       "logsNotifications": "Logboeken en meldingen",
       "mesaProfiles": "Profielen",
       "moveDown": "Verplaats omlaag",
+      "moveHint": "De pijltoetsen verplaatsen. Druk op Esc om te stoppen.",
+      "moveKeyboard": "Verplaatsen met het toetsenbord",
       "moveLeft": "Verplaats naar links",
       "moveRight": "Verplaats naar rechts",
       "moveToolbar": "Werkbalk verplaatsen",
@@ -2640,13 +2642,22 @@
       "toolbarOptions": "Kies hoe de knoppen van de werkbalk worden weergegeven, koppel hem aan een rand vast of maak hem los, zet hem verticaal of horizontaal, of vouw hem in.",
       "persona": "Een persona stelt de beginmogelijkheden in. Wijzig losse mogelijkheden in het venster Mogelijkheden; de persona wordt Aangepast zodra de instellingen met geen enkele persona meer overeenkomen.",
       "guidance": "Richtlijnen voor elke agent die deze toegangssleutel gebruikt, zoals hoe ruimtes en apparaten heten, wie de sleutel gebruikt of waar de documentatie van het huishouden staat. Phoenix MCP voegt ze toe aan de instructies van elke agent en verbergt entiteits-ID's buiten het bereik van deze toegangssleutel. Ze zijn alleen een advies: ze verlenen nooit toegang, wijzigen geen mogelijkheden en omzeilen geen goedkeuringen, en een model kan ze negeren. Agents en hun modelproviders ontvangen dit, en iedereen die met een agent praat, kan het laten herhalen. Zet hier nooit wachtwoorden of andere geheimen in.",
-      "inlineWait": "Hoe lang een bevestigingsgestuurde aanroep van een externe MCP-client op je beslissing wacht voordat er een antwoord in afwachting wordt geretourneerd. Met Uit, de standaard, keert de aanroep terug zodra de goedkeuring in de wachtrij staat. Agent Chat, spraak en AI-taak negeren dit: zij zetten altijd direct in de wachtrij en wachten op hun eigen manier."
+      "inlineWait": "Hoe lang een bevestigingsgestuurde aanroep van een externe MCP-client op je beslissing wacht voordat er een antwoord in afwachting wordt geretourneerd. Met Uit, de standaard, keert de aanroep terug zodra de goedkeuring in de wachtrij staat. Agent Chat, spraak en AI-taak negeren dit: zij zetten altijd direct in de wachtrij en wachten op hun eigen manier.",
+      "guideMenu": "Verplaats de gids of wijzig het formaat met het toetsenbord, vouw hem in, maximaliseer hem of sluit hem.",
+      "closeGuide": "Sluit de gids in alle werkruimten. Open hem opnieuw via het menu Documentatie."
     },
     "guide": {
       "title": "Gids",
       "back": "Terug",
       "unavailable": "De gids kon niet worden geladen. Laad de pagina opnieuw om het nog eens te proberen.",
-      "noTopic": "Er is nog geen gidsonderwerp voor deze werkruimte."
+      "noTopic": "Er is nog geen gidsonderwerp voor deze werkruimte.",
+      "more": "Inhoud en zoeken",
+      "contents": "Inhoud",
+      "search": "Zoeken",
+      "searchPlaceholder": "Zoeken in de gids",
+      "noResults": "Niets in de gids komt overeen.",
+      "forward": "Vooruit",
+      "breadcrumbs": "Waar deze pagina staat"
     },
     "logs": {
       "filters": "Filters",

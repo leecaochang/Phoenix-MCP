@@ -2,18 +2,19 @@
  * The Guide: topic files compile with every problem reported, the shipped
  * topics cover every workspace, topics render safely with links and UI
  * labels, the right topic is chosen, and the window follows links and the
- * focused window. During the setup wizard it shows each step's topic beside
- * the step until the user moves it.
+ * focused window. It is one window over every workspace, saved once, with
+ * the window controls every window has except Dock. During the setup wizard
+ * it shows each step's topic beside the step until the user moves it.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { compileGuide, parseTopic, type GuideBundle } from "../guide/compile";
+import { GUIDE_FORMAT, compileGuide, parseTopic, type GuideBundle } from "../guide/compile";
 import { GUIDE_LANGUAGES, GuideWindow, besideRect, clearGuideCache, findTopic, guideLanguages, renderTopic, topicById, useWizardGuide } from "../shell/guide";
 import { WIZARD_STEPS } from "../views/OnboardingWizard";
-import { WORKSPACE_IDS } from "../shell/storage";
+import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
 import { WorkspaceController } from "../shell/dock/controller";
 import { flattenCatalog } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
@@ -25,7 +26,7 @@ const file = (id: string, body: string, extra = "") => `---\n{ "id": "${id}", "t
 
 describe("compiling topics", () => {
   it("reads the JSON header and refuses a broken one", () => {
-    expect(parseTopic(file("workspace.logs", "Body."))).toEqual({ id: "workspace.logs", title: "T", body: "Body." });
+    expect(parseTopic(file("workspace.logs", "Body."))).toEqual({ id: "workspace.logs", title: "T", body: "Body.", covers: [] });
     expect(parseTopic("No header")).toMatch(/header/);
     expect(parseTopic("---\n{ nope }\n---\nBody")).toMatch(/not valid JSON/);
     expect(parseTopic(file("logs", "Body."))).toMatch(/bad topic id/);
@@ -76,7 +77,7 @@ describe("rendering a topic", () => {
   });
 
   it("chooses the focused window's topic, then the workspace overview, in the reader's language first", () => {
-    const bundle = (language: string, ids: string[]): GuideBundle => ({ format: 1, language, topics: Object.fromEntries(ids.map((id) => [id, { title: `${language} ${id}`, body: "x" }])) });
+    const bundle = (language: string, ids: string[]): GuideBundle => ({ format: GUIDE_FORMAT, language, topics: Object.fromEntries(ids.map((id) => [id, { title: `${language} ${id}`, body: "x", anchors: [] }])) });
     const fr = bundle("fr", ["workspace.logs"]);
     const english = bundle("en", ["workspace.logs", "window.auditLog"]);
     expect(findTopic([fr, english], "logs", "auditLog")?.title).toBe("fr workspace.logs");
@@ -94,11 +95,11 @@ describe("the Guide window", () => {
 
   it("shows the workspace overview, follows a topic link and goes back, and moves on with the focused window", async () => {
     const topics = {
-      "workspace.logs": { title: "Logs", body: "Read the [audit log](guide:window.auditLog)." },
-      "window.auditLog": { title: "Audit Log", body: "Every request." },
-      "window.conversationLog": { title: "Conversation Log", body: "Conversations." },
+      "workspace.logs": { title: "Logs", body: "Read the [audit log](guide:window.auditLog).", anchors: [] },
+      "window.auditLog": { title: "Audit Log", body: "Every request.", anchors: [] },
+      "window.conversationLog": { title: "Conversation Log", body: "Conversations.", anchors: [] },
     };
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: 1, language: "en", topics }) })));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
     const controller = new WorkspaceController("logs", [], () => {}, (id) => id);
     render(<GuideWindow workspace="logs" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Logs"));
@@ -112,10 +113,10 @@ describe("the Guide window", () => {
 
   it("shows a wizard step's topic ahead of the focused window's, and the usual topic when the step has none", async () => {
     const topics = {
-      "workspace.accessKeys": { title: "Access Keys", body: "Keys." },
-      "wizard.persona": { title: "Choosing a Persona", body: "Personas." },
+      "workspace.accessKeys": { title: "Access Keys", body: "Keys.", anchors: [] },
+      "wizard.persona": { title: "Choosing a Persona", body: "Personas.", anchors: [] },
     };
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: 1, language: "en", topics }) })));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
     const controller = new WorkspaceController("accessKeys", [], () => {}, (id) => id);
     const view = render(<GuideWindow workspace="accessKeys" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }}
       onRect={() => {}} onClose={() => {}} topicId="wizard.persona" />);
@@ -126,7 +127,7 @@ describe("the Guide window", () => {
   });
 
   it("is pinned beside the wizard step, level with the part it explains, and cannot be moved, resized or closed", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: 1, language: "en", topics: {} }) })));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics: {} }) })));
     const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) });
     const frame = document.createElement("div");
     frame.className = "phx-workspace";
@@ -197,5 +198,98 @@ describe("the wizard's step", () => {
     expect(hook.result.current.step?.step).toBe("persona");
     act(() => hook.result.current.report(null));
     expect(hook.result.current.step).toBeNull();
+  });
+});
+
+describe("one Guide over every workspace", () => {
+  it("is saved once, open or closed, with its place and whether it is folded", () => {
+    const rect = { x: 40, y: 80, w: 380, h: 520 };
+    expect(readGuide({ open: true, rect, folded: true })).toEqual({ open: true, rect, folded: true });
+    expect(readGuide({ open: false, rect: { x: 1, y: 1, w: 10, h: 10 } })).toEqual({ open: false });
+    expect(readGuide("nope")).toEqual(GUIDE_CLOSED);
+  });
+
+  it("reads a record saved with one Guide per workspace: open if it was open anywhere, at the first place found", () => {
+    const rect = { x: 40, y: 80, w: 380, h: 520 };
+    expect(readGuide({ logs: { open: false, rect }, settings: { open: true } })).toEqual({ open: true, rect });
+    expect(readGuide({ logs: { open: false }, nowhere: { open: true } })).toEqual({ open: false });
+  });
+});
+
+describe("the Guide's window controls", () => {
+  afterEach(() => { vi.unstubAllGlobals(); clearGuideCache(); document.body.innerHTML = ""; });
+  const topics = { "workspace.logs": { title: "Logs", body: "Every request.", anchors: [] } };
+  const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  const shell = () => {
+    const root = document.createElement("div");
+    root.className = "phx-shell";
+    const area = document.createElement("main");
+    area.className = "phx-workspaces";
+    area.getBoundingClientRect = () => box(0, 60, 1200, 860);
+    // The Guide renders beside the workspace area, as in the shell; React replaces whatever its container holds.
+    const host = document.createElement("div");
+    root.append(area, host);
+    document.body.appendChild(root);
+    return host;
+  };
+  const rect = { x: 10, y: 10, w: 360, h: 400 };
+
+  it("folds into its title bar, maximizes over the workspace area and restores, and cannot be docked", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    const onFold = vi.fn();
+    const props = { workspace: "logs", controller: null, language: "en", rect, onRect: () => {}, onClose: () => {}, onFold };
+    const view = render(<GuideWindow {...props} />, { container: shell() });
+    const guide = screen.getByRole("region", { name: "Guide" });
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Logs"));
+    expect(within(guide).queryByRole("button", { name: /Dock|Float/ })).toBeNull();
+
+    fireEvent.click(within(guide).getByRole("button", { name: "Fold" }));
+    expect(onFold).toHaveBeenLastCalledWith(true);
+    view.rerender(<GuideWindow {...props} folded />);
+    expect(guide).toHaveClass("is-folded");
+    expect(guide.querySelector(".phx-guide-body")).toHaveAttribute("hidden");
+    expect(guide.querySelector(".agentcli-resize")).toBeNull();
+    expect(guide.style.height).toBe("");
+
+    // Maximizing a folded Guide unfolds it.
+    fireEvent.click(within(guide).getByRole("button", { name: "Maximize" }));
+    expect(onFold).toHaveBeenLastCalledWith(false);
+    view.rerender(<GuideWindow {...props} />);
+    expect(guide).toHaveClass("is-maximized");
+    expect([guide.style.left, guide.style.top, guide.style.width, guide.style.height]).toEqual(["8px", "68px", "1184px", "784px"]);
+    expect(guide.querySelector(".agentcli-resize")).toBeNull();
+    fireEvent.click(within(guide).getByRole("button", { name: "Restore" }));
+    expect([guide.style.left, guide.style.top, guide.style.width, guide.style.height]).toEqual(["10px", "10px", "360px", "400px"]);
+  });
+
+  it("moves and resizes with the arrow keys from its window menu, saving when finished", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    const onRect = vi.fn();
+    const onClose = vi.fn();
+    render(<GuideWindow workspace="logs" controller={null} language="en" rect={rect} onRect={onRect} onClose={onClose} />, { container: shell() });
+    const guide = screen.getByRole("region", { name: "Guide" });
+    const menu = within(guide).getByRole("button", { name: "Window menu" });
+
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move with Keyboard" }));
+    expect(screen.getByRole("status").textContent).toBe("Arrow keys move. Esc to finish.");
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect([guide.style.left, guide.style.top]).toEqual(["34px", "34px"]);
+    expect(onRect).not.toHaveBeenCalled();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(onRect).toHaveBeenLastCalledWith({ x: 34, y: 34, w: 360, h: 400 });
+
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Resize with Keyboard" }));
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    fireEvent.keyDown(menu, { key: "Enter" });
+    expect(onRect).toHaveBeenLastCalledWith({ x: 34, y: 34, w: 384, h: 376 });
+    expect(screen.queryByRole("status")).toBeNull();
+
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

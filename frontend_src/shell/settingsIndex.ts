@@ -56,7 +56,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "chatStyle", labelKey: "settings.conversationStyleAria", window: "settingsChat", aria: ["settings.conversationStyleAria", chat] },
   { id: "chatDetail", labelKey: "settings.detailLevelAria", window: "settingsChat", aria: ["settings.detailLevelAria", chat] },
   { id: "chatHomeFocused", labelKey: "settings.homeFocusedAria", window: "settingsChat", aria: ["settings.homeFocusedAria", chat] },
-  { id: "chatStatistics", labelKey: "routingStats.title", window: "settingsChat", selector: ".routing-statistics > summary" },
+  { id: "chatStatistics", labelKey: "routingStats.title", window: "settingsChat", selector: ".routing-statistics-open button, .routing-statistics > summary" },
 
   { id: "voiceEnable", labelKey: "settings.voiceEnableLabel", window: "settingsHome", tab: "voice", aria: ["settings.voiceEnableLabel"] },
   { id: "voiceAssistant", labelKey: "settings.voiceAssistSetup", window: "settingsHome", tab: "voice", aria: ["settings.voiceAssistSetup"] },
@@ -68,7 +68,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "voiceStyle", labelKey: "settings.conversationStyleAria", window: "settingsHome", tab: "voice", aria: ["settings.conversationStyleAria", voice] },
   { id: "voiceDetail", labelKey: "settings.detailLevelAria", window: "settingsHome", tab: "voice", aria: ["settings.detailLevelAria", voice] },
   { id: "voiceHomeFocused", labelKey: "settings.homeFocusedAria", window: "settingsHome", tab: "voice", aria: ["settings.homeFocusedAria", voice] },
-  { id: "voiceStatistics", labelKey: "routingStats.title", window: "settingsHome", tab: "voice", selector: ".routing-statistics > summary" },
+  { id: "voiceStatistics", labelKey: "routingStats.title", window: "settingsHome", tab: "voice", selector: ".routing-statistics-open button, .routing-statistics > summary" },
 
   { id: "aiTaskEnable", labelKey: "settings.aiTaskEnableLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiTaskEnableLabel"] },
   { id: "aiTaskDefault", labelKey: "settings.aiTaskDefaultLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiTaskDefaultLabel"], optional: true },

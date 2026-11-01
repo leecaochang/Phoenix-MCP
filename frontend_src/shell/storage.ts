@@ -65,8 +65,13 @@ export function withHelpIn(help: HelpPrefs, workspace: WorkspaceId, open: boolea
 
 /** Where the Guide sits on screen, in CSS pixels from the viewport's top-left corner. */
 export interface GuideRect { x: number; y: number; w: number; h: number }
-/** The Guide in one workspace: whether it is open, and where the user put it. */
-export interface GuideState { open: boolean; rect?: GuideRect }
+/**
+ * The Guide: one window over every workspace, as Agent Chat is (user,
+ * 2026-11-01), so opening or closing it anywhere does so everywhere. It
+ * remembers where the user put it and whether it is folded.
+ */
+export interface GuideState { open: boolean; rect?: GuideRect; folded?: boolean }
+export const GUIDE_CLOSED: GuideState = { open: false };
 
 export interface ShellRecord {
   schema: number;
@@ -80,8 +85,8 @@ export interface ShellRecord {
   lastWorkspace?: WorkspaceId;
   toolbar?: ToolbarState;
   help?: HelpPrefs;
-  /** The Guide per workspace; it starts closed. */
-  guide?: Partial<Record<WorkspaceId, GuideState>>;
+  /** The Guide; it starts closed. */
+  guide?: GuideState;
   workspaces: Partial<Record<WorkspaceId, WorkspaceLayout>>;
   /** Arrangements the user saved as My Default, one per workspace; automatic saving never changes them. */
   myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
@@ -117,20 +122,23 @@ export function readToolbar(raw: unknown): ToolbarState {
 
 const isWorkspace = (v: unknown): v is WorkspaceId => (WORKSPACE_IDS as readonly unknown[]).includes(v);
 
-/** Saved Guide states, with anything unreadable left out. */
-export function readGuide(raw: unknown): Partial<Record<WorkspaceId, GuideState>> {
-  const out: Partial<Record<WorkspaceId, GuideState>> = {};
-  if (!raw || typeof raw !== "object") return out;
+/** The saved Guide, with anything unreadable left out. */
+export function readGuide(raw: unknown): GuideState {
+  if (!raw || typeof raw !== "object") return GUIDE_CLOSED;
   const px = (v: unknown, max: number) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max;
-  for (const [id, value] of Object.entries(raw)) {
-    const v = value as { open?: unknown; rect?: Partial<Record<keyof GuideRect, unknown>> } | null;
-    if (!isWorkspace(id) || !v || typeof v.open !== "boolean") continue;
-    const r = v.rect;
-    const rect = r && px(r.x, 20000) && px(r.y, 20000) && px(r.w, 20000) && px(r.h, 20000) && (r.w as number) >= 200 && (r.h as number) >= 120
+  const rectOf = (r: Partial<Record<keyof GuideRect, unknown>> | undefined): GuideRect | undefined =>
+    r && px(r.x, 20000) && px(r.y, 20000) && px(r.w, 20000) && px(r.h, 20000) && (r.w as number) >= 200 && (r.h as number) >= 120
       ? { x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number } : undefined;
-    out[id] = { open: v.open, ...(rect ? { rect } : {}) };
+  type Saved = { open?: unknown; rect?: Partial<Record<keyof GuideRect, unknown>>; folded?: unknown } | null;
+  const v = raw as Saved;
+  if (typeof v?.open === "boolean") {
+    const rect = rectOf(v.rect);
+    return { open: v.open, ...(rect ? { rect } : {}), ...(v.folded === true ? { folded: true } : {}) };
   }
-  return out;
+  // Saved by an earlier build, one Guide per workspace: open if it was open anywhere, at the first place found.
+  const old = Object.entries(raw).filter(([id]) => isWorkspace(id)).map(([, value]) => value as Saved);
+  const rect = old.map((o) => rectOf(o?.rect ?? undefined)).find(Boolean);
+  return { open: old.some((o) => o?.open === true), ...(rect ? { rect } : {}) };
 }
 
 /** Saved Help preferences, with anything unreadable left out. */

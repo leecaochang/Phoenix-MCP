@@ -459,7 +459,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
           )}
         </div>
         {editing === inst.id ? (
-          <div ref={editBox} className="agentcli-settings-model-edit">
+          <div ref={editBox} className="agentcli-settings-model-edit" data-guide="window.settingsProviders#change-model">
             {/* Refresh Models sits beside the model it refreshes (user, 2026-10-31). */}
             <div className="agentcli-add-inline">
               <BusySelect className="input input-auto" value={modelDraft} busy={busy || refreshing !== null}
@@ -481,7 +481,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                   </option>
                 )}
               </BusySelect>
-              <ActionButton icon="refresh" className="btn btn-outline btn-sm"
+              <ActionButton icon="refresh" className="btn btn-outline btn-sm" guide="window.settingsProviders#refresh-models"
                 label={refreshing === inst.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
                 busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
             </div>
@@ -507,13 +507,13 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
           </div>
         ) : (
           <div className="phx-window-actions agentcli-account-actions">
-            <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy}
+            <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy} guide="window.settingsProviders#change-model"
               onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); setConfirmProbe(null); setConfirmRemove(null); }} />
             {/* Unlike everything else here, the check spends the operator's credit, so it asks first,
                 in place, as Remove does; what it costs reads in Help (user, 2026-10-31). The last-checked
                 time rides on the button's tooltip. */}
             {confirmProbe === inst.id ? (
-              <span className="row-actions" ref={askBox}>
+              <span className="row-actions" ref={askBox} data-guide="window.settingsProviders#check-options">
                 <ActionButton icon="probe" label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.agentcliProbeRun")}
                   className="btn btn-outline btn-sm" helpText={probeHelp} busy={busy || probing !== null}
                   onClick={() => void probeCaps(inst)} />
@@ -521,7 +521,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                   onClick={() => setConfirmProbe(null)} />
               </span>
             ) : (
-              <ActionButton icon="probe" className="btn btn-outline btn-sm"
+              <ActionButton icon="probe" className="btn btn-outline btn-sm" guide="window.settingsProviders#check-options"
                 label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.accountCheckOptions")}
                 title={inst.capabilities_checked_at
                   ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
@@ -531,7 +531,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 onClick={() => { setConfirmProbe(inst.id); setConfirmRemove(null); }} />
             )}
             {confirmRemove === inst.id ? (
-              <span className="row-actions" ref={askBox}>
+              <span className="row-actions" ref={askBox} data-guide="window.settingsProviders#remove-account">
                 <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: inst.name })}
                   className="btn btn-danger btn-sm" helpText={removeHelp} busy={busy}
                   onClick={() => void remove(inst.id)} />
@@ -539,7 +539,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                   onClick={() => { setConfirmRemove(null); setRemoveError(null); }} />
               </span>
             ) : (
-              <ActionButton icon="delete" className="btn btn-outline btn-sm phx-action-danger"
+              <ActionButton icon="delete" className="btn btn-outline btn-sm phx-action-danger" guide="window.settingsProviders#remove-account"
                 label={t("settings.agentcliRemoveAccount", { name: inst.name })} helpText={removeHelp}
                 busy={busy} onClick={() => { setConfirmRemove(inst.id); setConfirmProbe(null); }} />
             )}
@@ -582,7 +582,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
       />
 
       <details className="phx-disclosure">
-        <summary>{t("settings.catalogChecks")}</summary>
+        <summary data-guide="window.settingsProviders#catalog-checks">{t("settings.catalogChecks")}</summary>
         <div className="phx-disclosure-body">
           <div className="toggle-row" {...helpRow(t("settings.providerChecksHelp"))}>
             <SettingLabel help={t("settings.providerChecksHelp")}><span>{t("settings.providerChecksLabel")}</span></SettingLabel>

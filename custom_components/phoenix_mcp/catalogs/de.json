@@ -2471,6 +2471,8 @@
       "logsNotifications": "Protokolle und Benachrichtigungen",
       "mesaProfiles": "Profile",
       "moveDown": "Nach unten verschieben",
+      "moveHint": "Die Pfeiltasten verschieben. Mit Esc beenden.",
+      "moveKeyboard": "Mit der Tastatur verschieben",
       "moveLeft": "Nach links verschieben",
       "moveRight": "Nach rechts verschieben",
       "moveToolbar": "Symbolleiste verschieben",
@@ -2561,13 +2563,22 @@
       "wsMy": "Ihr eigener Arbeitsbereich: Fenster, die Sie aus den anderen Arbeitsbereichen hinzugefügt haben, und Agent Chat, wenn Sie es hier angedockt haben.",
       "persona": "Eine Persona legt die anfänglichen Fähigkeiten fest. Einzelne Fähigkeiten ändern Sie im Fenster Fähigkeiten; die Persona wird zu Benutzerdefiniert, sobald die Einstellungen keiner Persona mehr entsprechen.",
       "guidance": "Hinweise für jeden Agenten, der diesen Zugriffsschlüssel verwendet, etwa wie Räume und Geräte heißen, wer ihn nutzt oder wo die Dokumentation des Haushalts liegt. Phoenix MCP fügt sie den Anweisungen jedes Agenten hinzu und blendet Entitäts-IDs außerhalb des Geltungsbereichs dieses Zugriffsschlüssels aus. Sie sind nur Hinweise: Sie gewähren nie Zugriff, ändern keine Fähigkeiten und umgehen keine Genehmigungen, und ein Modell kann sie ignorieren. Agenten und ihre Modellanbieter erhalten diesen Text, und wer mit einem Agenten spricht, kann ihn sich wiedergeben lassen. Tragen Sie hier niemals Passwörter oder andere Geheimnisse ein.",
-      "inlineWait": "Wie lange ein bestätigungspflichtiger Aufruf eines externen MCP-Clients auf Ihre Entscheidung wartet, bevor eine ausstehende Antwort zurückgegeben wird. Bei Aus, der Standardeinstellung, kehrt der Aufruf zurück, sobald die Genehmigung in die Warteschlange gestellt ist. Agent Chat, Sprachassistent und KI-Aufgabe ignorieren dies: Sie stellen immer sofort in die Warteschlange und warten auf ihre eigene Weise."
+      "inlineWait": "Wie lange ein bestätigungspflichtiger Aufruf eines externen MCP-Clients auf Ihre Entscheidung wartet, bevor eine ausstehende Antwort zurückgegeben wird. Bei Aus, der Standardeinstellung, kehrt der Aufruf zurück, sobald die Genehmigung in die Warteschlange gestellt ist. Agent Chat, Sprachassistent und KI-Aufgabe ignorieren dies: Sie stellen immer sofort in die Warteschlange und warten auf ihre eigene Weise.",
+      "guideMenu": "Den Leitfaden mit der Tastatur verschieben oder in der Größe ändern, einklappen, maximieren oder schließen.",
+      "closeGuide": "Den Leitfaden in allen Arbeitsbereichen schließen. Über das Menü „Dokumentation“ lässt er sich wieder öffnen."
     },
     "guide": {
       "title": "Leitfaden",
       "back": "Zurück",
       "unavailable": "Der Leitfaden konnte nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
-      "noTopic": "Für diesen Arbeitsbereich gibt es noch kein Thema im Leitfaden."
+      "noTopic": "Für diesen Arbeitsbereich gibt es noch kein Thema im Leitfaden.",
+      "more": "Inhalt und Suche",
+      "contents": "Inhalt",
+      "search": "Suchen",
+      "searchPlaceholder": "Im Leitfaden suchen",
+      "noResults": "Nichts im Leitfaden passt dazu.",
+      "forward": "Vorwärts",
+      "breadcrumbs": "Wo diese Seite steht"
     },
     "logs": {
       "filters": "Filter",

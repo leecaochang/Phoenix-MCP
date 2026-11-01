@@ -2471,6 +2471,8 @@
       "logsNotifications": "Registros y notificaciones",
       "mesaProfiles": "Perfiles",
       "moveDown": "Mover hacia abajo",
+      "moveHint": "Las teclas de flecha mueven. Pulse Esc para terminar.",
+      "moveKeyboard": "Mover con el teclado",
       "moveLeft": "Mover a la izquierda",
       "moveRight": "Mover a la derecha",
       "moveToolbar": "Mover la barra de herramientas",
@@ -2561,13 +2563,22 @@
       "wsMy": "Su propio espacio de trabajo: las ventanas que ha añadido desde los otros espacios de trabajo y Agent Chat si lo ha acoplado aquí.",
       "persona": "Una persona establece las capacidades iniciales. Cambie capacidades sueltas en la ventana Capacidades; la persona pasa a Personalizado cuando la configuración ya no coincide con ninguna.",
       "guidance": "Indicaciones para todos los agentes que usan esta clave de acceso, como el nombre de las habitaciones y los dispositivos, quién la usa o dónde se guarda la documentación del hogar. Phoenix MCP las añade a las instrucciones de cada agente y oculta los ID de entidad fuera del ámbito de esta clave de acceso. Son solo orientativas: nunca conceden acceso, cambian capacidades ni omiten aprobaciones, y un modelo puede ignorarlas. Los agentes y sus proveedores de modelos reciben este texto, y cualquiera que hable con un agente puede conseguir que lo repita. Nunca incluya contraseñas ni otros secretos.",
-      "inlineWait": "Cuánto tiempo espera una llamada sujeta a confirmación de un cliente MCP externo su decisión antes de devolver una respuesta pendiente. Con Desactivado, el valor predeterminado, la llamada responde en cuanto la aprobación se pone en cola. Agent Chat, la voz y la tarea IA lo ignoran: siempre se ponen en cola de inmediato y esperan a su manera."
+      "inlineWait": "Cuánto tiempo espera una llamada sujeta a confirmación de un cliente MCP externo su decisión antes de devolver una respuesta pendiente. Con Desactivado, el valor predeterminado, la llamada responde en cuanto la aprobación se pone en cola. Agent Chat, la voz y la tarea IA lo ignoran: siempre se ponen en cola de inmediato y esperan a su manera.",
+      "guideMenu": "Mueva la guía o cambie su tamaño con el teclado, pliéguela, maximícela o ciérrela.",
+      "closeGuide": "Cierra la guía en todos los espacios de trabajo. Vuelva a abrirla desde el menú Documentación."
     },
     "guide": {
       "title": "Guía",
       "back": "Atrás",
       "unavailable": "No se pudo cargar la guía. Vuelva a cargar la página para intentarlo de nuevo.",
-      "noTopic": "Todavía no hay ningún tema de la guía para este espacio de trabajo."
+      "noTopic": "Todavía no hay ningún tema de la guía para este espacio de trabajo.",
+      "more": "Contenido y búsqueda",
+      "contents": "Contenido",
+      "search": "Buscar",
+      "searchPlaceholder": "Buscar en la guía",
+      "noResults": "Nada en la guía coincide.",
+      "forward": "Adelante",
+      "breadcrumbs": "Dónde se encuentra esta página"
     },
     "logs": {
       "filters": "Filtros",
