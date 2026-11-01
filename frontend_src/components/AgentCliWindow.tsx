@@ -2062,7 +2062,7 @@ export function AgentCliWindow({
       {!collapsed && (
         <>
           {/* One line naming the key, provider and model; the triangle beside it opens the fields that change them. */}
-          <div className="agentcli-connection">
+          <div className="agentcli-connection" data-guide="window.agentChat#connection">
             <div className="agentcli-connection-head">
               {/* Only the triangle opens the fields: the line itself is text, not a control (user, 2026-10-29). */}
               <button type="button" className="agentcli-connection-toggle" aria-expanded={connectionOpen}
@@ -2150,7 +2150,7 @@ export function AgentCliWindow({
           </div>
 
           {pendingContinue !== null && !sending && (
-            <div className="agentcli-continue" role="status">
+            <div className="agentcli-continue" role="status" data-guide="window.agentChat#check-in">
               <span className="agentcli-continue-text">
                 {tn("agentchat.pausedAfter", pendingContinue)}
               </span>
@@ -2160,7 +2160,7 @@ export function AgentCliWindow({
           )}
 
           {(attachments.length > 0 || attachError) && (
-            <div className="agentcli-attachments">
+            <div className="agentcli-attachments" data-guide="window.agentChat#images">
               {attachments.length > 0 && (
                 <ul className="agentcli-attachment-list">
                   {attachments.map((attachment) => (
@@ -2193,14 +2193,14 @@ export function AgentCliWindow({
             </div>
           )}
 
-          <div className="agentcli-input">
+          <div className="agentcli-input" data-guide="window.agentChat#conversation">
             <input
               ref={fileInputRef} type="file" accept="image/*" multiple hidden
               onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void addFiles(files); }}
             />
             <button
               type="button" className="btn btn-sm agentcli-attach-btn"
-              aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")}
+              aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")} data-guide="window.agentChat#images"
               aria-disabled={Boolean(attachBlocked) || attachments.length >= ATTACHMENT_MAX_COUNT}
               onClick={() => {
                 if (attachBlocked) setAttachError(attachBlocked);
@@ -2242,7 +2242,7 @@ export function AgentCliWindow({
           </div>
 
           {showFooter && (
-            <div className="agentcli-footer">
+            <div className="agentcli-footer" data-guide="window.agentChat#conversation">
               <div className="agentcli-text-size-controls" role="group" aria-label={t("agentchat.textSize")}>
                 <button type="button" className="agentcli-text-size-btn"
                         aria-label={t("agentchat.decreaseTextSize")} title={t("agentchat.decreaseTextSize")}
@@ -2525,7 +2525,7 @@ function ChatItem({
         return <div className="agentcli-notice">{t("agentchat.chatEnded")}</div>;
       }
       return (
-        <div className="agentcli-approval">
+        <div className="agentcli-approval" data-guide="window.agentChat#approvals">
           <div>{tRich("agentchat.approvalNeeded", { code: (c) => <code>{c}</code> }, { name: entry.toolName })}</div>
           {entry.status === "pending" && !entry.checking ? (
             <div className="agentcli-approval-actions">

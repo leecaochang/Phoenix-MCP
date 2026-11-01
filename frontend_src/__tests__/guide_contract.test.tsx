@@ -15,6 +15,7 @@ import { join, resolve } from "path";
 import { compileGuide, type GuideBundle } from "../guide/compile";
 import { flattenCatalog } from "../i18n";
 import { WORKSPACES } from "../shell/workspaces";
+import { CHAT_WINDOW } from "../shell/chatDock";
 import type { WorkspaceId } from "../shell/storage";
 import { SETTING_INDEX } from "../shell/settingsIndex";
 import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
@@ -69,7 +70,7 @@ describe("the shipped Guide", () => {
         expect(bundle.topics[`window.${id}`], `window.${id}`).toBeDefined();
       }
     }
-    for (const id of SHARED) expect(bundle.topics[`window.${id}`], `window.${id}`).toBeDefined();
+    for (const id of [...SHARED, CHAT_WINDOW]) expect(bundle.topics[`window.${id}`], `window.${id}`).toBeDefined();
   });
 
   it("has a section for every setting Find Setting knows, on its window's page", () => {
