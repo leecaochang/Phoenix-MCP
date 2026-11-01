@@ -62,7 +62,10 @@ type Opt = { value: string; label: string };
 // A fixed option set instead carries the catalog key for its label.
 type LabeledOpt = { value: string; labelKey: string };
 
+// "" leaves control_mode undeclared, so the profile makes no control decision
+// and the inherited or built-in mode applies (Spec 5.7 Rule E).
 const CONTROL_MODES: LabeledOpt[] = [
+  { value: "", labelKey: "mesa.unset" },
   { value: "autonomous", labelKey: "mesa.modeAutonomous" },
   { value: "confirm", labelKey: "mesa.modeConfirmOption" },
   { value: "read_only", labelKey: "mesa.modeReadOnly" },
@@ -259,7 +262,7 @@ function docToEditor(key: string, doc: MesaProfileDocument | null): EditorState 
   return {
     key,
     tags: tagsOf(doc),
-    control_mode: (ob.control_mode as string) ?? "autonomous",
+    control_mode: (ob.control_mode as string) ?? "",
     enforcement_mode: (ob.enforcement_mode as string) ?? "advisory",
     triggers_automations: (ob.triggers_automations as string) ?? "unknown",
     reversible: rev === true ? "true" : rev === false ? "false" : "",
@@ -270,10 +273,8 @@ function docToEditor(key: string, doc: MesaProfileDocument | null): EditorState 
 }
 
 function editorToDoc(s: EditorState): MesaProfileDocument {
-  const ob: Record<string, unknown> = {
-    control_mode: s.control_mode,
-    triggers_automations: s.triggers_automations,
-  };
+  const ob: Record<string, unknown> = { triggers_automations: s.triggers_automations };
+  if (s.control_mode !== "") ob.control_mode = s.control_mode;
   // Omit when advisory (the default) to keep stored docs clean, matching how
   // mesa-core serialises the field.
   if (s.enforcement_mode === "enforced") ob.enforcement_mode = "enforced";
