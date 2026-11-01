@@ -1,10 +1,13 @@
 ---
-{ "id": "workspace.mesa", "title": "MESA Workspace", "order": 40 }
+{ "id": "workspace.mesa", "title": "MESA Workspace", "order": 40, "keywords": ["MESA", "safety", "profiles", "control mode"] }
 ---
-MESA describes what each device or entity is, so Phoenix can handle it safely. A profile can make a device need confirmation, or put it off-limits, whatever an access key allows.
+MESA is Phoenix's device safety layer. A profile tells MESA how careful to be with a device or entity: let agents act freely, ask you first, or keep them off it entirely. MESA applies on top of what each access key allows.
 
-- A profile can cover a domain, an integration, an area, a device or a single entity. **{{label:workspace.mesaProfiles}}** lists them all. Choose one to open it in **{{label:workspace.profileEditor}}**, or start a new one with **{{label:mesa.addProfile}}**.
-- **{{label:mesa.suggestTitle}}** proposes profiles for devices Phoenix recognizes. Nothing is applied until you choose one, check it in the editor and save it. **{{label:mesa.dismiss}}** removes a suggestion from the list.
-- **{{label:workspace.advisory}}** appears only while MESA has a finding: an automation it could only partly inspect, a trigger that doesn't match its declaration, or a profile whose target is gone.
-- Dismissing a finding doesn't change any profile. **{{label:mesa.restoreNotices}}** in the MESA Actions menu shows them again.
-- Until **{{label:settings.mesaModeLabel}}** in [Settings](guide:window.settingsSafety#mesa-mode) is **{{label:settings.mesaModeEnforced}}**, most restrictions only warn.
+- **{{label:workspace.mesaProfiles}}** lists every profile. Choose one to open it, or select **{{label:mesa.addProfile}}** to start a new one. Import and export profiles from the MESA Actions menu.
+- **{{label:workspace.profileEditor}}** shows the chosen profile. Change it and save.
+- **{{label:mesa.suggestTitle}}** lists devices and automations that may need a profile. Nothing changes until you save one.
+- **{{label:workspace.advisory}}** appears only when MESA has a finding to show you.
+
+How strictly MESA acts is set by **{{label:settings.mesaModeLabel}}** in [Settings](guide:window.settingsSafety#mesa-mode). In {{label:settings.mesaModeAdvisory}} mode, the default, most rules only warn the agent.
+
+Related: [How MESA Decides](guide:topic.mesaRules), [Profile buttons on Home Assistant's pages](guide:window.settingsGeneral#inject)

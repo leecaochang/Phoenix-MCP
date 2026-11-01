@@ -54,7 +54,7 @@ const controlText = (row: ProfileRow): string =>
  * is answered beside it, on the same line, and a click anywhere else cancels,
  * as Delete Permanently does in Archived Access Keys (user, 2026-10-30).
  */
-function RowAction({ id, label, confirmLabel, icon, busy, confirming, boxRef, onAsk, onConfirm }: {
+function RowAction({ id, label, confirmLabel, icon, busy, confirming, boxRef, guide, onAsk, onConfirm }: {
   id: string;
   label: string;
   confirmLabel: string;
@@ -63,13 +63,15 @@ function RowAction({ id, label, confirmLabel, icon, busy, confirming, boxRef, on
   confirming: string | null;
   /** The window's own click-away box, given to the row that is asking. */
   boxRef: RefObject<HTMLSpanElement | null>;
+  /** The Guide section about this action. */
+  guide: string;
   onAsk: (id: string | null) => void;
   onConfirm: () => void;
 }) {
   const asked = confirming === id;
   return (
     // Acting on a row never chooses it: the list's own choice stays where it is.
-    <span className="row-actions" ref={asked ? boxRef : undefined} onClick={(e) => e.stopPropagation()}>
+    <span className="row-actions" ref={asked ? boxRef : undefined} data-guide={guide} onClick={(e) => e.stopPropagation()}>
       <ActionButton icon={icon} label={asked ? t("common.confirm") : label} name={asked ? confirmLabel : undefined} busy={busy}
         className={asked ? "btn btn-danger btn-sm" : "btn btn-ghost btn-sm"}
         onClick={() => (asked ? onConfirm() : onAsk(id))} />
@@ -186,7 +188,7 @@ export function MesaProfilesWindow() {
     { id: "actions", label: t("mesa.colActions"), width: 205, maxWidth: 205, className: "phx-td-actions",
       cell: (r) => (
         <RowAction id={r.id} icon="delete" label={t("mesa.delete")} confirmLabel={t("mesa.confirmDelete")} busy={deleting === r.id}
-          confirming={confirmId} boxRef={confirmBox} onAsk={setConfirmId} onConfirm={() => { void remove(r); }} />
+          confirming={confirmId} boxRef={confirmBox} guide="window.mesaProfiles#delete" onAsk={setConfirmId} onConfirm={() => { void remove(r); }} />
       ) },
   ];
   const editing = m.editing && !m.editing.isNew ? `${m.editing.scope}:${m.editing.key}` : null;
@@ -195,19 +197,21 @@ export function MesaProfilesWindow() {
     <div className="phx-list-view mesa-profiles-view">
       {!onToolbar && <InlineTools groups={groups} />}
       {m.exporting && (
+        <div data-guide="window.mesaProfiles#export">
         <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("common.cancel")}
           confirmClassName="btn btn-outline btn-sm" help={`${tn("mesa.exportBody", m.rows.length)} ${t("mesa.exportNote")}`}
           busy={m.exporting.busy} error={m.exporting.error} onConfirm={() => { void m.doExport(); }} onCancel={m.cancelExport} />
+        </div>
       )}
       {importing && (
-        <div className="phx-inline-panel mesa-import-panel">
+        <div className="phx-inline-panel mesa-import-panel" data-guide="window.mesaProfiles#import">
           <div className="phx-inline-panel-head">
             <h3 className="phx-section-title">{t("mesa.importTitle")}</h3>
           </div>
           <MesaImport onImported={() => m.refresh()} onCancel={() => showImport(false)} />
         </div>
       )}
-      <div className="phx-filters" hidden={!showFilters}>
+      <div className="phx-filters" hidden={!showFilters} data-guide="window.mesaProfiles#filters">
         <div className="filter-row">
           <select className="input input-auto" data-filter="scope" value={scope} onChange={(e) => { forget(); setScope(e.target.value); }} aria-label={t("mesa.colAppliesTo")}>
             <option value="">{t("mesa.allTypes")}</option>
@@ -232,6 +236,7 @@ export function MesaProfilesWindow() {
       {m.error && <ErrorMsg msg={m.error} />}
       {deleteError && <ErrorMsg msg={deleteError} />}
       {!m.loaded && m.loading && <Loading />}
+      <div className="mesa-table" data-guide="window.mesaProfiles#list">
       <ConfigTable
         id="mesaProfiles"
         label={t("workspace.mesaProfiles")}
@@ -244,6 +249,7 @@ export function MesaProfilesWindow() {
         rowLabel={(r) => `${r.key}, ${r.name || ""}, ${controlText(r)}, ${scopeLabel(r.scope)}`}
         empty={!m.loaded ? null : <p className="audit-empty">{m.rows.length ? t("mesa.noMatch") : t("mesa.emptyState")}</p>}
       />
+      </div>
     </div>
   );
 }
@@ -312,12 +318,13 @@ export function SuggestedProfilesWindow() {
     { id: "actions", label: t("mesa.colActions"), width: 205, maxWidth: 205, className: "phx-td-actions",
       cell: (s) => (
         <RowAction id={s.key} icon="close" label={t("mesa.dismiss")} confirmLabel={t("mesa.confirmDismiss")} busy={m.suggestionBusy === s.key}
-          confirming={confirmId} boxRef={confirmBox} onAsk={setConfirmId} onConfirm={() => { void m.dismissSuggestion(s); setConfirmId(null); }} />
+          confirming={confirmId} boxRef={confirmBox} guide="window.mesaSuggestions#dismiss" onAsk={setConfirmId} onConfirm={() => { void m.dismissSuggestion(s); setConfirmId(null); }} />
       ) },
   ];
   return (
     <div className="phx-list-view mesa-suggestions-view" data-help="mesa.suggestSub">
       {m.suggestionError && <ErrorMsg msg={m.suggestionError} />}
+      <div className="mesa-table" data-guide="window.mesaSuggestions#review">
       <ConfigTable
         id="mesaSuggestions"
         label={t("mesa.suggestTitle")}
@@ -330,6 +337,7 @@ export function SuggestedProfilesWindow() {
         rowLabel={(s) => `${s.subject_id}, ${mode(s)}. ${suggestionReason(s)}`}
         empty={<NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} />}
       />
+      </div>
     </div>
   );
 }
@@ -371,9 +379,9 @@ function OrphanGroups({ m, onOpen }: { m: MesaState; onOpen?: (scope: MesaProfil
  * is a named button under it rather than a cross in its corner (user,
  * 2026-10-30), and it is permanent, per account, and changes nothing in MESA.
  */
-function Notice({ tone, label, onDismiss, children }: { tone: "info" | "warn"; label: string; onDismiss?: () => void; children: ReactNode }) {
+function Notice({ tone, label, guide, onDismiss, children }: { tone: "info" | "warn"; label: string; guide: string; onDismiss?: () => void; children: ReactNode }) {
   return (
-    <div className={`mesa-notice mesa-notice-${tone}`}>
+    <div className={`mesa-notice mesa-notice-${tone}`} data-guide={guide}>
       {tone === "warn" && <Icon name="warning" size={16} className="mesa-notice-icon" />}
       <div className="mesa-notice-content">
         {children}
@@ -381,7 +389,7 @@ function Notice({ tone, label, onDismiss, children }: { tone: "info" | "warn"; l
           // Named in words whatever the toolbar's display mode: a cross alone was what
           // the user asked to be rid of here (user, 2026-10-30).
           <DisplayModeContext.Provider value="icon-text">
-            <div className="mesa-notice-actions">
+            <div className="mesa-notice-actions" data-guide="window.mesaAdvisory#dismiss">
               <ActionButton icon="close" label={t("mesa.dismiss")} name={label} className="btn btn-outline btn-sm" onClick={onDismiss} />
             </div>
           </DisplayModeContext.Provider>
@@ -393,7 +401,7 @@ function Notice({ tone, label, onDismiss, children }: { tone: "info" | "warn"; l
 
 function InspectionNotice({ m, label, onDismiss }: { m: MesaState; label: string; onDismiss: () => void }) {
   return (
-    <Notice tone="info" label={label} onDismiss={onDismiss}>
+    <Notice tone="info" label={label} guide="window.mesaAdvisory#inspection" onDismiss={onDismiss}>
       <p>{tn("mesa.partialInspection", m.inspection.length)}</p>
       <p>{t("mesa.advisoryOnly")}</p>
       <details className="mesa-notice-details">
@@ -408,7 +416,7 @@ function InspectionNotice({ m, label, onDismiss }: { m: MesaState; label: string
 
 function ValidationNotice({ m, label, onDismiss }: { m: MesaState; label: string; onDismiss: () => void }) {
   return (
-    <Notice tone="warn" label={label} onDismiss={onDismiss}>
+    <Notice tone="warn" label={label} guide="window.mesaAdvisory#validation" onDismiss={onDismiss}>
       <strong>{t("mesa.triggerIssues", { count: m.validation.length })}</strong>
       <ul>
         {m.validation.map((i: MesaValidationIssue, idx) => (
@@ -447,7 +455,7 @@ export function AdvisoryWindow() {
       {shown(inspection) && <InspectionNotice m={m} label={t("mesa.dismissInspectionNotice")} onDismiss={() => m.dismiss(inspection)} />}
       {shown(validation) && <ValidationNotice m={m} label={t("mesa.dismissValidationNotice")} onDismiss={() => m.dismiss(validation)} />}
       {shown(orphans) && (
-        <Notice tone="info" label={t("mesa.dismissOrphanNotice")} onDismiss={() => m.dismiss(orphans)}>
+        <Notice tone="info" label={t("mesa.dismissOrphanNotice")} guide="window.mesaAdvisory#orphans" onDismiss={() => m.dismiss(orphans)}>
           <OrphanGroups m={m} onOpen={(scope, key) => { m.open({ scope, key, isNew: false }); ensureOpen("mesaEditor"); }} />
           <p>{t("mesa.advisoryOnly")}</p>
         </Notice>

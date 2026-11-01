@@ -364,10 +364,10 @@ function FieldLabel({ id, text, help }: { id?: string; text: string; help: strin
 // A select rendered with friendly labels but storing slug values, full width so
 // every control lines up on the grid.
 function SelectField({
-  id, label, helpKey, value, options, onChange,
-}: { id: string; label: string; helpKey: string; value: string; options: LabeledOpt[]; onChange: (v: string) => void }) {
+  id, label, helpKey, guide, value, options, onChange,
+}: { id: string; label: string; helpKey: string; guide: string; value: string; options: LabeledOpt[]; onChange: (v: string) => void }) {
   return (
-    <div className="field">
+    <div className="field" data-guide={guide}>
       <FieldLabel id={id} text={label} help={t(helpKey)} />
       {/* The field's explanation also shows in the Help window while it has the pointer or focus. */}
       <select id={id} className="input" value={value} data-help={helpKey} onChange={(e) => onChange(e.target.value)}>
@@ -827,9 +827,11 @@ export function ProfileEditor({
 
   // Deleting names the target and what falls back once its profile is gone.
   const deleteConfirmation = confirmDelete && !isNew && (
+    <div data-guide="window.mesaEditor#delete">
     <InlineConfirm label={t(DELETE_CONFIRM[scope])} tone="danger" confirmLabel={t(DELETE_BUTTON[scope])} confirmIcon="delete"
       confirmClassName="btn btn-danger btn-sm" cancelLabel={t("mesa.cancel")} busy={saving}
       onConfirm={() => { void remove(); }} onCancel={() => setConfirmDelete(false)} help={t(DELETE_WARN[scope], { key: target })} />
+    </div>
   );
 
   const body = (
@@ -846,7 +848,7 @@ export function ProfileEditor({
         ) : (
           <>
             {isNew && !lockedKey && (
-              <div className="field">
+              <div className="field" data-guide="window.mesaEditor#target">
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <Combo
                   id="mesa-key"
@@ -864,13 +866,13 @@ export function ProfileEditor({
             {(lockedKey || !isNew) && (
               // What the profile covers, by its familiar name, on every profile that has
               // one already: only a new one is chosen here (user, 2026-10-30).
-              <div className="field">
+              <div className="field" data-guide="window.mesaEditor#target">
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <input id="mesa-key" className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
               </div>
             )}
 
-            <div className="field">
+            <div className="field" data-guide="window.mesaEditor#tags">
               <FieldLabel id="mesa-tags" text={t("mesa.semanticTags")} help={t(HELP.tags)} />
               {/* The suggested tags open from the end of the input itself, closed every time (user, 2026-10-30). */}
               <div className="mesa-tag-row">
@@ -889,24 +891,24 @@ export function ProfileEditor({
             </div>
 
             <div className="mesa-grid">
-              <SelectField id="mesa-cm" label={t("mesa.fieldControlMode")} helpKey={HELP.control_mode}
+              <SelectField id="mesa-cm" guide="window.mesaEditor#control-mode" label={t("mesa.fieldControlMode")} helpKey={HELP.control_mode}
                 value={state.control_mode} options={CONTROL_MODES} onChange={(v) => set("control_mode", v)} />
-              <SelectField id="mesa-em" label={t("mesa.fieldEnforcement")} helpKey={HELP.enforcement_mode}
+              <SelectField id="mesa-em" guide="window.mesaEditor#enforcement" label={t("mesa.fieldEnforcement")} helpKey={HELP.enforcement_mode}
                 value={state.enforcement_mode} options={ENFORCEMENT_MODES} onChange={(v) => set("enforcement_mode", v)} />
-              <SelectField id="mesa-ta" label={t("mesa.fieldTriggersAutomations")} helpKey={HELP.triggers_automations}
+              <SelectField id="mesa-ta" guide="window.mesaEditor#triggers-automations" label={t("mesa.fieldTriggersAutomations")} helpKey={HELP.triggers_automations}
                 value={state.triggers_automations} options={TRIGGERS} onChange={(v) => set("triggers_automations", v)} />
-              <SelectField id="mesa-rev" label={t("mesa.fieldReversible")} helpKey={HELP.reversible}
+              <SelectField id="mesa-rev" guide="window.mesaEditor#effect" label={t("mesa.fieldReversible")} helpKey={HELP.reversible}
                 value={state.reversible} options={REVERSIBLE} onChange={(v) => set("reversible", v)} />
-              <SelectField id="mesa-rc" label={t("mesa.fieldReversibilityCost")} helpKey={HELP.reversibility_cost}
+              <SelectField id="mesa-rc" guide="window.mesaEditor#effect" label={t("mesa.fieldReversibilityCost")} helpKey={HELP.reversibility_cost}
                 value={state.reversibility_cost} options={REVERSIBILITY_COSTS} onChange={(v) => set("reversibility_cost", v)} />
-              <SelectField id="mesa-ses" label={t("mesa.fieldSideEffectScope")} helpKey={HELP.side_effect_scope}
+              <SelectField id="mesa-ses" guide="window.mesaEditor#effect" label={t("mesa.fieldSideEffectScope")} helpKey={HELP.side_effect_scope}
                 value={state.side_effect_scope} options={SCOPES} onChange={(v) => set("side_effect_scope", v)} />
-              <SelectField id="mesa-pl" label={t("mesa.fieldPrivacyLevel")} helpKey={HELP.privacy_level}
+              <SelectField id="mesa-pl" guide="window.mesaEditor#privacy-level" label={t("mesa.fieldPrivacyLevel")} helpKey={HELP.privacy_level}
                 value={state.privacy_level} options={PRIVACY_LEVELS} onChange={(v) => set("privacy_level", v)} />
             </div>
 
             {warnings.length > 0 && (
-              <div className="banner banner-warn">
+              <div className="banner banner-warn" data-guide="window.mesaEditor#save-warnings">
                 <strong>{t("mesa.savedWithWarnings")}</strong>
                 <ul>
                   {warnings.map((w, i) => (
@@ -927,7 +929,7 @@ export function ProfileEditor({
                 text is mesa-core's own and stays English, like the resolution
                 table below it. */}
             {!isNew && scope === "entity" && detail && detail.explanation.warnings.length > 0 && (
-              <div className="banner banner-warn mesa-resolution-warnings">
+              <div className="banner banner-warn mesa-resolution-warnings" data-guide="window.mesaEditor#effective-resolution">
                 <strong>{t("mesa.resolutionWarnings")}</strong>
                 <ul>
                   {detail.explanation.warnings.map((w) => <li key={w}>{w}</li>)}
@@ -937,7 +939,7 @@ export function ProfileEditor({
 
             {!isNew && scope === "entity" && detail && (
               <details className="mesa-explain" open={explainOpen} onToggle={(e) => { explainLeftOpen = e.currentTarget.open; setExplainOpen(e.currentTarget.open); }}>
-                <summary data-help-text={t("mesa.helpEffectiveResolution")}>{t("mesa.effectiveResolution")}</summary>
+                <summary data-help-text={t("mesa.helpEffectiveResolution")} data-guide="window.mesaEditor#effective-resolution">{t("mesa.effectiveResolution")}</summary>
                 <table className="data-table">
                   <thead><tr><th>{t("mesa.colField")}</th><th>{t("mesa.colEffective")}</th><th>{t("mesa.colFrom")}</th><th>{t("mesa.colOrigin")}</th></tr></thead>
                   <tbody>
@@ -969,7 +971,7 @@ export function ProfileEditor({
               ? <strong>{name}</strong>
               : <><strong className="mesa-editor-scope">{t(SCOPE_ID_LABEL[scope])}</strong><code>{id || name}</code></>}
           </h3>
-          <div className="phx-window-actions mesa-editor-actions">
+          <div className="phx-window-actions mesa-editor-actions" data-guide="window.mesaEditor#save">
             {/* A new profile is itself the change; an existing one waits for an edit (user, 2026-10-30). */}
             <ActionButton icon="save" label={t("mesa.save")} busy={saving} disabled={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
             <ActionButton icon="undo" label={t("mesa.discardChanges")} busy={saving} disabled={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
