@@ -32,7 +32,6 @@ import { Reconnecting } from "./Reconnecting";
 import { MesaProvider, type MesaFindings } from "./mesa";
 import { SettingsProvider, settingsGuideAnchor } from "./settings";
 import type { SettingsWindowId } from "./settingsIndex";
-import { DOCS_BASE_URL } from "../components/common";
 import {
   ARCHIVED_WINDOW, ATTENTION_WINDOW, DOCK_COMPONENTS, EmptyWorkspace, KEY_WINDOWS, MY_EXTRAS, SHARED_PAIRS, SOURCE_OF, WORKSPACES, WorkspaceVisibleContext, canAddToMy, myWorkspaceWindows,
   renderWindow, windowAvailable, windowTitle, type WindowId,
@@ -460,7 +459,8 @@ export function Shell() {
     return items;
   }, [env, addToMy, removeFromMy]);
 
-  // Documentation: Show Help Bar (every workspace; desktop only for now), the Guide (every workspace) and the website.
+  // Documentation: Show Help Bar (every workspace; desktop only for now) and the Guide (every workspace). The Guide is
+  // the manual, so the website is no longer offered (user, 2026-11-01).
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
@@ -473,7 +473,6 @@ export function Shell() {
     const pinned = here === "accessKeys" && !!wizardRef.current;
     const guideOpen = pinned || guideRef.current.open;
     items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, disabled: pinned, onSelect: () => updateGuide({ open: !guideOpen }) });
-    items.push({ id: "website", label: t("help.openDocumentation"), onSelect: () => { window.open(DOCS_BASE_URL, "_blank", "noopener,noreferrer"); } });
     return items;
   }, [env, updateGuide]);
 

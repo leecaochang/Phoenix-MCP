@@ -16,7 +16,7 @@ import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { WorkspaceController } from "./dock/controller";
 import { usePanelData } from "./PanelData";
 import { toolbarVertical, withToolbarDock, WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState, type WorkspaceId } from "./storage";
-import { chooseFit, fitClass, rowFits } from "./toolbarFit";
+import { chooseFit, fitClass, rowFits, singleRowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
 import { useSettings } from "./settings";
 import { HELP_WINDOW } from "./help";
@@ -97,9 +97,9 @@ function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number
 }
 
 /**
- * The toolbar's own menu: display mode, where it sits, and Collapse or
- * Expand. While floating it offers the orientation it is not in, and no
- * Float Toolbar. Phones keep it docked at the top.
+ * The toolbar's own menu: display mode, one row or two, where it sits, and
+ * Collapse or Expand. While floating it offers the orientation it is not in,
+ * and no Float Toolbar. Phones keep it docked at the top.
  */
 function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => void, env: Env): MenuEntry[] {
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
@@ -107,6 +107,11 @@ function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => v
     { id: "icons", label: t("workspace.iconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
     { id: "icon-text", label: t("workspace.iconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
   ];
+  // Single Row, checked while chosen (user, 2026-11-01); an upright toolbar has columns instead. It stays
+  // checked while the toolbar shows two rows because one does not fit.
+  if (env === "desktop" && !toolbarVertical(state)) {
+    items.push("separator", { id: "single-row", label: t("workspace.singleRow"), checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }) });
+  }
   if (env === "desktop") {
     items.push("separator");
     const floating = state.dock === "floating";
@@ -160,7 +165,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   env: Env;
   state: ToolbarState;
   onChange: (next: ToolbarState) => void;
-  /** The Documentation menu: Help, the Guide and the documentation website. */
+  /** The Documentation menu: Help and the Guide. */
   documentation: () => MenuEntry[];
   /** Agent Chat: its docked window in My Workspace, or the floating one. */
   onAgentChat?: () => void;
@@ -256,21 +261,31 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     return () => observer.disconnect();
   }, [effective.dock, state.x, state.y, state.mode, state.collapsed, state.vertical]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A horizontal toolbar with icons and text keeps the main row on one line (toolbarFit.ts).
-  // The step is set on the toolbar directly, only when the panel's width or the row's text changes.
+  // A horizontal toolbar with icons and text keeps the main row on one line (toolbarFit.ts), and one set
+  // to a single row takes the tools onto it while they fit. Both are set on the toolbar directly, only
+  // when the panel's width or the rows' text changes.
   const vertical = env === "desktop" && toolbarVertical(effective);
   const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
+  const oneRow = env === "desktop" && effective.singleRow && !effective.collapsed && !vertical;
   const fitKey = useRef("");
   const refit = useRef<(force?: boolean) => void>(() => {});
   useLayoutEffect(() => {
     refit.current = (force = false) => {
       const bar = self.current;
+      const body = bar?.querySelector<HTMLElement>(".phx-toolbar-body");
       const main = bar?.querySelector<HTMLElement>(".phx-toolbar-main");
-      if (!bar || !main) return;
-      if (!fitOneLine) { delete bar.dataset.fit; fitKey.current = ""; return; }
-      const key = `${shellRoot.current?.clientWidth ?? 0}|${effective.dock}|${vertical}|${d.workspace}|${main.textContent}`;
+      if (!bar || !body || !main) return;
+      const tools = bar.querySelector<HTMLElement>(".phx-toolbar-tools");
+      const key = `${shellRoot.current?.clientWidth ?? 0}|${effective.dock}|${vertical}|${effective.mode}|${oneRow}|${d.workspace}|${main.textContent}|${tools?.textContent ?? ""}`;
       if (!force && key === fitKey.current) return;
       fitKey.current = key;
+      if (oneRow && tools) {
+        bar.dataset.rows = "1";
+        if (fitOneLine) bar.dataset.fit = "0";
+        if (singleRowFits(body)) return;
+      }
+      delete bar.dataset.rows;
+      if (!fitOneLine) { delete bar.dataset.fit; return; }
       chooseFit((step) => { bar.dataset.fit = String(step); }, () => rowFits(main));
     };
     refit.current();
@@ -374,19 +389,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
               <MenuButton label={t("workspace.toolbarOptions")} help="help.toolbarOptions" icon={<Icon name="more" size={16} />}
                 items={() => appearanceMenu(state, onChange, env)} className="phx-toolbar-button phx-toolbar-plain phx-toolbar-options" />
             )}
-            {/* One icon-only control shows or hides the tools row, in the same place either way. */}
-            {!collapsed && groups.length > 0 && (
-              <button type="button" className="phx-toolbar-button phx-toolbar-plain phx-toolbar-tools-toggle"
-                aria-label={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
-                title={effective.toolsShown ? t("workspace.hideTools") : t("workspace.showTools")}
-                data-help="help.tools"
-                aria-expanded={effective.toolsShown}
-                onClick={() => update({ toolsShown: !state.toolsShown })}>
-                <Icon name={effective.toolsShown ? "hideTools" : "showTools"} size={16} />
-              </button>
-            )}
           </div>
-          {!collapsed && effective.toolsShown && registry && groups.length > 0 && (
+          {/* The open windows' tools always show (user, 2026-11-01): hiding them only made them harder to find. */}
+          {!collapsed && registry && groups.length > 0 && (
             <ToolRow registry={registry} workspace={d.workspace} order={order} groups={groups} />
           )}
         </div>

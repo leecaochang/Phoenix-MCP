@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { DEFAULT_TOOLBAR, readToolbar, toolbarVertical, withToolbarDock } from "../shell/storage";
-import { FIT_STEPS, chooseFit, rowFits } from "../shell/toolbarFit";
+import { FIT_STEPS, chooseFit, rowFits, singleRowFits } from "../shell/toolbarFit";
 import { auditEntryKey } from "../components/AuditEntry";
 import { ConfigTable } from "../ui/table/ConfigTable";
 import { ContextMenuHost, useContextMenu, type MenuEntry } from "../ui/Menu";
@@ -192,9 +192,10 @@ describe("Log Details", () => {
 describe("saved toolbar placement", () => {
   it("keeps valid values and replaces anything else with the defaults", () => {
     expect(readToolbar(undefined)).toEqual(DEFAULT_TOOLBAR);
-    expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true }))
-      .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true });
-    expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge", vertical: "up" })).toEqual(DEFAULT_TOOLBAR);
+    // A saved choice to hide the tools is dropped with the button that made it (user, 2026-11-01).
+    expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true, singleRow: true }))
+      .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, mode: "icon-text", vertical: true, singleRow: true });
+    expect(readToolbar({ dock: "sideways", x: -5, y: Number.NaN, collapsed: "yes", toolsShown: 1, mode: "huge", vertical: "up", singleRow: "yes" })).toEqual(DEFAULT_TOOLBAR);
   });
 
   it("keeps the orientation a docked toolbar had when it floats, and follows the edge when docked", () => {
@@ -228,6 +229,19 @@ describe("toolbar fit rule", () => {
   it("ignores items without a box, so a row it cannot measure counts as fitting", () => {
     expect(rowFits(row([[0, 0], [0, 0]]))).toBe(true);
     expect(rowFits(row([[0, 46], [80, 0]]))).toBe(true);
+  });
+
+  it("counts a one-row toolbar as fitting only with every button on one line and nothing past its end", () => {
+    const body = (boxes: Array<[number, number]>, scroll = 900, client = 1000) => {
+      const el = row(boxes);
+      for (const b of el.children) b.className = "phx-toolbar-button";
+      Object.defineProperty(el, "scrollWidth", { value: scroll });
+      Object.defineProperty(el, "clientWidth", { value: client });
+      return el;
+    };
+    expect(singleRowFits(body([[5, 36], [0, 46], [5, 36]]))).toBe(true);
+    expect(singleRowFits(body([[5, 36], [50, 46]]))).toBe(false);
+    expect(singleRowFits(body([[5, 36], [0, 46]], 1200, 1000))).toBe(false);
   });
 
   it("tries each step from full text and keeps the first that fits", () => {

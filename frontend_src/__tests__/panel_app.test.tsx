@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, waitFor } from "@testing-library/react";
+import { act, fireEvent, waitFor } from "@testing-library/react";
 import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 
 // Lets the REAL PhoenixApp tree render (with a mocked api) so the app-level
@@ -331,6 +331,45 @@ describe("phoenix-mcp-panel full app shell", () => {
       expect(el.shadowRoot!.querySelector(".phx-toolbar-body")).toBeNull();
       grip();
       expect(items()).toContain("Expand Toolbar");
+    });
+
+    it("puts the tools on the main row from its menu, back on two rows while they do not fit (user, 2026-11-01)", async () => {
+      const { connection } = userData();
+      const el = mountWith(connection);
+      const bar = () => el.shadowRoot!.querySelector<HTMLElement>(".phx-toolbar")!;
+      await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar-tools")).not.toBeNull());
+      // The tools always show: there is no button to hide them.
+      expect(el.shadowRoot!.querySelector('[aria-label="Hide Tools"], [aria-label="Show Tools"]')).toBeNull();
+      const single = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role="menuitemcheckbox"]')].find((i) => i.textContent!.replace("\u2713", "").trim() === "Single Row")!;
+      const items = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].map((i) => i.textContent!.replace("\u2713", "").trim());
+      const options = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar-main [aria-label="Toolbar Options"]')!.click(); });
+      expect(bar()).not.toHaveAttribute("data-rows");
+      options();
+      expect(single()).toHaveAttribute("aria-checked", "false");
+      act(() => single().click());
+      await waitFor(() => expect(bar()).toHaveAttribute("data-rows", "1"));
+      options();
+      expect(single()).toHaveAttribute("aria-checked", "true");
+      act(() => single().click());
+      await waitFor(() => expect(bar()).not.toHaveAttribute("data-rows"));
+      // Too wide for one row: two rows until there is room, still checked.
+      const body = el.shadowRoot!.querySelector<HTMLElement>(".phx-toolbar-body")!;
+      Object.defineProperty(body, "scrollWidth", { configurable: true, value: 2000 });
+      Object.defineProperty(body, "clientWidth", { configurable: true, value: 800 });
+      try {
+        options();
+        act(() => single().click());
+        options();
+        expect(single()).toHaveAttribute("aria-checked", "true");
+        expect(bar()).not.toHaveAttribute("data-rows");
+        act(() => { fireEvent.keyDown(el.shadowRoot!.querySelector(".phx-menu")!, { key: "Escape" }); });
+      } finally {
+        delete (body as unknown as Record<string, unknown>).scrollWidth;
+        delete (body as unknown as Record<string, unknown>).clientWidth;
+      }
+      // Documentation holds Help and the Guide; the Guide is the manual, so the website is gone.
+      act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar [aria-label="Documentation"]')!.click(); });
+      expect(items()).toEqual(["Show Help Bar", "Guide"]);
     });
   });
 });

@@ -26,14 +26,14 @@ export interface ToolbarState {
   x: number;
   y: number;
   collapsed: boolean;
-  /** Whether the second row of workspace tools is shown. */
-  toolsShown: boolean;
   mode: "icons" | "icon-text";
   /** Whether a floating toolbar stands upright; a docked one follows its edge. */
   vertical: boolean;
+  /** A horizontal toolbar puts the tools on the main row, back on a second row while they do not fit. */
+  singleRow: boolean;
 }
 /** Docked at the top, icons only, tools shown: the accepted starting point. */
-export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icons", vertical: false };
+export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, mode: "icons", vertical: false, singleRow: false };
 
 /** Whether the toolbar stands upright: docked at a side, or floating upright. */
 export const toolbarVertical = (state: ToolbarState): boolean => (state.dock === "floating" ? state.vertical : state.dock === "left" || state.dock === "right");
@@ -114,8 +114,8 @@ export function readToolbar(raw: unknown): ToolbarState {
     x: num(r.x, d.x),
     y: num(r.y, d.y),
     collapsed: typeof r.collapsed === "boolean" ? r.collapsed : d.collapsed,
-    toolsShown: typeof r.toolsShown === "boolean" ? r.toolsShown : d.toolsShown,
     mode: r.mode === "icon-text" || r.mode === "icons" ? r.mode : d.mode,
+    singleRow: typeof r.singleRow === "boolean" ? r.singleRow : d.singleRow,
     vertical: typeof r.vertical === "boolean" ? r.vertical : d.vertical,
   };
 }

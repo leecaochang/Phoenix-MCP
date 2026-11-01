@@ -398,6 +398,15 @@
   white-space: nowrap;
 }
 
+/* One row (user, 2026-11-01): the tools follow the workspaces after a separator, and Agent Chat, Documentation,
+   Workspace Options and the toolbar's own buttons keep the end of the row. The main row lends its items to the
+   one row; the toolbar sets data-rows only while everything fits (shell/toolbarFit.ts). */
+.phx-toolbar[data-rows="1"] .phx-toolbar-body { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-main { display: contents; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-tools { order: 2; margin-inline-start: 2px; padding: 0 0 0 6px; border-top: none; border-inline-start: 1px solid var(--phx-border); }
+.phx-toolbar[data-rows="1"] .phx-toolbar-group { order: 3; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-options { order: 4; }
+
 /* The second row: tools for the visible workspace, grouped with separator bars. */
 .phx-toolbar-tools {
   display: flex;

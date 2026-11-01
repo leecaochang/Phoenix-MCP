@@ -40,8 +40,8 @@ function connection(initial: unknown, opts: { noSubscribe?: boolean; failWrites?
 
 describe("merging records", () => {
   it("takes this browser's changed sections over the stored copy and keeps the rest", () => {
-    const stored = record({ rev: 4, toolbar: { dock: "left", x: 1, y: 1, collapsed: false, toolsShown: true, mode: "icons", vertical: false }, workspaces: { logs: layout("other-logs"), mesa: layout("other-mesa") }, myDefaults: { logs: layout("other-default") } });
-    const local = record({ rev: 3, toolbar: { dock: "top", x: 1, y: 1, collapsed: true, toolsShown: true, mode: "icons", vertical: false }, workspaces: { logs: layout("mine-logs"), mesa: layout("mine-mesa") }, myDefaults: { mesa: layout("mine-default") } });
+    const stored = record({ rev: 4, toolbar: { dock: "left", x: 1, y: 1, collapsed: false, mode: "icons", vertical: false, singleRow: false }, workspaces: { logs: layout("other-logs"), mesa: layout("other-mesa") }, myDefaults: { logs: layout("other-default") } });
+    const local = record({ rev: 3, toolbar: { dock: "top", x: 1, y: 1, collapsed: true, mode: "icons", vertical: false, singleRow: false }, workspaces: { logs: layout("mine-logs"), mesa: layout("mine-mesa") }, myDefaults: { mesa: layout("mine-default") } });
     const merged = mergeRecords(stored, local, new Set(["ws:logs", "my:mesa"]), "browser-b");
     expect(merged.rev).toBe(5);
     expect(merged.writer).toBe("browser-b");

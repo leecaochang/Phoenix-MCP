@@ -3,8 +3,11 @@
  * floating, the main row stays on one line: when it does not fit, its
  * controls give up their text in a fixed order (Workspace Options, then
  * Documentation, Agent Chat, and last the workspaces), keeping their names
- * as tooltips and accessible names. The toolbar options and the tools toggle
- * never carry text.
+ * as tooltips and accessible names. The toolbar options never carry text.
+ *
+ * A toolbar set to one row (user, 2026-11-01) puts the tools after the main
+ * row's workspaces, with every label shown; while that does not fit, it goes
+ * back to two rows and the rule above, and returns to one row once there is room.
  */
 
 /** How many steps the main row can drop text in; each control's class `phx-fit-<step>` says when it does. */
@@ -32,4 +35,13 @@ export function chooseFit(apply: (step: number) => void, fits: () => boolean, st
   }
   apply(steps);
   return steps;
+}
+
+/** Whether every button of a one-row toolbar sits on one line, with nothing running past its end. */
+export function singleRowFits(body: HTMLElement): boolean {
+  const boxes = [...body.querySelectorAll(".phx-toolbar-button")].map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);
+  if (body.scrollWidth > body.clientWidth + 1) return false;
+  if (boxes.length < 2) return true;
+  const firstLineBottom = Math.min(...boxes.map((r) => r.bottom));
+  return boxes.every((r) => r.top < firstLineBottom);
 }
