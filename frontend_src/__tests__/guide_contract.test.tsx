@@ -103,9 +103,10 @@ describe("the shipped Guide", () => {
     expect(broken).toEqual([]);
   });
 
-  it("puts only workspace overviews at the top of Contents", () => {
+  it("puts only workspace overviews and the About page at the top of Contents", () => {
+    // Reference material that belongs to no workspace sits under one About page (user, 2026-11-01).
     const top = Object.entries(bundle.topics).filter(([, t]) => !t.parent).map(([id]) => id);
-    expect(top.filter((id) => !id.startsWith("workspace."))).toEqual([]);
+    expect(top.filter((id) => !id.startsWith("workspace.") && id !== "topic.about")).toEqual([]);
   });
 });
 
