@@ -1,12 +1,32 @@
 ---
-{ "id": "workspace.my", "title": "My Workspace", "order": 70 }
+{ "id": "workspace.my", "title": "My Workspace", "order": 70, "keywords": ["favorites", "personal", "custom layout"], "sectionKeywords": { "adding": ["add to my workspace", "copy"], "removing": ["close", "remove"], "scrolling": ["vertical scrolling", "taller"], "chat": ["agent chat", "dock", "float agent chat"], "phones": ["mobile"] }, "covers": ["frontend_src/shell/Shell.tsx", "frontend_src/shell/workspaces.tsx", "frontend_src/shell/chatDock.tsx"] }
 ---
-My Workspace gathers the windows you use most from the other workspaces.
+My Workspace gathers the windows you use most from the other workspaces. It starts empty.
 
-- **{{label:workspace.addToMy}}** in a window's menu adds it here. It stays in its own workspace too, and both copies show the same selection.
-- Each new window goes in the next place: beside the first, then a row or column at a time.
-- Closing a window here removes it. To bring it back, add it again from its own workspace.
-- **{{label:workspace.verticalScrolling}}**, in any window's menu here, lets the workspace grow taller than the screen and scroll. Every window gets back its earlier height, or its usual height.
-- With it on, drag the border under a window, or the workspace's bottom edge, to make it taller. With it off, every window shrinks to fit the screen.
-- **{{label:workspace.restoreOriginal}}** empties My Workspace.
-- **{{label:shell.agentChat}}** docks here from its own menu. While another workspace is shown, Chat floats over it, and it comes back here when you return. **{{label:agentchat.floatChat}}** undocks it.
+Related: [Working with Windows](guide:topic.windows)
+
+## Adding a window {#adding}
+
+Choose **{{label:workspace.addToMy}}** in a window's menu. The window stays in its own workspace too, and both copies show the same chosen record. Filters, columns and sizes are separate in each copy.
+
+The first window fills the workspace. Each next one goes beside or under the others, a row at a time.
+
+## Removing a window {#removing}
+
+Closing a window here removes it. To bring it back, add it again from its own workspace. **{{label:workspace.restoreOriginal}}** removes every window.
+
+My Default here keeps the arrangement but not which windows are in it, so restoring it doesn't bring removed windows back.
+
+## {{label:workspace.verticalScrolling}} {#scrolling}
+
+Off by default, so the windows share the screen's height. Turn it on from any window's menu here to let the workspace grow taller and scroll. Each window then gets back the height it had before.
+
+With it on, drag the border under a window to make it taller.
+
+## Agent Chat {#chat}
+
+Choose **{{label:workspace.addToMy}}** in Agent Chat's own menu to dock it here. While another workspace is shown, Chat floats over it, and it docks again when you come back here. **{{label:agentchat.floatChat}}** undocks it, and closing it here closes Chat.
+
+## On a phone {#phones}
+
+Windows can only be added on a computer, and a phone keeps its own arrangement, so My Workspace stays empty on a phone.

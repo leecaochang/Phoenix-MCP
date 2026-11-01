@@ -37,7 +37,7 @@ const TOPICS = resolve(REPO, "frontend_src/guide/topics/en");
 const LABELS = flattenCatalog((en as { panel: unknown }).panel);
 
 /** Workspaces whose website pages have been turned into Guide pages; each gains this check as it is converted. */
-const CONVERTED: readonly WorkspaceId[] = ["settings", "accessKeys", "approvals", "changes", "mesa", "logs"];
+const CONVERTED: readonly WorkspaceId[] = ["settings", "accessKeys", "approvals", "changes", "mesa", "logs", "my"];
 /** Windows every workspace shares, documented once rather than per workspace. */
 const SHARED = new Set(["attention", "help", "notifications"]);
 
