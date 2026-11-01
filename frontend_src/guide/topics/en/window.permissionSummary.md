@@ -5,7 +5,7 @@ Lists every rule set in this key's [{{label:accessKeys.permissionsTree}}](guide:
 
 ## The table {#summary-table}
 
-Shows each rule's type, name, ID and state. The state reads Deny when a D on the device or domain overrides the rule. Use the column header's menu to sort, move, resize or hide columns.
+Shows each rule's type, name, ID and state. The state reads Deny when a D on the device or domain overrides the rule. Use the column header's menu to sort, move or hide columns, and drag a header's edge to resize one.
 
 Select a row to show it in the {{label:accessKeys.permissionsTree}}. The MESA button on an entity row opens its MESA profile.
 

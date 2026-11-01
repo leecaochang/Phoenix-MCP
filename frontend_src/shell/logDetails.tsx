@@ -164,15 +164,15 @@ export function LogDetailsContent() {
     <div className="phx-log-details">
       <div className="phx-log-details-bar">
         <h3 className="audit-section-title">{value.kind === "audit" ? t("audit.detailTitle") : t("conversations.conversation")}</h3>
-        <div className="phx-log-details-nav">
+        <div className="phx-log-details-nav" data-guide="window.logDetails#step">
           <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={at <= 0} onClick={() => selection.step(-1)} className="btn btn-outline btn-sm" />
           <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={at < 0 || at >= value.ordered.length - 1} onClick={() => selection.step(1)} className="btn btn-outline btn-sm" />
         </div>
       </div>
       {value.kind === "audit"
-        ? <AuditEntryDetail key={auditEntryKey(value.entry)} entry={value.entry} accessKeyName={value.nameOf(value.entry)} />
+        ? <div className="log-group" data-guide="window.logDetails#audit-entry"><AuditEntryDetail key={auditEntryKey(value.entry)} entry={value.entry} accessKeyName={value.nameOf(value.entry)} /></div>
         : (
-          <div className="phx-log-record" key={value.entry.id}>
+          <div className="phx-log-record" key={value.entry.id} data-guide="window.logDetails#conversation">
             <ConversationHeading entry={value.entry} />
             {value.entry.turns
               ? <ConversationDetail entry={value.entry} accessKeyNames={value.accessKeyNames} />

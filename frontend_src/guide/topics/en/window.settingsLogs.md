@@ -5,7 +5,9 @@ Choose what Phoenix records, how long it keeps it, and when Home Assistant notif
 
 ## {{label:shell.tabAudit}} {#audit-log}
 
-The audit log records every request Phoenix receives, and its outcome.
+The audit log records what agents do through Phoenix and what administrators change, with each outcome.
+
+Related: [What the logs record](guide:topic.logRecords)
 
 ### {{label:settings.logDisableAllLabel}} {#log-disable-all}
 
@@ -19,7 +21,9 @@ Records requests that were carried out. On by default.
 
 ### {{label:settings.logDeniedLabel}} {#log-denied}
 
-Records requests that were refused, malformed, or named something that doesn't exist. On by default. Requests waiting for approval are always recorded.
+Records requests that were refused, malformed, not supported, or named something that doesn't exist. MESA blocks count here too. On by default.
+
+Requests waiting for approval, and your approval decisions, are always recorded.
 
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 
@@ -37,7 +41,7 @@ How many entries the audit log keeps: 100, 1,000, 5,000 or 10,000 (default). Low
 
 ## {{label:conversations.title}} {#conversation-log}
 
-**{{label:conversations.enable}}** keeps a record of Agent Chat and voice conversations, which you can review in the {{label:workspace.logs}} workspace. Off by default. Turning it off keeps what was already recorded.
+**{{label:conversations.enable}}** keeps a record of what agents say and do: Agent Chat and voice conversations, AI Task, and the tool calls of MCP clients, Assist and Home Companion. Review it in the {{label:workspace.logs}} workspace. Off by default. Turning it off keeps what was already recorded.
 
 Three limits control how much is kept. Each one saves a moment after you change it. When the log goes over a limit, the oldest conversations are removed first.
 
@@ -59,11 +63,13 @@ Choose what the logs show about your home and the people using Phoenix.
 
 ### {{label:settings.logEntityIdsLabel}} {#log-entity-ids}
 
-When off, the audit log hides which device or entity a request named, and the Conversation Log leaves out what was said. On by default.
+When off, the audit log's {{label:audit.rowResource}} column shows [redacted], and the Conversation Log leaves out what was said and done. On by default.
+
+The audit log's payload still holds each tool call's arguments, which can name entities. Conversation content already recorded is removed the next time Phoenix starts.
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 
-When off, both logs hide the caller's IP address. On by default.
+When off, both logs hide the caller's IP address. On by default. In the audit log, Agent Chat, voice, Assist and AI Task then show as [redacted] too.
 
 ## {{label:settings.haNotifications}} {#notifications}
 

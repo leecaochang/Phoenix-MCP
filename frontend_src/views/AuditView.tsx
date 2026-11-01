@@ -231,7 +231,7 @@ export function AuditView({ accessKeys }: Props) {
 
   return (
     <div className="view-root phx-log-view">
-      <div className="phx-filters" hidden={!showFilters}>
+      <div className="phx-filters" hidden={!showFilters} data-guide="window.auditLog#filters">
         <div className="filter-row">
           <select
             aria-label={t("audit.filterOutcomeAria")}
@@ -326,6 +326,7 @@ export function AuditView({ accessKeys }: Props) {
       {loading ? (
         <div className="loading-wrap"><div className="spinner" /><span>{t("common.loading")}</span></div>
       ) : !(error && entries.length === 0) && (
+        <div className="log-group" data-guide="window.auditLog#list">
         <ConfigTable
           id="auditLog"
           label={t("shell.tabAudit")}
@@ -338,9 +339,10 @@ export function AuditView({ accessKeys }: Props) {
           rowLabel={(e) => t("audit.openEntryAria", { outcome: outcomeLabel(e), name: displayName(e) })}
           empty={<p className="audit-empty">{t("audit.empty")}</p>}
         />
+        </div>
       )}
       {!loading && entries.length > 0 && (
-        <div className="phx-table-footer">
+        <div className="phx-table-footer" data-guide="window.auditLog#list">
           <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
           {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
           {/* Not while a first page is loading: a later page fetched for the new

@@ -13,7 +13,7 @@ Closing the filters stops them from applying; they come back as they were when y
 
 Each row shows when the change was made, the item, the action, its type, and who made it: the access key, or (admin restore) for a restore from this panel.
 
-You can sort, move, resize and hide columns from the column header's menu. The count under the list includes changes not loaded yet.
+Sort, move and hide columns from the column header's menu, and drag a header's edge to resize one. The count under the list includes changes not loaded yet.
 
 ## {{label:common.loadMore}} {#load-more}
 

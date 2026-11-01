@@ -150,11 +150,11 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const partialSort = entries.length < total && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
 
   return <div className="view-root conversations-view phx-log-view">
-    {!enabled && <p className="banner">{t("conversations.disabledHelp")}</p>}
+    {!enabled && <p className="banner" data-guide="window.conversationLog#recording">{t("conversations.disabledHelp")}</p>}
     {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
-    {confirmBanner}
-    <div className="phx-filters" hidden={!showFilters}>
+    {confirmBanner && <div className="log-group" data-guide="window.conversationLog#clear">{confirmBanner}</div>}
+    <div className="phx-filters" hidden={!showFilters} data-guide="window.conversationLog#filters">
       <div className="filter-row">
         <select className="input input-auto" data-filter="source" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allSources")}</option>
@@ -176,7 +176,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
       </div>
     </div>
-    <div className="conversation-list" aria-busy={loading}>
+    <div className="conversation-list" aria-busy={loading} data-guide="window.conversationLog#list">
       <ConfigTable
         id="conversationLog"
         label={t("conversations.title")}
@@ -190,7 +190,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         empty={!loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
       />
     </div>
-    <div className="phx-table-footer">
+    <div className="phx-table-footer" data-guide="window.conversationLog#list">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
       {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
       {entries.length < total && <ActionButton icon="loadMore" label={t("common.loadMore")} busy={loading} onClick={() => setLimit(n => n + 25)} />}
