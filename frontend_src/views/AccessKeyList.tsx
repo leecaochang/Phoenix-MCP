@@ -50,11 +50,15 @@ const BY_NAME = { column: "name", dir: "asc" } as const;
  */
 export function ArchivedAccessKeysWindow() {
   const [archived, setArchived] = useState<ArchivedAccessKeyRecord[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    api.listArchivedAccessKeys().then((keys) => { if (live) setArchived(keys); }).catch(() => { if (live) setArchived([]); });
+    // A failed read says so, rather than claiming there are no archived keys.
+    api.listArchivedAccessKeys().then((keys) => { if (live) setArchived(keys); })
+      .catch((e: unknown) => { if (live) setFailed(e instanceof Error ? e.message : t("accessKeys.loadFailed")); });
     return () => { live = false; };
   }, []);
+  if (failed) return <ErrorMsg msg={failed} />;
   if (!archived) return <Loading />;
   return (
     <div className="phx-list-view access-keys-archived">

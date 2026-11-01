@@ -19,7 +19,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     diff: { summary: "Create automation 'Front door notify'" },
     status: "pending",
     created_at: "2026-01-01T00:00:00Z",
-    expires_at: "2026-01-01T01:00:00Z",
+    expires_at: "2099-01-01T01:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
     rejected_reason: null,

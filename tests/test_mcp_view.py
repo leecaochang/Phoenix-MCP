@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import hashlib
 import json
 import secrets
@@ -1969,6 +1971,30 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
 
 
 @pytest.mark.asyncio
+async def test_a_full_approval_queue_is_said_plainly_not_an_internal_error():
+    """The 101st pending approval for a key reached the agent as an internal error."""
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.approvals import PendingApprovalCapacityError
+
+    access_key, _ = _make_access_key(cap_automation_write="allow")
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+
+    async def _full(*_a, **_k):
+        raise PendingApprovalCapacityError("full")
+
+    with patch.object(mcp_view, "_call_tool", _full):
+        result, _m, _r, outcome = await _dispatch_mcp(
+            "tools/call", 7, {"name": "create_automation", "arguments": {}},
+            access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+        )
+
+    assert outcome == "denied"
+    text = result["result"]["content"][0]["text"]
+    assert "waiting for approval" in text and "Internal error" not in text
+
+
+@pytest.mark.asyncio
 async def test_authoring_invalid_config_still_gets_the_domain_guidance():
     """The other half: a real vol.Invalid keeps the actionable message."""
     import voluptuous as vol
@@ -2886,6 +2912,9 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         def set_pending_approvals(self, v: list) -> None:
             self._p = v
 
+        def get_settings(self):
+            return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
     access_key = _make_physical_access_key("confirm")
     store = _ApprStore()
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
@@ -3232,6 +3261,27 @@ async def test_stale_advisory_fires_once_per_epoch_and_resets_on_list():
     assert access_key.tools_list_version == access_key.settings_version
     assert access_key.id not in data.stale_tools_advised
     assert not _has_advisory(await _dt_call(access_key, hass, data, 8))
+
+
+@pytest.mark.asyncio
+async def test_a_change_that_keeps_the_tool_list_is_not_advised_as_a_reconnect():
+    """Allow to Confirm keeps the announced tools, as the panel says."""
+    access_key, _ = _make_access_key(cap_restart="allow")
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+    await _dispatch_mcp("tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
+                        base_url="http://homeassistant.local")
+
+    access_key.cap_restart = "confirm"
+    access_key.settings_version += 1
+    text = " ".join(c.get("text", "") for c in await _dt_call(access_key, hass, data, 2))
+    assert "Your tools are the same" in text and "reconnect" not in text
+
+    # Deny takes the tool away: that list is stale, so the reconnect is advised.
+    access_key.cap_restart = "deny"
+    access_key.settings_version += 1
+    text = " ".join(c.get("text", "") for c in await _dt_call(access_key, hass, data, 3))
+    assert "reconnect" in text
 
 
 def _has_catalog_advisory(content) -> bool:
@@ -3728,6 +3778,9 @@ async def test_no_target_reload_pending_under_confirm(hass):
 
         def set_pending_approvals(self, v: list) -> None:
             self._p = v
+
+        def get_settings(self):
+            return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
     called: list = []
 

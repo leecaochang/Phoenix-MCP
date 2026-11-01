@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { AttentionItem } from "../types";
-import { localeDateTime, localeNumber, t } from "../i18n";
+import { localeDateTime, t } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
 import { InlineConfirm } from "../ui/InlineConfirm";
-import { Icon } from "../ui/Icon";
 
 const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
 const HELP = { mesa: "attention.mesaHelp", calendar_storage: "attention.calendar_storageHelp" };
@@ -102,7 +101,7 @@ export function AttentionList({ state, onShowRequest }: {
           <div className="log-group" data-guide="window.attention#review">
           <InlineConfirm label={t("attention.continue")} acknowledge={t("attention.checked")}
             confirmLabel={t("attention.continue")} cancelLabel={t("common.cancel")}
-            busy={busy === key} onConfirm={() => { void review(item); setConfirming(null); }} onCancel={() => setConfirming(null)}>
+            busy={busy === key} onConfirm={() => { void review(item).finally(() => setConfirming(null)); }} onCancel={() => setConfirming(null)}>
             <p>{t("attention.noReplay")}</p>
           </InlineConfirm>
           </div>
@@ -122,39 +121,4 @@ export function AttentionList({ state, onShowRequest }: {
       </article>;
     })}
   </div>;
-}
-
-/** Quiet, persistent review of uncertain actions, without dispatching them again. */
-export function AttentionPanel({ onShowRequest }: { onShowRequest?: (requestId: string) => void } = {}) {
-  const state = useAttention();
-  const { items, error, load } = state;
-  const [open, setOpen] = useState(() => window.location.hash === "#attention");
-  const section = useRef<HTMLElement>(null);
-  const bodyId = useId();
-
-  useEffect(() => {
-    const show = () => {
-      if (window.location.hash !== "#attention") return;
-      setOpen(true);
-      void load();
-      section.current?.scrollIntoView?.({ block: "nearest" });
-    };
-    window.addEventListener("hashchange", show);
-    window.addEventListener("location-changed", show);
-    return () => {
-      window.removeEventListener("hashchange", show);
-      window.removeEventListener("location-changed", show);
-    };
-  }, [load]);
-
-  if (!items.length && !error && !open) return null;
-  return <section className="phx-attention" ref={section} aria-label={t("attention.title")}>
-    <button className="phx-attention-toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
-      <span>{t("attention.title")}{items.length > 0 && <span className="phx-attention-count">{localeNumber(items.length)}</span>}</span>
-      <Icon name="expand" size={16} className="phx-attention-chevron" />
-    </button>
-    <div className="phx-attention-body" id={bodyId} hidden={!open}>
-      <AttentionList state={state} onShowRequest={onShowRequest} />
-    </div>
-  </section>;
 }

@@ -915,7 +915,8 @@ export function AgentCliWindow({
     patchDurable({ freshConversation: false }, persistenceOwner);
     setSessionUsage({ input: 0, output: 0, context: 0, noData: false }, persistenceOwner);
   }, [persistenceOwner, saved.freshConversation]);
-  // The transcript is session-only (survives remount within a page load).
+  // The transcript is kept in this browser's storage for the Home Assistant user
+  // (utils/agentcli_state), so it survives a remount and a reload.
   useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [persistenceOwner, turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect
   // rather than at each setInput call site so every path stays in sync: typing,
@@ -1418,7 +1419,13 @@ export function AgentCliWindow({
         // Home Assistant going away is not the model provider failing, and the window
         // already says so above the composer: no red line is added, and what was typed
         // comes back so it can be sent again (user, 2026-10-29).
-        if (homeAssistantReachable()) {
+        // A server answer carries its HTTP status; a network failure does not.
+        if (err instanceof Error && typeof (err as { status?: unknown }).status === "number") {
+          // Phoenix answered and refused before any reply streamed (the kill switch, a key or
+          // account no longer usable, an attachment over its limit): its own message says why,
+          // so it is shown as is, never replaced by the provider-unavailable text.
+          push({ kind: "error", code: "", message: err.message });
+        } else if (homeAssistantReachable()) {
           push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
         } else if (lastQueryRef.current) {
           setInput((current) => current || lastQueryRef.current);
@@ -1964,7 +1971,8 @@ export function AgentCliWindow({
           tech reliably picks up updates (live regions must pre-exist). */}
       <div className="sr-only" role="status">{announcement}</div>
       {collapsed && narrowViewport ? (
-        <button type="button" className="agentcli-mobile-pill" onClick={restore}
+        // On a phone Chat comes back full screen, as when the toolbar opens it.
+        <button type="button" className="agentcli-mobile-pill" onClick={() => (isNarrowViewport() ? setMode("max") : restore())}
                 title={t("agentchat.restore")} aria-label={t("agentchat.restore")}>
           <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />
         </button>
@@ -2170,7 +2178,13 @@ export function AgentCliWindow({
               disabled={noInstances || away}
               rows={2}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+              // Enter that ends an input method's composition (Chinese, Japanese, Korean) picks the
+              // characters; it does not send. Safari reports that as key code 229.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                e.preventDefault();
+                void send();
+              }}
               onPaste={(e) => {
                 const files = imageFiles(e.clipboardData);
                 if (files.length) { e.preventDefault(); void addFiles(files); }

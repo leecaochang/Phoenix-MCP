@@ -23,4 +23,4 @@ Hides one group of findings in this browser. It comes back when a new finding jo
 
 ## When findings update {#refresh}
 
-MESA checks again when Home Assistant starts and when automations reload. An import also updates orphaned profiles. Saving or deleting a profile doesn't, so a finding you've fixed can stay listed until the next check.
+MESA checks again when Home Assistant starts, when automations reload, and when you save, delete or import a profile here, so a finding you've fixed goes away. **{{label:mesa.rescan}}** checks again straight away.

@@ -218,6 +218,46 @@ describe("batch approve", () => {
     expect(await findByText("1 left pending.")).toBeTruthy();
   });
 
+  it("names a failed run's reason in words, not its slug", async () => {
+    // An executor that reported an error finalizes the record as execution_failed
+    // with no message, which the banner once showed raw.
+    vi.mocked(api.batchApproveApprovals).mockResolvedValue({
+      applied: [],
+      failed: { approval_id: "a", tool_name: "edit_automation", status: 200, error: "execution_failed" },
+      remaining: ["b"],
+    });
+    const { getByRole, findByText, queryByText } = await renderPending([record("a"), record("b")]);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(getByRole("checkbox", { name: "Select all" }));
+    fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
+    expect(await findByText(/Execution failed/)).toBeTruthy();
+    expect(queryByText(/execution_failed/)).toBeNull();
+  });
+
+  it("select-all stops at the server's batch limit of 50", async () => {
+    const many = Array.from({ length: 55 }, (_, i) => record(`r${i}`));
+    const { getByRole, findByRole } = await renderPending(many);
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    fireEvent.click(getByRole("checkbox", { name: "Select all" }));
+    expect(await findByRole("button", { name: "Approve 50 Selected" })).toBeTruthy();
+    // The rest cannot be ticked one by one either, until one is unticked.
+    expect(pickBoxes()[54].disabled).toBe(true);
+    fireEvent.click(pickBoxes()[0]);
+    expect(pickBoxes()[54].disabled).toBe(false);
+  });
+
+  it("offers neither Approve nor a tick box for a request past its expiry", async () => {
+    const { getByRole } = await renderPending([
+      record("a", { expires_at: "2020-01-01T00:00:00Z" }), record("b"), record("c"),
+    ]);
+    fireEvent.click(listRows()[0]);
+    expect(within(reviewWindow()).queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(within(reviewWindow()).getByRole("button", { name: "Reject" })).toBeTruthy();
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    expect(pickBoxes()[0].disabled).toBe(true);
+    expect(pickBoxes()[1].disabled).toBe(false);
+  });
+
   it("keeps only the untouched remainder ticked after a stop", async () => {
     vi.mocked(api.batchApproveApprovals).mockResolvedValue({
       applied: [{ approval_id: "a", tool_name: "edit_automation" }],

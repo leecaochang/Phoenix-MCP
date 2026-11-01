@@ -23,7 +23,7 @@ async function auditLog(entries: AuditEntry[]) {
       <AuditView accessKeys={[{ id: "tok-1", name: "demo" } as never]} /><LogDetailsContent />
     </LogSelectionContext.Provider>,
   );
-  await screen.findAllByRole("row", { name: /Open audit entry/ });
+  await screen.findAllByRole("row", { name: /Audit entry:/ });
   const details = () => view.container.querySelector<HTMLElement>(".phx-log-details");
   return { ...view, details };
 }
@@ -40,6 +40,8 @@ describe("accessibility regressions", () => {
 
     expect(screen.getByRole("group", { name: "Permission for light.kitchen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Read and write, selected/ })).toHaveAttribute("aria-pressed", "true");
+    // Each button names the entity, not just its own letter.
+    expect(screen.getByRole("button", { name: /^Permission for light\.kitchen: Read and write/ })).toBeInTheDocument();
   });
 
   it("connects the tag combobox to its active suggestion", () => {
@@ -75,7 +77,7 @@ describe("accessibility regressions", () => {
     };
 
     const log = await auditLog([entry]);
-    fireEvent.click(screen.getByRole("row", { name: /Open audit entry Allowed for demo/ }));
+    fireEvent.click(screen.getByRole("row", { name: /Audit entry: Allowed, demo/ }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(within(log.details()!).getByText("Audit Entry")).toBeInTheDocument();
@@ -96,7 +98,7 @@ describe("accessibility regressions", () => {
     };
     const newer: AuditEntry = { ...older, request_id: "req-newer", timestamp: "2026-06-30T00:00:00Z", resource: "/api/newer" };
     const log = await auditLog([newer, older]);
-    const rows = screen.getAllByRole("row", { name: /Open audit entry Allowed for demo/ });
+    const rows = screen.getAllByRole("row", { name: /Audit entry: Allowed, demo/ });
     fireEvent.click(rows[0]);
     expect(log.details()).toHaveTextContent("/api/newer");
 
@@ -128,7 +130,7 @@ describe("accessibility regressions", () => {
     };
     const log = await auditLog([executed, approved]);
 
-    const rows = screen.getAllByRole("row", { name: /Open audit entry Allowed for admin/ });
+    const rows = screen.getAllByRole("row", { name: /Audit entry: Allowed, admin/ });
     expect(rows).toHaveLength(2);
     fireEvent.click(rows[0]);
     expect(log.details()).toHaveTextContent("approval/executed");
@@ -156,7 +158,7 @@ describe("accessibility regressions", () => {
 
     await auditLog([entry]);
 
-    const row = screen.getByRole("row", { name: /Open audit entry/ });
+    const row = screen.getByRole("row", { name: /Audit entry:/ });
     expect(row).toHaveAttribute("tabindex", "0");
     expect(row.querySelectorAll("button, a, input, [tabindex]")).toHaveLength(0);
   });

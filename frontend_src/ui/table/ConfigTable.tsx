@@ -86,7 +86,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, rowLabel, rowClass, empty, selection, detail, fitColumns = true }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, onOrder, rowLabel, rowClass, empty, selection, detail, fitColumns = true }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -99,6 +99,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   selectedKey?: string | null;
   /** Choosing a row; receives the rows in their shown order, for stepping through them. */
   onSelect?: (row: Row, ordered: Row[]) => void;
+  /** The rows in their shown order, each time it changes (new rows, a new sort). */
+  onOrder?: (ordered: Row[]) => void;
   rowLabel?: (row: Row) => string;
   rowClass?: (row: Row) => string;
   /** Shown under the headers when there are no rows. */
@@ -147,6 +149,9 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
       })
       .map((x) => x.row);
   }, [rows, sort, byId]);
+  const onOrderRef = useRef(onOrder);
+  onOrderRef.current = onOrder;
+  useEffect(() => { onOrderRef.current?.(sorted); }, [sorted]);
 
   const update = (patch: Partial<TableSettings>) => saveSettings(clean({ ...settings, ...patch }));
   const focusHeader = (cid: string) => requestAnimationFrame(() => head.current?.querySelector<HTMLElement>(`th[data-column="${cid}"] .phx-th-label`)?.focus());

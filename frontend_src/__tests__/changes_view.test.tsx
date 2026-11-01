@@ -145,7 +145,7 @@ describe("the Changes list", () => {
     await waitFor(() => expect(api.listVersions).toHaveBeenCalledTimes(2));
     // The newer, event-driven reload answers first with nothing: its answer stands, and loading ends.
     background.resolve(page([]));
-    expect(await view.findByText(/No agent configuration changes yet/)).toBeTruthy();
+    expect(await view.findByText(/No configuration changes yet/)).toBeTruthy();
     foreground.resolve(page([version({ id: "v9", alias: "Stale foreground" })]));
     await new Promise((r) => setTimeout(r, 20));
     expect(view.queryByText("Stale foreground")).toBeNull();
@@ -166,6 +166,16 @@ describe("Comparison and Restore", () => {
     await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeNull());
     expect(within(comparisonWindow()).getByText("Select a change to compare.")).toBeVisible();
     expect(within(historyWindow()).getByText("Select a change to see the item's other recorded changes.")).toBeVisible();
+  });
+
+  it("typing a search empties Comparison as the other filters do", async () => {
+    const edit = version({ action: "edit", has_before: true });
+    vi.mocked(api.listVersions).mockResolvedValue(page([edit]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(edit));
+    const view = renderChanges();
+    await choose("My automation");
+    fireEvent.change(view.getByLabelText("Search loaded changes..."), { target: { value: "automation" } });
+    await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeNull());
   });
 
   it("choosing a change shows it in Comparison and keeps focus in the list", async () => {
@@ -190,9 +200,9 @@ describe("Comparison and Restore", () => {
     const [before, after] = openRestore();
     // A creation has no Before; the latest change's After is the item's current state.
     expect(before).toHaveAttribute("aria-disabled", "true");
-    expect(before).toHaveAttribute("title", "There is no saved state from before this item was created.");
+    expect(before).toHaveAccessibleDescription("There is no saved Before state for this change, for example because it created the item.");
     expect(after).toHaveAttribute("aria-disabled", "true");
-    expect(after).toHaveAttribute("title", "This is already the item's current state.");
+    expect(after).toHaveAccessibleDescription("This is the newest recorded change for this item, so its After state is current unless the item was changed outside Phoenix MCP.");
   });
 
   it("refuses a side whose snapshot was too large to store", async () => {
@@ -203,7 +213,7 @@ describe("Comparison and Restore", () => {
     renderChanges();
     await choose("motion.yaml");
     const [before, after] = openRestore();
-    expect(before).toHaveAttribute("title", "This snapshot was too large to store, so it cannot be restored.");
+    expect(before).toHaveAccessibleDescription("This snapshot was too large to store, so it cannot be restored.");
     expect(after).not.toHaveAttribute("aria-disabled", "true");
   });
 
@@ -224,12 +234,55 @@ describe("Comparison and Restore", () => {
     fireEvent.click(openRestore()[0]);
     const confirm = within(comparisonWindow()).getByRole("group", { name: "Restore" });
     expect(confirm.textContent).toMatch(/Restore My automation to its Before state from .+\?/);
-    expect(confirm.textContent).toContain("including any later edits");
+    expect(confirm.textContent).toContain("later edits to the same settings are lost");
     fireEvent.click(within(confirm).getByRole("button", { name: "Confirm Restore" }));
-    await waitFor(() => expect(api.restoreVersion).toHaveBeenCalledWith("v1", "before"));
+    // The newest change seen goes too, so the server refuses if another lands first.
+    await waitFor(() => expect(api.restoreVersion).toHaveBeenCalledWith("v1", "before", "v1"));
     await waitFor(() => expect(api.getVersion).toHaveBeenCalledWith("v2"));
     expect(center.history[0].text).toMatch(/^Restored My automation to its Before state from /);
     expect(within(comparisonWindow()).queryByRole("group", { name: "Restore" })).toBeNull();
+    // The restore's own change joins the order, so Next steps back to the change restored.
+    await waitFor(() => expect(within(comparisonWindow()).getByRole("button", { name: "Next Record" })).toBeEnabled());
+  });
+
+  it("names the reason the server gives for a side it would refuse", async () => {
+    const edit = version({ action: "edit", has_before: true, resource_type: "entity", resource_id: "light.gone" });
+    const newer = version({ id: "v2", action: "edit", resource_type: "entity", resource_id: "light.gone" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([edit])).mockResolvedValue(page([newer, edit]));
+    vi.mocked(api.getVersion).mockResolvedValue({ ...record(edit), restore_refusals: { before: "entity_missing", after: null } });
+    renderChanges();
+    await choose("My automation");
+    const [before, after] = openRestore();
+    expect(before).toHaveAttribute("aria-disabled", "true");
+    // Shown in the menu itself, not only on hover.
+    expect(before.textContent).toContain("This entity is no longer in Home Assistant, so its settings can't be restored.");
+    expect(after).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("treats the server's stale refusal like the panel's own check", async () => {
+    const center = new Notifications();
+    const original = version({ action: "edit", has_before: true });
+    vi.mocked(api.listVersions).mockResolvedValue(page([original]));
+    vi.mocked(api.getVersion).mockResolvedValue(record(original));
+    vi.mocked(api.restoreVersion).mockRejectedValue(Object.assign(new Error("changed"), { status: 409, code: "stale_version" }));
+    renderChanges({ center });
+    await choose("My automation");
+    fireEvent.click(openRestore()[0]);
+    fireEvent.click(within(comparisonWindow()).getByRole("button", { name: "Confirm Restore" }));
+    await waitFor(() => expect(center.history[0]?.text).toBe("My automation has changed since you chose to restore it. Review the comparison and try again."));
+    expect(within(comparisonWindow()).queryByText("changed")).toBeNull();
+  });
+
+  it("drops a change the server no longer keeps from the list", async () => {
+    const gone = version({ action: "edit", has_before: true });
+    const kept = version({ id: "v2", action: "edit", alias: "Other automation", resource_id: "aid2" });
+    vi.mocked(api.listVersions).mockResolvedValue(page([gone, kept]));
+    vi.mocked(api.getVersion).mockRejectedValue(Object.assign(new Error("Version not found."), { status: 404, code: "not_found" }));
+    renderChanges();
+    fireEvent.click(await within(listWindow()).findByText("My automation"));
+    expect(await within(comparisonWindow()).findByText("This change is no longer kept. Each item keeps its newest 20 changes.")).toBeTruthy();
+    await waitFor(() => expect(within(listWindow()).queryByText("My automation")).toBeNull());
+    expect(within(listWindow()).getByText("Other automation")).toBeTruthy();
   });
 
   it("refuses a restore when the item changed after Restore was chosen", async () => {
@@ -315,7 +368,7 @@ describe("Comparison of device YAML", () => {
     const reason = "Phoenix does not write configuration files back, so this version is history only. Copy its content and apply it by hand.";
     for (const side of openRestore()) {
       expect(side).toHaveAttribute("aria-disabled", "true");
-      expect(side).toHaveAttribute("title", reason);
+      expect(side).toHaveAccessibleDescription(reason);
     }
   });
 

@@ -81,7 +81,10 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       setEntries(unique); setTotal(result.total); setEnabled(result.enabled); setAvailable(result.available); setError("");
       // The conversation shown in Log Details follows its newer copy.
       selectionRef.current?.follow(unique);
-    } catch { if (own === generation.current) setError(t("conversations.loadFailed")); }
+    } catch {
+      // A failed background update keeps what is shown, as in the Audit Log; the next one or Refresh retries.
+      if (own === generation.current && !quiet) setError(t("conversations.loadFailed"));
+    }
     finally { if (own === generation.current) setLoading(false); }
   }, [limit, debouncedSearch, source, outcome, days, filtersApply]);
   const windowVisible = useWindowVisible();
@@ -114,7 +117,8 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } }] : []),
       ...logSettings,
       // Neutral until it asks to confirm, like the other destructive buttons (user, 2026-10-28).
-      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", disabled: clearing || !entries.length, onSelect: () => setConfirmClear(true) },
+      // An empty filtered list says nothing about the rest of the history, which Clear removes too.
+      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", disabled: clearing || (!entries.length && !activeFilters), onSelect: () => setConfirmClear(true) },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
@@ -185,6 +189,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         rowKey={(e) => e.id}
         defaultSort={SERVER_SORT}
         selectedKey={logSelection?.selectedKey("conversation")}
+        onOrder={(ordered) => logSelection?.reorder("conversation", ordered)}
         onSelect={(entry, ordered) => logSelection?.set({ kind: "conversation", entry, ordered, accessKeyNames })}
         rowLabel={(e) => `${conversationTitle(e)}, ${label("outcome", rowStatus(e))}`}
         empty={!loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}

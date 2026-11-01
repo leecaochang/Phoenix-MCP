@@ -3136,6 +3136,36 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
 
 
 @pytest.mark.asyncio
+async def test_run_agent_turn_names_the_kill_switch_when_it_stops_a_turn(hass):
+    """The kill switch is not the key's fault, so the chat says which stopped it."""
+    provider = _ScriptedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}}, _done("tool_use")],
+    ])
+    data = _loop_data()
+    data.store.get_settings.return_value = GlobalSettings(kill_switch=True)
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    access_key = MagicMock()
+    access_key.id = "tid"
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_access_key", return_value=None):
+        msgs = await async_run_agent_turn(
+            hass=hass, data=data, access_key=access_key, provider=provider,
+            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    batch = next(m for m in msgs if m.get("tool_results"))
+    assert "kill switch" in batch["tool_results"][0]["result_text"]
+    codes = [p.get("code") for n, p in events if n == "error"]
+    assert codes == ["kill_switch"]
+
+
+@pytest.mark.asyncio
 async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
     # An admin rejects from the Approvals panel WITH a reason; the agent loop must
     # feed that reason back as the tool result so the model can report it.

@@ -40,7 +40,9 @@ from custom_components.phoenix_mcp.approvals import (
     async_update_approval_status,
 )
 from custom_components.phoenix_mcp.approvals import create_approval_notification
-from custom_components.phoenix_mcp.const import DOMAIN, MAX_PENDING_APPROVALS_PER_ACCESS_KEY
+from custom_components.phoenix_mcp.const import (
+    CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, DOMAIN, MAX_PENDING_APPROVALS_PER_ACCESS_KEY,
+)
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
@@ -651,6 +653,19 @@ class TestNotificationGating:
             m.assert_called_once()
             assert "/phoenix-mcp/approvals/appr_x" in m.call_args.kwargs["message"]
 
+    def test_configuration_recovery_is_named_not_an_access_key(self, hass):
+        """Recovery approvals belong to no access key, so the text names the recovery."""
+        hass.data[DOMAIN] = self._data(notify=True)
+        approval = self._approval()
+        approval.access_key_id = CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
+        approval.access_key_name = "Phoenix MCP"
+        with patch("homeassistant.components.persistent_notification.async_create") as m:
+            create_approval_notification(hass, approval)
+        message = m.call_args.kwargs["message"]
+        assert message.startswith("Configuration recovery needs review")
+        assert "Access key" not in message
+        assert "/phoenix-mcp/approvals/appr_x" in message
+
 
 @pytest.mark.parametrize("notify", [False, True])
 async def test_requested_event_has_bound_review_link_without_configuration(hass, store, notify):
@@ -979,6 +994,52 @@ async def test_terminal_retention_bounds_history_but_preserves_uncertain_and_pen
     store.async_save.reset_mock()
     await async_prune_terminal_approvals(store, skip_ids={"claimed"})
     store.async_save.assert_not_awaited()
+
+
+async def test_interrupted_approvals_stay_but_drop_their_payload_after_the_history_window(store):
+    """An interrupted approval is kept as the record of an outcome nobody saw.
+
+    Its raw arguments were kept for good; now they
+    go once the history window passes, as the operator has had that long to check.
+    """
+    from custom_components.phoenix_mcp.approvals import async_prune_terminal_approvals
+    from custom_components.phoenix_mcp.const import APPROVAL_HISTORY_DAYS
+    now = utcnow()
+    payload = {"args": {"code": "private"}, "diff": {"before": "private"}, "result": "private"}
+    recent = {"id": "recent", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED,
+              "resolved_at": (now - timedelta(days=APPROVAL_HISTORY_DAYS - 1)).isoformat(), **payload}
+    old = {"id": "old", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED,
+           "resolved_at": (now - timedelta(days=APPROVAL_HISTORY_DAYS + 1)).isoformat(), **payload}
+    store.set_pending_approvals([recent, old])
+    await async_prune_terminal_approvals(store)
+    kept = {row["id"]: row for row in store.get_pending_approvals()}
+    assert kept["recent"] == recent
+    assert kept["old"]["status"] == STATUS_FAILED and kept["old"]["rejected_reason"] == REASON_EXECUTION_INTERRUPTED
+    assert kept["old"]["args"] == {} and kept["old"]["diff"] == {} and kept["old"]["result"] is None
+
+
+async def test_device_codes_are_hidden_from_review_but_kept_for_the_executor(store):
+    """A disarm code is a credential: the admin view and the stored diff hide it (2026-11-01).
+
+    The executor re-runs the saved args, so they keep the code; only what an
+    administrator sees, and the review diff on disk, lose it.
+    """
+    from custom_components.phoenix_mcp.approvals import async_create_pending_approval
+    args = {"domain": "alarm_control_panel", "service": "alarm_disarm",
+            "entity_id": "alarm_control_panel.home", "service_data": {"code": "4321"}}
+    diff = {"domain": "alarm_control_panel", "service": "alarm_disarm", "service_data": {"code": "4321"},
+            "requested_entity_ids": ["alarm_control_panel.home"]}
+    async with store.async_lock:
+        record = await async_create_pending_approval(
+            store, access_key_id="t1", access_key_name="alice", tool_name="call_service",
+            cap_name="cap_physical_control", args=args, diff=diff, request_id="rid-code",
+        )
+    public = record.to_dict()
+    assert public["args"]["service_data"]["code"] == "<redacted>"
+    assert public["diff"]["service_data"]["code"] == "<redacted>"
+    assert public["args"]["entity_id"] == "alarm_control_panel.home"
+    assert record.to_dict(redact_args=False)["args"]["service_data"]["code"] == "4321"
+    assert "4321" not in str(store.get_pending_approvals()[-1].get("diff"))
 
 
 async def test_failed_retention_persistence_restores_original_payloads(store):

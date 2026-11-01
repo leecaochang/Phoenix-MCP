@@ -311,7 +311,7 @@ describe("AgentCliWindow latest-message scrolling", () => {
     await waitFor(() => expect(inAppBody.scrollTop).toBe(scrollHeight));
 
     inAppBody.scrollTop = 0;
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     const popupUi = within(popup.document.body);
     const popupBody = popupUi.getByRole("dialog", { name: "Agent Chat" })
       .querySelector<HTMLElement>(".agentcli-body");
@@ -319,7 +319,7 @@ describe("AgentCliWindow latest-message scrolling", () => {
     await waitFor(() => expect(popupBody.scrollTop).toBe(scrollHeight));
 
     popupBody.scrollTop = 0;
-    fireEvent.click(popupUi.getByRole("button", { name: "Pop back into Home Assistant" }));
+    fireEvent.click(popupUi.getByRole("button", { name: "Pop Back into Home Assistant" }));
     const restoredBody = await waitFor(() => {
       const body = screen.getByRole("dialog", { name: "Agent Chat" })
         .querySelector<HTMLElement>(".agentcli-body");
@@ -659,7 +659,7 @@ describe("AgentCliWindow pop-out", () => {
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLSelectElement).value)
       .toBe("claude-opus-4-8"));
     expect(screen.getByRole("dialog", { name: "Agent Chat" })).toHaveClass("agentcli-maximized");
-    expect(screen.queryByRole("button", { name: "Pop out to a separate window" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pop Out to a Separate Window" })).toBeNull();
     expect(screen.getByRole("button", { name: "Options" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Minimize" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Close" })).toBeVisible();
@@ -716,7 +716,7 @@ describe("AgentCliWindow pop-out", () => {
                       hass={{ enableShortcuts: true, language: "zh-Hans" }} />,
     );
 
-    const popOutButton = screen.getByRole("button", { name: "Pop out to a separate window" });
+    const popOutButton = screen.getByRole("button", { name: "Pop Out to a Separate Window" });
     const popOutIcon = popOutButton.querySelector("svg");
     expect(popOutIcon).toHaveClass("lucide-square-arrow-out-up-right");
     expect(popOutIcon).toHaveAttribute("aria-hidden", "true");
@@ -736,7 +736,7 @@ describe("AgentCliWindow pop-out", () => {
       "content", "width=device-width, initial-scale=1",
     );
     expect(popupUi.getByRole("dialog", { name: "Agent Chat" })).toHaveClass("agentcli-popped-out");
-    const popInButton = popupUi.getByRole("button", { name: "Pop back into Home Assistant" });
+    const popInButton = popupUi.getByRole("button", { name: "Pop Back into Home Assistant" });
     expect(popInButton).toBeVisible();
     expect(popInButton.querySelector("svg")).toHaveClass("lucide-square-arrow-down-left");
     expect(popInButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
@@ -770,7 +770,7 @@ describe("AgentCliWindow pop-out", () => {
       <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
                       initialAccessKeyId="t1" onClose={onClose} hass={{ enableShortcuts: true }} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
 
     const PopupKeyboardEvent = (popup as Window & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
     popup.dispatchEvent(new PopupKeyboardEvent("keydown", {
@@ -790,7 +790,7 @@ describe("AgentCliWindow pop-out", () => {
                       initialAccessKeyId="t1" onClose={onClose}
                       getHass={() => ({ enableShortcuts: shortcutsEnabled })} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
 
     const PopupKeyboardEvent = (popup as Window & { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent;
     const pressShortcut = () => popup.dispatchEvent(new PopupKeyboardEvent("keydown", {
@@ -824,10 +824,10 @@ describe("AgentCliWindow pop-out", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(requestSignal).toBeDefined());
 
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     expect(requestSignal?.aborted).toBe(false);
     fireEvent.click(within(popup.document.body).getByRole("button", {
-      name: "Pop back into Home Assistant",
+      name: "Pop Back into Home Assistant",
     }));
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Agent Chat" })).toBeVisible());
     expect(requestSignal?.aborted).toBe(false);
@@ -843,7 +843,7 @@ describe("AgentCliWindow pop-out", () => {
                       initialAccessKeyId="t1" onClose={() => {}} hass={{ enableShortcuts: true }} />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Your browser blocked the pop-out. Allow pop-ups for Home Assistant, then try again.",
     );
@@ -877,7 +877,7 @@ describe("AgentCliWindow pop-out", () => {
     await waitFor(() => expect(agentCliChat).toHaveBeenCalledOnce());
     const signal = agentCliChat.mock.calls[0][2] as AbortSignal;
     act(() => emit("approval_required", { approval_id: "ap-refresh", tool_name: "create_helper" }));
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     const popupUi = within(popup.document.body);
     expect(popupUi.getByRole("button", { name: "Approve" })).toBeVisible();
 
@@ -932,7 +932,7 @@ describe("AgentCliWindow pop-out", () => {
       <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(false);
@@ -1115,6 +1115,31 @@ describe("AgentCliWindow streaming", () => {
     expect(JSON.stringify(agentCliChat.mock.calls[1][0].messages)).not.toContain("old-format");
   });
 
+  it("does not send on the Enter that finishes an input method's composition", async () => {
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      initialAccessKeyId={ACCESS_KEYS[0].id} onClose={() => {}} />);
+    const textarea = await screen.findByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "你好" } });
+    fireEvent.keyDown(textarea, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(textarea, { key: "Enter", keyCode: 229 });
+    expect(agentCliChat).not.toHaveBeenCalled();
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows Phoenix's own refusal when it refuses before any reply, not a provider error", async () => {
+    agentCliChat.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("The kill switch is on. Agent Chat is unavailable."), { status: 503, code: "kill_switch" });
+    });
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      initialAccessKeyId={ACCESS_KEYS[0].id} onClose={() => {}} />);
+    const textarea = await screen.findByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(await screen.findByText("The kill switch is on. Agent Chat is unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText("The provider is temporarily unavailable.")).toBeNull();
+  });
+
   it.each(["account removed", "history cleared"])("drops a paused turn's Continue when the %s", async (how) => {
     const two: AgentCliInstance[] = [INSTANCES[0], { id: "i-other", kind: "chatgpt", name: "Other", model: "gpt" }];
     agentCliChat.mockImplementationOnce(async (_body, onEvent: (n: string, p: unknown) => void) => {
@@ -1128,7 +1153,7 @@ describe("AgentCliWindow streaming", () => {
     const textarea = screen.getByLabelText("Message Agent Chat");
     fireEvent.change(textarea, { target: { value: "look into it" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
-    expect(await screen.findByText("Paused after 10 steps. Continue investigating?")).toBeInTheDocument();
+    expect(await screen.findByText("Paused after 10 steps. Continue?")).toBeInTheDocument();
 
     if (how === "account removed") {
       view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} scrollbackLines={500}
@@ -1137,7 +1162,7 @@ describe("AgentCliWindow streaming", () => {
       fireEvent.change(textarea, { target: { value: "/clear" } });
       fireEvent.keyDown(textarea, { key: "Enter" });
     }
-    await waitFor(() => expect(screen.queryByText("Paused after 10 steps. Continue investigating?")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Paused after 10 steps. Continue?")).toBeNull());
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
   });
 
@@ -1307,7 +1332,7 @@ describe("AgentCliWindow streaming", () => {
     // The same label also reaches the live region (the announcement resolves the
     // status through the catalog), so scope this to the card.
     const statuses = Array.from(document.querySelectorAll(".agentcli-approval-status"));
-    expect(statuses.map((n) => n.textContent).join(" ")).toContain("approved, but execution failed");
+    expect(statuses.map((n) => n.textContent).join(" ")).toContain("Approved, but execution failed");
     expect(screen.getByText(/changed since you last read it/)).toBeInTheDocument();
     expect(screen.getByText("Chat ended.")).toBeInTheDocument();
   });
@@ -1332,7 +1357,7 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.change(textarea, { target: { value: "retry" } });
     fireEvent.keyDown(textarea, { key: "Enter" });
 
-    const localized = "The provider did not answer after retrying for about 12s. raw upstream detail";
+    const localized = "The provider did not answer after retrying for about 12 s. raw upstream detail";
     expect(await screen.findByText(localized)).toBeInTheDocument();
     const announcer = document.querySelector(".agentcli-window .sr-only[role='status']");
     expect(announcer?.textContent).toBe(`Error: ${localized}`);
@@ -1406,12 +1431,12 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     const expected =
-      "The provider's rate limit remained exceeded after retrying for about 12s. " +
+      "The provider's rate limit remained exceeded after retrying for about 12 s. " +
       "Provider detail: Rate limit exceeded\n" +
       "Tokens this minute: 0 remaining of 50,000.\n" +
       "Tokens this month: 3,991,234 remaining of 4,000,000.\n" +
       "Requests this second: 0 remaining of 1.\n" +
-      "Provider retry-after: 48s.";
+      "Provider retry-after: 48 s.";
     await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(expected));
     expect(screen.queryByText(/must never render/)).not.toBeInTheDocument();
   });
@@ -1884,6 +1909,20 @@ describe("AgentCliWindow streaming", () => {
     }
   });
 
+  it("comes back full screen when its phone icon is tapped", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Agent Chat" });
+    expect(dialog).toHaveClass("agentcli-maximized");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Minimize" }));
+    expect(dialog).toHaveClass("agentcli-minimized");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+    expect(dialog).toHaveClass("agentcli-maximized");
+  });
+
   it("redirects swipes from fixed controls into the transcript", async () => {
     render(
       <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
@@ -2154,7 +2193,7 @@ describe("AgentCliWindow header and connection", () => {
     expect(items.slice(0, 4).map((i) => [i.getAttribute("role"), i.getAttribute("aria-checked")])).toEqual([
       ["menuitemcheckbox", "false"], ["menuitemcheckbox", "false"], ["menuitemcheckbox", "false"], ["menuitemcheckbox", String(getDurable().showFooter)],
     ]);
-    expect(items[1]).toHaveAttribute("title", "Show the agent's tool calls, tool results, and thinking. Off shows only the final answer.");
+    expect(items[1]).toHaveAttribute("title", "Show the agent's tool calls, tool results, and thinking. Replies, images, progress, approvals, and notices show either way.");
     const before = getDurable().textSizePt;
     fireEvent.click(within(menu).getByText("Increase Text Size"));
     expect(screen.queryByRole("menu")).toBeNull();
@@ -2423,7 +2462,7 @@ describe("AgentCliWindow held-tool progress", () => {
     await waitFor(() =>
       expect(screen.getByText("Compiling rf-blaster2: 40%")).toBeInTheDocument());
     // The tool call itself stays hidden; only the progress line surfaces.
-    expect(screen.queryByText(/calling/)).toBeNull();
+    expect(screen.queryByText(/Calling/)).toBeNull();
   });
 
   it("replaces the line in place instead of stacking one per tick", async () => {
@@ -2487,7 +2526,7 @@ describe("AgentCliWindow generic activity line", () => {
     await running([["tool_call", { id: "tc1", name: "get_states", arguments: {} }]]);
 
     await waitFor(() => expect(screen.getByText("Working: get_states")).toBeInTheDocument());
-    expect(screen.queryByText(/calling/)).toBeNull();
+    expect(screen.queryByText(/Calling/)).toBeNull();
   });
 
   it("moves to the newest call instead of stacking one line per tool", async () => {
@@ -2547,7 +2586,7 @@ describe("AgentCliWindow generic activity line", () => {
     pickChatMenu("Show Verbose Output");
 
     await waitFor(() => expect(screen.queryByText("Working: get_states")).toBeNull());
-    expect(screen.getByText(/calling/)).toBeInTheDocument();
+    expect(screen.getByText(/Calling/)).toBeInTheDocument();
   });
 });
 
@@ -2692,7 +2731,7 @@ describe("Agent Chat docked in My Workspace", () => {
     const inSlot = within(win);
     // The workspace window's title bar moves, folds, maximizes and closes it.
     for (const name of ["Close", "Minimize", "Maximize"]) expect(inSlot.queryByRole("button", { name })).toBeNull();
-    expect(inSlot.getByRole("button", { name: "Pop out to a separate window" })).toBeInTheDocument();
+    expect(inSlot.getByRole("button", { name: "Pop Out to a Separate Window" })).toBeInTheDocument();
     fireEvent.click(inSlot.getByRole("button", { name: "Options" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Float Agent Chat" }));
     expect(toggle).toHaveBeenCalledOnce();

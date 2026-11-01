@@ -109,6 +109,14 @@ export class LogSelection {
     this.set({ ...v, entry, ordered }, false);
   }
 
+  /** The log's rows in their current shown order, so Previous and Next reach new rows and follow a re-sort. */
+  reorder(kind: LogRecord["kind"], ordered: LogRecord["entry"][]): void {
+    const v = this.value;
+    if (v?.kind !== kind) return;
+    if (ordered.length === v.ordered.length && ordered.every((e, i) => keyOf(v, e) === keyOf(v, v.ordered[i]))) return;
+    this.set({ ...v, ordered } as LogRecord, false);
+  }
+
   /** Step to the previous or next record in the log's shown order. */
   step(offset: -1 | 1): void {
     const v = this.value;

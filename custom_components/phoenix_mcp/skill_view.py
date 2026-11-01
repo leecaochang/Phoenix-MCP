@@ -11,7 +11,7 @@ PHOENIX_SKILL_MARKDOWN = """---
 name: phoenix
 description: >-
   Use when controlling, inspecting, or configuring Home Assistant through a Phoenix MCP
-  (Phoenix MCP) MCP connection. Covers Phoenix MCP's scoped permission
+  connection. Covers Phoenix MCP's scoped permission
   model, the human-approval ("confirm") gate, the MESA per-entity safety layer,
   and the recommended discover, preview, act, verify workflow for reads, service
   calls, and authoring automations, scripts, scenes, helpers, and dashboards,
@@ -20,7 +20,7 @@ description: >-
 
 # Using Home Assistant through Phoenix MCP
 
-You are connected to Home Assistant through Phoenix MCP (Phoenix MCP), a
+You are connected to Home Assistant through Phoenix MCP, a
 scoped gateway. Your access key sees only the entities and tools an operator
 granted it, and some actions are gated behind human approval or a per-entity
 safety layer. Phoenix MCP is the enforcement: this guide is advisory. Working with the

@@ -188,9 +188,15 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   const reqNum = parseInt(rateLimitRequests, 10);
   const burstDisabled = isNaN(reqNum) || reqNum === 0;
 
+  // A key must expire in the future: an empty, zero or negative amount would
+  // create one that is already expired.
+  const ttlAmount = Number(ttlValue);
+  const ttlInvalid = ttlUnit !== "none" && !(ttlValue.trim() !== "" && Number.isInteger(ttlAmount) && ttlAmount >= 1);
+
   const canSubmit =
     name.length >= 3 &&
     !nameError &&
+    !ttlInvalid &&
     (!passThrough || ptConfirmed);
 
   async function submit() {
@@ -293,10 +299,13 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
                 type="number"
                 min={1}
                 value={ttlValue}
+                aria-invalid={ttlInvalid}
+                aria-describedby={ttlInvalid ? "access-key-expiry-error" : undefined}
                 onChange={(e) => setTtlValue(e.target.value)}
               />
             )}
           </div>
+          {ttlInvalid && <span id="access-key-expiry-error" className="field-error">{t("accessKeys.expiryAmountError")}</span>}
         </div>
 
         {!passThrough && (

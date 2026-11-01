@@ -1,3 +1,4 @@
+import type { CompanionDomains } from "./utils/companion_reach";
 import type {
   AttentionItem,
   ConversationEntry, ConversationListResponse,
@@ -248,7 +249,7 @@ export const api = {
   getConversation: (id: string) => req<ConversationEntry>("GET", `/conversations/${encodeURIComponent(id)}`),
   clearConversations: () => req<{ cleared: boolean }>("DELETE", "/conversations", { confirm: true }),
 
-  getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
+  getInfo: () => req<{ version: string; min_ha_version: string; github_url: string; home_companion_reach?: CompanionDomains }>("GET", "/info"),
 
   getRoutingStatistics: () => req<RoutingStatisticsResponse>("GET", "/command-routing/statistics"),
   resetRoutingStatistics: (surface: "voice" | "chat") => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
@@ -265,7 +266,8 @@ export const api = {
       "POST", "/voice_agent/pipeline", { preferred },
     ),
   deleteVoiceAgentPipeline: () =>
-    req<{ ok: boolean }>("DELETE", "/voice_agent/pipeline"),
+    // kept: Home Assistant still has the assistant (for example its only one), though Phoenix no longer tracks it.
+    req<{ ok: boolean; kept?: boolean }>("DELETE", "/voice_agent/pipeline"),
   // Whether that pipeline is Home Assistant's preferred assistant; the pipeline stays either way.
   setVoiceAgentPreferred: (preferred: boolean) =>
     req<{ pipeline_id: string; preferred: boolean }>(preferred ? "POST" : "DELETE", "/voice_agent/pipeline/preferred"),
@@ -382,8 +384,8 @@ export const api = {
     req<{ canonical_tags: string[]; canonical_roots: string[] }>("GET", "/mesa/vocabulary"),
 
   // refresh=true recomputes everything (trigger issues, orphans, suggestions);
-  // refresh="suggestions" recomputes only suggestions, leaving the separate
-  // issues/orphans banner untouched (the Suggestions card's own Rescan).
+  // refresh="suggestions" recomputes only suggestions, leaving trigger issues
+  // and orphans as cached (the MESA workspace's quiet half-minute read).
   getMesaIssues: (refresh: boolean | "suggestions" = false) =>
     req<MesaIssuesResponse>(
       "GET",
@@ -434,8 +436,11 @@ export const api = {
     return req<VersionListResponse>("GET", `/versions${q ? `?${q}` : ""}`);
   },
   getVersion: (id: string) => req<VersionRecord>("GET", `/versions/${encodeURIComponent(id)}`),
-  restoreVersion: (id: string, side?: "before" | "after") =>
-    req<VersionRestoreResponse>("POST", `/versions/${encodeURIComponent(id)}/restore`, side ? { side } : undefined),
+  /** expectedLatestId: the item's newest change when Restore was chosen; the server refuses if another came since. */
+  restoreVersion: (id: string, side?: "before" | "after", expectedLatestId?: string | null) => {
+    const body = { ...(side ? { side } : {}), ...(expectedLatestId ? { expected_latest_id: expectedLatestId } : {}) };
+    return req<VersionRestoreResponse>("POST", `/versions/${encodeURIComponent(id)}/restore`, Object.keys(body).length ? body : undefined);
+  },
 
   // agentCLI: provider accounts live on the admin surface. Multiple accounts of
   // the same kind are allowed; each has an opaque instance id.

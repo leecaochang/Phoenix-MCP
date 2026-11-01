@@ -95,7 +95,8 @@ def assist_api_supported() -> bool:
 
 _UNBOUND_PROMPT = (
     "No Phoenix MCP access key is currently bound to Phoenix MCP. An administrator must bind "
-    "an access key in the Phoenix MCP panel (Access keys, then Tool Announcement & Assist) before this "
+    "an access key in the Phoenix MCP panel (Settings workspace, Home Assistant window, Assist Tool "
+    "Provider tab) before this "
     "assistant can control anything. Until then you have no tools available."
 )
 

@@ -13,7 +13,7 @@ import { api } from "../api";
 import { AuditOutcome, accessLabel, auditEntryKey, mesaLabel, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
 import { RefreshIcon } from "../components/common";
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
-import { friendlyResource } from "../utils";
+import { friendlyResource, resourceFilterValue } from "../utils";
 import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
 import { AuditFocusContext, useLogSelection } from "../shell/logDetails";
@@ -92,9 +92,11 @@ export function AuditView({ accessKeys }: Props) {
   const filterParams = useMemo(() => (filtersApply ? {
     outcome: outcomeFilter || undefined,
     access_key_id: accessKeyFilter || undefined,
-    since: timeWindow ? new Date(Date.now() - TIME_WINDOW_MS[timeWindow]).toISOString() : undefined,
+    // The window itself, not a fixed start: each load counts back from its own moment.
+    windowMs: timeWindow ? TIME_WINDOW_MS[timeWindow] : undefined,
     method: debouncedMethod || undefined,
-    resource: debouncedResource || undefined,
+    // Typed against the shown text; the server matches the stored one.
+    resource: debouncedResource ? resourceFilterValue(debouncedResource) : undefined,
     ip: debouncedIp ? auditSourceFilterValue(debouncedIp) : undefined,
     request_id: requestFilter || undefined,
   } : {}), [filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp, requestFilter]);
@@ -115,6 +117,12 @@ export function AuditView({ accessKeys }: Props) {
     setFiltersOpen(true);
   }, [focus, focusVersion]);
 
+  /** The query for one load, its time window counted back from now so Past 5 Minutes slides. */
+  const query = useCallback((offset: number) => {
+    const { windowMs, ...rest } = filterParams as typeof filterParams & { windowMs?: number };
+    return { ...rest, since: windowMs ? new Date(Date.now() - windowMs).toISOString() : undefined, limit: PAGE_SIZE, offset };
+  }, [filterParams]);
+
   const beginLoad = useLatestRequest();
   // Each load starts a generation; a background update applies only within the one it began in.
   const loadGeneration = useRef(0);
@@ -126,7 +134,7 @@ export function AuditView({ accessKeys }: Props) {
     loadsRunning.current++;
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
-      const resp = await api.getAudit({ ...filterParams, limit: PAGE_SIZE, offset });
+      const resp = await api.getAudit(query(offset));
       if (!isLatest()) return;
       setEntries((prev) => (offset === 0 ? resp.entries : [...prev, ...resp.entries]));
       setTotal(resp.total);
@@ -149,7 +157,7 @@ export function AuditView({ accessKeys }: Props) {
         setLoadingMore(false);
       }
     }
-  }, [beginLoad, filterParams]);
+  }, [beginLoad, query]);
 
   // (Re)load from the top whenever a filter changes.
   useEffect(() => { load(0); }, [load]);
@@ -163,7 +171,7 @@ export function AuditView({ accessKeys }: Props) {
     if (loadsRunning.current > 0) return;
     const generation = loadGeneration.current;
     try {
-      const resp = await api.getAudit({ ...filterParams, limit: PAGE_SIZE, offset: 0 });
+      const resp = await api.getAudit(query(0));
       if (generation !== loadGeneration.current || loadsRunning.current > 0) return;
       setEntries((prev) => {
         if (prev.length <= PAGE_SIZE) return resp.entries;
@@ -176,7 +184,7 @@ export function AuditView({ accessKeys }: Props) {
     } catch {
       // A failed background update keeps what is shown; the next one or Refresh retries.
     }
-  }, [filterParams]);
+  }, [query]);
   useEffect(() => {
     if (paused || !windowVisible) return;
     const timer = window.setInterval(() => { if (!document.hidden) void updateQuietly(); }, UPDATE_MS);
@@ -187,7 +195,7 @@ export function AuditView({ accessKeys }: Props) {
   const activeFilters = filtersApply ? [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter, requestFilter].filter(Boolean).length : 0;
   const clearFilters = () => {
     setOutcomeFilter(""); setAccessKeyFilter(""); setTimeWindow("");
-    setMethodFilter(""); setResourceFilter(""); setIpFilter("");
+    setMethodFilter(""); setResourceFilter(""); setIpFilter(""); setRequestFilter("");
   };
 
   // In the workspace shell, a chosen entry opens in Log Details; Refresh and Filters move to the toolbar.
@@ -335,6 +343,7 @@ export function AuditView({ accessKeys }: Props) {
           rowKey={auditEntryKey}
           defaultSort={SERVER_SORT}
           selectedKey={logSelection?.selectedKey("audit")}
+          onOrder={(ordered) => logSelection?.reorder("audit", ordered)}
           onSelect={(entry, ordered) => logSelection?.set({ kind: "audit", entry, ordered, nameOf: displayName })}
           rowLabel={(e) => t("audit.openEntryAria", { outcome: outcomeLabel(e), name: displayName(e) })}
           empty={<p className="audit-empty">{t("audit.empty")}</p>}

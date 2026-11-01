@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { load } from "js-yaml";
-import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexAccessKeyEnv, firstGreenEntity, firstGreenTarget, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
+import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexAccessKeyEnv, firstGreenEntity, firstGreenTarget, freeAccessKeyName, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EntityTree, PermissionTree } from "../types";
 
@@ -194,6 +194,13 @@ describe("firstGreenEntity", () => {
   });
 });
 
+describe("freeAccessKeyName", () => {
+  it("keeps a free name, and otherwise picks the first free numbered one, compared as the server does", () => {
+    expect(freeAccessKeyName("my_access_key", ["other"])).toBe("my_access_key");
+    expect(freeAccessKeyName("my_access_key", ["My-Access-Key", "my_access_key_2"])).toBe("my_access_key_3");
+  });
+});
+
 describe("firstGreenTarget", () => {
   const entityTree: EntityTree = {
     light: {
@@ -207,6 +214,22 @@ describe("firstGreenTarget", () => {
   };
   const tree = (over: Partial<PermissionTree>): PermissionTree => ({
     domains: {}, devices: {}, entities: {}, ...over,
+  });
+
+  it("finds an entity on a part of a main device that has W", () => {
+    const withParts: EntityTree = {
+      switch: {
+        devices: {
+          strip: { device_id: "strip", parent_device_id: null, name: "Strip", area_id: null, area_name: null, entities: [] },
+          outlet: { device_id: "outlet", parent_device_id: "strip", name: "Outlet", area_id: null, area_name: null, entities: ["switch.outlet"] },
+        },
+        deviceless_entities: [],
+        entity_details: {
+          "switch.outlet": { entity_id: "switch.outlet", friendly_name: "Outlet", device_id: "outlet", area_id: null, area_name: null, labels: [] },
+        },
+      },
+    } as EntityTree;
+    expect(firstGreenTarget(tree({ devices: { strip: { state: "GREEN", hint: null } } }), withParts)).toBe("switch.outlet");
   });
 
   it("prefers a directly granted entity", () => {

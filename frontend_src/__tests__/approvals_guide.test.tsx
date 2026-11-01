@@ -46,7 +46,7 @@ describe("the Guide in Approvals", () => {
     const approve = await within(review).findByRole("button", { name: "Approve" });
     expect(guideTargetFor(approve)).toMatchObject({ windowId: "review", topic: "window.review", anchor: "approve" });
     expect(guideTargetFor(within(review).getByRole("button", { name: "Reject" }))).toMatchObject({ anchor: "reject" });
-    const args = await waitFor(() => [...document.querySelectorAll("summary")].find((s) => s.textContent === "Raw Args")!);
+    const args = await waitFor(() => [...document.querySelectorAll("summary")].find((s) => s.textContent === "Arguments")!);
     expect(guideTargetFor(args)).toMatchObject({ windowId: "requestDetails", topic: "window.requestDetails", anchor: "raw-args" });
 
     fireEvent.click(utils.getByRole("button", { name: "Select Multiple" }));

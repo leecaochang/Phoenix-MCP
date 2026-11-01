@@ -65,11 +65,11 @@ Choose what the logs show about your home and the people using Phoenix.
 
 When off, the audit log's {{label:audit.rowResource}} column shows [redacted], and the Conversation Log leaves out what was said and done. On by default.
 
-The audit log's payload still holds each tool call's arguments, which can name entities. Conversation content already recorded is removed the next time Phoenix starts.
+The audit log's payload hides entity IDs too, though free text in a tool call's arguments can still name one. Conversation content already recorded is removed the next time Phoenix starts.
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 
-When off, both logs hide the caller's IP address. On by default. In the audit log, Agent Chat, voice, Assist and AI Task then show as [redacted] too.
+When off, both logs hide the caller's IP address, though an address written into a tool call's arguments stays in the audit payload. On by default. Agent Chat, voice, Assist, AI Task and Home Companion still show by name, since they aren't addresses.
 
 ## {{label:settings.haNotifications}} {#notifications}
 

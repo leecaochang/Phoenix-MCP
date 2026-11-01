@@ -299,9 +299,9 @@ describe("phoenix-mcp-panel full app shell", () => {
       const items = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].map((i) => i.textContent!.replace("\u2713", "").trim());
       const pick = (label: string) => act(() => { [...el.shadowRoot!.querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].find((i) => i.textContent!.replace("\u2713", "").trim() === label)!.click(); });
       const options = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar-main [aria-label="Toolbar Options"]')!.click(); });
-      const grip = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar > [aria-label="Move toolbar"]')!.click(); });
+      const grip = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar > [aria-label="Move Toolbar"]')!.click(); });
       // The grip sits outside the rows, beside both of them.
-      expect(el.shadowRoot!.querySelector(".phx-toolbar-main [aria-label='Move toolbar']")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".phx-toolbar-main [aria-label='Move Toolbar']")).toBeNull();
       // No separate collapse button: Collapse lives in the menu. Docked, no orientation choice.
       expect(el.shadowRoot!.querySelector('[aria-label="Collapse Toolbar"]')).toBeNull();
       options();

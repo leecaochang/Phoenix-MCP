@@ -26,7 +26,7 @@ it("confirms in place and resets only the selected surface", async () => {
   expect(reset).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).toBeNull();
   const confirm = screen.getByRole("group", { name: "Reset Statistics" });
-  expect(confirm).toHaveTextContent("Clear statistics for this card only");
+  expect(confirm).toHaveTextContent("Clear these statistics? Voice Agent and Agent Chat keep separate statistics");
   fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("group", { name: "Reset Statistics" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Reset Statistics" }));

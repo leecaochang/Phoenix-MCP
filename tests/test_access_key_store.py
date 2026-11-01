@@ -976,6 +976,50 @@ class TestPermissions:
         access_key = access_key_store.get_access_key_by_id(record.id)
         assert "light" not in access_key.permissions.domains
 
+    async def test_painting_a_node_keeps_its_hint(self, access_key_store):
+        """A state change without a hint keeps the node's hint."""
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "devices", "dev1", "GREEN", hint="garage opener")
+        await access_key_store.async_patch_permission_node(record.id, "devices", "dev1", "YELLOW")
+        node = access_key_store.get_access_key_by_id(record.id).permissions.devices["dev1"]
+        assert (node.state, node.hint) == ("YELLOW", "garage opener")
+
+    async def test_setting_n_keeps_a_node_that_has_a_hint(self, access_key_store):
+        """N on a hinted entity keeps the hint, which still reaches agents through its other grants."""
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.a", "GREEN", hint="porch light")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.a", "GREY")
+        node = access_key_store.get_access_key_by_id(record.id).permissions.entities["light.a"]
+        assert (node.state, node.hint) == ("GREY", "porch light")
+
+    async def test_clearing_the_hint_of_an_n_node_removes_it(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.a", "GREY", hint="porch light")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.a", "GREY", hint=None)
+        assert "light.a" not in access_key_store.get_access_key_by_id(record.id).permissions.entities
+
+    async def test_a_renamed_entity_keeps_its_grant_and_hints(self, access_key_store):
+        """Renaming an entity carries its nodes and global hint to the new ID."""
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.old", "GREEN", hint="desk lamp")
+        await access_key_store.async_set_entity_hint("light.old", "the lamp on the desk")
+        before = access_key_store.get_access_key_by_id(record.id).settings_version
+        assert await access_key_store.async_rename_entity("light.old", "light.new") is True
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        assert "light.old" not in access_key.permissions.entities
+        node = access_key.permissions.entities["light.new"]
+        assert (node.state, node.hint) == ("GREEN", "desk lamp")
+        assert access_key.settings_version > before
+        assert access_key_store.get_entity_hints() == {"light.new": "the lamp on the desk"}
+
+    async def test_a_rename_never_overwrites_a_node_at_the_new_id(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.old", "GREEN")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "light.new", "RED")
+        assert await access_key_store.async_rename_entity("light.old", "light.new") is False
+        entities = access_key_store.get_access_key_by_id(record.id).permissions.entities
+        assert entities["light.new"].state == "RED" and entities["light.old"].state == "GREEN"
+
     async def test_patch_permission_node_invalid_type_returns_none(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         result = await access_key_store.async_patch_permission_node(
@@ -1458,3 +1502,20 @@ class TestSettingsVersion:
         assert GlobalSettings.from_dict({"access_key_presets_enabled": True}).access_key_presets_enabled is True
         assert GlobalSettings().access_key_presets_enabled is False
         assert GlobalSettings(access_key_presets_enabled=True).to_dict()["access_key_presets_enabled"] is True
+
+
+async def test_choosing_custom_stays_custom_when_a_preset_matches(access_key_store):
+    """Restoring Custom capabilities that match a preset keeps Custom."""
+    from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
+
+    store = access_key_store
+    access_key, _ = await store.async_create_access_key("chooser", "admin")
+    caps = dict(PERSONA_DEFINITIONS["power_user"])
+    updated = await store.async_patch_access_key(access_key.id, persona="custom", **caps)
+    assert updated.persona == "custom"
+    # Capabilities alone are still labelled by the preset they match.
+    flipped = "deny" if caps["cap_restart"] != "deny" else "allow"
+    await store.async_patch_access_key(access_key.id, cap_restart=flipped)
+    updated = await store.async_patch_access_key(access_key.id, **caps)
+    assert updated.persona == "power_user"
+

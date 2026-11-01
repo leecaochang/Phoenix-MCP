@@ -294,7 +294,7 @@ describe("Access Keys", () => {
     act(() => { fireEvent.click(confirm.querySelector<HTMLInputElement>('input[type="checkbox"]')!); });
     const reads = apiMock.listAccessKeys.mock.calls.length;
     act(() => { confirm.querySelector<HTMLButtonElement>(".phx-inline-confirm-actions button")!.click(); });
-    await waitFor(() => expect(keyRow(el).textContent).toContain("Pass Through"));
+    await waitFor(() => expect(keyRow(el).textContent).toContain("Pass-Through"));
     expect(apiMock.listAccessKeys.mock.calls.length).toBeGreaterThan(reads);
     expect(visible(el, "accessKeys")!.querySelector(".pass-through-header-banner")).toBeNull();
   });

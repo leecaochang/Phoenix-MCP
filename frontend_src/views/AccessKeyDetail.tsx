@@ -13,6 +13,7 @@ import { PersonaPicker } from "../components/PersonaPicker";
 import { AccessKeyNotes } from "../components/AccessKeyNotes";
 import { RateLimitConfig } from "../components/RateLimitConfig";
 import { PassThroughNotice } from "../components/PassThroughNotice";
+import { useCompanionDomains } from "../utils/companion_reach";
 import { EntityTree, rememberEntityTree } from "../components/EntityTree";
 import { PermissionSummary } from "../components/PermissionSummary";
 import { ProfileEditor } from "./MesaView";
@@ -30,10 +31,19 @@ import { Icon } from "../ui/Icon";
 // cap-tied tool is announced whenever its cap is not "deny", so switching between
 // allow and confirm (per-request gating, enforced live) does NOT need a reconnect.
 // pass_through and announce_all_tools change the announced set wholesale. Persona
-// changes surface here as capability changes.
+// changes surface here as capability changes. Write scope (any Write in the tree)
+// announces the control tools, so a tree edit that adds the first Write or removes
+// the last one changes the set too.
+function hasWriteScope(k: AccessKeyRecord): boolean {
+  // The server's access_key_has_write_scope, which tools/list follows.
+  const tree = k.permissions;
+  return k.pass_through || [tree.domains, tree.devices, tree.entities].some((nodes) => Object.values(nodes).some((n) => n?.state === "GREEN"));
+}
+
 function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
   const capCrossedDeny = CAP_NAMES.some((c) => (a[c] === "deny") !== (b[c] === "deny"));
-  return capCrossedDeny || a.pass_through !== b.pass_through || a.announce_all_tools !== b.announce_all_tools;
+  return capCrossedDeny || a.pass_through !== b.pass_through || a.announce_all_tools !== b.announce_all_tools
+    || hasWriteScope(a) !== hasWriteScope(b);
 }
 
 // The destructive actions on a key, each behind its own inline confirmation.
@@ -71,6 +81,8 @@ function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAc
 
 export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUpdate: (t: AccessKeyRecord) => void }) {
   const [saving, setSaving] = useState(false);
+  // A Home Companion key always gets only its own tools; the server refuses this setting.
+  const companion = accessKey.persona === "home_companion";
   const [error, setError] = useState<string | null>(null);
   async function patch(body: PatchAccessKeyBody) {
     setSaving(true);
@@ -97,10 +109,11 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
           <BusyInput
             type="checkbox"
             aria-label={t("accessKeys.announceAllLabel")}
-            aria-description={t("accessKeys.announceAllHelp")}
+            aria-description={companion ? t("accessKeys.companionUnavailable") : t("accessKeys.announceAllHelp")}
             data-help="accessKeys.announceAllHelp"
             checked={!!accessKey.announce_all_tools}
             busy={saving}
+            disabled={companion}
             onChange={(e) => patch({ announce_all_tools: e.target.checked })}
           />
           <span className="toggle-switch-track" />
@@ -835,7 +848,12 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
   }, []);
 
   const onPermissionsChange = useCallback((tree: PermissionTree) => {
-    setAccessKey((current) => (current?.id === accessKeyId ? { ...current, permissions: tree } : current));
+    setAccessKey((current) => {
+      if (current?.id !== accessKeyId) return current;
+      const updated = { ...current, permissions: tree };
+      if (current.last_used_at && toolGatingChanged(current, updated)) setReconnectNeeded(true);
+      return updated;
+    });
   }, [accessKeyId]);
 
   const value = useMemo<AccessKeyDetail>(() => ({
@@ -1020,7 +1038,8 @@ export function useKeyActionsTool(): ToolGroup | null {
   const menu = (): MenuEntry[] => [
     { id: "rename", label: t("workspace.rename"), onSelect: () => detail.setRenaming(true) },
     { id: "rotate", label: t("accessKeys.rotate"), onSelect: () => detail.openAction("rotate") },
-    { id: "passThrough", label: t("accessKeys.enablePtLabel"), disabled: accessKey.pass_through, onSelect: () => detail.openAction("passThrough") },
+    { id: "passThrough", label: t("accessKeys.enablePtLabel"), disabled: accessKey.pass_through || accessKey.persona === "home_companion",
+      hint: accessKey.persona === "home_companion" ? t("accessKeys.companionUnavailable") : undefined, onSelect: () => detail.openAction("passThrough") },
     "separator",
     { id: "revoke", label: t("accessKeys.revoke"), onSelect: () => detail.openAction("revoke") },
   ];
@@ -1099,6 +1118,7 @@ export function PermissionsWindow() {
         onSelect: () => (detail.action?.kind === "clearPerms" ? detail.cancelAction() : detail.openAction("clearPerms")) },
     ],
   }] : []);
+  const companion = useCompanionDomains(!("placeholder" in k) && k.accessKey.persona === "home_companion");
   if ("placeholder" in k) return <>{k.placeholder}</>;
   const { accessKey } = k;
   if (accessKey.pass_through) {
@@ -1126,6 +1146,7 @@ export function PermissionsWindow() {
         mesaProfileDevices={k.detail.mesaProfileDevices}
         mesaProfileDomains={k.detail.mesaProfileDomains}
         onOpenMesa={k.detail.openMesa}
+        companion={companion}
       />
     </KeyPad>
   );
@@ -1133,6 +1154,7 @@ export function PermissionsWindow() {
 
 export function PermissionSummaryWindow() {
   const k = useLoadedKey();
+  const companion = useCompanionDomains(!("placeholder" in k) && k.accessKey.persona === "home_companion");
   if ("placeholder" in k) return <>{k.placeholder}</>;
   if (k.accessKey.pass_through) return <p className="phx-window-empty">{t("workspace.summaryPassThrough")}</p>;
   return (
@@ -1144,6 +1166,7 @@ export function PermissionSummaryWindow() {
         onEntityClick={k.detail.revealNode}
         mesaProfileEntities={k.detail.mesaProfileEntities}
         onOpenMesa={k.detail.openMesa}
+        companion={companion}
       />
       </div>
     </KeyPad>

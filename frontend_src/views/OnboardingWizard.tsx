@@ -16,7 +16,7 @@ import { CopyButton } from "../components/AccessKeyCreate";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
-import { buildTestPrompt, firstGreenTarget } from "../wizard_helpers";
+import { buildTestPrompt, firstGreenTarget, freeAccessKeyName } from "../wizard_helpers";
 import { patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 import { ErrorMsg } from "../components/common";
 import { localeNumber, t } from "../i18n";
@@ -60,6 +60,18 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const [name, setName] = useState(() => t("accessKeys.namePlaceholder"));
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
+  // The suggested name moves on to a free one when an earlier run used it, until the person types their own.
+  const nameTyped = useRef(false);
+  useEffect(() => {
+    let live = true;
+    api.listAccessKeys()
+      .then((keys) => { if (live && !nameTyped.current) setName((current) => freeAccessKeyName(current, keys.map((k) => k.name))); })
+      .catch(() => { /* the server still refuses a taken name when the key is created */ });
+    return () => { live = false; };
+  }, []);
+  // An expiry needs a whole number of 1 or more: anything else would create a key that is already expired.
+  const ttlAmount = Number(ttlValue);
+  const ttlInvalid = ttlUnit !== "none" && !(ttlValue.trim() !== "" && Number.isInteger(ttlAmount) && ttlAmount >= 1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,13 +81,17 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
 
   const [entityTree, setEntityTree] = useState<EntityTreeData | null>(null);
   const [mesaEnforced, setMesaEnforced] = useState(false);
+  // Home Companion answers an app with the Voice provider; without one its requests fail.
+  const [voiceProvider, setVoiceProvider] = useState(true);
+  // With the kill switch on Agent Chat cannot open, so Try Now says so rather than waiting.
+  const [killSwitch, setKillSwitch] = useState(false);
   const [showAllDomains, setShowAllDomains] = useState(false);
 
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     api.getEntityTree().then(setEntityTree).catch(() => null);
-    api.getSettings().then((s) => setMesaEnforced(s.mesa_mode === "enforced")).catch(() => null);
+    api.getSettings().then((s) => { setMesaEnforced(s.mesa_mode === "enforced"); setVoiceProvider(!!s.voice_agent_provider_id); setKillSwitch(!!s.kill_switch); }).catch(() => null);
   }, []);
 
   // Keyboard focus lands on the new step's heading after Next/Back; the
@@ -113,6 +129,10 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
       if (!accessKeyId) {
         if (name && !NAME_REGEX.test(name)) {
           setError(t("wizard.nameError"));
+          return;
+        }
+        if (ttlInvalid) {
+          setError(t("accessKeys.expiryAmountError"));
           return;
         }
         let expiresAt: string | undefined;
@@ -273,7 +293,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <div className="field" data-guide-part>
               <label htmlFor="wiz-name">{t("wizard.nameLabel")}</label>
               <input id="wiz-name" className="input" value={name} disabled={!!accessKeyId}
-                maxLength={32} onChange={(e) => setName(e.target.value)} placeholder={t("accessKeys.namePlaceholder")} />
+                maxLength={32} onChange={(e) => { nameTyped.current = true; setName(e.target.value); }} placeholder={t("accessKeys.namePlaceholder")} />
             </div>
             <div className="field">
               <label htmlFor="wiz-expiry-unit">{t("wizard.expiryLabel")}</label>
@@ -288,7 +308,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                 </select>
                 {ttlUnit !== "none" && (
                   <input className="input access-key-create-expiry-value" type="number" min={1}
-                    aria-label={t("wizard.expiryAmountAria")}
+                    aria-label={t("wizard.expiryAmountAria")} aria-invalid={ttlInvalid}
                     value={ttlValue} disabled={!!accessKeyId} onChange={(e) => setTtlValue(e.target.value)} />
                 )}
               </div>
@@ -352,7 +372,9 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         return (
           <>
             <h3 className="wizard-title">{t("wizard.chatReadyTitle")}</h3>
-            <p className="wizard-sub">{tRich("wizard.chatReadySub", { strong: (c) => <strong>{c}</strong> })}</p>
+            {killSwitch
+              ? <p className="wizard-hint wizard-hint-warning" role="status">{t("shell.killSwitchTitle")}</p>
+              : <p className="wizard-sub">{tRich("wizard.chatReadySub", { strong: (c) => <strong>{c}</strong> })}</p>}
             <div className="wizard-actions">
               <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
             </div>
@@ -377,6 +399,9 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             )}
             {mesaEnforced && (
               <p className="wizard-hint">{t("wizard.mesaHint")}</p>
+            )}
+            {persona === "home_companion" && !voiceProvider && (
+              <p className="wizard-hint wizard-hint-warning" role="status">{t("wizard.companionNoVoiceProvider")}</p>
             )}
             <div className={`wizard-connect-status${connected ? " wizard-connect-status-ok" : ""}`}>
               {connected ? t("wizard.connected") : t("wizard.waitingForAgent")}

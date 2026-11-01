@@ -77,8 +77,8 @@ it("combines template inspection notices and leaves automation details collapsed
   expect(advisory.getByText(/sensor.retained_profile/)).toBeVisible();
   expect(screen.queryByRole("button", { name: /Clear all orphaned profiles/ })).toBeNull();
   // Each finding is dismissed from Advisory itself.
-  expect(advisory.getByRole("button", { name: "Dismiss inspection notice permanently" })).toBeVisible();
-  expect(advisory.getByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeVisible();
+  expect(advisory.getByRole("button", { name: "Dismiss inspection notice in this browser" })).toBeVisible();
+  expect(advisory.getByRole("button", { name: "Dismiss orphaned-profile notice in this browser" })).toBeVisible();
   expect(api.clearMesaOrphans).not.toHaveBeenCalled();
 });
 
@@ -142,10 +142,10 @@ it("shows Advisory only while it holds an undismissed finding of any kind, and b
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
   expect(findings[0]).toBeNull();
   // One finding left is still a reason to show it.
-  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss orphaned-profile notice in this browser" }));
   expect(advisoryWindow().queryByText(/sensor.kept/)).toBeNull();
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
-  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss inspection notice permanently" }));
+  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss inspection notice in this browser" }));
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: false }));
   // Dismissed notices come back from the MESA Actions menu (user, 2026-10-30).
   fireEvent.click(profilesWindow().getByRole("button", { name: "MESA Actions" }));
@@ -165,7 +165,7 @@ it("opens an orphaned profile in Profile Editor so it can be reviewed and remove
 it("permanently dismisses orphan findings across refresh, remount, subsets and reordering without deleting profiles", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_a", "sensor.kept_b"] });
   const first = renderMesa();
-  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice in this browser" }));
   expect(advisoryWindow().queryByText(/sensor.kept_a/)).toBeNull();
   refresh();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
@@ -174,7 +174,7 @@ it("permanently dismisses orphan findings across refresh, remount, subsets and r
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b", "sensor.kept_a"] });
   const second = renderMesa();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(3));
-  expect(advisoryWindow().queryByRole("button", { name: "Dismiss orphaned-profile notice permanently" })).toBeNull();
+  expect(advisoryWindow().queryByRole("button", { name: "Dismiss orphaned-profile notice in this browser" })).toBeNull();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b"] });
   refresh();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(4));
@@ -190,7 +190,7 @@ it("permanently dismisses orphan findings across refresh, remount, subsets and r
 it("keeps dismissals scoped to the current authenticated account", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.retained"] });
   const first = renderMesa();
-  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice in this browser" }));
   first.unmount();
   setHass({ user: { id: "another-admin" } });
   const second = renderMesa();
@@ -207,10 +207,10 @@ it("dismisses inspection and validation notices independently and resurfaces cha
   const validation = { ...inspection, automation_id: "conflict", recommendation: "Review this finding." };
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [inspection, validation] });
   const first = renderMesa();
-  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss inspection notice permanently" }));
+  fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss inspection notice in this browser" }));
   expect(advisoryWindow().queryByText("View Automations")).toBeNull();
   expect(advisoryWindow().getByText(validation.recommendation)).toBeVisible();
-  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss validation notice permanently" }));
+  fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss validation notice in this browser" }));
   first.unmount();
   const second = renderMesa();
   await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
@@ -229,7 +229,7 @@ it("still allows dismissal when browser storage is unavailable or malformed", as
   const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Unavailable"); });
   try {
     renderMesa();
-    fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice permanently" }));
+    fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice in this browser" }));
     expect(advisoryWindow().queryByText(/sensor.retained/)).toBeNull();
   } finally { write.mockRestore(); }
 });

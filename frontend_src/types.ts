@@ -753,6 +753,8 @@ export interface VersionRecord {
   summary?: string | null;
   summary_key?: string | null;
   summary_params?: Record<string, string | number> | null;
+  /** Per side, why Restore would be refused whatever the item holds now (a reason slug), or null. */
+  restore_refusals?: { before?: string | null; after?: string | null };
 }
 
 export interface VersionListResponse {

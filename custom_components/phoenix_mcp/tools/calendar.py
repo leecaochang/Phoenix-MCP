@@ -33,7 +33,7 @@ from ..request_authority import AuthorityChangedError, check_request_authority, 
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _approved_exec_ctx, _gate, _pending_or_inline, _tool_error, _tool_success,
-    redaction_sentinel_path, _tool_pending,
+    redaction_sentinel_path, _tool_pending, _approval_notifies,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -401,7 +401,10 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
                 if removable is None:
                     raise ValueError("Calendar recovery storage is full. No write was dispatched.")
                 records.remove(removable)
+            # The request id ties this receipt to the same call's Agent Chat recovery row,
+            # so Needs Attention lists one item for it, not two.
             receipt = {"receipt_id": uuid.uuid4().hex, "access_key_id": access_key.id,
+                       "request_id": dispatch_request_id.get(),
                        "identity": target_binding([entity_id], hass), "entity_id": entity_id,
                        "status": "outcome_unknown", "created_at": dt_util.utcnow().isoformat(),
                        "operation": operation, "before": copy.deepcopy(plan["before"]),
@@ -426,7 +429,10 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
             )
             if mesa.decision == "pending" and mesa.approval is not None:
                 # Waiting inline while holding the journal lock would deadlock replay.
-                return _tool_pending(mesa.approval), "pending_approval", mesa.approval.id
+                return (
+                    _tool_pending(mesa.approval, notified=_approval_notifies(data)),
+                    "pending_approval", mesa.approval.id,
+                )
             if mesa.decision != "allow":
                 raise PermissionError
             check_request_authority()

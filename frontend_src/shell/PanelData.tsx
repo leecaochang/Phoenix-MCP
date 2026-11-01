@@ -127,11 +127,18 @@ export interface PanelData {
   closeAgentCli: () => void;
   agentCliOpen: boolean;
   agentCliKey: number;
+  /** Bumped to bring an open panel Chat back without remounting it. */
+  agentCliSummon: number;
   agentCliInstances: AgentCliInstance[];
   globalChatReady: boolean;
 }
 
 const PanelDataContext = createContext<PanelData | null>(null);
+
+/** The panel data, or null outside the provider (a window drawn on its own). */
+export function usePanelDataOrNull(): PanelData | null {
+  return useContext(PanelDataContext);
+}
 
 export function usePanelData(): PanelData {
   const data = useContext(PanelDataContext);
@@ -182,6 +189,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   // Bumped each time the window is opened from a button so it remounts and
   // re-reads the (re-centered, un-minimized) durable geometry.
   const [agentCliKey, setAgentCliKey] = useState<number>(0);
+  const [agentCliSummon, setAgentCliSummon] = useState<number>(0);
   const [agentCliInstances, setAgentCliInstances] = useState<AgentCliInstance[]>([]);
   // Baseline pendingCount "seen" while actually viewing Pending; null until the
   // first count is known, so a reload with History persisted and count > 0
@@ -349,9 +357,16 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
       g.open(accessKeyId);
       return;
     }
+    // An open window is brought back, not remounted: a remount would end a running reply and
+    // cancel its approvals. Opening it on a given key, as the
+    // setup does, starts afresh.
+    if (agentCliOpen && accessKeyId === undefined) {
+      setAgentCliSummon((v) => v + 1);
+      return;
+    }
     setAgentCliKey((k) => k + 1);
     setAgentCliOpen(true);
-  }, [settings]);
+  }, [settings, agentCliOpen]);
   const closeAgentCli = useCallback(() => {
     patchAgentCliDurable({ open: false });
     setAgentCliOpen(false);
@@ -533,7 +548,11 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     if (next === "accessKeys") void refreshAccessKeys();
   }, [refreshAccessKeys, approvalsTab, pendingCount]);
 
-  const dismissAttentionRequest = useCallback(() => setAttentionRequested(false), []);
+  // The link's #attention goes too, or a reload would bring back the window just closed.
+  const dismissAttentionRequest = useCallback(() => {
+    setAttentionRequested(false);
+    if (window.location.hash === "#attention") history.replaceState(history.state, "", window.location.pathname + window.location.search);
+  }, []);
 
   const value: PanelData = {
     hass, narrow, theme, onThemeChange, language, onLanguageChange,
@@ -544,7 +563,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,
     attention, attentionRequested, dismissAttentionRequest,
-    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliInstances, globalChatReady,
+    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliSummon, agentCliInstances, globalChatReady,
   };
   return <PanelDataContext.Provider value={value}>{children}</PanelDataContext.Provider>;
 }

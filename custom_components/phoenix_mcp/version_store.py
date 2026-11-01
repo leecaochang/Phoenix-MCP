@@ -168,6 +168,22 @@ class VersionStore:
         drop = set(matching[:overflow])
         self._versions = [r for i, r in enumerate(self._versions) if i not in drop]
 
+    async def async_rename_resource(self, resource_type: str, old_id: str, new_id: str) -> int:
+        """Move one resource's records to its new id, so a rename keeps one history.
+
+        Records the item had under its old id join any already under the new id,
+        and the retention cap applies to the joined history. Returns how many moved.
+        """
+        moved = 0
+        for r in self._versions:
+            if r.resource_type == resource_type and r.resource_id == old_id:
+                r.resource_id = new_id
+                moved += 1
+        if moved:
+            self._evict(resource_type, new_id)
+            await self.async_save()
+        return moved
+
     def list_for(self, resource_type: str, resource_id: str) -> list[VersionRecord]:
         """Return one resource's versions, newest first."""
         return [

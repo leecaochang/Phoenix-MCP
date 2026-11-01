@@ -29,4 +29,4 @@ An entity that's disabled, or has no current state, is visible only through a gr
 
 ## What the tree shows {#tree-label}
 
-The result after each name in the tree follows the tree alone. It doesn't take Home Companion limits or the person speaking into account.
+The result after each name in the tree follows the tree. On a Home Companion key it also shows the companion's limits: devices it can't reach show No Access, and Write on a sensor shows Read. It doesn't take the person speaking into account.

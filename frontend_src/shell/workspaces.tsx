@@ -35,6 +35,8 @@ import { AuditFocusContext, LogDetailsContent } from "./logDetails";
 import { TableSettingsContext } from "../ui/table/settings";
 import { NotificationsWindow } from "./notifications";
 import { HELP_WINDOW, HelpWindow } from "./help";
+// A cycle (Toolbar reads WORKSPACES), safe because neither module uses the other at load.
+import { WorkspaceActionsContext } from "./Toolbar";
 import { MIN_WINDOW_HEIGHT, TITLE_BAR_HEIGHT } from "./dock/fold";
 import { DisplayModeContext } from "../ui/ActionButton";
 
@@ -625,11 +627,14 @@ export const DOCK_COMPONENTS: Record<string, FunctionComponent<IDockviewPanelPro
 /** Shown when every window in a workspace is closed: reopen one, or restore the arrangement. */
 export function EmptyWorkspace(_props: IWatermarkPanelProps) {
   const controller = useContext(ControllerContext);
+  const actions = useContext(WorkspaceActionsContext);
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
   if (!controller) return null;
   const mine = controller.id === "my";
   const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
-  const closed = controller.closedWindows().filter((id) => !toolWindows.includes(id));
+  // The workspace's own windows, as Workspace Options offers them: Help follows Show Help Bar,
+  // and Notifications has its own item there.
+  const closed = controller.closedWindows().filter((id) => !toolWindows.includes(id) && !SHARED_WINDOWS.includes(id as WindowId));
   return (
     <div className="phx-workspace-empty">
       {/* My Workspace without any added window explains how to add one. */}
@@ -641,7 +646,7 @@ export function EmptyWorkspace(_props: IWatermarkPanelProps) {
           </button>
         ))}
         {!mine && (
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => controller.restoreOriginal()}>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => (actions ? actions.restoreOriginal(controller) : controller.restoreOriginal())}>
             {t("workspace.restoreOriginal")}
           </button>
         )}

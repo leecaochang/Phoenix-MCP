@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP on jo määritetty."
     },
     "create_entry": {
-      "default": "Hallitse käyttöavaimiasi Phoenix MCP -paneelissa"
+      "default": "Hallitse käyttöavaimiasi sivupalkin Phoenix MCP -paneelissa. Paneeli näkyy vain ylläpitäjille."
     },
     "step": {
       "user": {

@@ -48,15 +48,34 @@ export function changeLabel(v: { alias: string | null; resource_id: string; reso
 
 export type RestoreSide = "before" | "after";
 
+/** Why the server refuses a side whatever the item holds now, by the slug it reports. */
+const REFUSAL_KEYS: Record<string, string> = {
+  yaml_tags: "adminError.restoreYamlTags",
+  audit_only: "changes.refusalAuditOnly",
+  template_incompatible: "changes.refusalTemplateIncompatible",
+  entity_missing: "changes.refusalEntityMissing",
+};
+
 /** Whether a side of a change can be restored, and the reason when it cannot. */
 export function restoreAvailability(record: VersionRecord, history: VersionSummary[], side: RestoreSide): { ok: true } | { ok: false; reason: string } {
   if (HISTORY_ONLY_TYPES.has(record.resource_type)) return { ok: false, reason: t("changes.historyOnly") };
   const value = side === "before" ? record.before : record.after;
   if (value == null) return { ok: false, reason: t(side === "before" ? "changes.noBefore" : "changes.noAfter") };
   if (RAW_CONTENT_TYPES.has(record.resource_type) && rawSide(value)?.content == null) return { ok: false, reason: t("changes.tooLarge") };
+  const refusal = record.restore_refusals?.[side];
+  if (refusal) return { ok: false, reason: t(REFUSAL_KEYS[refusal] ?? "adminError.restoreNotApplicable") };
   // The newest change's After is the item's current state, so restoring it changes nothing.
   if (side === "after" && history[0]?.id === record.id) return { ok: false, reason: t("changes.alreadyLatest") };
   return { ok: true };
+}
+
+/** An API error's status and code, read without importing ApiError (tests mock the api module). */
+function isNotFound(e: unknown): boolean {
+  return typeof (e as { status?: unknown })?.status === "number" && (e as { status: number }).status === 404;
+}
+function errorCode(e: unknown): string | undefined {
+  const code = (e as { code?: unknown })?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 const CHANGES_PAGE = 100;
@@ -228,7 +247,17 @@ export function ChangesProvider({ hass, active = true, children }: {
           .then((resp) => { if (isLatest()) setHistory(resp.versions); })
           .catch(() => { if (isLatest()) setHistory([]); });
       })
-      .catch((e: unknown) => { if (isLatest()) { setRecord(null); setRecordError(e instanceof Error ? e.message : t("changes.loadVersionFailed")); } })
+      .catch((e: unknown) => {
+        if (!isLatest()) return;
+        setRecord(null);
+        // Gone: evicted by the item's limit of 20 while the list still showed it. It leaves the list.
+        if (isNotFound(e)) {
+          setFeed((prev) => prev.filter((v) => v.id !== selectedId));
+          setRecordError(t("changes.versionGone"));
+        } else {
+          setRecordError(e instanceof Error ? e.message : t("changes.loadVersionFailed"));
+        }
+      })
       .finally(() => { if (isLatest()) setRecordLoading(false); });
   }, [selectedId, beginRecord, readRecord]);
 
@@ -312,7 +341,7 @@ export function ChangesProvider({ hass, active = true, children }: {
         notify(t("changes.restoreStale", { name }));
         return;
       }
-      await api.restoreVersion(r.id, c.side);
+      await api.restoreVersion(r.id, c.side, c.latestId);
       setConfirm(null);
       notify(t("changes.restored", { name, side, time: formatDateTime(r.timestamp) }));
       await loadFeed(0, true);
@@ -320,14 +349,21 @@ export function ChangesProvider({ hass, active = true, children }: {
       const after = (await api.listVersions({ resource_type: r.resource_type, resource_id: r.resource_id })).versions;
       if (selectedRef.current !== r.id) return;
       setHistory(after);
-      if (after[0] && after[0].id !== c.latestId && after[0].id !== r.id) select(after[0].id);
+      // It joins the order Previous and Next step through, at the top where the list shows it.
+      if (after[0] && after[0].id !== c.latestId && after[0].id !== r.id) select(after[0].id, [after[0].id, ...order.filter((id) => id !== after[0].id)]);
     } catch (e: unknown) {
       setConfirm(null);
-      setRestoreError(e instanceof Error ? e.message : t("changes.restoreFailed"));
+      // The server's own stale check: another change landed between the panel's check and the restore.
+      if (errorCode(e) === "stale_version") {
+        notify(t("changes.restoreStale", { name }));
+        void reloadHistory();
+      } else {
+        setRestoreError(e instanceof Error ? e.message : t("changes.restoreFailed"));
+      }
     } finally {
       setRestoring(false);
     }
-  }, [record, confirm, restoring, notify, loadFeed, select]);
+  }, [record, confirm, restoring, notify, loadFeed, select, reloadHistory, order]);
 
   const value: ChangesState = {
     feed, loading, loadingMore, error, hasMore, total,

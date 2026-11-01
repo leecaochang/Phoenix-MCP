@@ -12,7 +12,16 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .const import AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION, CONVERSATION_LOG_SCAN_BYTES
+from .const import (
+    AGENTCLI_CLIENT_IP,
+    AI_TASK_CLIENT_IP,
+    ASSIST_CLIENT_IP,
+    AUDIT_LOG_MAXLEN,
+    AUDIT_STORAGE_VERSION,
+    CONVERSATION_LOG_SCAN_BYTES,
+    HOME_COMPANION_CLIENT_IP,
+    VOICE_AGENT_CLIENT_IP,
+)
 from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
@@ -36,6 +45,23 @@ Outcome = Literal[
 ]
 
 _REDACTED = "[redacted]"
+
+# Sources that are Phoenix's own surfaces, not a caller's address: Log client IP
+# off hides addresses, and these name no one.
+_INTERNAL_SOURCES = frozenset({
+    AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP,
+})
+# Payload keys that hold entity IDs, hidden with the resource when Log entity IDs is off.
+_ENTITY_KEYS = frozenset({"entity_id", "entity_ids", "entity", "entities"})
+
+
+def _without_entity_ids(value: Any) -> Any:
+    """A payload with every entity-ID field replaced. Free text that names an entity stays."""
+    if isinstance(value, dict):
+        return {k: _REDACTED if k in _ENTITY_KEYS else _without_entity_ids(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_without_entity_ids(v) for v in value]
+    return value
 
 
 def _bounded_field(value: object) -> str:
@@ -178,9 +204,10 @@ class AuditLog:
         """Append an audit entry, subject to the current logging settings.
 
         Returns without writing if disable_all_logging or the relevant per-outcome
-        toggle is off. resource and client_ip are redacted when log_entity_names or
-        log_client_ip is off. pending_approval and approval/* lifecycle rows ignore
-        the log_allowed/log_denied toggles.
+        toggle is off. resource and the payload's entity-ID fields are redacted when
+        log_entity_names is off, and client_ip when log_client_ip is off unless it
+        names one of Phoenix's own surfaces. pending_approval and approval/*
+        lifecycle rows ignore the log_allowed/log_denied toggles.
         """
         if settings.disable_all_logging:
             return
@@ -209,8 +236,10 @@ class AuditLog:
             return
 
         logged_resource = resource if settings.log_entity_names else _REDACTED
-        logged_ip = client_ip if settings.log_client_ip else _REDACTED
+        logged_ip = client_ip if settings.log_client_ip or client_ip in _INTERNAL_SOURCES else _REDACTED
 
+        if payload is not None and not settings.log_entity_names:
+            payload = _without_entity_ids(payload)
         logged_payload = None if payload is None else _logged_payload(payload)
 
         from .household_authority import household_authority

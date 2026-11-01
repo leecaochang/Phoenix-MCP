@@ -19,6 +19,12 @@ vi.mock("../api", () => ({
   },
 }));
 
+const notify = vi.fn();
+vi.mock("../ui/notify", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../ui/notify")>()),
+  useNotify: () => notify,
+}));
+
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import type { GlobalSettings } from "../types";
 
@@ -157,6 +163,16 @@ describe("VoiceAgentSettings", () => {
     await waitFor(() => expect(deleteVoiceAgentPipeline).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
     expect(createVoiceAgentPipeline).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("Phoenix MCP assistant removed from Home Assistant");
+  });
+
+  it("does not report the assistant removed when Home Assistant keeps it", async () => {
+    deleteVoiceAgentPipeline.mockResolvedValue({ ok: true, kept: true });
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
+    fireEvent.click(checkbox(ASSIST));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalledWith("Phoenix MCP assistant removed from Home Assistant");
   });
 
   it("shows Home Assistant's actual preference and sets or clears it, keeping the assistant", async () => {

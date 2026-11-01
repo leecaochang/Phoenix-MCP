@@ -493,17 +493,19 @@ async def async_create_assist_pipeline(
             "preferred": _is_preferred(store, pipeline.id)}
 
 
-async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> None:
+async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> bool:
     """Delete the Phoenix-created Assist pipeline if one is tracked. Best-effort.
 
     Clears the tracked id even if the pipeline is already gone. A preferred pipeline
     cannot be deleted directly, so preference is first moved to any other pipeline;
     if Phoenix MCP's is the only one it is left in place (HA keeps at least one pipeline).
+    Returns True when the pipeline is still in Home Assistant afterwards, so the panel
+    does not report it removed.
     """
     s = data.store.get_settings()
     pipeline_id = s.voice_agent_pipeline_id
     if pipeline_id is None:
-        return
+        return False
 
     store = _pipeline_store(hass)
     if store is not None and pipeline_id in getattr(store, "data", {}):
@@ -523,6 +525,7 @@ async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> None:
 
     async with data.store.async_lock:
         await data.store.async_patch_settings(voice_agent_pipeline_id=None)
+    return store is not None and pipeline_id in getattr(store, "data", {})
 
 
 def assist_pipeline_preferred(hass: HomeAssistant, pipeline_id: str | None) -> bool:

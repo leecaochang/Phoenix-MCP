@@ -20,7 +20,7 @@ Sort, move and hide columns from the column header's menu, and drag a header's e
 
 ## {{label:logs.filters}} {#filters}
 
-Narrow the list by **{{label:audit.rowOutcome}}**, **{{label:audit.rowAccessKey}}** and time, and by text in **{{label:audit.rowMethod}}**, **{{label:audit.rowResource}}** and **{{label:audit.rowIp}}**. **{{label:audit.rowRequestId}}** finds one exact request, such as one from the Conversation Log.
+Narrow the list by **{{label:audit.rowOutcome}}**, **{{label:audit.rowAccessKey}}** and time, and by text in **{{label:audit.rowMethod}}**, **{{label:audit.rowResource}}** and **{{label:audit.rowIp}}**. **{{label:audit.rowRequestId}}** finds one exact request, such as one from the Conversation Log. A time window such as the past 5 minutes moves on as the log updates.
 
 Hiding the filters stops them applying until you show them again. When both logs are open, one **{{label:logs.filters}}** button shows the filters of both.
 

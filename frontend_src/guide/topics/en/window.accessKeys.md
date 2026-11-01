@@ -9,7 +9,7 @@ Each row shows the key's name, mode and status, and when it was created, last ch
 
 Type in the filter box above the list to find a key by name or status. You can sort, move, resize and hide columns; the layout is kept in this browser.
 
-The Mode column shows Scoped, or Pass Through for a key that skips the permissions tree.
+The Mode column shows Scoped, or {{label:accessKeys.passThrough}} for a key that skips the permissions tree.
 
 Related: [What pass-through opens](guide:topic.passThrough)
 
@@ -73,4 +73,4 @@ Ends the key for good. Its requests are refused, and its waiting approvals are c
 
 When you change which tools a key may use, a banner above the list asks you to reconnect its agent. Some apps only read their list of tools when they connect. The banner appears only for keys that have been used.
 
-Giving a key write access to something it couldn't change before, or taking it away, changes its tools too, but shows no banner. Reconnect the app then as well.
+Giving a key its first Write in the permissions tree, or removing its last one, changes its tools too, and shows the banner as well.

@@ -61,7 +61,9 @@ export function useWorkspaceReset(forget: () => void): void {
   const controller = useContext(ControllerContext);
   const latest = useRef(forget);
   latest.current = forget;
-  useEffect(() => controller?.onReset(() => latest.current()), [controller]);
+  // My Workspace's copies share their workspace's selection, and its reset only empties it,
+  // so they forget nothing: the source workspace keeps its chosen record.
+  useEffect(() => (controller && controller.id !== "my" ? controller.onReset(() => latest.current()) : undefined), [controller]);
 }
 
 /** Open (or unfold) a window of this workspace; does nothing outside the shell. */

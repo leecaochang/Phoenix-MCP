@@ -14,7 +14,7 @@ The kill switch cuts off every way an AI can reach your home through Phoenix. It
 
 ## What keeps working {#keeps}
 
-This panel keeps working, so you can review what happened and turn the switch off again. You can still edit MESA profiles, and the in-context profile buttons stay.
+This panel keeps working, so you can review what happened and turn the switch off again. You can still restore a change in Changes and edit MESA profiles, and the in-context profile buttons stay.
 
 ## After a restart {#restart}
 

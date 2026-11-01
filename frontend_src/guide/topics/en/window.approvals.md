@@ -23,7 +23,7 @@ Use the arrow keys to move through the list; Review follows. A request someone i
 
 Approves several pending requests at once. Select **{{label:approvals.selectMultiple}}** on the toolbar, tick the requests, then select the Approve button that counts them. It's available while at least two pending requests are listed.
 
-Phoenix approves them one at a time, newest first, and stops at the first one that doesn't succeed. The rest stay pending and ticked. A batch holds at most 50 requests. **{{label:approvals.cancelSelection}}** leaves without approving.
+Phoenix approves them one at a time, newest first, and stops at the first one that doesn't succeed. The rest stay pending and ticked. A batch holds at most 50 requests, so selecting all ticks the first 50. Expired requests can't be ticked. **{{label:approvals.cancelSelection}}** leaves without approving.
 
 Use it only for requests you already know well; each one still runs exactly as Review shows it.
 

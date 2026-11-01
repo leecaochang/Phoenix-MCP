@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP はすでに設定されています。"
     },
     "create_entry": {
-      "default": "Phoenix MCP パネルでアクセスキーを管理してください"
+      "default": "サイドバーの Phoenix MCP パネルでアクセスキーを管理してください。このパネルは管理者にのみ表示されます。"
     }
   },
   "issues": {

@@ -10,7 +10,7 @@
       "already_configured": "Phoenix MCP is already configured."
     },
     "create_entry": {
-      "default": "Use the Phoenix MCP panel to manage your access keys"
+      "default": "Use the Phoenix MCP panel in the sidebar to manage your access keys. The panel is shown only to administrators."
     }
   },
   "issues": {

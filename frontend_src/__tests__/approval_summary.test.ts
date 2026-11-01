@@ -3,7 +3,7 @@ import { friendlyApprovalSummary } from "../utils/approval_summary";
 
 describe("friendly approval summary", () => {
   it.each([
-    ["exact", "This approval covers the entities listed in Details. Changed targets require a new request."],
+    ["exact", "This approval covers the entities listed below. Changed targets require a new request."],
     ["future_native_execution", "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks."],
     ["dynamic_accessible_devices", "Accessible devices are resolved again at execution and may have changed."],
   ])("explains %s target semantics on named script summaries", (semantics, explanation) => {
@@ -138,7 +138,7 @@ describe("friendly approval summary", () => {
       target: { type: "script", id: "approval_summary_smoke_test", label: "Approval Summary Smoke Test" },
     })).toEqual({
       title: "Create script 'Approval Summary Smoke Test'",
-      body: "This will add script 'Approval Summary Smoke Test' to Home Assistant. Open Details to review its configuration.",
+      body: "This will add script 'Approval Summary Smoke Test' to Home Assistant. Review its configuration below.",
     });
   });
 

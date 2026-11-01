@@ -120,4 +120,16 @@ describe("moving through a log", () => {
     selection.step(1);
     expect(onStep).toHaveBeenCalledOnce();
   });
+
+  it("follows the log's current order, so new rows and a re-sort are reachable", () => {
+    const selection = new LogSelection();
+    const a = { id: "a" } as never, b = { id: "b" } as never, c = { id: "c" } as never;
+    selection.set({ kind: "conversation", entry: a, ordered: [a], accessKeyNames: {} });
+    selection.reorder("conversation", [c, a, b]);
+    selection.step(-1);
+    expect((selection.get()!.entry as { id: string }).id).toBe("c");
+    // Another log's order never replaces this one.
+    selection.reorder("audit", []);
+    expect(selection.get()!.ordered).toHaveLength(3);
+  });
 });

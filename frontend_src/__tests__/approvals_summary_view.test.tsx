@@ -25,7 +25,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     diff: { kind: "system_action", summary: "Restart Home Assistant", summary_key: "diff.restart_ha", summary_params: {} },
     status: "pending",
     created_at: "2026-08-13T04:00:00Z",
-    expires_at: "2026-08-13T05:00:00Z",
+    expires_at: "2099-08-13T05:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
     rejected_reason: null,
@@ -113,7 +113,7 @@ describe("Review and Request Details", () => {
     expect(details().getByText("cap_restart")).toBeTruthy();
     // Inputs can be large (a whole dashboard): built only when opened.
     expect(details().queryByText(/technical/)).toBeNull();
-    const inputs = details().getByText("Raw Args").closest("details")!;
+    const inputs = details().getByText("Arguments").closest("details")!;
     inputs.open = true;
     fireEvent(inputs, new Event("toggle"));
     expect(await details().findByText(/technical/)).toBeTruthy();
@@ -224,7 +224,7 @@ describe("Review and Request Details", () => {
     ["rejected", "not now", null, "The request was rejected and was not run. Reason: not now"],
     ["expired", null, null, "The request expired and was not run."],
     ["cancelled", "admin_cancelled", null, "The request was cancelled and was not run. Reason: Cancelled by admin"],
-    ["failed", "execution_failed", { tool_result: { content: [{ type: "text", text: "Forbidden." }] } }, "The request was approved, but execution failed. Error: The action could not be completed. Open Details to review the executor error."],
+    ["failed", "execution_failed", { tool_result: { content: [{ type: "text", text: "Forbidden." }] } }, "The request was approved but did not complete. Error: The action could not be completed. Request Details shows the full error under Result."],
     ["failed", "execution_interrupted", null, "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again."],
   ] as const)("shows a friendly %s outcome", async (status, rejectedReason, result, expected) => {
     const resolved = record({ status, rejected_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });

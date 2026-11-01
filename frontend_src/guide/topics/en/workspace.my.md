@@ -15,7 +15,7 @@ The first window fills the workspace. Each next one goes beside or under the oth
 
 Closing a window here removes it. To bring it back, add it again from its own workspace. **{{label:workspace.restoreOriginal}}** removes every window.
 
-My Default here keeps the arrangement but not which windows are in it, so restoring it doesn't bring removed windows back.
+My Default here keeps the arrangement and the windows in it, so restoring it brings back windows you removed since.
 
 ## {{label:workspace.verticalScrolling}} {#scrolling}
 
@@ -25,8 +25,8 @@ With it on, drag the border under a window to make it taller.
 
 ## Agent Chat {#chat}
 
-Choose **{{label:workspace.addToMy}}** in Agent Chat's own menu to dock it here. While another workspace is shown, Chat floats over it, and it docks again when you come back here. **{{label:agentchat.floatChat}}** undocks it, and closing it here closes Chat.
+Choose **{{label:workspace.addToMy}}** in Agent Chat's own menu to dock it here. While another workspace is shown, Chat floats over it, and it docks again when you come back here. If you closed it meanwhile, it stays closed; **{{label:shell.agentChat}}** in its window opens it. **{{label:agentchat.floatChat}}** undocks it, and closing it here closes Chat.
 
 ## On a phone {#phones}
 
-Windows can only be added on a computer, and a phone keeps its own arrangement, so My Workspace stays empty on a phone.
+Select **+** in a window's title bar to add it to My Workspace, and close it there to remove it. A phone keeps its own My Workspace, apart from the one on a computer.

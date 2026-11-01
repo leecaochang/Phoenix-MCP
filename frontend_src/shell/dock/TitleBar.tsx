@@ -58,6 +58,12 @@ const MOVES: Array<[Direction, string]> = [
   ["left", "workspace.moveLeft"], ["right", "workspace.moveRight"], ["up", "workspace.moveUp"], ["down", "workspace.moveDown"],
 ];
 
+/** How far Move Left, Right, Up and Down take a floating window. */
+const FLOAT_STEP = 40;
+const FLOAT_MOVES: Record<Direction, { left?: number; top?: number }> = {
+  left: { left: -FLOAT_STEP }, right: { left: FLOAT_STEP }, up: { top: -FLOAT_STEP }, down: { top: FLOAT_STEP },
+};
+
 /** Asks a window's menu button to enter keyboard resizing, which its arrow keys then drive. */
 const RESIZE_EVENT = "phx-window-resize";
 
@@ -91,13 +97,15 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
   const pinned = host === "top" || host === "bottom";
   const then = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
   const entries: MenuEntry[] = MOVES.map(([dir, key]) => {
+    // A floating window moves by a step over the workspace, so the keyboard can place it too.
+    if (floating && host === "float") return { id: `move-${dir}`, label: t(key), onSelect: then(() => controller.nudgeFloat(group, FLOAT_MOVES[dir])) };
     const target = !floating && hostApi ? neighbor(hostApi, group, dir) : null;
     // Moving beside a window in a row that is already four across is refused, as a drop there is.
     const crowded = !!target && (dir === "left" || dir === "right") && tooManyAcross(hostApi!, target, group);
     return { id: `move-${dir}`, label: t(key), disabled: !target || crowded, onSelect: then(() => controller.move(group, dir)) };
   });
   entries.push("separator");
-  entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating, onSelect: () => startResize(controller, windowId) });
+  entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating && host !== "float", onSelect: () => startResize(controller, windowId) });
   entries.push(floating
     ? { id: "dock", label: t("workspace.dockWindow"), onSelect: then(() => controller.dock(group)) }
     : { id: "float", label: t("workspace.floatWindow"), onSelect: then(() => controller.float(group)) });
@@ -156,6 +164,14 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
   const resizeKeys = (e: KeyboardEvent<HTMLButtonElement>): boolean => {
     if (!resizing) return false;
     const g: DockviewGroupPanel = group;
+    const delta = { ArrowRight: { width: RESIZE_STEP }, ArrowLeft: { width: -RESIZE_STEP }, ArrowDown: { height: RESIZE_STEP }, ArrowUp: { height: -RESIZE_STEP } }[e.key];
+    if (floating && delta) {
+      // Laid out again at its new size, the window gets a new title bar: resizing carries on there.
+      controller.nudgeFloat(g, delta);
+      requestAnimationFrame(() => startResize(controller, windowId));
+      e.preventDefault();
+      return true;
+    }
     if (e.key === "ArrowRight") g.api.setSize({ width: g.width + RESIZE_STEP });
     else if (e.key === "ArrowLeft") g.api.setSize({ width: g.width - RESIZE_STEP });
     else if (e.key === "ArrowDown") controller.resizeHeight(g, RESIZE_STEP);

@@ -19,7 +19,7 @@ Related: [Deny, Allow and Confirm](guide:window.capabilities#modes)
 
 ## How long a request waits {#expiry}
 
-A pending request expires after one hour. Each access key can have up to 100 pending requests at once.
+A pending request expires after one hour. Once it has, Review offers only Reject, and rejecting it records it as expired. Each access key can have up to 100 pending requests at once.
 
 ## What happens when you approve {#approve}
 
@@ -56,4 +56,4 @@ Related: [Home Assistant notifications](guide:window.settingsLogs#notify-approva
 
 ## History {#history}
 
-Decided requests are kept for seven days, up to the newest 500. Their arguments, change and result are cleared about an hour after the decision. Interrupted requests are kept in full, so you can check what happened.
+Decided requests are kept for seven days, up to the newest 500. Their arguments, change and result are cleared about an hour after the decision. Interrupted requests stay in the list, so you can check what happened, but their arguments, change and result are cleared after seven days too.

@@ -14,7 +14,7 @@ import { CapabilityMatrix } from "../components/CapabilityMatrix";
 it("activates entity permissions through keyboard clicks and assistive clicks", async () => {
   const onChange = vi.fn();
   render(<PermissionSelector value="GREY" onChange={onChange} />);
-  const write = screen.getByRole("button", { name: "W: Read and write" });
+  const write = screen.getByRole("button", { name: "Permission: Read and write" });
   write.focus();
   const user = userEvent.setup();
   await user.keyboard("{Enter}");
@@ -26,7 +26,7 @@ it("activates entity permissions through keyboard clicks and assistive clicks", 
 it("changes a permission only on a primary press of the primary contact", () => {
   const onChange = vi.fn();
   render(<PermissionSelector value="GREY" onChange={onChange} />);
-  const write = screen.getByRole("button", { name: "W: Read and write" });
+  const write = screen.getByRole("button", { name: "Permission: Read and write" });
   write.releasePointerCapture ??= () => {};
   fireEvent.pointerDown(write, { button: 2, pointerId: 1, isPrimary: true });
   fireEvent.pointerDown(write, { button: 1, pointerId: 1, isPrimary: true });
@@ -41,7 +41,7 @@ it("lets only the pointer that started a paint gesture continue or end it", () =
   const first = vi.fn(), second = vi.fn();
   render(<><PermissionSelector value="GREY" label="first" onChange={first} />
     <PermissionSelector value="GREY" label="second" onChange={second} /></>);
-  const write = screen.getAllByRole("button", { name: "W: Read and write" })[0];
+  const write = screen.getByRole("button", { name: "first: Read and write" });
   write.releasePointerCapture ??= () => {};
   const row = screen.getByRole("group", { name: "second" });
   fireEvent.pointerDown(write, { button: 0, pointerId: 1, isPrimary: true });
@@ -63,7 +63,7 @@ it.each([
   const first = vi.fn(), second = vi.fn();
   render(<><PermissionSelector value="GREY" label="first" onChange={first} />
     <PermissionSelector value="GREY" label="second" onChange={second} /></>);
-  const write = screen.getAllByRole("button", { name: "W: Read and write" })[0];
+  const write = screen.getByRole("button", { name: "first: Read and write" });
   write.releasePointerCapture ??= () => {};
   const row = screen.getByRole("group", { name: "second" });
   fireEvent.pointerDown(write, { button: 0, pointerId: 1, isPrimary: true });

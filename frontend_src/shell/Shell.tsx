@@ -13,7 +13,7 @@ import { resolveLanguage, t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
 import { DisplayModeContext } from "../ui/ActionButton";
-import { WorkspaceController } from "./dock/controller";
+import { WorkspaceController, layoutMembers } from "./dock/controller";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
@@ -128,6 +128,21 @@ export function Shell() {
   useEffect(() => { setGuide(record?.guide ?? GUIDE_CLOSED); }, [record]);
   const guideRef = useRef(guide);
   guideRef.current = guide;
+  // The start workspace was read before the panel's width was known, so possibly from the
+  // other environment's record; and a Home Assistant record adopted later has its own. Each
+  // record that arrives decides it until the user moves to another workspace.
+  const startWorkspace = useRef<WorkspaceId | null>(d.workspace);
+  useEffect(() => {
+    const last = record?.lastWorkspace;
+    if (startWorkspace.current === null || d.workspace !== startWorkspace.current) {
+      startWorkspace.current = null;
+      return;
+    }
+    if (last && last !== d.workspace && WORKSPACE_IDS.includes(last)) {
+      startWorkspace.current = last;
+      d.navigate(last);
+    }
+  }, [record]); // eslint-disable-line react-hooks/exhaustive-deps
   // The windows added to My Workspace, in the order added.
   const [myWindows, setMyWindows] = useState<string[]>(() => record?.myWindows ?? []);
   useEffect(() => { setMyWindows(record?.myWindows ?? []); }, [record]);
@@ -486,6 +501,8 @@ export function Shell() {
     guideRef.current = GUIDE_CLOSED;
     // My Workspace goes back to empty, as Reset This Workspace leaves it.
     clearMy();
+    // Needs Attention comes back everywhere while items are waiting, as Reset This Workspace brings it back there.
+    for (const id of WORKSPACE_IDS) attentionRef.current.showAttentionIn(id);
     setShowArchived(false);
     deselectKey();
     for (const controller of controllers.values()) {
@@ -518,6 +535,14 @@ export function Shell() {
       const id = controller.id as WorkspaceId;
       const saved = recordRef.current?.myDefaults?.[id];
       if (!saved) return;
+      // My Workspace's windows are its own list, which a reset empties: take them back
+      // from the saved arrangement before laying it out.
+      if (id === "my") {
+        const members = layoutMembers(saved).filter((w) => canAddToMy(w) || w === CHAT_WINDOW);
+        myWindowsRef.current = members;
+        setMyWindows(members);
+        controller.setWindows(myWorkspaceWindows(members));
+      }
       controller.load(saved);
       markChanged([`ws:${id}`], true);
       notify(t("workspace.myDefaultRestored"));
@@ -555,15 +580,18 @@ export function Shell() {
   }, [controllers, helpTracker, languageSignature]);
 
   // Needs Attention appears in the visible workspace while items need checking (or a
-  // notification asked for it). Closing it hides it in THAT workspace only, until more
-  // items arrive, and Workspace Options offers it back there (user, 2026-10-29).
-  const attentionCount = d.attention.items.length;
-  const [dismissedAt, setDismissedAt] = useState<Partial<Record<WorkspaceId, number>>>({});
+  // notification asked for it). Closing it hides it in THAT workspace only, until an
+  // item it did not show arrives, and Workspace Options offers it back there (user, 2026-10-29).
+  // Items, not a count: a review and a new item together keep the count.
+  const attentionKeys = d.attention.items.map((item) => `${item.kind}:${item.id}`);
+  const attentionCount = attentionKeys.length;
+  const attentionSignature = attentionKeys.join("|");
+  const [dismissedAt, setDismissedAt] = useState<Partial<Record<WorkspaceId, readonly string[]>>>({});
   const waiting = attentionCount > 0 || d.attentionRequested;
   const attentionShownIn = useCallback((id: WorkspaceId) => {
-    const at = dismissedAt[id];
-    return waiting && (at === undefined || attentionCount > at);
-  }, [waiting, attentionCount, dismissedAt]);
+    const seen = dismissedAt[id];
+    return waiting && (seen === undefined || attentionSignature.split("|").some((key) => key && !seen.includes(key)));
+  }, [waiting, attentionSignature, dismissedAt]);
   useEffect(() => { if (attentionCount === 0) setDismissedAt({}); }, [attentionCount]);
   const dismissAttention = d.dismissAttentionRequest;
   const showAttentionIn = useCallback((id: WorkspaceId) => {
@@ -580,7 +608,7 @@ export function Shell() {
       // Presets appears only while its setting is on.
       controller.availability = (w) => windowAvailable(w, settings, mesaFindings, showArchived);
       controller.syncAvailable();
-      controller.onTransientClose = () => { setDismissedAt((prev) => ({ ...prev, [id]: attentionCount })); dismissAttention(); };
+      controller.onTransientClose = () => { setDismissedAt((prev) => ({ ...prev, [id]: attentionKeys })); dismissAttention(); };
       if (env === "desktop" && id === d.workspace && attentionShownIn(id)) controller.showTransient(ATTENTION_WINDOW);
       else controller.hideTransient(ATTENTION_WINDOW);
     }
@@ -588,6 +616,9 @@ export function Shell() {
     // when the two disagree: `want` lays the workspace out again, which every render must not do.
     const keys = controllers.get("accessKeys");
     if (keys && !!keys.hostOf(ARCHIVED_WINDOW) !== showArchived) keys.want(ARCHIVED_WINDOW, showArchived);
+    // A copy added to My Workspace follows Show Archived too, rather than lingering or never appearing.
+    const my = controllers.get("my");
+    if (my && myWindows.includes(ARCHIVED_WINDOW) && !!my.hostOf(ARCHIVED_WINDOW) !== showArchived) my.want(ARCHIVED_WINDOW, showArchived);
   });
 
   const s = d.settings;
@@ -610,15 +641,10 @@ export function Shell() {
   }, [addToMy, removeFromMy]);
   const closeAgentCli = d.closeAgentCli;
   closeChatRef.current = () => { if (globalChat) chatBridge()?.close?.(); else closeAgentCli(); };
-  // The panel's own Chat counts as open while it shows in the slot, so it floats when My Workspace is left.
-  // Only a slot that has just appeared opens Chat: closing the docked window closes Chat a moment before its slot goes.
+  // A slot never opens Chat by itself: Chat docks from its own menu, so it is open then, and a
+  // Chat closed elsewhere stays closed when My Workspace shows again (user, 2026-11-01). The
+  // docked window offers Agent Chat to open it.
   const { agentCliOpen, keepAgentCliOpen, openAgentCli } = d;
-  const lastChatSlot = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const appeared = !!chatSlot && chatSlot !== lastChatSlot.current;
-    lastChatSlot.current = chatSlot;
-    if (appeared && !globalChat && !agentCliOpen) keepAgentCliOpen();
-  }, [chatSlot, globalChat, agentCliOpen, keepAgentCliOpen]);
   // The global Chat follows the slot through its bridge; without the panel it floats.
   useEffect(() => {
     if (!globalChat) return;
@@ -706,7 +732,9 @@ export function Shell() {
                 />
               </WorkspaceVisibleContext.Provider>
             ))
-            : <PhoneStack workspace={active} showAttention={attentionShownIn(active)} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
+            : <PhoneStack workspace={active} showAttention={attentionShownIn(active)}
+              onCloseAttention={() => { setDismissedAt((prev) => ({ ...prev, [active]: attentionKeys })); dismissAttention(); }}
+              onAddToMy={addToMy} onRemoveFromMy={removeFromMy} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
               guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => updateGuide({ open: false })}
                 topicId={wizardGuideShown ? `wizard.${wizardStep.step}` : null} /> : null} />}
         </WorkspaceArea>
@@ -715,7 +743,7 @@ export function Shell() {
             inject module owns the window then), nor while the kill switch is on.
             When global injection is unsupported, __phxAgentChat is absent, so this
             renders as the fallback. */}
-        {s && !s.kill_switch && (d.agentCliOpen || chatSlot) && !globalChat && (
+        {s && !s.kill_switch && d.agentCliOpen && !globalChat && (
           <ErrorBoundary key={d.agentCliKey}>
             <AgentCliWindow
               key={d.agentCliKey}
@@ -725,6 +753,7 @@ export function Shell() {
               initialAccessKeyId={d.accessKeys[0]?.id ?? ""}
               onClose={d.closeAgentCli}
               hass={d.hass}
+              summonVersion={d.agentCliSummon}
               dockMount={chatSlot}
               dock={env === "desktop" ? { docked: chatDocked, toggle: dockToggle } : null}
             />

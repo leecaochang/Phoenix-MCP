@@ -24,6 +24,21 @@ export function skillUrlFromMcp(mcpUrl: string): string {
 // client. Access key names match ^[A-Za-z0-9_-]{3,32}$ (backend ACCESS_KEY_NAME_REGEX)
 // and the backend rejects two access keys whose lowercased name slugs collide, so
 // this derivation is unique across access keys without extra sanitization.
+/**
+ * `base`, or the first `base_N` no existing key uses, compared as the server
+ * compares names (case and hyphens ignored). The wizard's suggested name is the
+ * same every run, so a second run would otherwise be refused as taken.
+ */
+export function freeAccessKeyName(base: string, existing: readonly string[]): string {
+  const slug = (name: string) => name.toLowerCase().replace(/-/g, "_");
+  const taken = new Set(existing.map(slug));
+  if (!taken.has(slug(base))) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}_${n}`;
+    if (!taken.has(slug(candidate))) return candidate;
+  }
+}
+
 export function mcpServerName(accessKeyName: string): string {
   return "phx-" + accessKeyName.toLowerCase().replace(/_/g, "-");
 }
@@ -232,8 +247,7 @@ export function buildAgentTabs(url: string, accessKey: string, accessKeyName: st
 // Per-agent "install the Phoenix MCP skill" guidance. The server's MCP
 // instructions already link every connection to the same guide, so installing it
 // locally is optional. Native skills expose their metadata first and load the
-// guide when activated; Cursor uses a project rule that references the
-// downloaded guide.
+// guide when activated. Cursor installs it as a user skill in ~/.cursor/skills.
 export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBlock[] {
   const title = t("wizard.skillInstallTitle");
   switch (agentKey) {
@@ -338,7 +352,10 @@ export function firstGreenTarget(tree: PermissionTree, entityTree: EntityTree | 
       if (ids.length) return ids[0];
     }
     for (const [eid, info] of Object.entries(dt.entity_details)) {
-      if (info.device_id && greenDevices.has(info.device_id)) return eid;
+      if (!info.device_id) continue;
+      // A grant on a main device covers its parts' entities too.
+      const parent = dt.devices[info.device_id]?.parent_device_id;
+      if (greenDevices.has(info.device_id) || (parent && greenDevices.has(parent))) return eid;
     }
   }
   return null;

@@ -269,19 +269,19 @@ describe("the Guide window with sections, Contents and Search", () => {
     render(<GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={onClose} />);
     await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     expect(open).toHaveBeenCalledWith("", "phoenix-mcp-guide", expect.stringContaining("popup=yes"));
     expect(document.querySelector("section.phx-guide")).toBeNull();
     expect(popupDoc.querySelector("section.phx-guide.is-popped h3")?.textContent).toBe("Settings");
     // The title bar's buttons keep their window-control styling there.
     expect(popupDoc.head.querySelector("style")?.textContent).toContain(".phx-window-control");
 
-    act(() => { (popupDoc.querySelector('[aria-label="Pop back into Home Assistant"]') as HTMLButtonElement).click(); });
+    act(() => { (popupDoc.querySelector('[aria-label="Pop Back into Home Assistant"]') as HTMLButtonElement).click(); });
     expect(document.querySelector("section.phx-guide")).not.toBeNull();
     await waitFor(() => expect(popupWindow.close).toHaveBeenCalled());
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     act(() => { popupWindow.dispatchEvent(new Event("pagehide")); });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -292,7 +292,7 @@ describe("the Guide window with sections, Contents and Search", () => {
     const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
     render(<GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
-    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
     expect(screen.getByRole("alert").textContent).toMatch(/blocked/);
     expect(document.querySelector("section.phx-guide")).not.toBeNull();
   });

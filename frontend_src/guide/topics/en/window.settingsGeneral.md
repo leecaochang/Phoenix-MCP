@@ -25,7 +25,7 @@ Related: [Access Keys](guide:workspace.accessKeys)
 
 Adds MESA profile buttons to Home Assistant's own pages: the entity, automation, script, scene, helper and people lists, and the device, area and integration pages. Only administrators see them. Off by default.
 
-A change takes effect the next time the page fully loads. If the buttons fail on a page, they turn off for the rest of that browser session, but the setting stays on.
+A change takes effect the next time the page fully loads. If the buttons fail on a page, they turn off until the page reloads, but the setting stays on.
 
 Related: [MESA](guide:workspace.mesa)
 

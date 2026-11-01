@@ -23,6 +23,8 @@ import { compareStrings, t, tn } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
 import { useNotify } from "../ui/notify";
 import { InlineConfirm } from "../ui/InlineConfirm";
+// A cycle (shell/mesa reads exportMesaArchive), safe because neither module uses the other at load.
+import { useMesa } from "../shell/mesa";
 
 // Maps an HA domain to the canonical tag namespace roots that describe an ENTITY
 // of that domain, used to surface "Suggested" tags. Intent namespaces
@@ -579,6 +581,10 @@ export function ProfileEditor({
   /** Window: a message shown above the form, such as a question before switching profiles. */
   notice?: React.ReactNode;
 }) {
+  // A toast names the profile as the lists do: a device by its name, not its id. Outside the
+  // MESA workspace (the in-context editor) there is no name list, and the key is shown.
+  const mesaNames = useMesa();
+  const profileName = (key: string) => mesaNames?.nameOf(scope, key) || key;
   const initialState = () => {
     const base = docToEditor(profileKey ?? "", null);
     if (isNew && seedControlMode) base.control_mode = seedControlMode;
@@ -798,7 +804,16 @@ export function ProfileEditor({
       const w = await saveProfile(scope, state.key.trim(), doc, isNew);
       cleanSnapshot.current = JSON.stringify(state);
       setWarnings(w);
-      if (w.length === 0) { notify(t("mesa.savedToast", { key: state.key.trim() })); onSaved(); finish(); }
+      // The window keeps this form for the profile it just saved, so the
+      // Effective Resolution it shows is read again here; the form is left as
+      // it is, so nothing typed after Save is replaced.
+      if (!isNew && scope === "entity" && profileKey) {
+        const savedKey = profileKey;
+        void (async () => {
+          try { setDetail(await api.getMesaProfile(savedKey)); } catch { /* the earlier resolution stays shown */ }
+        })();
+      }
+      if (w.length === 0) { notify(t("mesa.savedToast", { key: profileName(state.key.trim()) })); onSaved(); finish(); }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("mesa.saveProfileFailed"));
     } finally {
@@ -811,7 +826,7 @@ export function ProfileEditor({
     setSaving(true);
     try {
       await deleteProfile(scope, profileKey);
-      notify(t("mesa.deletedToast", { key: profileKey }));
+      notify(t("mesa.deletedToast", { key: profileName(profileKey) }));
       onSaved();
       onClose();
     } catch (e) {

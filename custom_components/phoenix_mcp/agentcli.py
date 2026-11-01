@@ -5543,7 +5543,8 @@ async def _run_tool_batch(
                 reason: str | None = "Cancelled by the operator; not run."
             else:
                 authority_lost = True
-                reason = "This access key is no longer authorized; not run."
+                reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
+                          else "This access key is no longer authorized; not run.")
             results.append({"tool_use_id": tc.get("id"), "tool_name": name,
                             "result_text": reason, "is_error": True})
             continue
@@ -5987,8 +5988,13 @@ async def async_run_agent_turn(
         # batch was completed with synthetic results (protocol-safe); end the
         # turn rather than looping into more denied dispatches.
         if authority_lost:
-            await emit("error", {"code": "unauthorized",
-                                 "message": "This access key is no longer authorized."})
+            # The kill switch is not the key's fault; say which one stopped the turn.
+            if _kill_switch_on(data):
+                await emit("error", {"code": "kill_switch",
+                                     "message": "The kill switch is on, so the agent stopped. Nothing more was run."})
+            else:
+                await emit("error", {"code": "unauthorized",
+                                     "message": "This access key is no longer authorized."})
             break
         if stop_turn:
             # Defence in depth with no observable effect today, so no test can
@@ -6584,7 +6590,8 @@ async def async_run_voice_turn(
         # the reply as markdown). Absolute when a base URL is known so it clicks from
         # anywhere; the review_url is already a same-origin path like /phoenix-mcp/approvals/id.
         links = [f"{base_url}{u}" if base_url else u for u in turn.review_urls]
-        joined = " ".join(f"[Approve in the Phoenix MCP panel]({href})" for href in links)
+        label = voice_text(language, "approval_link")
+        joined = " ".join(f"[{label}]({href})" for href in links)
         answer = f"{answer}\n\n{joined}"
     return answer
 
@@ -6737,6 +6744,11 @@ def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
         return dataclasses.replace(access_key, confirm_inline_wait_seconds=0)
     except (TypeError, ValueError):
         return access_key
+
+
+def _kill_switch_on(data: PhoenixData) -> bool:
+    """Whether the runtime kill switch is what stopped a turn."""
+    return bool(data.store.get_settings().kill_switch)
 
 
 def _current_dispatch_access_key(data: PhoenixData, access_key_id: str) -> AccessKeyRecord | None:

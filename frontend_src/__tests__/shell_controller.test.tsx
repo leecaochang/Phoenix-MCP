@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { DockviewReact, type AddPanelOptions, type DockviewApi } from "dockview-react";
-import { WorkspaceController } from "../shell/dock/controller";
+import { WorkspaceController, layoutMembers, type WorkspaceLayout } from "../shell/dock/controller";
 
 // The controller drives a real Dockview instance in jsdom. jsdom has no layout,
 // so geometry (neighbours, rows) is covered against fixed rectangles in
@@ -259,5 +259,18 @@ describe("workspace controller", () => {
       const second = mountKeys(() => allowed, saved);
       expect(ids(second)).toContain("presets");
     });
+  });
+});
+
+describe("layoutMembers", () => {
+  it("names every window a saved layout places or remembers closed, for My Workspace's My Default", () => {
+    const layout = {
+      dock: { grid: {}, panels: { approvals: {}, help: {} } },
+      bands: { top: { dock: { grid: {}, panels: { changes: {} } } } },
+      floats: { grid: {}, panels: { auditLog: {} } },
+      closed: { mesaProfiles: null },
+      folds: {},
+    } as unknown as WorkspaceLayout;
+    expect(layoutMembers(layout).sort()).toEqual(["approvals", "auditLog", "changes", "help", "mesaProfiles"]);
   });
 });

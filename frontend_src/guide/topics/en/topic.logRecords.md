@@ -9,7 +9,7 @@ Phoenix keeps two logs. The audit log is a short record of every action and its 
 - **Other MCP requests**: listing tools, starting and ending a session, and requests a key wasn't allowed to make.
 - **MESA blocks**: an extra entry for each action MESA refused.
 - **Approvals**: each request queued for approval, and what happened to it: approved, carried out, rejected, cancelled or failed.
-- **Your changes in the panel**: access keys, permissions, settings, MESA profiles, restores, wipes and other administrator actions. These show the administrator instead of an access key.
+- **Your changes in the panel**: access keys, permissions, settings, MESA profiles, restores, wipes and other administrator actions. These show the administrator instead of an access key. A settings change names what changed, even one that turns logging off.
 
 ## What isn't recorded {#not-audited}
 

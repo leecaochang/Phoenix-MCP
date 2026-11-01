@@ -5,4 +5,4 @@ Every recorded change to the chosen item, newest first, with the chosen one mark
 
 It opens by itself, under the Changes list, when the item has more than one change. If you close it, it stays closed; reopen it from **{{label:workspace.options}}**.
 
-Phoenix keeps the 20 newest changes to each item.
+Phoenix keeps the 20 newest changes to each item. When an entity is renamed, its changes move to its new ID, so its history stays in one list.

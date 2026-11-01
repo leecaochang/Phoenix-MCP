@@ -17,7 +17,7 @@ A dashboard change can also be shown as a **{{label:common.preview}}** that draw
 
 Puts the item back as it was before this change (**{{label:changes.restoreBefore}}**) or right after it (**{{label:changes.restoreAfter}}**). A restore runs with your authority as an administrator, so it needs no approval.
 
-A greyed-out choice can't work here; point at it to see why. For example, a side that doesn't exist, or the After of the item's newest change. Some restores can still be refused after you confirm, such as an entity that was deleted.
+A greyed-out choice can't work here, and the reason shows under it. For example, a side that doesn't exist, the After of the item's newest change, an entity that was deleted, or a version holding YAML tags such as !secret. A restore can still be refused after you confirm if it no longer fits the item as it is now.
 
 Related: [What a restore can put back](guide:topic.configurationHistory#restore)
 
@@ -25,7 +25,7 @@ Related: [What a restore can put back](guide:topic.configurationHistory#restore)
 
 Choosing a side asks you to confirm in place. Select **{{label:changes.confirmRestoreButton}}**, or **{{label:changes.cancelRestore}}** to back out.
 
-If the item has a newer change by the time you confirm, Phoenix restores nothing and tells you, so check the newer change first.
+If the item has a newer change by the time you confirm, Phoenix restores nothing and tells you, so check the newer change first. The server checks this too, so a change that lands at the last moment is caught as well.
 
 ### After a restore {#after-restore}
 

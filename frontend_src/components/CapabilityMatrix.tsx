@@ -296,14 +296,16 @@ const MODE_DESC_KEYS: Record<CapMode, string> = {
 };
 
 export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
-  const [saving, setSaving] = React.useState<CapName | null>(null);
+  // The rows saving now. The API queues one key's changes in order, so a click on
+  // another row is saved after it rather than dropped.
+  const [saving, setSaving] = React.useState<ReadonlySet<CapName>>(() => new Set());
   const [error, setError] = React.useState<string | null>(null);
   // Descriptions show in icons-and-text mode; in icons-only mode they are in Help (user, 2026-10-28).
   const iconsOnly = useContext(DisplayModeContext) === "icons";
 
   async function setMode(cap: CapName, mode: CapMode) {
-    if (saving !== null || accessKey[cap] === mode) return;
-    setSaving(cap);
+    if (saving.has(cap) || accessKey[cap] === mode) return;
+    setSaving((prev) => new Set(prev).add(cap));
     setError(null);
     try {
       const body = { [cap]: mode } as unknown as PatchAccessKeyBody;
@@ -312,7 +314,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("caps.updateFailed"));
     } finally {
-      setSaving(null);
+      setSaving((prev) => { const next = new Set(prev); next.delete(cap); return next; });
     }
   }
 
@@ -344,7 +346,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
             <div className="cap-tier-header">{t(TIER_LABEL_KEYS[tier])}</div>
             {items.map((cap) => {
               const current = accessKey[cap.key];
-              const isSaving = saving === cap.key;
+              const isSaving = saving.has(cap.key);
               const notice = cap.key === "cap_esphome_yaml" || cap.key === "cap_esphome_flash"
                 ? esphomeNotice(esphome) : null;
               return (

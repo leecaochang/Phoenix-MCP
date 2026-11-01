@@ -136,7 +136,7 @@ describe("permission tree search and device cleanup", () => {
     expect(screen.getByText(GHOST_DEVICE_ID)).toBeInTheDocument();
     const selector = screen.getByRole("group", { name: `Permission for device ${GHOST_DEVICE_ID}` });
     const clearButton = within(selector).getByRole("button", {
-      name: "N: No explicit grant (inherits from parent)",
+      name: `Permission for device ${GHOST_DEVICE_ID}: No explicit grant (inherits from parent)`,
     });
     clearButton.releasePointerCapture = vi.fn();
     fireEvent.pointerDown(clearButton, { pointerId: 1, isPrimary: true });
@@ -305,7 +305,7 @@ describe("permission tree search and device cleanup", () => {
     expect(effective).toEqual([`(${t("perms.stateNoAccess")})`, write, write, write]);
 
     const selector = screen.getByRole("group", { name: "Permission for device Strip" });
-    const red = within(selector).getByRole("button", { name: /^D:/ });
+    const red = within(selector).getByRole("button", { name: /: Deny \(overrides grants above and below\)/ });
     red.releasePointerCapture = vi.fn();
     fireEvent.pointerDown(red, { pointerId: 1, isPrimary: true });
     await waitFor(() => expect(mocks.patchDevicePermission).toHaveBeenCalledWith(

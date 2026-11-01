@@ -98,4 +98,20 @@ describe("the Notifications window", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear Notification" }));
     expect(screen.getByText("No notifications in this session.")).toBeTruthy();
   });
+
+  it("dates a notice from another day", () => {
+    const center = new Notifications();
+    center.notify("Today.");
+    center.notify("Yesterday.");
+    center.history[0].time -= 86_400_000;
+    render(
+      <NotificationsContext.Provider value={center}>
+        <WindowPlaceContext.Provider value={{ workspace: "logs", window: "notifications" }}>
+          <NotificationsWindow />
+        </WindowPlaceContext.Provider>
+      </NotificationsContext.Provider>,
+    );
+    const [older, today] = screen.getAllByRole("listitem").map((li) => li.querySelector("time")!.textContent!);
+    expect(older.length).toBeGreaterThan(today.length);
+  });
 });

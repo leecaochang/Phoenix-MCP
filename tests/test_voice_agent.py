@@ -260,6 +260,20 @@ async def test_voice_turn_appends_review_link_only_when_requested():
         assert ("http://h/phoenix-mcp/approvals/ap1" in text) is expect_link
         assert "It is queued." in text
 
+    # The link label follows the conversation language, like the reply around it.
+    with patch.object(agentcli, "_stream_turn_resilient", stream_factory()), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
+         patch.object(agentcli, "get_approval", return_value=record), \
+         patch.object(agentcli, "voice_text", side_effect=lambda lang, key, **p: f"{lang}:{key}"), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "unlock",
+            include_review_links=True, language="de",
+        )
+    assert "[de:approval_link](http://h/phoenix-mcp/approvals/ap1)" in text
+
 
 @pytest.mark.asyncio
 async def test_voice_turn_authority_loss_skips_side_effect():
@@ -832,9 +846,23 @@ async def test_remove_pipeline_reassigns_preferred_then_deletes():
     store.async_set_preferred_item(phoenix.id)
     data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
     with patch.object(voice_agent, "_pipeline_store", return_value=store):
-        await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+        kept = await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+    assert kept is False
     assert phoenix.id not in store.data
     assert store.async_get_preferred_item() == other.id
+    assert data.store.get_settings().voice_agent_pipeline_id is None
+
+
+@pytest.mark.asyncio
+async def test_remove_pipeline_reports_only_pipeline_kept():
+    """Home Assistant's only pipeline stays; removal says so and stops tracking it."""
+    store = _FakePipelineStore()
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})  # first item is preferred
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        kept = await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+    assert kept is True
+    assert phoenix.id in store.data
     assert data.store.get_settings().voice_agent_pipeline_id is None
 
 

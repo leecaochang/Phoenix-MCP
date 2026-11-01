@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP är redan konfigurerad."
     },
     "create_entry": {
-      "default": "Använd Phoenix MCP-panelen för att hantera dina åtkomstnycklar"
+      "default": "Använd Phoenix MCP-panelen i sidofältet för att hantera dina åtkomstnycklar. Panelen visas bara för administratörer."
     },
     "step": {
       "user": {

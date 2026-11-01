@@ -10,6 +10,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { t } from "../i18n";
 import { Icon } from "../ui/Icon";
+import { usePanelDataOrNull } from "./PanelData";
+import { useSettings } from "./settings";
 import { WorkspaceVisibleContext } from "./visibility";
 
 /** The window id of Agent Chat in My Workspace. */
@@ -29,6 +31,9 @@ export const ChatDockContext = createContext<ChatDock | null>(null);
 export function ChatDockWindow() {
   const dock = useContext(ChatDockContext);
   const visible = useContext(WorkspaceVisibleContext);
+  // With the kill switch on Chat cannot open, so the window says why and leads to the switch, as the toolbar does.
+  const killSwitch = !!usePanelDataOrNull()?.settings?.kill_switch;
+  const settings = useSettings();
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!dock || !slot || !visible) return;
@@ -39,11 +44,23 @@ export function ChatDockWindow() {
     <div className="phx-chat-dock">
       <div ref={setSlot} className="phx-chat-dock-slot" />
       <div className="phx-chat-dock-empty">
-        <p>{t("agentchat.dockedClosed")}</p>
-        <button type="button" className="btn btn-outline btn-sm phx-action" onClick={() => dock?.openChat()}>
-          <Icon name="agentChat" size={16} />
-          <span>{t("shell.agentChat")}</span>
-        </button>
+        {killSwitch ? (
+          <>
+            <p>{t("shell.killSwitchTitle")}</p>
+            <button type="button" className="btn btn-outline btn-sm phx-action" onClick={() => settings?.reveal("killSwitch")}>
+              <Icon name="killSwitch" size={16} />
+              <span>{t("shell.killSwitchFull")}</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <p>{t("agentchat.dockedClosed")}</p>
+            <button type="button" className="btn btn-outline btn-sm phx-action" onClick={() => dock?.openChat()}>
+              <Icon name="agentChat" size={16} />
+              <span>{t("shell.agentChat")}</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

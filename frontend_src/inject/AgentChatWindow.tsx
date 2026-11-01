@@ -182,10 +182,7 @@ function paintAgentChat(): void {
  */
 export function setAgentChatDock(next: AgentChatDock | null): void {
   dockState = next;
-  if (next?.slot && !host) {
-    showAgentChat();
-    return;
-  }
+  // A slot never opens Chat: a Chat closed elsewhere stays closed in My Workspace (user, 2026-11-01).
   if (host) paintAgentChat();
 }
 

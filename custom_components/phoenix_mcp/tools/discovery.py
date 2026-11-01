@@ -48,7 +48,7 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
-from ..authoring_validation import authoring_input_error, validation_message
+from ..authoring_validation import async_validation_message, authoring_input_error, validation_message
 from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
@@ -3413,10 +3413,10 @@ async def _tool_validate_config(
             errors.append("Config failed schema validation.")
     except vol.Invalid as exc:
         valid = False
-        errors.append(validation_message(cfg_type, exc))
+        errors.append(await async_validation_message(hass, cfg_type, config, exc))
     except HomeAssistantError:
         valid = False
-        errors.append(validation_message(cfg_type))
+        errors.append(await async_validation_message(hass, cfg_type, config))
     except Exception:
         _LOGGER.error("Config validation raised an unexpected internal error")
         return _tool_error("Internal error validating this config."), "invalid_request", "validate_automation_or_script"

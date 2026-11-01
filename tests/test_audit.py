@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -424,6 +425,31 @@ class TestRedactionSettings:
         entry = list(log._log)[0]
         assert entry.resource == "[redacted]"
         assert entry.client_ip == "[redacted]"
+
+    def test_log_client_ip_false_keeps_phoenixs_own_surfaces(self):
+        """They name no one, and without them every internal row looks like a network one."""
+        log = AuditLog()
+        s = _settings(log_client_ip=False)
+        for source in ("agentcli", "voice", "assist", "ai_task", "home_companion"):
+            _record(log, client_ip=source, settings=s)
+        assert [e.client_ip for e in log._log] == ["agentcli", "voice", "assist", "ai_task", "home_companion"]
+
+    def test_log_entity_names_false_hides_entity_ids_in_the_payload(self):
+        """Tool arguments and MESA rows carry entity IDs too."""
+        log = AuditLog()
+        payload = {"arguments": {"entity_id": "lock.front_door", "target": {"entity_id": ["light.a"]}},
+                   "entities": [{"id": "x"}], "service": "light.turn_on"}
+        log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
+                   resource="lock.front_door", outcome="allowed", client_ip="", settings=_settings(log_entity_names=False),
+                   payload=payload)
+        stored = json.loads(list(log._log)[0].payload)
+        assert "lock.front_door" not in json.dumps(stored) and "light.a" not in json.dumps(stored)
+        assert stored["arguments"]["entity_id"] == "[redacted]"
+        # A service name looks like an entity ID but is not one, and stays.
+        assert stored["service"] == "light.turn_on"
+        log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
+                   resource="x", outcome="allowed", client_ip="", settings=_settings(), payload=payload)
+        assert "lock.front_door" in list(log._log)[1].payload
 
     def test_redaction_applied_before_storage(self):
         """Original values must not be recoverable from the log after redaction."""

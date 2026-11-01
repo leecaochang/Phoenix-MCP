@@ -281,9 +281,19 @@ describe("Agent Chat in My Workspace", () => {
     await waitFor(() => expect(stored().myWindows).toEqual([]), { timeout: 4000 });
   });
 
+  it("keeps a closed Chat closed when My Workspace shows its slot (user, 2026-11-01)", async () => {
+    seed({ lastWorkspace: "my", myWindows: ["agentChat"] });
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "agentChat")?.textContent).toContain("Agent Chat is closed."));
+    expect(chat(el)).toBeNull();
+  });
+
   it("closing its window in My Workspace closes Chat and takes it out of My Workspace", async () => {
     seed({ lastWorkspace: "my", myWindows: ["agentChat"] });
     const el = mountPanel();
+    // Opened from the docked window, as a Chat closed earlier is.
+    await waitFor(() => expect(visible(el, "agentChat")?.querySelector<HTMLButtonElement>(".phx-chat-dock-empty button")).toBeTruthy());
+    act(() => { visible(el, "agentChat")!.querySelector<HTMLButtonElement>(".phx-chat-dock-empty button")!.click(); });
     await waitFor(() => expect(chat(el)).toHaveClass("agentcli-docked"));
     act(() => { titleControl(el, "Agent Chat", '[aria-label="Close"]').click(); });
     await waitFor(() => expect(chat(el)).toBeNull());
@@ -300,7 +310,8 @@ describe("Agent Chat in My Workspace", () => {
       (window as unknown as Record<string, unknown>).__phxAgentChat = { ready: true, isVisible: () => false, open: vi.fn(), restore: vi.fn(), close: vi.fn(), setDock };
       seed({ lastWorkspace: "my", myWindows: ["agentChat"] });
       const el = mountPanel();
-      await waitFor(() => expect(visible(el, "agentChat")?.textContent).toContain("Agent Chat is closed."));
+      // The window says why Chat cannot open, and leads to the switch.
+      await waitFor(() => expect(visible(el, "agentChat")?.textContent).toContain("Phoenix MCP is not serving any agent requests."));
       await waitFor(() => expect(setDock).toHaveBeenCalled());
       expect(setDock.mock.calls.every(([dock]) => dock === null || dock.slot === null)).toBe(true);
       expect(chat(el)).toBeNull();

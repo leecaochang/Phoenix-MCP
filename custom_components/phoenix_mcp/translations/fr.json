@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP est déjà configuré."
     },
     "create_entry": {
-      "default": "Utilisez le panneau Phoenix MCP pour gérer vos clés d’accès"
+      "default": "Utilisez le panneau Phoenix MCP dans la barre latérale pour gérer vos clés d’accès. Le panneau n’est visible que par les administrateurs."
     }
   },
   "issues": {

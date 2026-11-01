@@ -291,8 +291,32 @@ async def _rollback_failed_setup(
         hass.data.pop(DOMAIN, None)
 
 
+def _ha_version_supported() -> tuple[bool, str]:
+    """Whether the running Home Assistant meets MIN_HA_VERSION, and its version; unparsable passes."""
+    from awesomeversion import AwesomeVersion
+    from homeassistant.const import __version__ as ha_version
+
+    from .const import MIN_HA_VERSION
+
+    try:
+        return AwesomeVersion(ha_version) >= AwesomeVersion(MIN_HA_VERSION), ha_version
+    except Exception:  # noqa: BLE001 - an unreadable version must not block setup
+        return True, ha_version
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Phoenix MCP atomically from a config entry."""
+    # HACS checks the version before installing; a manual install does not, so
+    # setup refuses clearly here rather than failing somewhere later.
+    supported, ha_version = _ha_version_supported()
+    if not supported:
+        from .const import MIN_HA_VERSION
+
+        _LOGGER.error(
+            "Phoenix MCP needs Home Assistant %s or newer, and this is %s. It was not set up.",
+            MIN_HA_VERSION, ha_version,
+        )
+        return False
     hass.data[RUNTIME_READY_KEY] = False
     try:
         result = await _async_setup_entry_impl(hass, entry)
@@ -669,6 +693,18 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         for approval in expired:
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
+            # Recorded as an expiry found at approve time is, so the audit trail
+            # shows every request that timed out.
+            data.audit.record(
+                request_id=approval.request_id or "",
+                access_key_id=approval.access_key_id,
+                access_key_name=approval.access_key_name,
+                method="approval/expired",
+                resource=f"approval:{approval.tool_name}:{approval.id}",
+                outcome="denied",
+                client_ip="",
+                settings=store.get_settings(),
+            )
 
     async def _reconcile_interrupted_approvals(
         *,
@@ -800,10 +836,23 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     def _invalidate_entity_tree(_event=None) -> None:
         data.entity_tree_cache_valid = False
 
+    async def _carry_renamed_entity(old_entity_id: str, new_entity_id: str) -> None:
+        async with data.store.async_lock:
+            await data.store.async_rename_entity(old_entity_id, new_entity_id)
+        # Its Changes history follows too, rather than splitting across two ids.
+        await data.versions.async_rename_resource("entity", old_entity_id, new_entity_id)
+
     @callback
     def _on_entity_registry_updated(event: Event) -> None:
         _invalidate_entity_tree(event)
         _warn_on_computed_alias_loss(hass, event)
+        # A renamed entity keeps its grants, hints and history.
+        old_entity_id = event.data.get("old_entity_id")
+        if event.data.get("action") == "update" and isinstance(old_entity_id, str):
+            entry.async_create_background_task(
+                hass, _carry_renamed_entity(old_entity_id, event.data["entity_id"]),
+                "phoenix_mcp_carry_renamed_entity",
+            )
 
     entry.async_on_unload(
         hass.bus.async_listen(
@@ -829,9 +878,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         from .mesa import (
             async_import_sidecar_profiles,
             async_refresh_trigger_issues,
+            async_track_lease_expiry,
             refresh_orphans,
         )
         from .mesa_suggestions import refresh_suggestions
+
+        entry.async_on_unload(async_track_lease_expiry(hass, mesa_runtime))
 
         async def _mesa_startup() -> None:
             """Import sidecar profiles and prime trigger/orphan caches."""

@@ -18,7 +18,7 @@ const recovery: ApprovalRecord = {
     summary_key: "diff.configuration_recovery.restore", summary_params: { resource: "authored_file:www/recovery.txt" },
     before: "unexpected current content", after: "saved content",
   },
-  status: "pending", created_at: "2026-09-30T00:00:00Z", expires_at: "2026-09-30T01:00:00Z",
+  status: "pending", created_at: "2026-09-30T00:00:00Z", expires_at: "2099-09-30T01:00:00Z",
   resolved_at: null, approved_by_user_id: null, rejected_reason: null,
   result: null, request_id: "recovery", client_ip: null,
 };
@@ -37,7 +37,7 @@ it.each(["approve", "reject"] as const)("resolves recovery through the existing 
   await waitFor(() => expect(reviewWindow().querySelector(".phx-review")).toBeTruthy());
   const review = within(reviewWindow());
   // What deciding does, in words, beside the exact change.
-  expect(review.getByText(/Approve restores the saved configuration shown in Details/)).toBeTruthy();
+  expect(review.getByText(/Approve restores the saved configuration shown below/)).toBeTruthy();
   expect(review.getByText(/Reject keeps the current configuration/)).toBeTruthy();
   expect(review.getByText("unexpected current content")).toBeTruthy();
   expect(review.getByText("saved content")).toBeTruthy();

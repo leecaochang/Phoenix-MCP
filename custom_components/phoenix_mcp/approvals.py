@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
+from .conversation_log import redact_device_codes
 from .helpers import notification_text
 from .const import (
     APPROVAL_DEFAULT_TTL_SECONDS,
+    CONFIG_RECOVERY_APPROVAL_ACCESS_KEY,
     DOMAIN,
     MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS, APPROVAL_PAYLOAD_RETENTION_SECONDS,
 )
@@ -110,7 +112,8 @@ class PendingApproval:
         """
         from .helpers import redact_structure  # noqa: PLC0415
 
-        public_args = redact_structure(self.args)
+        # Device codes too (a disarm code, a PIN), which the general redaction keeps.
+        public_args = redact_device_codes(redact_structure(self.args))
         if isinstance(public_args, dict):
             # Leading-underscore arguments are executor-only approval bindings
             # (MESA/context/private identity hashes), not operator input. Keep
@@ -222,7 +225,9 @@ async def async_create_pending_approval(
         tool_name=tool_name,
         cap_name=cap_name,
         args=args,
-        diff=diff,
+        # The diff is for review only (the executor re-runs args), so device codes
+        # never need to be kept in it, shown, or written to disk.
+        diff=redact_device_codes(diff),
         status=STATUS_PENDING,
         created_at=now,
         expires_at=now + timedelta(seconds=ttl_seconds),
@@ -658,10 +663,12 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
 
     from homeassistant.components import persistent_notification  # noqa: PLC0415
 
+    # Configuration recovery is Phoenix's own review, not an access key's request.
+    recovery = approval.access_key_id == CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
     persistent_notification.async_create(
         hass,
         message=notification_text(
-            hass, "approval.message",
+            hass, "approval.recovery_message" if recovery else "approval.message",
             access_key=approval.access_key_name,
             url=f"/phoenix-mcp/approvals/{approval.id}",
         ),
@@ -687,7 +694,6 @@ async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set
     skipped = skip_ids or set()
     for row in original:
         if (row.get("status") not in TERMINAL_STATUSES or row.get("execution_started_at")
-                or row.get("rejected_reason") == REASON_EXECUTION_INTERRUPTED
                 or row.get("id") in skipped):
             protected.append(row)
             continue
@@ -695,6 +701,15 @@ async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set
             at = parse_datetime(row.get("resolved_at") or row.get("created_at") or "")
         except (TypeError, ValueError):
             at = None
+        if row.get("rejected_reason") == REASON_EXECUTION_INTERRUPTED:
+            # Kept as the record of an action whose outcome nobody saw, but its raw
+            # arguments only for the history window: the operator has that long to
+            # check the result, and nothing reads them afterwards.
+            if (at is not None and at.tzinfo is not None and now - at > timedelta(days=APPROVAL_HISTORY_DAYS)
+                    and (row.get("args") or row.get("diff") or row.get("result") is not None)):
+                row = {**row, "args": {}, "diff": {}, "result": None}
+            protected.append(row)
+            continue
         if at is None or at.tzinfo is None:
             protected.append(row)
             continue

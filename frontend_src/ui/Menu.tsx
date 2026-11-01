@@ -9,7 +9,7 @@
  */
 
 import {
-  createContext, useCallback, useContext, useLayoutEffect, useRef, useState,
+  createContext, useCallback, useContext, useId, useLayoutEffect, useRef, useState,
   type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type Ref,
 } from "react";
 import { createPortal } from "react-dom";
@@ -23,7 +23,7 @@ export interface MenuItem {
   checked?: boolean;
   /** An on/off setting rather than one of several choices; announced as a checkbox. */
   toggle?: boolean;
-  /** Longer explanation, shown on hover and in Help. */
+  /** Longer explanation, shown on hover and in Help; under the label when the item is disabled, as the reason. */
   hint?: string;
   onSelect: () => void;
 }
@@ -47,6 +47,7 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
   listRef: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   const root = useContext(MenuRootContext);
+  const noteId = useId();
   const [pos, setPos] = useState(place);
   const available = () => [...(listRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])') ?? [])];
 
@@ -89,18 +90,25 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
       style={{ top: pos.top, left: pos.left }} onKeyDown={onKeyDown} onContextMenu={(e) => e.preventDefault()}>
       {entries.map((item, i) => item === "separator"
         ? <div key={`sep-${i}`} className="phx-menu-separator" role="separator" />
-        : (
+        : (() => {
+          // Why an item is unavailable is shown, not left to a hover.
+          const note = item.disabled && item.hint ? item.hint : undefined;
+          return (
           <div key={item.id} role={item.checked === undefined ? "menuitem" : item.toggle ? "menuitemcheckbox" : "menuitemradio"} tabIndex={-1}
-            className="phx-menu-item"
-            title={item.hint}
+            className={`phx-menu-item${note ? " has-note" : ""}`}
+            title={note ? undefined : item.hint}
             aria-checked={item.checked}
             aria-disabled={item.disabled || undefined}
+            aria-describedby={note ? `${noteId}-${i}` : undefined}
             onClick={() => run(item)}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run(item); } }}>
             {checkColumn && <span className="phx-menu-check" aria-hidden="true">{item.checked && <Icon name="check" size={14} />}</span>}
-            {item.label}
+            {note
+              ? <span className="phx-menu-text"><span className="phx-menu-label">{item.label}</span><span id={`${noteId}-${i}`} className="phx-menu-note">{note}</span></span>
+              : item.label}
           </div>
-        ))}
+          );
+        })())}
     </div>,
     root ?? document.body,
   );
@@ -132,7 +140,7 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   };
 }
 
-export function MenuButton({ label, title, help, icon, children, items, className = "", buttonRef, onButtonKeyDown, onPointerDown, pressed = false }: {
+export function MenuButton({ label, title, help, icon, children, items, className = "", buttonRef, onButtonKeyDown, onPointerDown, pressed = false, disabled = false }: {
   /** Accessible name of the button and of the menu. */
   label: string;
   title?: string;
@@ -151,6 +159,7 @@ export function MenuButton({ label, title, help, icon, children, items, classNam
   onPointerDown?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   /** Shows the button as active, for a mode started from the menu. */
   pressed?: boolean;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState<{ entries: MenuEntry[]; place: Place; focusFirst: boolean } | null>(null);
   const button = useRef<HTMLButtonElement | null>(null);
@@ -181,6 +190,7 @@ export function MenuButton({ label, title, help, icon, children, items, classNam
         data-help={help}
         aria-haspopup="menu"
         aria-expanded={!!open}
+        disabled={disabled}
         onPointerDown={onPointerDown}
         onClick={() => (open ? close(false) : openMenu(false))}
         onKeyDown={(e) => {

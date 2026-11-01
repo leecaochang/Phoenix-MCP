@@ -8,6 +8,7 @@ import { t } from "../i18n";
 import { Icon } from "../ui/Icon";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { personaGuide } from "../guide/targets";
+import { useNotify } from "../ui/notify";
 
 // Patch mode: applies the persona to an existing access key (Access key detail).
 // Select mode: no access key yet (onboarding wizard); reports the chosen persona to
@@ -36,6 +37,7 @@ const customCaps = new Map<string, Record<string, string>>();
 export function PersonaPicker(props: Props) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const notify = useNotify();
 
   const isSelectMode = props.onSelect !== undefined;
   // In icons-only mode the Persona window shows each persona's name alone; its description is in Help
@@ -63,6 +65,10 @@ export function PersonaPicker(props: Props) {
       const updated = await api.patchAccessKey(key.id, body);
       if (key.persona === "custom" && persona !== "custom") customCaps.set(key.id, Object.fromEntries(CAP_NAMES.map((c) => [c, key[c]])));
       props.onUpdate(updated);
+      // Home Companion turns both off on the server; say so rather than let them vanish.
+      if ((key.pass_through && !updated.pass_through) || (key.announce_all_tools && !updated.announce_all_tools)) {
+        notify(t("personas.home_companion.turnedOff", { name: key.name }));
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.personaApplyFailed"));
     } finally {

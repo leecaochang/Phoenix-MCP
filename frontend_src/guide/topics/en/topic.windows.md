@@ -5,7 +5,7 @@ Each workspace is a set of windows you can arrange as you like. Phoenix remember
 
 ## The toolbar {#toolbar}
 
-The buttons switch workspaces. Approvals shows how many requests are waiting. **{{label:shell.agentChat}}** opens Agent Chat, and **{{label:shell.documentation}}** turns the Help bar and the Guide on or off.
+The buttons switch workspaces. Approvals shows how many requests are waiting. **{{label:shell.agentChat}}** opens Agent Chat, and **{{label:shell.documentation}}** turns the Help Bar and the Guide on or off.
 
 The second row holds the tools of the windows you have open, such as Filters or Refresh. A tool several windows share shows once and acts on all of them.
 
@@ -22,7 +22,7 @@ Open them from the toolbar's last button, or right-click the toolbar.
 
 Drag a window by its title bar. The buttons beside the title fold it to its title bar, float it above the workspace, maximize it, and close it.
 
-A floating window stays put while the workspace scrolls. **{{label:workspace.dockWindow}}** puts it back where it was.
+A floating window stays put while the workspace scrolls. **{{label:workspace.dockWindow}}** puts it back where it was. From its menu, the Move items nudge it across the workspace, and **{{label:workspace.resizeKeyboard}}** sizes it.
 
 ## The window menu {#window-menu}
 

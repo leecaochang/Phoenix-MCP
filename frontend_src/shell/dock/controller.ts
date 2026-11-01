@@ -37,6 +37,17 @@ export interface BandLayout {
   heights?: Record<string, number>;
 }
 
+/** Every window a saved layout places, in the grid, a band or floating, or remembers as closed. */
+export function layoutMembers(layout: WorkspaceLayout): string[] {
+  const panelsOf = (dock: SerializedDockview | undefined) => Object.keys(dock?.panels ?? {});
+  return [...new Set([
+    ...panelsOf(layout.dock),
+    ...Object.values(layout.bands ?? {}).flatMap((band) => panelsOf(band?.dock)),
+    ...panelsOf(layout.floats),
+    ...Object.keys(layout.closed ?? {}),
+  ])];
+}
+
 /** What a workspace saves: Dockview's own layouts plus Phoenix's per-window state. */
 export interface WorkspaceLayout extends DisplaySnapshot {
   dock: SerializedDockview;
@@ -1494,8 +1505,8 @@ export class WorkspaceController {
       : isBand(partnerSlot?.host) ? partnerSlot!.host as Band
       : BANDS.find((b) => this.extras.pinned?.[b]?.includes(partner) || this.extras.pinned?.[b]?.includes(id)) ?? "bottom";
     if (!this.apiOf(band)) return false;
-    const leader = right ? partner : id;
-    const height = validHeight(slot?.height) ?? this.extras.heights?.[leader] ?? REOPEN_HEIGHT;
+    // A row of its own takes the window's own height, not the partner's (Notifications is not Help's 100 px).
+    const height = validHeight(slot?.height) ?? this.extras.heights?.[id] ?? this.extras.heights?.[right ? partner : id] ?? REOPEN_HEIGHT;
     this.bandChanging(band);
     this.batch(() => this.keepHeights(() => this.addToBand(id, band), { [id]: height }));
     return true;
@@ -1583,6 +1594,33 @@ export class WorkspaceController {
     const group = this.apiOf("float")?.getPanel(id)?.group;
     const box = group && this.floatBox(group);
     if (box) this.floatBoxes.set(id, box);
+  }
+
+  /**
+   * Move or size a floating window from the keyboard, kept inside the floating
+   * layer. Dockview has no public call to move a floating group, so the window
+   * is laid out again at its new box, as a transfer between hosts does; its
+   * content stays mounted.
+   */
+  nudgeFloat(group: DockviewGroupPanel, delta: Partial<FloatBox>): void {
+    const panel = group.activePanel;
+    const float = this.apiOf("float");
+    const box = this.floatBox(group);
+    if (!panel || !float || !box || this.hostOfGroup(group) !== "float") return;
+    const room = this.canvas?.host.clientWidth || Infinity;
+    const visible = this.visibleHeight() || Infinity;
+    const width = Math.max(FLOAT_BOUNDS.minWidth, Math.min(box.width + (delta.width ?? 0), room));
+    const height = Math.max(MIN_WINDOW_HEIGHT, Math.min(box.height + (delta.height ?? 0), visible));
+    const left = Math.max(0, Math.min(box.left + (delta.left ?? 0), room - width));
+    const top = Math.max(0, Math.min(box.top + (delta.top ?? 0), visible - height));
+    const id = panel.id;
+    this.noteUserSized(id);
+    this.floatBoxes.set(id, { left, top, width, height });
+    this.batch(() => {
+      float.removePanel(panel);
+      this.addFloating(id, width, height, true);
+    });
+    this.changed();
   }
 
   float(group: DockviewGroupPanel): void {

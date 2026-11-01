@@ -5,7 +5,7 @@ Shows exactly what the chosen request would change, and lets you decide. A decid
 
 ## Time left {#context}
 
-The line under the title shows the request's status, its access key, and for a pending request the time left before it expires.
+The line under the title shows the request's status, its access key, and for a pending request the time left before it expires. An expired request can't be approved, so only **{{label:approvals.reject}}** is offered, and it closes the request as expired.
 
 ## {{label:approvals.approve}} {#approve}
 

@@ -25,7 +25,7 @@ Creates a Home Assistant assistant named Phoenix MCP that uses this agent, with 
 
 Turning it off deletes the assistant. Home Assistant always keeps at least one assistant, so if it's the only one, it stays, but Phoenix stops managing it.
 
-Phoenix also removes its assistant if you clear the access key, account or model, or revoke the key.
+Phoenix also removes its assistant if you clear the access key, account or model, or revoke the key. Home Assistant keeps it while it is its only assistant; Phoenix then says so, and you can remove it in Home Assistant after adding another.
 
 ### {{label:settings.voicePreferredLabel}} {#voice-preferred}
 

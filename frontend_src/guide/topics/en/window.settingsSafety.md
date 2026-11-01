@@ -19,7 +19,7 @@ What MESA, Phoenix's device safety layer, does when an action breaks a profile's
 - {{label:settings.mesaModeAdvisory}}: most rules only warn. Privacy rules, read-only devices and profiles set to enforce still block.
 - {{label:settings.mesaModeEnforced}}: forbidden actions are blocked, and actions that need confirmation wait for your approval.
 
-Devices without a MESA profile follow a built-in baseline: lights are allowed, locks and alarm panels are forbidden, and everything else needs approval. Add profiles before you rely on {{label:settings.mesaModeEnforced}}.
+Devices with no MESA profile at any level follow a built-in baseline: lights are allowed, locks and alarm panels are forbidden, and everything else needs approval. Imported deployment defaults replace that baseline. Add profiles before you rely on {{label:settings.mesaModeEnforced}}.
 
 Related: [MESA](guide:workspace.mesa)
 

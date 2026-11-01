@@ -165,7 +165,7 @@ export function ChangesListWindow() {
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
         </div>
         <div className="filter-row">
-          <input type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
+          <input type="search" className="input" value={search} onChange={(e) => { forget(); setSearch(e.target.value); }}
             placeholder={t("changes.search")} aria-label={t("changes.search")} />
         </div>
       </div>

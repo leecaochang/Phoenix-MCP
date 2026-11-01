@@ -35,7 +35,7 @@ Phoenix speaks MCP over Streamable HTTP. Older app settings that use the SSE tra
 
 ## When the tools change {#reconnect}
 
-Some apps read the list of tools only when they connect. After you change a key's capabilities or permissions, reconnect the app to see the new list. Phoenix also tells the agent on its next call that its tools changed.
+Some apps read the list of tools only when they connect. After you change a key's capabilities or permissions, reconnect the app to see the new list. Phoenix also tells the agent on its next call: to reconnect when its tools changed, or, when only which actions need approval changed, that its tools are the same.
 
 Related: [Reconnecting an agent](guide:window.accessKeys#reconnect)
 

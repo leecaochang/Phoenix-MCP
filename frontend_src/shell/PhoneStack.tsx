@@ -11,7 +11,12 @@ import type { GlobalSettings } from "../types";
 import { ATTENTION_WINDOW, SHARED_WINDOWS, WINDOW_CONTENT, WORKSPACES, canAddToMy, windowAvailable, windowTitle, type WindowId } from "./workspaces";
 import type { MesaFindings } from "./mesa";
 
-function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }) {
+function PhoneWindow({ id, workspace, onClose, onAdd, added = false }: {
+  id: WindowId; workspace: WorkspaceId; onClose?: () => void;
+  /** Add this window to My Workspace; given outside My Workspace for a window that can be added. */
+  onAdd?: () => void;
+  added?: boolean;
+}) {
   const [folded, setFolded] = useState(() => WORKSPACES[workspace].folded?.includes(id) ?? false);
   const place = useMemo(() => ({ workspace, window: id }), [workspace, id]);
   const titleId = useId();
@@ -29,6 +34,17 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
           <Icon name={folded ? "folded" : "expand"} size={14} />
         </button>
         <h2 id={titleId} className="phx-window-title-text">{windowTitle(id)}</h2>
+        {onAdd && (
+          <button type="button" className="phx-window-control" aria-label={t("workspace.addToMy")} title={t("workspace.addToMy")}
+            disabled={added} onClick={onAdd}>
+            <Icon name="add" size={14} />
+          </button>
+        )}
+        {onClose && (
+          <button type="button" className="phx-window-control" aria-label={t("common.close")} onClick={onClose}>
+            <Icon name="close" size={14} />
+          </button>
+        )}
       </header>
       <WindowPlaceContext.Provider value={place}>
       <WindowVisibleContext.Provider value={!folded}>
@@ -41,12 +57,17 @@ function PhoneWindow({ id, workspace }: { id: WindowId; workspace: WorkspaceId }
   );
 }
 
-export function PhoneStack({ workspace, showAttention, settings, mesa = null, showArchived = false, myWindows = [], guide }: {
+export function PhoneStack({ workspace, showAttention, onCloseAttention, settings, mesa = null, showArchived = false, myWindows = [], onAddToMy, onRemoveFromMy, guide }: {
   workspace: WorkspaceId; showAttention: boolean; settings: GlobalSettings | null; mesa?: MesaFindings | null;
+  /** Closes Needs Attention here, as its close control does on a desktop. */
+  onCloseAttention?: () => void;
   /** Whether Show Archived is on: the archived keys head no stack until it is.  */
   showArchived?: boolean;
   /** The windows added to My Workspace on phones. */
   myWindows?: readonly string[];
+  /** Add a window to My Workspace from its title bar, and take one out by closing it there (user, 2026-11-01). */
+  onAddToMy?: (id: string) => void;
+  onRemoveFromMy?: (id: string) => void;
   guide?: ReactNode;
 }) {
   const def = WORKSPACES[workspace];
@@ -59,7 +80,12 @@ export function PhoneStack({ workspace, showAttention, settings, mesa = null, sh
     <div className="phx-phone-stack" data-workspace={workspace}>
       {/* The Guide heads the stack when it is open. */}
       {guide}
-      {windows.map((id) => <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace} />)}
+      {windows.map((id) => (
+        <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace}
+          onClose={id === ATTENTION_WINDOW ? onCloseAttention : workspace === "my" && onRemoveFromMy ? () => onRemoveFromMy(id) : undefined}
+          onAdd={workspace !== "my" && onAddToMy && canAddToMy(id) ? () => onAddToMy(id) : undefined}
+          added={myWindows.includes(id)} />
+      ))}
       {workspace === "my" && !windows.length && <p className="phx-workspace-empty phx-phone-empty">{t("workspace.myEmptyPhone")}</p>}
     </div>
   );

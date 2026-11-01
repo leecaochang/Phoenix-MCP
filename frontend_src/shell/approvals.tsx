@@ -28,6 +28,14 @@ export const APPROVALS_SCOPES: readonly ApprovalsScope[] = ["pending", "history"
 
 const POLL_INTERVAL_MS = 10_000;
 const PAGE = 50;
+/** The server's MAX_BATCH_APPROVALS: a larger batch is refused whole. */
+export const MAX_BATCH_APPROVALS = 50;
+
+/** A pending request past its expiry, which the server closes as Expired instead of running. */
+export function isOverdue(r: ApprovalRecord, now: number = Date.now()): boolean {
+  const expires = Date.parse(r.expires_at);
+  return r.status === "pending" && !Number.isNaN(expires) && expires <= now;
+}
 
 export interface ApprovalsState {
   scope: ApprovalsScope;
@@ -412,9 +420,11 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
 
   // A request already being executed cannot be batched: the server would answer
   // 409 on its claim and halt the run on something the operator never chose.
-  const selectableIds = useMemo(() => shown.filter((r) => r.status === "pending" && !isClaimed(r)).map((r) => r.id), [shown, isClaimed]);
+  // An overdue one would halt it the same way, as Expired.
+  const selectableIds = useMemo(() => shown.filter((r) => r.status === "pending" && !isClaimed(r) && !isOverdue(r)).map((r) => r.id), [shown, isClaimed]);
   const pickedCount = selectableIds.filter((id) => picked.has(id)).length;
-  const allPicked = selectableIds.length > 0 && pickedCount === selectableIds.length;
+  // Select All stops at the batch limit, so a list grown by Load More still sends a batch the server accepts.
+  const allPicked = selectableIds.length > 0 && pickedCount === Math.min(selectableIds.length, MAX_BATCH_APPROVALS);
   // Batching one thing is meaningless, so selection starts from two selectable requests.
   const canBatch = selectableIds.length > 1;
 
@@ -476,10 +486,10 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
     picked, selectableIds, pickedCount, allPicked,
     togglePick: (id) => setPicked((prev) => {
       const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
+      if (!next.delete(id) && selectableIds.filter((s) => next.has(s)).length < MAX_BATCH_APPROVALS) next.add(id);
       return next;
     }),
-    toggleAll: () => setPicked(allPicked ? new Set() : new Set(selectableIds)),
+    toggleAll: () => setPicked(allPicked ? new Set() : new Set(selectableIds.slice(0, MAX_BATCH_APPROVALS))),
     batchBusy, batchResult, dismissBatchResult: () => setBatchResult(null), approveSelected,
   };
   return <ApprovalsContext.Provider value={value}>{children}</ApprovalsContext.Provider>;

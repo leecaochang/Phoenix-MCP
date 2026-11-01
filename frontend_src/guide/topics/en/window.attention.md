@@ -24,4 +24,4 @@ These go away by themselves once the problem is fixed.
 
 ## Closing the window {#window}
 
-Closing the window hides it in this workspace until more items arrive. **{{label:workspace.showAttention}}** in Workspace Options brings it back.
+Closing the window hides it in this workspace until an item it didn't show arrives. **{{label:workspace.showAttention}}** in Workspace Options brings it back, and so does resetting the workspace or all workspaces. On a phone, close it from its title bar.

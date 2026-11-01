@@ -380,7 +380,7 @@ describe("Safety and Data Management", () => {
 
   it("warns while MESA is enforced", () => {
     renderSettings({ settings: { ...BASE_SETTINGS, mesa_mode: "enforced" } as GlobalSettings });
-    expect(settingsWindow("Safety").getByText(/use the built-in safety baseline/)).toBeVisible();
+    expect(settingsWindow("Safety").getByText(/otherwise the built-in safety baseline/)).toBeVisible();
   });
 });
 

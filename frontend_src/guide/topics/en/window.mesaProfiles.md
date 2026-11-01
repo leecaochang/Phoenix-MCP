@@ -33,7 +33,7 @@ The menu holds:
 
 - **{{label:mesa.importTitle}}** and **{{label:mesa.exportTitle}}**, below.
 - **{{label:mesa.suggestTitle}}**, which shows or hides that window.
-- **{{label:mesa.rescan}}**, which looks for new [suggestions](guide:window.mesaSuggestions) straight away.
+- **{{label:mesa.rescan}}**, which looks for new [suggestions](guide:window.mesaSuggestions) and Advisory findings straight away.
 - **{{label:mesa.restoreDismissed}}**, which brings back every suggestion you dismissed.
 - **{{label:mesa.restoreNotices}}**, which brings back the findings you dismissed in [{{label:workspace.advisory}}](guide:window.mesaAdvisory).
 

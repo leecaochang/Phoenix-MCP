@@ -140,7 +140,7 @@ function ToolRow({ registry, workspace, order, groups }: { registry: ToolRegistr
         <div key={group.id} className="phx-tool-group" role="group" aria-label={group.label}>
           {group.tools.map((tool) => tool.menu ? (
             <MenuButton key={tool.id} label={tool.label} icon={<Icon name={tool.icon} size={16} />} items={() => registry.latest(workspace, group.id, tool.id)?.menu?.() ?? []}
-              className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`}>
+              className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`} disabled={tool.disabled}>
               <span className="phx-toolbar-label">{tool.short ?? tool.label}</span>
             </MenuButton>
           ) : (

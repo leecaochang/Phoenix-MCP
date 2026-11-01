@@ -171,12 +171,12 @@ export function MesaProvider({ active = true, onFindings, children }: {
     try {
       const [list, iss, doms, ints, ars, devs] = await Promise.all([
         api.listMesaProfiles({ all: true }),
-        // Suggestions-scoped recompute: a refresh follows every profile save
-        // or delete (including Apply and Review from a suggestion), and a saved
-        // profile's coverage must be re-evaluated at once or the entity lingers
-        // in the suggestions. Trigger issues and orphans stay cached; Rescan
-        // is the way to force those.
-        api.getMesaIssues("suggestions"),
+        // A full read follows every profile save, delete and import, and every
+        // return to the workspace: the profile set changed, so the trigger
+        // findings and orphaned profiles are recomputed with the suggestions,
+        // or a deleted orphan would stay listed until a restart. The quiet
+        // half-minute read recomputes only the suggestions, the cheap part.
+        api.getMesaIssues(quiet ? "suggestions" : true),
         api.listMesaDomains().catch(() => ({ domains: [] })),
         api.listMesaIntegrations().catch(() => ({ integrations: [] })),
         api.listMesaAreas().catch(() => ({ areas: [] })),
@@ -396,7 +396,8 @@ export function MesaProvider({ active = true, onFindings, children }: {
     setRescanning(true);
     setSuggestionError(null);
     try {
-      setIssues(await api.getMesaIssues("suggestions"));
+      // Rescan recomputes every finding, not only the suggestions.
+      setIssues(await api.getMesaIssues(true));
     } catch (e) {
       setSuggestionError(e instanceof Error ? e.message : t("mesa.rescanFailed"));
     } finally {

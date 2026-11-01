@@ -162,18 +162,53 @@ describe("AuditView", () => {
     vi.useRealTimers();
   });
 
+  it("counts a time window back from each load, not from when it was chosen", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
+    fireEvent.change(getByLabelText("Filter by time window"), { target: { value: "24h" } });
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ since: expect.any(String) })));
+    const first = Date.parse(vi.mocked(api.getAudit).mock.lastCall![0]!.since!);
+    await new Promise((r) => setTimeout(r, 15));
+    fireEvent.click(getByLabelText("Refresh audit log"));
+    await waitFor(() => expect(Date.parse(vi.mocked(api.getAudit).mock.lastCall![0]!.since!)).toBeGreaterThan(first));
+    expect(vi.mocked(api.getAudit).mock.lastCall![0]).not.toHaveProperty("windowMs");
+  });
+
+  it("matches the Resource filter typed as shown against the stored resource", async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
+    await vi.waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(1));
+    fireEvent.change(getByLabelText("Filter by resource"), { target: { value: "approval:MESA-gated action:" } });
+    vi.advanceTimersByTime(300);
+    await vi.waitFor(() =>
+      expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ resource: "approval:call_service_mesa_approved:" })),
+    );
+    vi.useRealTimers();
+  });
+
+  it("Clear Filters clears the request id filter too", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText, getByRole } = render(<AuditView accessKeys={[]} />);
+    fireEvent.change(getByLabelText("Filter by request ID"), { target: { value: "rid-1" } });
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ request_id: "rid-1" })));
+    fireEvent.click(getByRole("button", { name: "Clear Filters" }));
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ request_id: undefined })));
+    expect((getByLabelText("Filter by request ID") as HTMLInputElement).value).toBe("");
+  });
+
   it("reports a failed read instead of an empty log, and recovers on refresh", async () => {
     vi.mocked(api.getAudit)
       .mockRejectedValueOnce(new Error("Server error"))
       .mockResolvedValueOnce({ entries: [entry()], total: 1 });
     const { findByRole, queryByText, getByLabelText, findByText } = render(<AuditView accessKeys={[]} />);
 
-    expect((await findByRole("alert")).textContent).toBe("Could not load the audit log. Refresh to try again.");
+    expect((await findByRole("alert")).textContent).toBe("Could not load the audit log. The log tries again every 5 seconds; while updates are paused, press Refresh.");
     expect(queryByText("No audit entries found.")).toBeNull();
 
     fireEvent.click(getByLabelText("Refresh audit log"));
     await findByText("create_automation");
-    expect(queryByText("Could not load the audit log. Refresh to try again.")).toBeNull();
+    expect(queryByText("Could not load the audit log. The log tries again every 5 seconds; while updates are paused, press Refresh.")).toBeNull();
   });
 
   it("keeps the rows already shown when a later page fails", async () => {

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   patchAccessKey: vi.fn(),
   getAccessKeyConnection: vi.fn(),
   getAgentCliProviders: vi.fn(),
+  listAccessKeys: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../api", () => ({ api: mocks, ApiError: class extends Error {} }));
@@ -82,7 +83,7 @@ describe("the setup wizard", () => {
   it("goes back to the step before each one on the external app path", async () => {
     render(<OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />);
     press(/^Connect an External App/);
-    expect(heading()).toBe("Connect Your First AI Agent");
+    expect(heading()).toBe("Choose a Persona");
     expect(current()).toBe("Persona");
     press("Back");
     expect(heading()).toBe("Choose How to Connect");
@@ -92,7 +93,7 @@ describe("the setup wizard", () => {
     press("Next");
     expect(heading()).toBe("Name Your Test Access Key");
     press("Back");
-    expect(heading()).toBe("Connect Your First AI Agent");
+    expect(heading()).toBe("Choose a Persona");
     press("Next");
     press("Create Access Key");
     await waitFor(() => expect(heading()).toBe("Grant Access to One Light"));
@@ -166,7 +167,7 @@ describe("the setup wizard", () => {
       expect(opened).toHaveBeenCalledOnce();
       const durable = getDurable();
       expect(durable.freshConversation).toBe(true);
-      expect(durable.prefill).toBe("How many lights are in my home?");
+      expect(durable.prefill).toBe("Which lights in my home can you see?");
       expect(durable.instanceId).toBe("inst1");
     } finally {
       window.removeEventListener("phx-open-agentcli", opened);

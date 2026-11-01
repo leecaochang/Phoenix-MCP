@@ -35,6 +35,16 @@ beforeEach(() => {
 });
 
 describe("ConversationsView", () => {
+  it("keeps the log shown when a background update fails, as the Audit Log does", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const view = render(<Logs />);
+    await view.findAllByText(/get_state|one|MCP/);
+    vi.mocked(api.getConversations).mockRejectedValue(new Error("offline"));
+    await act(async () => { vi.advanceTimersByTime(5100); });
+    expect(view.queryByText("Conversation history could not be loaded. Refresh to try again.")).toBeNull();
+    vi.useRealTimers();
+  });
+
   it("resolves renamed access keys without changing retained evidence or collapsing the turn", async () => {
     const stored = { ...detail, metadata: { access_key_id: "key-1", access_key_name: "Old_name" } };
     vi.mocked(api.getConversation).mockResolvedValue(stored);
@@ -227,7 +237,7 @@ it("keeps narration, tool activity and reply in order with omissions explained",
   expect(rows[1].textContent).toContain("get_state");
   expect(rows[3].textContent).toContain("Reply generated");
   expect(view.getAllByText("The light is on.")).toHaveLength(1);
-  expect(view.getByText(/entity-name logging is disabled/)).toBeTruthy();
+  expect(view.getByText(/Log entity IDs is off/)).toBeTruthy();
   expect(view.getByText(/3 events are not shown/)).toBeTruthy();
   expect(rows[0].querySelector("time")?.textContent).not.toBe("00:00:00");
 });

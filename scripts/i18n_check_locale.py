@@ -320,6 +320,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.approvals.detailTabArgs",       # "Arguments", the French word
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.mesa.roleCondition",  # "condition", Home Assistant's French term
@@ -390,7 +391,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
         "panel.changes.typeArea",  # "Area", Home Assistant's Italian term
-        "panel.agentchat.provider",  # "Provider", the Italian UI term
         "panel.wizard.stepProvider",  # "Provider", the Italian UI term
         "panel.settings.colAccount",  # "Account"
         "panel.settings.colProvider",  # "Provider"
@@ -516,7 +516,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMax",            # "Max"
         "panel.agentchat.model",               # "Model"
-        "panel.agentchat.provider",            # "Provider"
         "panel.agentchat.resultOk",            # "ok"
         "panel.agentchat.title",               # "Agent Chat", a product name
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate

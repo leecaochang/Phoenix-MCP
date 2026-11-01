@@ -755,6 +755,16 @@ async def test_session_capacity_returns_retryable_http_error():
     assert response.status == 429
     assert 'error' in json.loads(response.text)
     assert 'Mcp-Session-Id' not in response.headers
+    # Its own sessions are busy and free when their requests end: seconds, not the hour-long idle limit.
+    assert response.headers['Retry-After'] == str(mcp_view.MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS)
+
+
+async def test_a_quota_full_of_other_keys_waits_for_the_stalest_session():
+    access_key, _, data, _ = _strict_env()
+    now = mcp_view.time.monotonic()
+    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
+        data.mcp_sessions[str(i)] = {'access_key_id': str(i), 'last_seen': now - 3000}
+    assert abs(mcp_view._legacy_session_retry_after(data, access_key) - 600) <= 2
 
 
 async def test_legacy_batch_and_single_reject_same_modern_only_method():

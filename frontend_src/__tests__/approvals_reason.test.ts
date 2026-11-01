@@ -74,7 +74,7 @@ describe("friendlyReason", () => {
       rejected_reason: "execution_failed",
       result: { tool_result: { content: [{ type: "text", text: "Forbidden." }], isError: true } },
     });
-    expect(friendlyReason(r)).toBe("Execution failed: The action could not be completed. Open Details to review the executor error.");
+    expect(friendlyReason(r)).toBe("Execution failed: The action could not be completed. Request Details shows the full error under Result.");
   });
 
   it("falls back to a readable label when execution_failed has no result text", () => {
@@ -85,7 +85,7 @@ describe("friendlyReason", () => {
   it("maps known reason slugs to readable labels", () => {
     expect(friendlyReason(rec({ rejected_reason: "capability_denied" }))).toBe("Capability was denied");
     expect(friendlyReason(rec({ rejected_reason: "kill_switch" }))).toBe("Kill switch engaged");
-    expect(friendlyReason(rec({ rejected_reason: "agent_chat_ended" }))).toBe("Agent Chat ended before approval");
+    expect(friendlyReason(rec({ rejected_reason: "agent_chat_ended" }))).toBe("Agent Chat stopped waiting for approval");
     expect(friendlyReason(rec({ rejected_reason: "approval_format_incompatible" }))).toBe("Cancelled after upgrade because the approval format is incompatible");
   });
 
@@ -110,7 +110,7 @@ describe("localizedResultErrorText", () => {
   it("uses a localized fallback instead of leaking an unknown diagnostic", () => {
     expect(localizedResultErrorText({
       tool_result: { content: [{ type: "text", text: "A new diagnostic." }], isError: true },
-    })).toBe("The action could not be completed. Open Details to review the executor error.");
+    })).toBe("The action could not be completed. Request Details shows the full error under Result.");
   });
 
   it("localizes a disabled integration reload in Japanese and Chinese", () => {
@@ -131,9 +131,9 @@ describe("localizedResultErrorText", () => {
       tool_result: { content: [{ type: "text", text: "A future Home Assistant diagnostic." }], isError: true },
     };
     primeTranslations(ja.panel);
-    expect(localizedResultErrorText(result)).toBe("操作を完了できませんでした。実行エラーを確認するには、詳細を開いてください。");
+    expect(localizedResultErrorText(result)).toBe("操作を完了できませんでした。エラーの全文は「リクエストの詳細」の「結果」に表示されます。");
     primeTranslations(zh.panel);
-    expect(localizedResultErrorText(result)).toBe("无法完成此操作。请打开详细信息查看执行器错误。");
+    expect(localizedResultErrorText(result)).toBe("无法完成此操作。完整错误显示在“请求详情”的“结果”中。");
   });
 
   it.each([
@@ -146,7 +146,7 @@ describe("localizedResultErrorText", () => {
     };
     primeTranslations(ja.panel);
     expect(localizedResultErrorText(result)).toBe(
-      "操作を完了できませんでした。実行エラーを確認するには、詳細を開いてください。",
+      "操作を完了できませんでした。エラーの全文は「リクエストの詳細」の「結果」に表示されます。",
     );
     expect(friendlyReason(rec({ rejected_reason: "execution_failed", result }))).not.toContain(diagnostic);
   });

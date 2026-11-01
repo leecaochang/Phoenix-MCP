@@ -10,6 +10,8 @@ work unchanged.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import uuid
 from unittest.mock import MagicMock
@@ -260,6 +262,9 @@ class TestCardOpValidationBeforeGate:
 
             def set_pending_approvals(self, v: list) -> None:
                 self._p = v
+
+            def get_settings(self):
+                return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
         h, _light = lovelace_env
         await _seed(h)

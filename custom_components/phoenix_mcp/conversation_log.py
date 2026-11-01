@@ -56,6 +56,37 @@ def sensitive_key(key: str, service: bool = False) -> bool:
     return is_sensitive_key(key) or key.casefold() in {"pin", "psk", "encryption_key"} or (service and key.casefold() == "code")
 
 
+def service_context(obj: dict, inherited: bool = False) -> bool:
+    """Whether a mapping is part of a service call, or names an alarm or lock target.
+
+    Inside one, `code` is a credential (a disarm or unlock code); elsewhere it is
+    usually a protocol or error code worth keeping readable.
+    """
+    return inherited or isinstance(obj.get("service"), (str, dict)) or (
+        isinstance(obj.get("action"), str) and obj["action"].startswith(("alarm_control_panel.", "lock."))
+    ) or _names_guarded_domain(obj.get("domain"))
+
+
+def redact_device_codes(value: Any, _service: bool = False, _depth: int = 0) -> Any:
+    """Hide device codes (`pin`, `psk`, `encryption_key`, and `code` in a service context) by key.
+
+    Only the keys change, so a dashboard or automation in the value keeps its shape;
+    `sanitized` also rewrites text and media, which an admin preview must not lose.
+    """
+    if _depth > CONVERSATION_LOG_MAX_DEPTH:
+        return value
+    if isinstance(value, dict):
+        service = service_context(value, _service)
+        return {
+            key: _REDACTED if isinstance(key, str) and sensitive_key(key, service)
+            else redact_device_codes(item, service or key in {"service", "service_data"}, _depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_device_codes(item, _service, _depth + 1) for item in value]
+    return value
+
+
 def _names_guarded_domain(value: Any) -> bool:
     """Whether a `domain` value names an alarm or lock domain, alone or in a list.
 
@@ -134,9 +165,7 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
         if isinstance(obj, (list, tuple, set)):
             return [visit(item, depth + 1, service) for item in obj]
         if isinstance(obj, dict):
-            service = service or isinstance(obj.get("service"), (str, dict)) or (
-                isinstance(obj.get("action"), str) and obj["action"].startswith(("alarm_control_panel.", "lock."))
-            ) or _names_guarded_domain(obj.get("domain"))
+            service = service_context(obj, service)
             kind = obj.get("type")
             if isinstance(kind, str) and kind in {"image", "image_url", "input_image", "audio", "input_audio"}:
                 return {"attachment": True, "type": kind, "mime_type": text(str(obj.get("mimeType", obj.get("mime_type", ""))))[:128], "omitted": "media"}

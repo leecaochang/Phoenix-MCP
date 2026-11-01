@@ -36,6 +36,7 @@ from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
 from homeassistant.helpers import entity_registry as er_mod
 from homeassistant.helpers import sun as sun_mod
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.util.async_ import run_callback_threadsafe
 from homeassistant.util.yaml import load_yaml as _load_yaml
@@ -49,6 +50,7 @@ from .const import (
     MESA_APPROVED_EXECUTOR,
     MESA_CONFIRM_CAP,
     MESA_HOST_CALLBACK_TIMEOUT_SECONDS,
+    MESA_LEASE_SWEEP_INTERVAL,
     MESA_MODE_ENFORCED,
     MESA_MODE_OFF,
     MESA_STORAGE_KEY,
@@ -396,6 +398,35 @@ def _build_on_lease_event(hass: HomeAssistant) -> Callable[[dict[str, Any]], Non
         hass.add_job(hass.bus.async_fire, f"{DOMAIN}_mesa_lease_expired", dict(payload))
 
     return _on_lease_event
+
+
+def async_track_lease_expiry(hass: HomeAssistant, runtime: MesaRuntime) -> Callable[[], None]:
+    """Sweep run-out leases every MESA_LEASE_SWEEP_INTERVAL. Returns the cancel.
+
+    mesa-core owns no event loop: a lease that runs out is removed, and its
+    natural_expiry event fired, only when a lease operation sweeps, so without
+    this an automation on phoenix_mcp_mesa_lease_expired would fire only when
+    some key next requests or releases a lease. mesa-core asks hosts to call
+    expire() periodically for exactly this. The sweep runs in the executor
+    because a worker can hold the lease manager's lock while it waits for a
+    registry lookup the event loop must answer. One sweep at a time; the entry
+    owns the cancel and calls it at unload.
+    """
+    sweeping = False
+
+    async def _sweep(_now: datetime) -> None:
+        nonlocal sweeping
+        if sweeping:
+            return
+        sweeping = True
+        try:
+            await hass.async_add_executor_job(runtime.lease_manager.expire)
+        except Exception:  # noqa: BLE001 - leases are advisory; the next sweep retries
+            _LOGGER.debug("Phoenix MCP MESA: lease expiry sweep failed", exc_info=True)
+        finally:
+            sweeping = False
+
+    return async_track_time_interval(hass, _sweep, MESA_LEASE_SWEEP_INTERVAL)
 
 
 def _numeric_threshold_example(nt_spec: dict[str, Any]) -> dict[str, Any]:
@@ -974,7 +1005,12 @@ def entity_control_mode(
     """Best-effort effective MESA control_mode for one entity (advisory display).
 
     control_mode is an entity-level property, so the representative service used
-    to drive the evaluation does not change it. Returns the control_mode string
+    to drive the evaluation does not change it. The mode is the one this
+    evaluation would act on, after an active temporal window and the restricted
+    privacy level have tightened it, as the gate reads it: the inherited mode
+    alone can read Autonomous for an entity a write would route to Confirm. The
+    inherited mode is the fallback only when mesa-core reports no evaluated
+    mode. Returns the control_mode string
     (autonomous, confirm, read_only, prohibited) or None if it cannot be
     determined. Callers only pass entities the access key can already access, so this
     is not an enumeration oracle.
@@ -992,7 +1028,9 @@ def entity_control_mode(
             caller_context=build_caller_context(access_key, session_id),
             current_time=dt_util.now(),
         )
-        cm = result.effective_profile.operational_boundaries.control_mode
+        cm = result.evaluated_control_mode
+        if cm is None:
+            cm = result.effective_profile.operational_boundaries.control_mode
         return getattr(cm, "value", cm) if cm is not None else None
     except Exception:  # noqa: BLE001 - advisory display must never break the caller
         return None
@@ -1245,7 +1283,12 @@ async def async_create_mesa_approval(
         fire_approval_requested_event,
     )
 
+    from .request_authority import check_request_authority
+
     async with data.store.async_lock:
+        # As the capability and registry paths do: a request whose key, runtime or
+        # policy changed while it waited queues nothing.
+        check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
             access_key_id=access_key.id,

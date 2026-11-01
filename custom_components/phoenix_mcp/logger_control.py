@@ -216,10 +216,10 @@ class LoggerOverrideManager:
         self._cancel_timer(record.domain)
         delay = max(0.0, (record.expires_at - utcnow()).total_seconds())
 
-        async def expire(_now: datetime) -> None:
+        async def expire_override(_now: datetime) -> None:
             await self.async_expire(record.domain)
 
-        self._timers[record.domain] = async_call_later(self.hass, delay, expire)
+        self._timers[record.domain] = async_call_later(self.hass, delay, expire_override)
 
     async def async_set(
         self,

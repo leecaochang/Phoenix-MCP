@@ -17,6 +17,7 @@ vi.mock("../api", () => ({
   api: {
     getEntityTree: vi.fn().mockResolvedValue({}),
     getSettings: vi.fn().mockResolvedValue({ mesa_mode: "advisory" }),
+    listAccessKeys: vi.fn().mockResolvedValue([]),
     createAccessKey: (...a: unknown[]) => createAccessKey(...a),
     patchAccessKey: (...a: unknown[]) => patchAccessKey(...a),
   },

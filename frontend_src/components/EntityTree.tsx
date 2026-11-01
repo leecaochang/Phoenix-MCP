@@ -11,6 +11,7 @@ import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
 import { useWindowVisible } from "../shell/visibility";
 import { useClickAway } from "../ui/useClickAway";
+import { companionCap, companionDomainCap, companionLabel, type CompanionDomains } from "../utils/companion_reach";
 
 const INDIRECT_CONTROL_DOMAINS = new Set([
   "automation", "script", "scene",
@@ -142,6 +143,8 @@ interface Props {
   onOpenMesa?: (targetKey: string, scope: LinkScope, targetName?: string) => void;
   // Offer Select By beside the filter, narrowing the tree to an area, label or integration.
   selectBy?: boolean;
+  // A Home Companion key's reach; the labels then show what the resolver allows that key.
+  companion?: CompanionDomains | null;
 }
 
 // A child device's main parent sits between the child device and the domain,
@@ -193,6 +196,9 @@ function effectiveForNode(
   if (nodeType === "domain") return chainStates([domainState]);
   return chainStates([...deviceStates(nodeId, parentDeviceId, permissions), domainState]);
 }
+
+/** A Home Companion key's reach, which caps every label in the tree as the resolver does; null for other keys. */
+const CompanionContext = createContext<CompanionDomains | null>(null);
 
 /** The entity whose hint editor is open: one at a time in a tree. */
 const HintEditorContext = createContext<{ openId: string | null; setOpenId: (id: string | null) => void }>({
@@ -366,7 +372,9 @@ function EntityRow({
 }: EntityRowProps) {
   const entityNode = permissions.entities[entityId];
   const state: NodeState = entityNode?.state ?? "GREY";
-  const effective = effectivePermission(entityId, domainKey, deviceId, parentDeviceId, permissions);
+  const companion = useContext(CompanionContext);
+  const chained = effectivePermission(entityId, domainKey, deviceId, parentDeviceId, permissions);
+  const effective = companion ? companionLabel(chained, companionCap(entityId, companion)) : chained;
   const rowRef = React.useRef<HTMLDivElement>(null);
   const [permError, setPermError] = useState<string | null>(null);
   const isRevealed = (revealDepth ?? "entity") === "entity" && revealEntity === entityId;
@@ -535,7 +543,9 @@ function DeviceGroup({
   const deviceNode = permissions.devices[deviceId];
   const state: NodeState = deviceNode?.state ?? "GREY";
   const parentDeviceId = domainData.devices[deviceId]?.parent_device_id ?? null;
-  const effective = effectiveForNode("device", deviceId, domainKey, permissions, parentDeviceId);
+  const companion = useContext(CompanionContext);
+  const chained = effectiveForNode("device", deviceId, domainKey, permissions, parentDeviceId);
+  const effective = companion ? companionLabel(chained, companionDomainCap(domainKey, companion)) : chained;
   const isDynamic = state !== "GREY";
   const headerRef = React.useRef<HTMLDivElement>(null);
   const isRevealed = revealDepth === "device" && !!revealEntity && entityIds.includes(revealEntity);
@@ -799,7 +809,9 @@ function DomainGroup({
   const [permError, setPermError] = useState<string | null>(null);
   const domainNode = permissions.domains[domainKey];
   const state: NodeState = domainNode?.state ?? "GREY";
-  const effective = effectiveForNode("domain", domainKey, domainKey, permissions);
+  const companion = useContext(CompanionContext);
+  const chained = effectiveForNode("domain", domainKey, domainKey, permissions);
+  const effective = companion ? companionLabel(chained, companionDomainCap(domainKey, companion)) : chained;
   const isRisk = HIGH_RISK_DOMAINS.has(domainKey);
   const isIndirect = INDIRECT_CONTROL_DOMAINS.has(domainKey);
   const isDynamic = state !== "GREY";
@@ -1149,7 +1161,7 @@ let lastHints: Record<string, string> = {};
 /** Keep a tree read elsewhere, so the first tree drawn after a pass-through key needs no loading state either. */
 export function rememberEntityTree(tree: EntityTree): void { lastTree = tree; }
 
-export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEntityClick, collapseKey, domainAllowlist, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa, selectBy = false }: Props) {
+export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEntityClick, collapseKey, domainAllowlist, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa, selectBy = false, companion = null }: Props) {
   const [tree, setTree] = useState<EntityTree | null>(lastTree);
   const [loading, setLoading] = useState(!lastTree);
   const [error, setError] = useState<string | null>(null);
@@ -1261,6 +1273,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
   const hasFilterResults = (!filter.trim() && !scope) || hasDomainMatch || visibleUnmatchedDeviceIds.length > 0;
 
   return (
+    <CompanionContext.Provider value={companion}>
     <HintEditorContext.Provider value={hintEditor}>
     <div>
       <div className="tree-filter">
@@ -1315,5 +1328,6 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
       </div>
     </div>
     </HintEditorContext.Provider>
+    </CompanionContext.Provider>
   );
 }

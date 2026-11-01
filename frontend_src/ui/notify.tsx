@@ -62,10 +62,6 @@ export class Notifications {
     this.changed();
   }
 
-  clearAll(): void {
-    this.history = [];
-    this.changed();
-  }
 }
 
 export const NotificationsContext = createContext<Notifications | null>(null);

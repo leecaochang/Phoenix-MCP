@@ -31,6 +31,13 @@ export function friendlyResource(resource: string): string {
   return res.startsWith(prefix) ? `approval:${MESA_GATED_LABEL()}:${res.slice(prefix.length)}` : res;
 }
 
+/** A Resource filter typed against the shown text, in the stored form the server matches. */
+export function resourceFilterValue(text: string): string {
+  const label = MESA_GATED_LABEL();
+  const at = text.toLowerCase().indexOf(label.toLowerCase());
+  return at < 0 ? text : text.slice(0, at) + MESA_APPROVED_EXECUTOR + text.slice(at + label.length);
+}
+
 // Approval status slugs arrive raw from the server (the approvals API and the
 // Agent Chat stream both send the stored value), so anything rendering one
 // resolves it through the catalog first: a raw "approved" in a translated

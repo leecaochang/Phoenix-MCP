@@ -13,7 +13,7 @@ In HACS, find Phoenix MCP, or add its repository as a custom repository of type 
 
 ## Installing by hand {#manual}
 
-Copy the `phoenix_mcp` folder into your Home Assistant's `custom_components` folder, then restart Home Assistant. Check the version requirement yourself: a manual install doesn't.
+Copy the `phoenix_mcp` folder into your Home Assistant's `custom_components` folder, then restart Home Assistant. On an older Home Assistant, Phoenix doesn't start, and the Home Assistant log says which version it needs.
 
 ## Adding the integration {#setup}
 
@@ -33,4 +33,4 @@ The panel speaks 16 languages. By default it follows your Home Assistant profile
 
 Deleting the integration revokes every access key, cancels requests waiting for approval, and erases every AI provider account and its API key. It also unlinks Phoenix from Assist, the voice agent and AI Task.
 
-Your configuration history and recovery copies stay in Home Assistant's storage.
+Your configuration history and recovery copies stay in Home Assistant's storage. If you add Phoenix again, it starts with no active keys, as on a first install; the revoked keys are listed in Archived Access Keys.

@@ -449,11 +449,22 @@ async function refreshScoped(scope: Exclude<Scope, "entity">): Promise<void> {
   }
 }
 
+/** Read one scope's profiled keys again. */
+function refreshScope(scope: Scope): Promise<void> {
+  return scope === "entity" ? refreshProfiled() : refreshScoped(scope);
+}
+
 async function openModal(scope: Scope, key: string): Promise<void> {
   if (disposed) return;
   const generation = identityGeneration;
-  const { QUICK_ADD_TAG } = await import("./QuickAdd");
+  // The sets are read once per page load, so a profile made since then in the
+  // panel or another tab would open here in create mode, and its Save would
+  // fail because the profile exists. Read the scope again before choosing the
+  // mode; a failed read keeps the previous set, as it does everywhere else.
+  const [{ QUICK_ADD_TAG }] = await Promise.all([import("./QuickAdd"), refreshScope(scope)]);
   if (disposed || generation !== identityGeneration || !getHass()?.user?.is_admin) return;
+  // The button that was clicked, and any other on the page, shows the fresh state.
+  debouncedScan("opened");
   const el = document.createElement(QUICK_ADD_TAG);
   el.setAttribute("data-phx-mesa-modal", "");
   el.setAttribute("scope", scope);
@@ -465,7 +476,7 @@ async function openModal(scope: Scope, key: string): Promise<void> {
   if (profiled[scope].has(key)) el.setAttribute("has-profile", "1");
   el.addEventListener("phx-mesa-saved", () => {
     dbg("phx-mesa-saved", scope, key);
-    (scope === "entity" ? refreshProfiled() : refreshScoped(scope)).then(() => debouncedScan("saved"));
+    refreshScope(scope).then(() => debouncedScan("saved"));
   });
   document.body.appendChild(el);
 }

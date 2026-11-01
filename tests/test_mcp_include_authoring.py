@@ -14,6 +14,7 @@ determinism.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 import json
 import textwrap
 import uuid
@@ -92,6 +93,9 @@ class ApprovalStore:
 
     def set_pending_approvals(self, approvals: list) -> None:
         self.pending = approvals
+
+    def get_settings(self):
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
 
 def _approval_data() -> tuple[PhoenixData, ApprovalStore]:

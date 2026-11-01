@@ -170,6 +170,34 @@ async def test_confirm_creates_pending_approval(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
+async def test_confirm_refuses_when_authority_changed_before_queuing(hass: HomeAssistant):
+    """A MESA confirmation is queued only while the request still holds its authority.
+
+    The capability and registry paths check request authority under the store lock
+    before they create an approval; the MESA path did not (2026-11-01 Approvals
+    audit), so a request whose key was revoked, or whose runtime went away, during
+    the wait could still leave an approval behind.
+    """
+    from custom_components.phoenix_mcp.request_authority import (
+        AuthorityChangedError, RequestAuthority, request_authority,
+    )
+
+    data = await _make_data(hass, "enforced")
+    _set_profile(data, "light.gate", "confirm")
+    # The request was admitted for this runtime; hass no longer holds it, so the
+    # authority check finds the runtime gone.
+    token = request_authority.set(RequestAuthority(hass, data, "tok", "x"))
+    try:
+        with patch("homeassistant.components.persistent_notification.async_create") as notify:
+            with pytest.raises(AuthorityChangedError):
+                await _apply(hass, data, ["light.gate"])
+    finally:
+        request_authority.reset(token)
+    assert data.store._pending == []
+    notify.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_confirm_approved_folds_to_allow(hass: HomeAssistant):
     data = await _make_data(hass, "enforced")
     _set_profile(data, "light.gate", "confirm")

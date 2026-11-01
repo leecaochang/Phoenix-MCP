@@ -667,6 +667,10 @@ MESA_STORAGE_VERSION = 1
 # loop. One lookup takes milliseconds; the bound only stops a worker from
 # waiting forever on a loop that has stopped.
 MESA_HOST_CALLBACK_TIMEOUT_SECONDS = 30
+# How often Phoenix asks mesa-core to drop advisory leases that have run out,
+# which is what fires their natural-expiry event. Leases last at most 30
+# seconds, so an expiry is reported at most this late.
+MESA_LEASE_SWEEP_INTERVAL = datetime.timedelta(seconds=2)
 # Global enforcement mode for the vendored MesaEnforcer. "off" disables MESA
 # entirely; "advisory" warns but never blocks (except read_only, which is
 # entity-nature, not policy); "enforced" blocks and routes confirm through the
@@ -729,9 +733,9 @@ MESA_SUGGESTION_PHRASES: dict[str, str] = {
     "noun.scene": "scene",
     "shown.more": "{shown} + {extra} more",
     "baseline_note": (
-        " Prohibited matches the built-in baseline for this domain, so the authored "
-        "profile makes that intent explicit; choose confirm in Review to allow agent "
-        "control behind approvals instead."
+        " Prohibited matches the built-in baseline for this domain, so the profile makes "
+        "that intent explicit. To allow agent control behind admin approval instead, "
+        "choose Confirm in Profile Editor before saving; approval applies while MESA is enforced."
     ),
 }
 
@@ -1817,33 +1821,33 @@ _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
 }
 
 _APPROVAL_SUMMARY_BODIES = {
-    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown in Details. Reject keeps the current configuration. The original command will not be repeated.",
+    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown below. Reject keeps the current configuration. The original command will not be repeated.",
     "configuration_recovery.acknowledge": "A previous change could not be verified and cannot be safely restored here. Check this resource in Home Assistant, then Approve to accept its current state and unblock changes. Reject leaves changes blocked. The original command will not be repeated.",
     "restart_ha": "Home Assistant will be briefly unavailable while it restarts.",
-    "restore.template_helper": "This will put back the Template helper configuration from the selected change. Open Details to compare it with the current configuration.",
-    "restore.blueprint": "This will put back the blueprint source from the selected change. Open Details to compare it with the current source.",
-    "restore.dashboard_layout": "This will put back the dashboard layout from the selected change. Open Details to compare it with the current layout.",
-    "restore.dashboard_registry": "This will put back the dashboard's registry settings from the selected change. Open Details to compare them with the current settings.",
+    "restore.template_helper": "This will put back the Template helper configuration from the selected change. Compare it with the current configuration below.",
+    "restore.blueprint": "This will put back the blueprint source from the selected change. Compare it with the current source below.",
+    "restore.dashboard_layout": "This will put back the dashboard layout from the selected change. Compare it with the current layout below.",
+    "restore.dashboard_registry": "This will put back the dashboard's registry settings from the selected change. Compare them with the current settings below.",
     "restore.dashboard_resource": "This will put back the dashboard resource from the selected change. Every browser loads it when it opens a dashboard.",
-    "restore.energy": "This will put back the Energy dashboard preferences from the selected change. Open Details to compare them with the current preferences.",
-    "send_notification": "This will send the message shown in Details to {target}.",
+    "restore.energy": "This will put back the Energy dashboard preferences from the selected change. Compare them with the current preferences below.",
+    "send_notification": "This will send the message shown below to {target}.",
     "zigbee_reconfigure": "This will interview the Zigbee device again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_reconfigure.device": "This will interview {label} again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_remove": "This will remove the Zigbee device from the network. The change cannot be undone from this approval.",
     "zigbee_remove.device": "This will remove {label} from the Zigbee network. The change cannot be undone from this approval.",
-    "zigbee_options": "This will change Zigbee2MQTT device options. Open Details to review the proposed values.",
-    "zigbee_options.device": "This will change Zigbee2MQTT device options for {label}. Open Details to review the proposed values.",
-    "zigbee_property": "This will directly change a Zigbee2MQTT device property. Open Details to review the proposed value.",
-    "zigbee_property.device": "This will directly change property {property} for {label}. Open Details to review the proposed value.",
-    "zigbee_binding": "This will change direct control between two Zigbee devices. Open Details to review both devices and the selected clusters.",
-    "zigbee_binding.devices.bind": "This will let {source} control {target} directly over Zigbee. Open Details to review the exact relationship.",
-    "zigbee_binding.devices.unbind": "This will stop {source} controlling {target} directly over Zigbee. Open Details to review the exact relationship.",
-    "zigbee_reporting": "This will change how frequently a Zigbee device reports an attribute. Open Details to review the intervals.",
-    "zigbee_reporting.device": "This will change {cluster}.{attribute} reporting for {label}. Open Details to review the intervals.",
-    "zigbee_group": "This will change which devices are controlled together as a Zigbee group. Open Details to review the membership.",
-    "zigbee_group.named.create": "This will create Zigbee group {name}. Open Details to review its members.",
-    "zigbee_group.named.add_members": "This will add devices to Zigbee group {name}. Open Details to review the exact membership change.",
-    "zigbee_group.named.remove_members": "This will remove devices from Zigbee group {name}. Open Details to review the exact membership change.",
+    "zigbee_options": "This will change Zigbee2MQTT device options. Review the proposed values below.",
+    "zigbee_options.device": "This will change Zigbee2MQTT device options for {label}. Review the proposed values below.",
+    "zigbee_property": "This will directly change a Zigbee2MQTT device property. Review the proposed value below.",
+    "zigbee_property.device": "This will directly change property {property} for {label}. Review the proposed value below.",
+    "zigbee_binding": "This will change direct control between two Zigbee devices. Review both devices and the selected clusters below.",
+    "zigbee_binding.devices.bind": "This will let {source} control {target} directly over Zigbee. Review the exact relationship below.",
+    "zigbee_binding.devices.unbind": "This will stop {source} controlling {target} directly over Zigbee. Review the exact relationship below.",
+    "zigbee_reporting": "This will change how frequently a Zigbee device reports an attribute. Review the intervals below.",
+    "zigbee_reporting.device": "This will change {cluster}.{attribute} reporting for {label}. Review the intervals below.",
+    "zigbee_group": "This will change which devices are controlled together as a Zigbee group. Review the membership below.",
+    "zigbee_group.named.create": "This will create Zigbee group {name}. Review its members below.",
+    "zigbee_group.named.add_members": "This will add devices to Zigbee group {name}. Review the exact membership change below.",
+    "zigbee_group.named.remove_members": "This will remove devices from Zigbee group {name}. Review the exact membership change below.",
     "zigbee_group.named.delete": "This will remove Zigbee group {name}. Its devices stay paired but are no longer controlled together.",
     "zigbee_topology": "This actively queries Zigbee routers. The mesh may be less responsive while the scan runs.",
     "zigbee_topology.backend": "This actively queries Zigbee routers on {backend}. The mesh may be less responsive while the scan runs.",
@@ -1862,7 +1866,7 @@ _APPROVAL_SUMMARY_BODIES = {
     "blueprint.delete.consumers": "This will permanently delete {rel}. Automations and scripts that still use it: {count}.",
     "dashboard.delete": "This will permanently delete the dashboard {label}.",
     "dashboard_resource.create": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
-    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Open Details to compare the current and proposed file.",
+    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Compare the current and proposed file below.",
     "dashboard_resource.delete": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
     "dashboard_card.delete": "This will permanently delete the selected card from {label}.",
     "dashboard_card.delete.section": "This will permanently delete the selected card from {label}.",
@@ -1913,7 +1917,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "fallback.item.title": "Update {label}",
     "fallback.service.title": "Run {label}",
     "fallback.unknown.title": "Review proposed action",
-    "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
+    "targets.exact": "This approval covers the entities listed below. Changed targets require a new request.",
     "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
     "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
     "named.editAutomation.title": "Edit automation '{label}'",
@@ -1942,7 +1946,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "named.resource.editTitle": "Edit {kind} '{label}'",
     "named.resource.deleteTitle": "Delete {kind} '{label}'",
     "named.resource.deleteUnnamedTitle": "Delete {kind}",
-    "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Open Details to review its configuration.",
+    "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Review its configuration below.",
     "named.resource.editBody": "This will update {kind} '{label}'.",
     "named.resource.deleteBody": "This will permanently delete {kind} '{label}'. This action cannot be undone.",
     "named.resource.deleteUnnamedBody": "This will permanently delete the selected {kind}. This action cannot be undone.",
@@ -1952,7 +1956,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "history.expired.body": "The request expired and was not run.",
     "history.cancelled.body": "The request was cancelled and was not run.",
     "history.cancelledReason.body": "The request was cancelled and was not run. Reason: {reason}",
-    "history.error.generic": "The action could not be completed. Open Details to review the executor error.",
+    "history.error.generic": "The action could not be completed. Request Details shows the full error under Result.",
     "history.error.integrationChanged": "The integration changed after approval. Review the current request details and try again.",
     "history.error.integrationDisabled": "The integration is disabled and cannot be reloaded.",
     "history.error.integrationLoggerChanged": "The integration's logging configuration changed after approval. Review the current request details and try again.",
@@ -1960,7 +1964,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "history.error.integrationReloadFailed": "Home Assistant could not reload the integration.",
     "history.error.integrationReloadUnsupported": "This integration does not currently support reloading.",
     "history.error.integrationStateNotReloadable": "The integration is currently in state {state} and cannot be reloaded.",
-    "history.failed.body": "The request was approved, but execution failed. Error: {error}",
+    "history.failed.body": "The request was approved but did not complete. Error: {error}",
     "history.interrupted.body": "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again.",
     "history.resolvedAt": "Resolved {time}",
 }
@@ -2025,6 +2029,7 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
     # The link label is inside the markdown, so it has to be part of the string;
     # the URL is substituted and must not be translated.
     "approval.message": "Access key '{access_key}' requested approval.\n\n[Review in Phoenix MCP]({url})",
+    "approval.recovery_message": "Configuration recovery needs review: a previous change could not be verified.\n\n[Review in Phoenix MCP]({url})",
     "rate_limit.title": "Phoenix MCP Alert",
     "rate_limit.message": "Phoenix MCP: access key '{access_key}' has hit its rate limit.",
 }
@@ -2047,6 +2052,8 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
+    # Link label after a typed Assist reply that queued approvals (not spoken).
+    "approval_link": "Approve in the Phoenix MCP panel",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_state": "The state is {state}.",
     "local_state_unknown": "Unknown",
@@ -2951,3 +2958,7 @@ CONVERSATION_LOG_METADATA = frozenset({
     "request_id", "client_ip", "conversation_id", "session_ref", "provider", "model",
     "access_key_id", "access_key_name",
 })
+
+# Seconds a refused legacy MCP initialize waits when the access key's own sessions
+# are all busy: one frees as soon as its request ends.
+MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS = 5

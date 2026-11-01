@@ -255,7 +255,7 @@ describe("AgentCliSettings", () => {
   it("shows MiMo pay-as-you-go guidance without a logo", async () => {
     renderCard();
     await beginAdd("mimo");
-    expect(screen.getByText(/Use a pay-as-you-go Xiaomi MiMo API key/)).toBeInTheDocument();
+    expect(screen.getByText(/For a pay-as-you-go API key, choose Pay as you go/)).toBeInTheDocument();
     expect(document.querySelector(".agentcli-add-form img")).toBeNull();
     expect(screen.queryByLabelText("Site")).toBeNull();
   });

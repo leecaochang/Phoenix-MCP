@@ -520,7 +520,7 @@ class _ApprStore:
         self._p = v
 
     def get_settings(self):
-        return SimpleNamespace(mesa_mode="off")
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
 
 def _appr_data() -> tuple[PhoenixData, _ApprStore]:

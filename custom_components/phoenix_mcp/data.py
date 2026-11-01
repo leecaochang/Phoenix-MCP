@@ -75,6 +75,9 @@ class PhoenixData:
     # fires once per staleness epoch (a fresh tools/list clears the entry). In
     # memory only; after a restart the worst case is one repeated advisory.
     stale_tools_advised: dict[str, str] = field(default_factory=dict)
+    # The tool names each access key's client was last given by tools/list, so a
+    # settings change that leaves them as they were is not advised as a reconnect.
+    announced_tools: dict[str, frozenset[str]] = field(default_factory=dict)
     # In-memory request/denied/rate-limit counters keyed by access key ID.
     access_key_counters: dict[str, dict[str, int]] = field(default_factory=dict)
     # Approval IDs whose saved action is currently mid-execution. Guards

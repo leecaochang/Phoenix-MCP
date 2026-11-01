@@ -191,7 +191,7 @@ def _tool_refused_before_write(message: str) -> dict:
     return RefusedBeforeWrite(_tool_error(message))
 
 
-def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
+def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified: bool = False) -> dict:
     """Return an MCP tool result for a pending admin approval.
 
     isError is False because pending is a valid outcome, not a failure.
@@ -210,7 +210,15 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
     again on the same id would likely spend it twice. The advice is otherwise
     identical on every path that reaches here, because the agent cannot tell
     which it is on (the inline wait is an access key setting).
+
+    `notified` says whether new approvals raise a Home Assistant notification
+    (`_approval_notifies`); the message claims one only then.
     """
+    notice = (
+        "the admin has been notified. "
+        if notified
+        else "approval notifications are off, so the admin sees it only in the Phoenix MCP panel. "
+    )
     waited = (
         f"This call already held for {waited_seconds} seconds without resolving, so the operator "
         "is not reviewing in real time right now. "
@@ -224,7 +232,7 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
         "review_url": f"/phoenix-mcp/approvals/{approval.id}",
         "message": (
             f"{waited}This action is queued for admin approval and will be applied once approved; "
-            "the admin has been notified. Do not retry it. Continue with your remaining steps: "
+            f"{notice}Do not retry it. Continue with your remaining steps: "
             "further approval-gated calls queue alongside this one and the admin can clear the "
             "whole queue in a single action, so do NOT stop or wait after each one. When you "
             "genuinely need the outcomes, call wait_for_approval ONCE with approval_ids listing "
@@ -234,6 +242,11 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
         ),
     })
     return {"content": [{"type": "text", "text": body}]}
+
+
+def _approval_notifies(data: Any) -> bool:
+    """Whether a new approval raises a notification, as `create_approval_notification` decides."""
+    return bool(data.store.get_settings().notify_on_approval)
 
 
 def _tool_inline_resolved(approval: Any) -> dict:
@@ -490,7 +503,10 @@ async def _await_inline_confirm(
     except TimeoutError:
         # The one place the agent is told how long it already held, so it does
         # not immediately block on the same id and spend the budget twice.
-        return _tool_pending(approval, waited_seconds=wait), "pending_approval", _approval_resource(approval)
+        return (
+            _tool_pending(approval, waited_seconds=wait, notified=_approval_notifies(data)),
+            "pending_approval", _approval_resource(approval),
+        )
     finally:
         unsub()
         _set_progress_status(None)
@@ -500,7 +516,7 @@ async def _await_inline_confirm(
     if latest is None or latest.status == STATUS_PENDING:
         # Event fired but the record is not terminal (a rare race): behave as if
         # it timed out, so the agent still gets a usable pending reply.
-        return _tool_pending(approval), "pending_approval", resource
+        return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", resource
     if latest.status == STATUS_APPROVED and latest.result:
         tool_result = latest.result.get("tool_result")
         if tool_result is not None:
@@ -536,7 +552,7 @@ async def _pending_or_inline(
     """
     if access_key.confirm_inline_wait_seconds > 0 and not _access_key_has_other_pending(data, access_key, approval):
         return await _await_inline_confirm(hass, data, access_key, approval)
-    return _tool_pending(approval), "pending_approval", _approval_resource(approval)
+    return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", _approval_resource(approval)
 
 
 def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord, approval: Any) -> bool:

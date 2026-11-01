@@ -348,11 +348,29 @@ describe("Create Access Key", () => {
     expect(pt.closest(".toggle-row")).toHaveAttribute("data-help", "accessKeys.passThroughModeHelp");
     expect(pt).toHaveAttribute("aria-description", expect.stringContaining("Skip the permission tree"));
     const row = container.querySelector(".access-key-create-fields")!;
-    for (const name of ["Name (required)", "Expiry", "Requests per minute (0 = disabled)", "Burst per second"]) {
+    for (const name of ["Name (required)", "Expiry", "Requests per minute (0 = disabled)", "Burst per second (0 = no per-second limit)"]) {
       expect(row.contains(screen.getByLabelText(name))).toBe(true);
     }
     fireEvent.click(pt);
     expect(container.querySelector(".amber-block")).not.toBeNull();
+  });
+});
+
+describe("Create Access Key expiry", () => {
+  it("refuses an expiry amount that is empty, zero or negative", () => {
+    render(<AccessKeyCreateForm existingNames={[]} onCreated={vi.fn()} onClose={vi.fn()} onOpenSettings={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Name (required)"), { target: { value: "new_key" } });
+    fireEvent.change(screen.getByLabelText("Expiry"), { target: { value: "hours" } });
+    const amount = screen.getByLabelText("Expiry amount");
+    const create = () => screen.getByRole("button", { name: "Create" });
+    for (const bad of ["", "0", "-2", "1.5"]) {
+      fireEvent.change(amount, { target: { value: bad } });
+      expect(create()).toBeDisabled();
+      expect(screen.getByText("Enter a whole number of 1 or more.")).toBeInTheDocument();
+    }
+    fireEvent.change(amount, { target: { value: "3" } });
+    expect(create()).toBeEnabled();
+    expect(screen.queryByText("Enter a whole number of 1 or more.")).toBeNull();
   });
 });
 

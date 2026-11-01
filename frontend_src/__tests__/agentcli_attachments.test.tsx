@@ -217,7 +217,7 @@ describe("Agent Chat image attachments", () => {
     ["custom", NO_VISION, "This model does not accept images."],
   ])("blocks images for a %s access key when the model or persona cannot take them", async (persona, instance, reason) => {
     const { textarea } = await openWindow(instance, { ...KEY, persona } as AccessKeyRecord);
-    const attach = screen.getByRole("button", { name: "Attach image" });
+    const attach = screen.getByRole("button", { name: "Attach Image" });
     expect(attach).toHaveAttribute("aria-disabled", "true");
     expect(attach).toHaveAttribute("title", reason);
 

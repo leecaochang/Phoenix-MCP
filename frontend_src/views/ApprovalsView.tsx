@@ -11,8 +11,8 @@ import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../type
 import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
-import { t } from "../i18n";
-import { APPROVALS_SCOPES, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
+import { hasMessage, t, type Params } from "../i18n";
+import { APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
@@ -21,6 +21,7 @@ import { Icon, type IconName } from "../ui/Icon";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils";
 import { approvalListTitle, approvalOutcome, diffSummary, friendlyReason } from "../utils/approval_text";
+import { localizedApprovalReason } from "../utils/approval_reason";
 import { friendlyApprovalSummary } from "../utils/approval_summary";
 
 const SCOPE_LABEL_KEYS: Record<ApprovalsScope, string> = {
@@ -63,13 +64,20 @@ function ApprovalStatusLabel({ record, claimed }: { record: ApprovalRecord; clai
   );
 }
 
-function useExpiresLabel(expiresAt: string, status: ApprovalStatus): string | null {
+/** The current time, refreshed every 30 seconds while a request is pending. */
+function useNow(pending: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (status !== "pending") return;
+    if (!pending) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
-  }, [status]);
+  }, [pending]);
+  return now;
+}
+
+function useExpiresLabel(expiresAt: string, status: ApprovalStatus): string | null {
+  const now = useNow(status === "pending");
   if (status !== "pending") return null;
   const expiresMs = Date.parse(expiresAt);
   if (Number.isNaN(expiresMs)) return null;
@@ -102,7 +110,7 @@ function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onD
           <span>
             {t("approvals.batchStopped", {
               tool: friendlyToolName(failed.tool_name ?? ""),
-              reason: failed.message || failed.error,
+              reason: batchStopReason(failed),
             })}
           </span>
         )}
@@ -113,6 +121,12 @@ function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onD
       <button type="button" className="btn btn-ghost" onClick={onDismiss}>{t("common.close")}</button>
     </div>
   );
+}
+
+/** Why a batch stopped, in the operator's language: the refusal's own key, else the record's reason slug. */
+function batchStopReason(failed: NonNullable<BatchApproveResult["failed"]>): string {
+  if (failed.message_key && hasMessage(failed.message_key)) return t(failed.message_key, failed.message_params as Params | undefined);
+  return failed.message || localizedApprovalReason(failed.error);
 }
 
 /** Tools a window offers on the toolbar, or inline when it is not in the shell. */
@@ -194,7 +208,7 @@ export function ApprovalsListWindow() {
         empty={a.loading ? null : empty}
         selection={a.batchMode ? {
           picked: a.picked,
-          selectable: (r) => a.selectableIds.includes(r.id),
+          selectable: (r) => a.selectableIds.includes(r.id) && (a.picked.has(r.id) || a.pickedCount < MAX_BATCH_APPROVALS),
           onToggle: a.togglePick,
           onToggleAll: a.toggleAll,
           all: a.allPicked,
@@ -239,9 +253,12 @@ export function ReviewWindow() {
   const a = useApprovals();
   const decisions = useRef<HTMLDivElement | null>(null);
   const r = a?.current;
+  const now = useNow(r?.status === "pending");
   if (!a || !r) return <p className="phx-window-empty">{t("workspace.reviewEmpty")}</p>;
 
   const pending = r.status === "pending";
+  // Past its expiry the server only closes it as Expired, so Approve is not offered; Reject closes it now.
+  const overdue = isOverdue(r, now);
   const claimed = a.isClaimed(r);
   const locked = a.locked(r);
   // The summary sentence says what deciding does, which some requests depend on (a recovery, for one).
@@ -267,7 +284,7 @@ export function ReviewWindow() {
       </div>
       {pending && (
         <div ref={decisions} className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
-          <ActionButton icon="check" label={t("approvals.approve")} guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />
+          {!overdue && <ActionButton icon="check" label={t("approvals.approve")} guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />}
           <ActionButton icon="reject" label={t("approvals.reject")} guide="window.review#reject" busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
         </div>
       )}

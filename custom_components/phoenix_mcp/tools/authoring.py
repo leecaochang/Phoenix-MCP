@@ -43,7 +43,7 @@ from homeassistant.util.yaml import dump as _yaml_dump, load_yaml as _load_yaml
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
-from ..authoring_validation import authoring_input_error, validation_message
+from ..authoring_validation import async_validation_message, authoring_input_error, validation_message
 from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
@@ -461,14 +461,16 @@ async def _config_validation_error(
     error; calling it a validation failure would send the agent to rewrite a
     config that was never the problem.
     """
+    domain = "automation" if "automation" in tool_name else "script"
     try:
         if await validator(hass, config_key, config) is None:
             return _tool_error(invalid_message), "invalid_request", tool_name
     except vol.Invalid as exc:
-        domain = "automation" if "automation" in tool_name else "script"
-        return _tool_error(validation_message(domain, exc)), "invalid_request", tool_name
+        # Names a trigger or condition key Core has not registered, with its closest matches.
+        return _tool_error(await async_validation_message(hass, domain, config, exc)), "invalid_request", tool_name
     except HomeAssistantError:
-        return _tool_error(invalid_message), "invalid_request", tool_name
+        # Core raises this for a condition whose integration does not exist (a typo in its domain).
+        return _tool_error(await async_validation_message(hass, domain, config)), "invalid_request", tool_name
     except Exception as exc:
         _LOGGER.error("%s config validation raised an unexpected error:\n%s", tool_name, "".join(format_tb(exc.__traceback__)))
         return _tool_error("Internal error validating this config."), "invalid_request", tool_name

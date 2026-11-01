@@ -70,6 +70,8 @@ from .device_semantics import (
 from .service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
 from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, handler_arguments, normalize_tool_args, unknown_argument_error
 from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import MAX_PENDING_APPROVALS_PER_ACCESS_KEY, MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+from .approvals import PendingApprovalCapacityError
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -756,6 +758,14 @@ def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
         return "error", (-32602, "Invalid params.")
     return "dispatch", (method, raw_params or {})
 
+
+# The same notice when the operator's change left the announced tools as they were:
+# what needs approval may differ, but the client's list is still right.
+_SETTINGS_CHANGED_ADVISORY = (
+    "Notice: this access key's settings were changed by the operator after your "
+    "client last fetched the tool list. Your tools are the same, but which actions "
+    "need approval may have changed. Call get_capability_summary for the current state."
+)
 
 # One-time in-band advisory appended to a tools/call response when this access key's
 # settings changed after its last tools/list (the stateless transport cannot
@@ -6247,6 +6257,41 @@ async def async_restore_configuration(
         _restore_ctx.reset(ctx)
 
 
+def restore_refusal(record, side: str, hass: HomeAssistant) -> str | None:
+    """Why async_restore_version would refuse this side whatever the item holds now, or None.
+
+    Returns a reason slug: yaml_tags, audit_only, template_incompatible or
+    entity_missing. These are the refusals that do not depend on the item's
+    current content, so Changes can say why before Restore is chosen. A missing
+    side returns None; the panel explains that itself.
+    """
+    target = record.before if side == "before" else record.after
+    if not isinstance(target, dict):
+        return None
+    resource_type = record.resource_type
+    if resource_type in ("automation", "script", "scene") and yaml_includes.contains_tag_strings(target):
+        return "yaml_tags"
+    if resource_type in ("config_entry", "device") and target.get("restorable") is False:
+        return "audit_only"
+    if resource_type == "config_entry" and target.get("snapshot_type") == "template_helper":
+        from .template_recovery import validate_snapshot
+        try:
+            validate_snapshot(target)
+        except ValueError:  # ConfigurationRecoveryError is a ValueError
+            return "template_incompatible"
+    if resource_type == "entity":
+        # The same ids the restore follows a rename through; a deleted registry
+        # entry cannot be recreated.
+        candidates = [
+            snapshot["entity_id"] for snapshot in (record.before, record.after)
+            if isinstance(snapshot, dict) and isinstance(snapshot.get("entity_id"), str)
+        ] + [record.resource_id]
+        registry = er.async_get(hass)
+        if all(registry.async_get(candidate) is None for candidate in candidates):
+            return "entity_missing"
+    return None
+
+
 async def async_restore_version(
     record: Any, admin_user_id: str, hass: HomeAssistant, data: PhoenixData, side: str | None = None
 ) -> tuple[dict, str, str]:
@@ -9271,6 +9316,29 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
     return "\n".join(lines)
 
 
+def _announced_tools(access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> list[dict]:
+    """The tools tools/list announces to this access key, as their client-facing definitions.
+
+    Only the tools this access key can use, unless announce_all_tools is set.
+    Cap-tied tools gate on their cap; write/action tools gate on write scope;
+    tools needing a system surface (ESPHome, the Device Builder) gate on it being
+    present; reads are always announced. announce_all_tools overrides all of it,
+    including "requires": it is a debugging affordance, and the call path still
+    refuses.
+    """
+    from .home_companion import is_companion, wrapper_tool
+    if is_companion(access_key):
+        return [wrapper_tool()]
+    announce_all = getattr(access_key, "announce_all_tools", False)
+    has_write = access_key_has_write_scope(access_key)
+    mesa_defs = mesa_tool_defs() if data.mesa is not None else []
+    return [
+        {k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")}
+        for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs
+        if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, access_key, has_write, hass))
+    ]
+
+
 def _maybe_append_stale_advisory(
     tool_result: dict, access_key: AccessKeyRecord, data: PhoenixData, client_ip: str,
     hass: HomeAssistant,
@@ -9302,7 +9370,12 @@ def _maybe_append_stale_advisory(
     notices: list[str] = []
     if not internal:
         if access_key.settings_version > access_key.tools_list_version:
-            notices.append(_STALE_TOOLS_ADVISORY)
+            # A change that leaves the announced tools as they were (Allow to
+            # Confirm, say) needs no reconnect, as the panel tells the operator;
+            # without a record of what was announced, advise the reconnect.
+            given = data.announced_tools.get(access_key.id)
+            unchanged = given is not None and given == frozenset(t["name"] for t in _announced_tools(access_key, hass, data))
+            notices.append(_SETTINGS_CHANGED_ADVISORY if unchanged else _STALE_TOOLS_ADVISORY)
         if (
             access_key.tools_catalog_fingerprint
             and access_key.tools_catalog_fingerprint != _TOOL_CATALOG_FINGERPRINT
@@ -9368,6 +9441,15 @@ async def _dispatch_tools_call(
                  resource=receipt_resource, outcome=receipt_outcome, client_ip=client_ip,
                  payload={"name": tool_name, "arguments": arguments, "result_withheld": True})
         raise
+    except PendingApprovalCapacityError:
+        # Not an internal error: the key's approval queue is full.
+        tool_result = _tool_error(
+            f"This access key already has {MAX_PENDING_APPROVALS_PER_ACCESS_KEY} actions waiting for approval, "
+            "so this one was not queued. Ask the user to approve or reject the waiting requests in "
+            "Phoenix MCP's Approvals, then try again."
+        )
+        outcome = "denied"
+        resource = tool_name
     except Exception:
         # _call_tool is a bare dispatcher with no exception handling of its own,
         # and post() has none either: an unhandled exception here would reach
@@ -9594,23 +9676,9 @@ async def _dispatch_mcp_authorized(
     if is_companion(access_key) and method in {"resources/read", "prompts/get"}:
         return _jsonrpc_error(msg_id, -32602, "Unavailable for this persona."), method, "/api/phoenix-mcp", "denied"
     if method == "tools/list":
-        # Announce only the tools this access key can use, unless announce_all_tools
-        # is set. Cap-tied tools gate on their cap; write/action tools gate on
-        # write scope; tools needing a system surface (ESPHome, the Device
-        # Builder) gate on it being present; reads are always announced.
-        # announce_all_tools overrides all of it, including "requires": it is a
-        # debugging affordance, and the call path still refuses.
-        announce_all = getattr(access_key, "announce_all_tools", False)
-        has_write = access_key_has_write_scope(access_key)
-        mesa_defs = mesa_tool_defs() if data.mesa is not None else []
-        tools = []
-        for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-            if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, access_key, has_write, hass)):
-                tools.append({k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")})
-        if is_companion(access_key):
-            from .home_companion import wrapper_tool
-            tools = [wrapper_tool()]
+        tools = _announced_tools(access_key, hass, data)
         resp = _jsonrpc_result(msg_id, {"tools": tools})
+        data.announced_tools[access_key.id] = frozenset(tool["name"] for tool in tools)
         # After this response the client's tool list is current: echo the settings
         # version (in memory; persisted by the periodic flush, like last_used_at)
         # and clear the advised marker so a later change advises again.
@@ -10280,6 +10348,22 @@ def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str 
     return session_id
 
 
+def _legacy_session_retry_after(data: PhoenixData, access_key: AccessKeyRecord) -> int:
+    """Seconds until a refused initialize can find room.
+
+    The access key's own sessions are all busy: one frees when its request ends,
+    so a short wait. Otherwise other keys fill the quota: a slot frees when the
+    stalest of their sessions reaches its idle limit.
+    """
+    if any(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values()):
+        return MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+    oldest = min((float(state.get("last_seen", 0.0)) for state in data.mcp_sessions.values()), default=None)
+    if oldest is None:
+        return MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+    remaining = _MCP_LEGACY_SESSION_TTL_SECONDS - (time.monotonic() - oldest)
+    return max(MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS, math.ceil(remaining))
+
+
 def _legacy_session(
     data: PhoenixData, request: web.Request, access_key: AccessKeyRecord
 ) -> dict | None:
@@ -10740,7 +10824,7 @@ class PhoenixMcpView(PhoenixView):
                             msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
                             status=429,
                         )
-                        response.headers["Retry-After"] = str(math.ceil(_MCP_LEGACY_SESSION_TTL_SECONDS))
+                        response.headers["Retry-After"] = str(_legacy_session_retry_after(data, access_key))
                         return audited_transport_response(response, body=body)
                 else:
                     session = _legacy_session(data, request, access_key)

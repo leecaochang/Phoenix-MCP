@@ -90,12 +90,12 @@ export function VoiceAgentSettings({
   }
 
   /** Run one Home Assistant change, then show the settings it left. */
-  async function apply(run: () => Promise<unknown>, done: string, failed: string) {
+  async function apply<R>(run: () => Promise<R>, done: string | ((result: R) => string), failed: string) {
     setBusy(true);
     setError(null);
     try {
-      await run();
-      notify(done);
+      const result = await run();
+      notify(typeof done === "function" ? done(result) : done);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : failed);
     } finally {
@@ -103,9 +103,13 @@ export function VoiceAgentSettings({
       setBusy(false);
     }
   }
+  // Home Assistant keeps its only assistant, so turning this off can leave it in place (kept).
   const setAssistant = (on: boolean) => apply(
-    () => (on ? api.createVoiceAgentPipeline(false) : api.deleteVoiceAgentPipeline()),
-    on ? t("settings.voiceAssistantAddedToast") : t("settings.voiceAssistantRemovedToast"),
+    async () => {
+      if (on) { await api.createVoiceAgentPipeline(false); return false; }
+      return !!(await api.deleteVoiceAgentPipeline()).kept;
+    },
+    (kept) => t(on ? "settings.voiceAssistantAddedToast" : kept ? "settings.voiceAssistantKeptToast" : "settings.voiceAssistantRemovedToast"),
     on ? t("settings.voiceSetUpFailed") : t("settings.voiceRemoveFailed"),
   );
   const setPreferred = (on: boolean) => apply(

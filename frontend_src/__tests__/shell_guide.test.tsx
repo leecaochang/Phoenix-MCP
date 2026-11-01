@@ -268,11 +268,11 @@ describe("the Guide's window controls", () => {
     const onClose = vi.fn();
     render(<GuideWindow workspace="logs" controller={null} language="en" rect={rect} onRect={onRect} onClose={onClose} />, { container: shell() });
     const guide = screen.getByRole("region", { name: "Guide" });
-    const menu = within(guide).getByRole("button", { name: "Window menu" });
+    const menu = within(guide).getByRole("button", { name: "Window Menu" });
 
     fireEvent.click(menu);
     fireEvent.click(screen.getByRole("menuitem", { name: "Move with Keyboard" }));
-    expect(screen.getByRole("status").textContent).toBe("Arrow keys move. Esc to finish.");
+    expect(screen.getByRole("status").textContent).toBe("Arrow keys move. Esc, Enter, or Tab finishes.");
     fireEvent.keyDown(menu, { key: "ArrowRight" });
     fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect([guide.style.left, guide.style.top]).toEqual(["34px", "34px"]);

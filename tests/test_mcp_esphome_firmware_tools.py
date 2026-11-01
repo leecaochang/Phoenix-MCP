@@ -84,6 +84,9 @@ class _ApprStore:
     def set_pending_approvals(self, v: list) -> None:
         self._p = v
 
+    def get_settings(self):
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
 
 def _job(**over):
     base = {"job_id": JOB, "configuration": FILE, "status": "running", "output": []}

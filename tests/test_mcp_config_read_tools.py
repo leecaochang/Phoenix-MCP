@@ -9,6 +9,8 @@ the same compare-and-swap contract as get_dashboard_config.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import uuid
 from unittest.mock import patch, MagicMock
@@ -265,6 +267,9 @@ class TestApprovalDiffCompleteness:
 
             def set_pending_approvals(self, v: list) -> None:
                 self._p = v
+
+            def get_settings(self):
+                return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
         big_cfg = {
             "alias": "Long",

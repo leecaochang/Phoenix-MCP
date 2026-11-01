@@ -50,6 +50,7 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import (
+    KEEP_HINT,
     GlobalSettings,
     PermissionNode,
     AccessKeyRecord,
@@ -236,6 +237,22 @@ async def test_create_access_key_naive_expires_at_normalized_to_aware():
     assert resp.status == 201
     stored = data.store.async_create_access_key.call_args.kwargs["expires_at"]
     assert stored.isoformat() == "2030-01-01T10:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_create_access_key_refuses_an_expiry_that_has_passed():
+    """A key that is already expired would be archived on first use."""
+    data = _make_data()
+    hass = _make_hass(data)
+    data.store.name_slug_exists.return_value = False
+    data.store.async_create_access_key = AsyncMock()
+    view = PhoenixAdminAccessKeysView()
+    view.hass = hass
+    body = json.dumps({"name": "my-access-key", "expires_at": "2020-01-01T00:00:00+00:00"}).encode()
+    resp = await view.post(_make_admin_request(body=body))
+    assert resp.status == 400
+    assert json.loads(resp.text)["message_key"] == "adminError.expiresInPast"
+    data.store.async_create_access_key.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -465,6 +482,41 @@ async def test_patch_access_key_pass_through_requires_confirm():
     assert resp.status == 400
     body_parsed = json.loads(resp.text)
     assert "confirm_pass_through" in body_parsed["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [
+    {"pass_through": True, "confirm_pass_through": True},
+    {"announce_all_tools": True},
+    {"persona": "home_companion", "announce_all_tools": True},
+])
+async def test_patch_refuses_what_a_home_companion_key_never_uses(body):
+    """The store would turn these off and report success; the route says no instead."""
+    access_key = _make_active_access_key()
+    if "persona" not in body:
+        access_key.persona = "home_companion"
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    view = PhoenixAdminAccessKeyView()
+    view.hass = _make_hass(data)
+
+    resp = await view.patch(_make_admin_request(body=json.dumps(body).encode()), access_key_id=access_key.id)
+
+    assert resp.status == 400
+    assert json.loads(resp.text)["message_key"] == "adminError.companionSettingRefused"
+    data.store.async_patch_access_key.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_choosing_home_companion_alone_is_accepted():
+    access_key = _make_active_access_key(pass_through=True)
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
+    view = PhoenixAdminAccessKeyView()
+    view.hass = _make_hass(data)
+    resp = await view.patch(_make_admin_request(body=b'{"persona": "home_companion"}'), access_key_id=access_key.id)
+    assert resp.status == 200
 
 
 @pytest.mark.asyncio
@@ -732,7 +784,7 @@ async def test_permission_domain_patch_valid_state():
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
-        access_key.id, "domains", "light", "GREEN", None
+        access_key.id, "domains", "light", "GREEN", KEEP_HINT
     )
 
 
@@ -770,7 +822,7 @@ async def test_permission_patch_grey_removes_node():
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
-        access_key.id, "domains", "light", "GREY", None
+        access_key.id, "domains", "light", "GREY", KEEP_HINT
     )
 
 
@@ -1735,6 +1787,14 @@ async def test_global_audit_naive_since_normalized_to_aware():
     assert forwarded.tzinfo is not None
 
 
+async def test_entity_tree_lists_entities_without_a_registry_entry(hass):
+    """A YAML entity without a unique_id is grantable on its own."""
+    hass.states.async_set("sensor.yaml_only", "21", {"friendly_name": "Hall temperature"})
+    tree = _build_entity_tree(hass)
+    assert "sensor.yaml_only" in tree["sensor"]["deviceless_entities"]
+    assert tree["sensor"]["entity_details"]["sensor.yaml_only"]["friendly_name"] == "Hall temperature"
+
+
 @pytest.mark.asyncio
 async def test_entity_tree_uses_cache():
     data = _make_data()
@@ -2493,11 +2553,25 @@ async def test_voice_pipeline_delete_removes():
     data, _ = _settings_data([])
     view = PhoenixAdminVoiceAgentPipelineView()
     view.hass = _make_hass(data)
-    remove = AsyncMock()
+    remove = AsyncMock(return_value=False)
     with patch("custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline", remove):
         resp = await view.delete(_make_admin_request())
     assert resp.status == 200
+    assert json.loads(resp.text)["kept"] is False
     remove.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_voice_pipeline_delete_reports_kept_pipeline():
+    """Home Assistant's only assistant stays, and the response says so."""
+    data, _ = _settings_data([])
+    view = PhoenixAdminVoiceAgentPipelineView()
+    view.hass = _make_hass(data)
+    remove = AsyncMock(return_value=True)
+    with patch("custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline", remove):
+        resp = await view.delete(_make_admin_request())
+    assert resp.status == 200
+    assert json.loads(resp.text)["kept"] is True
 
 
 @pytest.mark.asyncio
@@ -2972,6 +3046,22 @@ async def test_settings_patch_audit_side_effects_fire_for_their_keys():
     assert resp.status == 200
     data.audit.resize.assert_called_once_with(5000)
     data.reschedule_audit_flush.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("setting_patch", [
+    {"disable_all_logging": True}, {"log_allowed": False}, {"kill_switch": True},
+])
+async def test_settings_patch_that_silences_logging_is_still_recorded(setting_patch):
+    """The change that turns logging off is the last thing the log should say."""
+    from custom_components.phoenix_mcp.audit import AuditLog
+
+    hass, data, holder = _patchable_hass()
+    data.audit = AuditLog()
+    resp = await _settings_patch(hass, setting_patch)
+    assert resp.status == 200
+    [row] = data.audit.query(limit=5)
+    assert json.loads(row.payload) == {"changed": sorted(setting_patch)}
 
 
 @pytest.mark.asyncio

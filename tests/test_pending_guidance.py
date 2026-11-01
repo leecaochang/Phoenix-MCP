@@ -67,6 +67,14 @@ class TestPendingToolResult:
         """A falsy waited_seconds must not render "already held for 0 seconds"."""
         assert "already held" not in _message(waited_seconds=0)
 
+    def test_it_claims_a_notification_only_when_one_is_sent(self):
+        """With approval notifications off, the admin was not notified."""
+        assert "the admin has been notified" in _message(notified=True)
+        message = _message(notified=False)
+        assert "notified" not in message
+        assert "approval notifications are off" in message
+        assert "Do not retry" in message
+
 
 class TestSurfacesAgree:
     """A primer, a skill guide and a tool result describing one event must agree.
