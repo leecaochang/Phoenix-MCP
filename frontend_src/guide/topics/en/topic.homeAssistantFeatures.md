@@ -15,7 +15,7 @@ Phoenix runs Home Assistant's AI Task actions for automations and scripts, with 
 
 ## Assist Tool Provider {#assist-tool-provider}
 
-Another integration's model answers, and Phoenix only lends it tools. The bound access key decides which tools that model gets. Phoenix runs no model here, and uses none of your credit.
+Another integration's model answers, and Phoenix only lends it tools. The bound access key decides which tools that model gets, and the Home Assistant user who asked limits them further. Phoenix runs no model here, and uses none of your credit.
 
 Use it if you already have a conversation agent you like, and want it to reach your home through Phoenix's controls.
 

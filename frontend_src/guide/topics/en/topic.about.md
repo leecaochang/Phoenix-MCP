@@ -7,10 +7,11 @@ Phoenix MCP lets AI agents work with your Home Assistant, safely. Each agent get
 
 - **Agent Chat**: chat with an AI model right inside Home Assistant. You add an account with an AI provider, and Phoenix runs the agent for you.
 - **An external app**: connect an MCP client, such as a desktop assistant or a coding tool, with an access key. The app's own model does the thinking.
+- **Home Assistant's own assistants**: Phoenix can answer as a voice agent, run AI Task actions, or lend its tools to another assistant.
 
 Either way, every action goes through the same checks, and the audit log records it.
 
-Related: [{{label:agentchat.title}}](guide:window.agentChat), [{{label:shell.tabAccessKeys}}](guide:workspace.accessKeys)
+Related: [{{label:agentchat.title}}](guide:window.agentChat), [Connecting External Apps](guide:topic.connecting), [Voice Agent, AI Task or Assist Tool Provider](guide:topic.homeAssistantFeatures)
 
 ## What every action goes through {#checks}
 
@@ -25,7 +26,7 @@ Related: [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities), [Ho
 
 A Home Assistant long-lived access token acts as your user, across all of Home Assistant's interfaces. Anything holding it can do what you can.
 
-An access key works only with Phoenix's agent connection. It has its own permissions, rate limit and optional expiry, and you can revoke it without touching your own login. Home Assistant tokens aren't accepted there.
+An access key works only with Phoenix. It has its own permissions and optional expiry, and a rate limit on Phoenix's own connection. You can revoke it without touching your own login. Phoenix's connection doesn't accept Home Assistant tokens.
 
 ## Where to start {#start}
 

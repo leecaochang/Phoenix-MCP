@@ -113,4 +113,6 @@ Lends Phoenix's tools to a model that runs elsewhere, such as a conversation age
 
 The access key whose tools the other model gets. With **{{label:settings.assistNotBound}}** (default), no tools are offered. The same happens while the **{{label:settings.killSwitchCard}}** is on.
 
-Changing the key refuses tool calls from earlier turns, so a conversation can't keep the old key's rights. Home Assistant's MCP Server uses the same key.
+Changing the key refuses tool calls from earlier turns, so a conversation can't keep the old key's rights. Home Assistant's MCP Server uses the same key, for administrators only, without the key's rate limit.
+
+Related: [Through Home Assistant's MCP Server](guide:topic.connecting#ha-mcp-server)

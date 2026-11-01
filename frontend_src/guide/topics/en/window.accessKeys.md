@@ -57,7 +57,7 @@ Turns the key's name into a text box. Press Enter to save, or Esc to cancel. You
 
 ### {{label:accessKeys.rotate}} {#rotate}
 
-Gives the key a new secret value and shows it. Everything else stays the same, including its permissions and history. The old value stops working straight away, so update every app that uses it.
+Gives the key a new secret value and shows it. Everything else stays the same, including its permissions and history. The old value stops working straight away, so update every app that uses it. **{{label:accessKeys.helpConnect}}** in the same dialog shows each app's setup with the new value.
 
 ### {{label:accessKeys.enablePtLabel}} {#enable-pass-through}
 
@@ -72,3 +72,5 @@ Ends the key for good. Its requests are refused, and its waiting approvals are c
 ## Reconnecting an agent {#reconnect}
 
 When you change which tools a key may use, a banner above the list asks you to reconnect its agent. Some apps only read their list of tools when they connect. The banner appears only for keys that have been used.
+
+Giving a key write access to something it couldn't change before, or taking it away, changes its tools too, but shows no banner. Reconnect the app then as well.
