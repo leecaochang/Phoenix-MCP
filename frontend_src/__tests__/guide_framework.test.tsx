@@ -16,6 +16,9 @@ import { GuideTargetContext, GuideWindow, clearGuideCache, guideContents, pushSt
 import { GuideTargetTracker, guideTargetFor, parseGuideRef } from "../shell/guideTarget";
 import { WorkspaceController } from "../shell/dock/controller";
 
+// Stylesheets read as empty text in tests; a marker shows the window controls' styles reach the popped-out Guide.
+vi.mock("../shell/dock/dock.css?inline", () => ({ default: ".phx-window-control { }" }));
+
 const labelExists = (key: string) => key === "workspace.aiProviders" || key === "settings.addAccount";
 const file = (header: string, body: string) => `---\n{ ${header} }\n---\n${body}\n`;
 
@@ -253,6 +256,45 @@ describe("the Guide window with sections, Contents and Search", () => {
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings");
     act(() => { fireEvent.focusIn(document.getElementById("b")!); });
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Needs Attention");
+  });
+
+  it("pops out into its own browser window and back, and closing that window closes the Guide", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    const popupDoc = document.implementation.createHTMLDocument("popup");
+    const popupWindow = Object.assign(new EventTarget(), { document: popupDoc, focus: vi.fn(), close: vi.fn(), closed: false });
+    const open = vi.fn(() => popupWindow as unknown as Window);
+    vi.stubGlobal("open", open);
+    const onClose = vi.fn();
+    const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
+    render(<GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={onClose} />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    expect(open).toHaveBeenCalledWith("", "phoenix-mcp-guide", expect.stringContaining("popup=yes"));
+    expect(document.querySelector("section.phx-guide")).toBeNull();
+    expect(popupDoc.querySelector("section.phx-guide.is-popped h3")?.textContent).toBe("Settings");
+    // The title bar's buttons keep their window-control styling there.
+    expect(popupDoc.head.querySelector("style")?.textContent).toContain(".phx-window-control");
+
+    act(() => { (popupDoc.querySelector('[aria-label="Pop back into Home Assistant"]') as HTMLButtonElement).click(); });
+    expect(document.querySelector("section.phx-guide")).not.toBeNull();
+    await waitFor(() => expect(popupWindow.close).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    act(() => { popupWindow.dispatchEvent(new Event("pagehide")); });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when the browser blocks the pop-out, and stays in the panel", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    vi.stubGlobal("open", vi.fn(() => null));
+    const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
+    render(<GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
+    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/blocked/);
+    expect(document.querySelector("section.phx-guide")).not.toBeNull();
   });
 
   it("lists every page in Contents and finds a section in Search, with Back returning", async () => {

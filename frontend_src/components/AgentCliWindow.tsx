@@ -36,8 +36,7 @@ import type {
 import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
-import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
-import { ensurePhoenixFont } from "../ui/fonts";
+import { openPopupWindow } from "../ui/popup";
 import { Icon } from "../ui/Icon";
 import { MenuButton, MenuRootContext, type MenuEntry } from "../ui/Menu";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
@@ -580,13 +579,6 @@ export function focusAgentCliPopup(): boolean {
 function forgetAgentCliPopup(popup: Window | null): void {
   if (activePopupWindow === popup) activePopupWindow = null;
 }
-
-// The panel stylesheet is authored for a shadow host. A same-origin popup has
-// no shadow host, so translate those selectors to the document root while
-// preserving the exact same tokens and component rules.
-const POPUP_PANEL_CSS = PANEL_CSS
-  .replace(/:host\(([^)]*)\)/g, ":root$1")
-  .replaceAll(":host", ":root");
 
 function applyPopupTheme(popup: Window, hass: unknown): void {
   const darkMode = (hass as AgentCliHass | null | undefined)?.themes?.darkMode;
@@ -1897,58 +1889,17 @@ export function AgentCliWindow({
     // conversation behind browser chrome. The control is hidden there too,
     // but keep the action itself guarded against stale or scripted calls.
     if (isNarrowViewport()) return;
-    const popupWidth = Math.max(360, Math.min(size.w, window.screen.availWidth || size.w));
-    const popupHeight = Math.max(360, Math.min(size.h, window.screen.availHeight || size.h));
-    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - popupWidth) / 2));
-    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - popupHeight) / 2));
-    let popup: Window | null = null;
-    try {
-      popup = window.open(
-        "",
-        POPUP_WINDOW_NAME,
-        [
-          "popup=yes",
-          `width=${popupWidth}`,
-          `height=${popupHeight}`,
-          `left=${left}`,
-          `top=${top}`,
-          "toolbar=no",
-          "location=no",
-          "menubar=no",
-          "status=no",
-          "scrollbars=no",
-          "resizable=yes",
-        ].join(","),
-      );
-    } catch {
-      // Browser policy can reject window.open by returning null or throwing.
-    }
-    if (!popup) {
+    const opened = openPopupWindow({
+      name: POPUP_WINDOW_NAME, mountId: POPUP_MOUNT_ID, width: size.w, height: size.h,
+      title: agentChatTitle, language: agentChatLanguage, background: "var(--phx-agentcli-surface)",
+    });
+    if (!opened) {
       const message = t("agentchat.popOutBlocked");
       setPopOutError(message);
       setAnnouncement(message);
       return;
     }
-
-    const doc = popup.document;
-    const base = doc.createElement("base");
-    base.href = window.location.href;
-    const viewport = doc.createElement("meta");
-    viewport.name = "viewport";
-    viewport.content = "width=device-width, initial-scale=1";
-    const styleEl = doc.createElement("style");
-    styleEl.textContent = `${POPUP_PANEL_CSS}\n
-      html, body, #${POPUP_MOUNT_ID} { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-      body { background: var(--phx-agentcli-surface); }
-      #${POPUP_MOUNT_ID} { position: relative; }
-    `;
-    doc.head.replaceChildren(base, viewport, styleEl);
-    ensurePhoenixFont(doc);
-    doc.title = agentChatTitle;
-    doc.documentElement.lang = agentChatLanguage;
-    const mount = doc.createElement("div");
-    mount.id = POPUP_MOUNT_ID;
-    doc.body.replaceChildren(mount);
+    const { window: popup, mount } = opened;
 
     closingPopupRef.current = false;
     activePopupWindow = popup;
@@ -1957,7 +1908,6 @@ export function AgentCliWindow({
     setMode("normal");
     setPopOutError("");
     setPopupMount(mount);
-    popup.focus();
   }, [agentChatLanguage, agentChatTitle, currentHass, size]);
 
   const noInstances = instances.length === 0;

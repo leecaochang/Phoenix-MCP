@@ -542,6 +542,12 @@
 .phx-guide.is-maximized .phx-guide-titlebar { cursor: default; }
 /* Maximized, the text keeps a readable line length instead of running across the screen. */
 .phx-guide.is-maximized .phx-guide-body > * { max-width: 760px; }
+/* Popped out: it fills its own browser window, which the browser moves and sizes. */
+.phx-guide.is-popped { position: static; width: 100%; height: 100%; min-width: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+/* Its title bar matches Agent Chat's popped-out window: the same padding, button and icon sizes. */
+.phx-guide.is-popped .phx-guide-titlebar { cursor: default; height: auto; gap: 2px; padding: 4px 6px; }
+.phx-guide.is-popped .phx-window-controls { gap: 2px; }
+.phx-guide.is-popped .phx-window-control { width: 28px; height: 24px; border-radius: var(--phx-radius-xs); }
 .phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }

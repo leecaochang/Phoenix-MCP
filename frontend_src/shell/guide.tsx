@@ -16,6 +16,7 @@
  * it cannot be moved, resized or closed until the wizard ends.
  */
 
+import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow";
 import { ANCHOR, GUIDE_FORMAT, HEADING, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
@@ -25,6 +26,10 @@ import { hasMessage, t } from "../i18n";
 import { compareStrings } from "../i18n/format";
 import { Icon } from "../ui/Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
+import { openPopupWindow, type OpenPopup } from "../ui/popup";
+// The title bar's buttons are window controls, styled with the workspace windows.
+import DOCK_CSS from "./dock/dock.css?inline";
+import { applyThemeClass } from "../ui/theme";
 import { renderMarkdown } from "../utils/markdown";
 import { JS_BUILD } from "../version";
 import type { WorkspaceController } from "./dock/controller";
@@ -434,14 +439,14 @@ function GuideBody({ guide }: { guide: Guide }) {
 }
 
 /** Back and Forward through the pages the Guide showed, as in a browser; each is greyed out at its end. */
-function HistoryButtons({ guide }: { guide: Guide }) {
+function HistoryButtons({ guide, iconSize = WINDOW_ICON }: { guide: Guide; iconSize?: number }) {
   return (
     <>
       <button type="button" className="phx-window-control" aria-label={t("guide.back")} title={t("guide.back")} disabled={!guide.canGoBack} onClick={guide.back}>
-        <Icon name="back" size={14} />
+        <Icon name="back" size={iconSize} />
       </button>
       <button type="button" className="phx-window-control" aria-label={t("guide.forward")} title={t("guide.forward")} disabled={!guide.canGoForward} onClick={guide.forward}>
-        <Icon name="forward" size={14} />
+        <Icon name="forward" size={iconSize} />
       </button>
     </>
   );
@@ -465,6 +470,12 @@ function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
 }
 
 const NO_WINDOWS: ReadonlySet<string> = new Set();
+const POPUP_NAME = "phoenix-mcp-guide";
+// Inside the panel the Guide's controls match the workspace windows'; popped out, they match
+// Agent Chat's popped-out window, the other window of its own (user, 2026-11-01).
+const WINDOW_ICON = 14;
+const POPUP_ICON = 16;
+const POPUP_MOUNT_ID = "phx-guide-popout-root";
 
 /** How far one arrow key moves or resizes the Guide. */
 const KEY_STEP = 24;
@@ -515,6 +526,16 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   const isFolded = folded && !following;
   // Moving or resizing with the arrow keys, from the window menu.
   const [keys, setKeys] = useState<"move" | "resize" | null>(null);
+  // Popped out into a browser window of its own, like Agent Chat (user, 2026-11-01). The same
+  // component renders there, so it keeps following selections in the panel, with its history.
+  const [popup, setPopup] = useState<OpenPopup | null>(null);
+  const [popupBlocked, setPopupBlocked] = useState(false);
+  const popupRef = useRef<OpenPopup | null>(null);
+  popupRef.current = popup;
+  // Set while Phoenix closes the popup itself, so its closing is not read as the reader's Close.
+  const closingPopup = useRef(false);
+  // The panel element, whose theme class the popup follows.
+  const themeHost = useRef<Element | null>(null);
 
   // Stay on screen when the browser window shrinks.
   useLayoutEffect(() => {
@@ -644,6 +665,66 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     }
     return false;
   };
+  const popOut = () => {
+    if (following) return;
+    const root = frame.current?.getRootNode();
+    themeHost.current = root instanceof ShadowRoot ? root.host : null;
+    const opened = openPopupWindow({
+      name: POPUP_NAME, mountId: POPUP_MOUNT_ID, width: liveRef.current.w, height: liveRef.current.h,
+      title: t("guide.title"), language: document.documentElement.lang, background: "var(--phx-surface)", extraCss: DOCK_CSS,
+    });
+    setPopupBlocked(!opened);
+    if (!opened) return;
+    closingPopup.current = false;
+    setKeys(null);
+    setMaxRect(null);
+    if (isFolded) onFold?.(false);
+    setPopup(opened);
+  };
+  const popIn = useCallback(() => {
+    const current = popupRef.current;
+    if (!current) return;
+    closingPopup.current = true;
+    setPopup(null);
+    // Let React take the content out before its window goes away.
+    window.setTimeout(() => current.window.close(), 0);
+  }, []);
+  // Beside the wizard the Guide stays in the panel.
+  useEffect(() => { if (following) popIn(); }, [following, popIn]);
+  // The popup follows the panel's theme, and its own close button closes the Guide, as Agent Chat's does.
+  useEffect(() => {
+    if (!popup) return undefined;
+    const sync = () => {
+      const host = themeHost.current;
+      applyThemeClass(popup.window.document.documentElement,
+        host?.classList.contains("phx-theme-dark") ? "phx-theme-dark" : host?.classList.contains("phx-theme-light") ? "phx-theme-light" : null);
+    };
+    sync();
+    const observer = themeHost.current ? new MutationObserver(sync) : null;
+    if (themeHost.current) observer?.observe(themeHost.current, { attributes: true, attributeFilter: ["class"] });
+    const closed = () => {
+      if (closingPopup.current) return;
+      setPopup(null);
+      onClose();
+    };
+    popup.window.addEventListener("pagehide", closed);
+    return () => {
+      observer?.disconnect();
+      popup.window.removeEventListener("pagehide", closed);
+    };
+  }, [popup, onClose]);
+  // The popup belongs to this page: leaving or reloading it, or closing the Guide, closes the popup.
+  useEffect(() => {
+    const end = () => {
+      const current = popupRef.current;
+      if (!current) return;
+      closingPopup.current = true;
+      current.window.close();
+    };
+    window.addEventListener("pagehide", end);
+    return () => { window.removeEventListener("pagehide", end); end(); };
+  }, []);
+
   const menu = (): MenuEntry[] => [
     { id: "move", label: t("workspace.moveKeyboard"), disabled: maximized, onSelect: () => startKeys("move") },
     { id: "resize", label: t("workspace.resizeKeyboard"), disabled: maximized || isFolded, onSelect: () => startKeys("resize") },
@@ -653,6 +734,27 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     { id: "close", label: t("common.close"), onSelect: onClose },
   ];
   const showMenu = useContextMenu();
+
+  if (popup) {
+    return createPortal(
+      <section className="phx-guide is-popped" aria-label={t("guide.title")}>
+        <header className="phx-guide-titlebar">
+          <HistoryButtons guide={guide} iconSize={POPUP_ICON} />
+          <h2 className="phx-guide-title">{t("guide.title")}</h2>
+          <div className="phx-window-controls">
+            <button type="button" className="phx-window-control" aria-label={t("agentchat.popIn")} title={t("agentchat.popIn")} onClick={popIn}>
+              <Icon name="popIn" size={POPUP_ICON} />
+            </button>
+            <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}>
+              <Icon name="close" size={POPUP_ICON} />
+            </button>
+          </div>
+        </header>
+        <div className="phx-guide-body"><GuideBody guide={guide} /></div>
+      </section>,
+      popup.mount,
+    );
+  }
 
   const shown = maximized ? maxRect! : live;
   const classes = ["phx-guide", following && "is-pinned", isFolded && "is-folded", maximized && "is-maximized"].filter(Boolean).join(" ");
@@ -674,6 +776,9 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
             {keys && <span className="phx-window-resize-hint" role="status">{t(keys === "move" ? "workspace.moveHint" : "workspace.resizeHint")}</span>}
             <MenuButton label={t("workspace.windowMenu")} help="help.guideMenu" icon={<Icon name="more" size={14} />} items={menu}
               className="phx-window-control" buttonRef={(el) => { menuButton.current = el; }} pressed={!!keys} onButtonKeyDown={keyStep} />
+            <button type="button" className="phx-window-control" aria-label={t("agentchat.popOut")} title={t("agentchat.popOut")} onClick={popOut}>
+              <Icon name="popOut" size={14} />
+            </button>
             <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
               title={maximized ? t("agentchat.restore") : t("agentchat.maximize")} data-help="help.maximizeWindow" onClick={toggleMaximize}>
               <Icon name={maximized ? "restore" : "maximize"} size={14} />
@@ -684,7 +789,10 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
           </div>
         )}
       </header>
-      <div className="phx-guide-body" hidden={isFolded}><GuideBody guide={guide} /></div>
+      <div className="phx-guide-body" hidden={isFolded}>
+        {popupBlocked && <p className="banner banner-error" role="alert">{t("agentchat.popOutBlocked")}</p>}
+        <GuideBody guide={guide} />
+      </div>
       {!following && !isFolded && !maximized && RESIZE_EDGES.map((d) => <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />)}
     </section>
   );

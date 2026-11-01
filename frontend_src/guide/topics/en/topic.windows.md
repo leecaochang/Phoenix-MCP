@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow"], "keyboard": ["shortcuts", "context menu", "escape"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx"] }
+{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow"], "keyboard": ["shortcuts", "context menu", "escape"], "guide": ["guide", "pop out", "pop in", "separate window", "contents", "search"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx"] }
 ---
 Each workspace is a set of windows you can arrange as you like. Phoenix remembers the arrangement for you, on every computer you sign in from.
 
@@ -33,6 +33,16 @@ Open it from the title bar's menu button, or right-click the title bar.
 - **{{label:workspace.pinTop}}** and **{{label:workspace.pinBottom}}** keep a window in a band that doesn't scroll. **{{label:workspace.unpin}}** returns it.
 - **{{label:workspace.addToMy}}** copies it to [My Workspace](guide:workspace.my).
 - **{{label:workspace.alwaysLabels}}** shows its tools with their names, even when the toolbar shows icons only.
+
+## The Guide {#guide}
+
+The Guide is one window over every workspace. It shows the page for the window you're working in, and selecting a control takes it to the section about that control. Use Back and Forward, Contents and Search at the top to find your way.
+
+Fold, maximize and close it from its title bar, or move and resize it with the keyboard from its menu. Closing it anywhere closes it everywhere.
+
+**{{label:agentchat.popOut}}** moves the Guide to a browser window of its own, so it can sit beside Home Assistant. It keeps following what you select in the panel. **{{label:agentchat.popIn}}** brings it back, and closing that window closes the Guide.
+
+It stays popped out only while the Phoenix panel is open. After a reload it's back inside the panel. It isn't offered on a phone, or while it sits beside the setup.
 
 ## Arranging windows {#arranging}
 
