@@ -49,6 +49,10 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       return;
     }
     setError(null);
+    // Leaving a field without a change saves nothing: every save tells the key's
+    // connected agents their tools changed and refuses their requests in progress.
+    // While an earlier save is on its way the stored values are stale, so save then.
+    if (inFlight.current === 0 && reqNum === accessKey.rate_limit_requests && burstNum === accessKey.rate_limit_burst) return;
     const submission = ++submitted.current;
     const sent = { ...edits.current };
     inFlight.current += 1;
