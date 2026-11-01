@@ -1,7 +1,10 @@
 ---
-{ "id": "workspace.changes", "title": "Changes Workspace", "order": 30 }
+{ "id": "workspace.changes", "title": "Changes Workspace", "order": 30, "keywords": ["history", "versions", "rollback", "restore"] }
 ---
-Changes keeps a version history of the configuration agents change: automations, scripts, scenes, integrations, helpers and dashboards.
+Changes keeps a history of the configuration agents change through Phoenix, so you can see exactly what changed and put an earlier version back.
 
-- Choose a change to compare the configuration before and after it in **{{label:workspace.comparison}}**. **{{label:workspace.itemHistory}}**, on the toolbar, lists the item's other changes.
-- **{{label:changes.restore}}** puts back a saved Before or After version, after you confirm. The restore is recorded too, so you can undo it the same way.
+- [{{label:shell.tabChanges}}](guide:window.changes): every recorded change, newest first.
+- [{{label:workspace.comparison}}](guide:window.comparison): the item before and after the chosen change, and **{{label:changes.restore}}**.
+- [{{label:workspace.itemHistory}}](guide:window.itemHistory): the other changes to the same item.
+
+Related: [What Changes records](guide:topic.configurationHistory), [Approvals](guide:workspace.approvals)

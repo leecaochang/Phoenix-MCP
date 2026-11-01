@@ -152,7 +152,7 @@ export function ChangesListWindow() {
   return (
     <div className="phx-list-view changes-list-view">
       {!onToolbar && <InlineTools groups={groups} />}
-      <div className="phx-filters" hidden={!showFilters}>
+      <div className="phx-filters" hidden={!showFilters} data-guide="window.changes#filters">
         <div className="filter-row">
           <select className="input input-auto" data-filter="type" value={type} onChange={(e) => { forget(); setType(e.target.value); }} aria-label={t("changes.colType")}>
             <option value="">{t("changes.allTypes")}</option>
@@ -171,6 +171,8 @@ export function ChangesListWindow() {
       </div>
       {c.error && <ErrorMsg msg={c.error} />}
       {c.loading && !c.feed.length && <Loading />}
+      {/* Grouped for the Guide only; the table stays the list's flex item. */}
+      <div className="changes-table" data-guide="window.changes#list">
       <ConfigTable
         id="changes"
         label={t("changes.title")}
@@ -183,11 +185,12 @@ export function ChangesListWindow() {
         rowLabel={(v) => `${changeLabel(v)}, ${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
         empty={c.loading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
+      </div>
       {!c.loading && c.feed.length > 0 && (
         <div className="phx-table-footer">
           <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shown.length), total: localeNumber(c.total) })}</span>
           {c.hasMore && (
-            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} busy={c.loadingMore} onClick={c.loadMore} />
+            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" busy={c.loadingMore} onClick={c.loadMore} />
           )}
         </div>
       )}
@@ -210,10 +213,12 @@ function RestoreMenu({ c }: { c: ChangesState }) {
     };
   };
   return (
+    <span className="change-restore" data-guide="window.comparison#restore">
     <MenuButton label={t("changes.restore")} icon={<Icon name="restoreVersion" size={16} />} items={() => [item("before"), item("after")]}
       className={`btn btn-outline btn-sm phx-action${iconsOnly ? " is-icon-only" : ""}`} pressed={!!c.confirm}>
       {!iconsOnly && <span>{t("changes.restore")}</span>}
     </MenuButton>
+    </span>
   );
 }
 
@@ -221,10 +226,12 @@ function RestoreConfirmation({ c }: { c: ChangesState }) {
   const record = c.record!;
   const side = t(c.confirm!.side === "before" ? "common.before" : "common.after");
   return (
+    <div data-guide="window.comparison#confirm">
     <InlineConfirm label={t("changes.restore")} title={t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
       cancelLabel={t("changes.cancelRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
       <p>{t("changes.restoreReplaces")}</p>
     </InlineConfirm>
+    </div>
   );
 }
 
@@ -282,7 +289,7 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
   return (
     <div className="change-diff-wrap">
       {/* The view controls, then Restore at the end of the same row (user, 2026-10-27). */}
-      <div className="change-diff-toolbar">
+      <div className="change-diff-toolbar" data-guide="window.comparison#views">
         {canPreview && (
           <SegmentedToggle value={mode} onChange={setMode} ariaLabel={t("approvals.diffModeAria")}
             options={[{ value: "diff", label: t("common.diff") }, { value: "preview", label: t("common.preview") }]} />
@@ -339,7 +346,7 @@ export function ComparisonWindow() {
         {/* Previous and Next step through the list the change was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">
           <h3 className="phx-review-title">{changeLabel(record)}</h3>
-          <div className="phx-log-details-nav">
+          <div className="phx-log-details-nav" data-guide="window.comparison#step">
             <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
             <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
           </div>
