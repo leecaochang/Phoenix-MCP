@@ -612,6 +612,7 @@
     "help": {
       "title": "Help",
       "idle": "Point at or focus a control to see what it does.",
+      "areaKeys": "F6 moves to the next area: the toolbar, each window, the Guide. Shift+F6 moves back.",
       "showHelpBar": "Show Help Bar",
       "wsAccessKeys": "Access Keys: create the keys agents connect with, and choose what each key may do.",
       "wsApprovals": "Approvals: review the changes agents asked to make, then approve or reject them.",

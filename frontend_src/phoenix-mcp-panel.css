@@ -3366,3 +3366,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .phx-attention-actions .phx-attention-ref { flex: 1 1 160px; min-width: 0; }
 .phx-attention-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 .phx-attention-meta .stat-label { margin-inline-end: 2px; }
+
+/* F6 lands on the toolbar, the Guide, a phone window or Agent Chat itself: show where focus went. */
+.phx-toolbar:focus-visible,
+section.phx-guide:focus-visible,
+.phx-phone-body:focus-visible,
+.agentcli-window:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }

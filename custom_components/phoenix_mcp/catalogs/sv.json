@@ -2548,6 +2548,7 @@
     "help": {
       "title": "Hjälp",
       "idle": "Peka på eller fokusera en kontroll för att se vad den gör.",
+      "areaKeys": "F6 går till nästa område: verktygsfältet, varje fönster, guiden. Skift+F6 går tillbaka.",
       "showHelpBar": "Visa hjälpfält",
       "wsAccessKeys": "Åtkomstnycklar: skapa nycklarna som agenter ansluter med och välj vad varje nyckel får göra.",
       "wsApprovals": "Godkännanden: granska ändringarna som agenter har bett om att göra och godkänn eller avvisa dem.",

@@ -2679,6 +2679,7 @@
     "help": {
       "title": "Pomoc",
       "idle": "Wskaż kontrolkę lub ustaw na niej fokus, aby zobaczyć, co robi.",
+      "areaKeys": "F6 przechodzi do następnego obszaru: paska narzędzi, każdego okna, przewodnika. Shift+F6 wraca.",
       "showHelpBar": "Pokaż pasek pomocy",
       "wsAccessKeys": "Klucze dostępu: twórz klucze, którymi łączą się agenci, i wybieraj, co może robić każdy klucz.",
       "wsApprovals": "Zatwierdzenia: przeglądaj zmiany, o które poprosili agenci, a następnie je zatwierdzaj lub odrzucaj.",

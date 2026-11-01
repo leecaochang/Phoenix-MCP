@@ -14,6 +14,7 @@ import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from
 import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { WorkspaceController, layoutMembers } from "./dock/controller";
+import { useAreaKeys } from "./areaFocus";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack } from "./PhoneStack";
@@ -107,6 +108,7 @@ export function Shell() {
   // null while children's layout effects ran, and the toolbar could not keep itself inside the panel.
   const attachRoot = useCallback((el: HTMLDivElement | null) => { root.current = el; setRootEl(el); }, []);
   const env = useEnvironment(root);
+  useAreaKeys(root);
   const userId = (d.hass as { user?: { id?: string } } | null)?.user?.id ?? null;
 
   // The record: this browser's copy paints first; Home Assistant's copy replaces it at

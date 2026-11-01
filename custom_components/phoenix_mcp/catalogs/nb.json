@@ -2548,6 +2548,7 @@
     "help": {
       "title": "Hjelp",
       "idle": "Pek på eller fokuser på en kontroll for å se hva den gjør.",
+      "areaKeys": "F6 går til neste område: verktøylinjen, hvert vindu, veiledningen. Skift+F6 går tilbake.",
       "showHelpBar": "Vis hjelpelinje",
       "wsAccessKeys": "Tilgangsnøkler: opprett nøklene agenter kobler til med, og velg hva hver nøkkel kan gjøre.",
       "wsApprovals": "Godkjenninger: gå gjennom endringene agenter har bedt om å gjøre, og godkjenn eller avvis dem.",

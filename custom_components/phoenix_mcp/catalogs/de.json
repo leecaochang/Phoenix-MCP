@@ -2542,6 +2542,7 @@
     "help": {
       "title": "Hilfe",
       "idle": "Zeigen Sie auf ein Bedienelement oder fokussieren Sie es, um zu sehen, was es tut.",
+      "areaKeys": "F6 wechselt zum nächsten Bereich: Symbolleiste, jedes Fenster, Leitfaden. Umschalt+F6 wechselt zurück.",
       "showHelpBar": "Hilfeleiste anzeigen",
       "wsAccessKeys": "Zugriffsschlüssel: Schlüssel erstellen, mit denen sich Agenten verbinden, und festlegen, was jeder Schlüssel darf.",
       "wsApprovals": "Genehmigungen: Änderungen prüfen, die Agenten vornehmen möchten, und sie genehmigen oder ablehnen.",

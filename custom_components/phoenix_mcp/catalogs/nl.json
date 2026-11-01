@@ -2623,6 +2623,7 @@
     "help": {
       "title": "Help",
       "idle": "Wijs een bedieningselement aan of geef het focus om te zien wat het doet.",
+      "areaKeys": "F6 gaat naar het volgende gebied: de werkbalk, elk venster, de Gids. Shift+F6 gaat terug.",
       "showHelpBar": "Helpbalk weergeven",
       "wsAccessKeys": "Toegangssleutels: maak de sleutels waarmee agents verbinding maken en kies wat elke sleutel mag doen.",
       "wsApprovals": "Goedkeuringen: bekijk de wijzigingen die agents willen aanbrengen en keur ze goed of af.",

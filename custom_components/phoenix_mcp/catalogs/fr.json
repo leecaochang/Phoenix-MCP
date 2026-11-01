@@ -2542,6 +2542,7 @@
     "help": {
       "title": "Aide",
       "idle": "Pointez ou sélectionnez une commande pour voir ce qu’elle fait.",
+      "areaKeys": "F6 passe à la zone suivante : la barre d’outils, chaque fenêtre, le Guide. Maj+F6 revient en arrière.",
       "showHelpBar": "Afficher la barre d’aide",
       "wsAccessKeys": "Clés d’accès : créez les clés avec lesquelles les agents se connectent et choisissez ce que chaque clé peut faire.",
       "wsApprovals": "Approbations : examinez les modifications que les agents ont demandé à faire, puis approuvez-les ou refusez-les.",

@@ -2542,6 +2542,7 @@
     "help": {
       "title": "Ayuda",
       "idle": "Señale o enfoque un control para ver qué hace.",
+      "areaKeys": "F6 pasa a la siguiente zona: la barra de herramientas, cada ventana, la Guía. Mayús+F6 vuelve atrás.",
       "showHelpBar": "Mostrar barra de ayuda",
       "wsAccessKeys": "Claves de acceso: cree las claves con las que se conectan los agentes y elija qué puede hacer cada clave.",
       "wsApprovals": "Aprobaciones: revise los cambios que los agentes han pedido hacer y apruébelos o rechácelos.",

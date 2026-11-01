@@ -2548,6 +2548,7 @@
     "help": {
       "title": "Ohje",
       "idle": "Osoita säädintä tai siirrä kohdistus siihen nähdäksesi, mitä se tekee.",
+      "areaKeys": "F6 siirtää seuraavaan alueeseen: työkalurivi, kukin ikkuna, opas. Vaihto+F6 siirtää takaisin.",
       "showHelpBar": "Näytä ohjepalkki",
       "wsAccessKeys": "Käyttöavaimet: luo avaimet, joilla agentit yhdistävät, ja valitse, mitä kukin avain saa tehdä.",
       "wsApprovals": "Hyväksynnät: tarkista muutokset, joita agentit ovat pyytäneet tekemään, ja hyväksy tai hylkää ne.",

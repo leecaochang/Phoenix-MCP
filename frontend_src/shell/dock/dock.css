@@ -186,6 +186,8 @@
 .phx-window-resize-hint { padding: 0 6px; font-size: 12px; color: var(--phx-text-2); white-space: nowrap; }
 
 .phx-window-body { box-sizing: border-box; height: 100%; overflow: auto; padding: 0 16px 16px; }
+/* F6 lands on a window, the toolbar or the Guide itself: show where focus went. */
+.phx-window-body:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }
 /* Windows that follow their content (Access Keys, Settings) are as tall as it, never scrolling inside, unless one is maximized.
    Dragging a border gives a window a height of its own (user, 2026-10-31). */
 .phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body { height: auto; overflow: hidden; }

@@ -67,7 +67,7 @@ describe("what Help says", () => {
     );
     const stop = tracker.attach(screen.getByTestId("root"));
     const help = () => document.querySelector(".phx-help-text")!.textContent;
-    expect(help()).toBe("Point at or focus a control to see what it does.");
+    expect(help()).toBe("Point at or focus a control to see what it does. F6 moves to the next area: the toolbar, each window, the Guide. Shift+F6 moves back.");
     act(() => { fireEvent.focusIn(screen.getByLabelText("First")); });
     expect(help()).toBe("First");
     act(() => { fireEvent.pointerOver(screen.getByLabelText("Second")); });
@@ -77,7 +77,7 @@ describe("what Help says", () => {
     act(() => { fireEvent.pointerOver(screen.getByTestId("space")); });
     expect(help()).toBe("First");
     act(() => { fireEvent.focusOut(screen.getByLabelText("First"), { relatedTarget: null }); });
-    expect(help()).toBe("Point at or focus a control to see what it does.");
+    expect(help()).toBe("Point at or focus a control to see what it does. F6 moves to the next area: the toolbar, each window, the Guide. Shift+F6 moves back.");
     stop();
   });
 
@@ -103,7 +103,7 @@ describe("what Help says", () => {
       act(() => tracker.refresh());
       expect(help()).toBe(de.panel.help.fold);
       act(() => { fireEvent.focusOut(screen.getByTestId("fold"), { relatedTarget: null }); });
-      expect(help()).toBe(de.panel.help.idle);
+      expect(help()).toBe(`${de.panel.help.idle} ${de.panel.help.areaKeys}`);
     } finally {
       primeTranslations(en.panel);
       stop();

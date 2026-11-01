@@ -2542,6 +2542,7 @@
     "help": {
       "title": "Aiuto",
       "idle": "Punta o metti a fuoco un controllo per vedere che cosa fa.",
+      "areaKeys": "F6 passa all’area successiva: la barra degli strumenti, ogni finestra, la Guida. Maiusc+F6 torna indietro.",
       "showHelpBar": "Mostra barra di aiuto",
       "wsAccessKeys": "Chiavi di accesso: crea le chiavi con cui si connettono gli agenti e scegli che cosa può fare ciascuna chiave.",
       "wsApprovals": "Approvazioni: esamina le modifiche che gli agenti hanno chiesto di fare, poi approvale o rifiutale.",

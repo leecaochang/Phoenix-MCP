@@ -193,7 +193,8 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
         className="phx-window-control"
         buttonRef={(el) => {
           menuButton.current = el;
-          el?.setAttribute("data-phx-window-menu", "");
+          // The window it belongs to, so F6 can find the window from its title bar.
+          el?.setAttribute("data-phx-window-menu", windowId);
         }}
         pressed={resizing}
         onButtonKeyDown={resizeKeys}
