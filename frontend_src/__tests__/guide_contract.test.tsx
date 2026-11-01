@@ -1,8 +1,8 @@
 /**
  * The shipped Guide against the code it describes (user, 2026-11-01): it
  * compiles cleanly with every covered file present; every window of a
- * converted workspace has its page; every Settings index entry has its
- * section on its window's page, and selecting the entry's control in a
+ * converted workspace has its page; every persona and capability has its
+ * section; every Settings index entry has its section on its window's page, and selecting the entry's control in a
  * rendered window points the Guide there; every `<topic id>#<anchor>` the
  * source names exists; and only workspace overviews sit at the top of
  * Contents. The rules are in docs-internal/agents/guide.md.
@@ -17,6 +17,9 @@ import { flattenCatalog } from "../i18n";
 import { WORKSPACES } from "../shell/workspaces";
 import type { WorkspaceId } from "../shell/storage";
 import { SETTING_INDEX } from "../shell/settingsIndex";
+import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
+import { capabilityGuide, personaGuide } from "../guide/targets";
+import { parseGuideRef } from "../shell/guideTarget";
 import { findControl, settingAnchor, settingsGuideAnchor } from "../shell/settings";
 import { api } from "../api";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
@@ -34,7 +37,7 @@ const TOPICS = resolve(REPO, "frontend_src/guide/topics/en");
 const LABELS = flattenCatalog((en as { panel: unknown }).panel);
 
 /** Workspaces whose website pages have been turned into Guide pages; each gains this check as it is converted. */
-const CONVERTED: readonly WorkspaceId[] = ["settings"];
+const CONVERTED: readonly WorkspaceId[] = ["settings", "accessKeys"];
 /** Windows every workspace shares, documented once rather than per workspace. */
 const SHARED = new Set(["attention", "help", "notifications"]);
 
@@ -71,6 +74,16 @@ describe("the shipped Guide", () => {
   it("has a section for every setting Find Setting knows, on its window's page", () => {
     const missing = SETTING_INDEX.filter((entry) => !bundle.topics[`window.${entry.window}`]?.anchors.includes(settingAnchor(entry.id)))
       .map((entry) => `window.${entry.window}#${settingAnchor(entry.id)}`);
+    expect(missing).toEqual([]);
+  });
+
+  it("has a section for every persona and every capability, which their controls point at", () => {
+    const refs = [...PERSONAS.map((p) => personaGuide(p.key)), ...Object.keys(PERSONA_CAP_DEFAULTS.read_only!).map(capabilityGuide)];
+    expect(refs.length).toBeGreaterThan(40);
+    const missing = refs.filter((ref) => {
+      const { topic, anchor } = parseGuideRef(ref);
+      return !bundle.topics[topic!]?.anchors.includes(anchor!);
+    });
     expect(missing).toEqual([]);
   });
 

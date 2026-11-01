@@ -244,7 +244,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   }
 
   return (
-    <section ref={form} className="phx-inline-form" aria-labelledby="create-access-key-title"
+    <section ref={form} className="phx-inline-form" aria-labelledby="create-access-key-title" data-guide="window.accessKeys#create-key"
       onKeyDown={(e) => {
         if (e.key !== "Escape" || saving) return;
         e.preventDefault();
@@ -255,7 +255,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
 
       {/* One row of fields that wraps on narrow windows (user, 2026-10-28). */}
       <div className="access-key-create-fields">
-        <div className="field access-key-create-name">
+        <div className="field access-key-create-name" data-guide="window.accessKeys#key-name">
           <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
           <input
             id="access-key-name-input"
@@ -272,8 +272,8 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         </div>
 
         <div className="field">
-          <label htmlFor="access-key-expiry-unit">{t("accessKeys.expiryLabel")}</label>
-          <div className="access-key-create-expiry-row">
+          <label htmlFor="access-key-expiry-unit" data-guide="window.accessKeys#key-expiry">{t("accessKeys.expiryLabel")}</label>
+          <div className="access-key-create-expiry-row" data-guide="window.accessKeys#key-expiry">
             <select
               id="access-key-expiry-unit"
               className="input input-auto"
@@ -301,7 +301,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
 
         {!passThrough && (
           <>
-            <div className="field access-key-create-number">
+            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits">
               <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
               <input
                 id="create-rate-requests"
@@ -312,7 +312,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
                 onChange={(e) => setRateLimitRequests(e.target.value)}
               />
             </div>
-            <div className="field access-key-create-number">
+            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits">
               <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
               <input
                 id="create-rate-burst"
@@ -329,7 +329,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       </div>
 
       {/* What pass-through does is in Help (user, 2026-10-28). */}
-      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp">
+      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-guide="window.accessKeys#key-pass-through">
         <label className="toggle-switch">
           <input
             type="checkbox"

@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.approvals", "title": "Approvals", "order": 20 }
+{ "id": "workspace.approvals", "title": "Approvals Workspace", "order": 20 }
 ---
 When a capability is set to confirm, the agent's change waits here for your decision. Nothing runs until you decide.
 

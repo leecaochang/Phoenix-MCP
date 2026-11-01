@@ -1,16 +1,16 @@
 ---
-{ "id": "workspace.accessKeys", "title": "Access Keys", "order": 10 }
+{ "id": "workspace.accessKeys", "title": "Access Keys Workspace", "order": 10, "keywords": ["agent", "token", "client", "security"] }
 ---
-Each agent connects to Phoenix with its own access key. The key decides what that agent can do in Home Assistant.
+Every agent connects to Phoenix with its own access key. The key decides what the agent can do: which tools it may use, and which devices and entities it can reach.
 
-- **{{label:accessKeys.setUpAgent}}** walks you through creating a key and connecting an app.
-- Select a key in the list to show its **{{label:accessKeys.cardPersona}}**, **{{label:accessKeys.cardCapabilities}}**, **{{label:workspace.keySettings}}** and **{{label:accessKeys.permissionsTree}}** windows.
-- **{{label:accessKeys.permissionSummary}}** sums up everything the key can reach.
-- Until you select a key, only the list is shown. The key stays selected when you come back from another workspace.
-- Each window grows to fit its content, so the workspace scrolls instead of the windows.
-- The **{{label:accessKeys.permissionsTree}}** keeps up with Home Assistant as entities, devices, areas and labels change. **{{label:selectBy.menu}}** narrows it to one area, label or integration.
-- **{{label:workspace.keyActions}}** on the toolbar renames, rotates or revokes the selected key.
-- **{{label:accessKeys.showArchived}}** opens **{{label:accessKeys.archivedTitle}}** under the list, with the revoked and expired keys. It closes when you select a key.
-- If you try another persona, choosing **{{label:personas.custom.label}}** again brings back the key's custom capabilities, until you close the panel.
+- [{{label:shell.tabAccessKeys}}](guide:window.accessKeys): your keys. Select one to show the windows below.
+- [{{label:accessKeys.cardPersona}}](guide:window.persona) and [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities): which tools the key may use, and which wait for your approval.
+- [{{label:accessKeys.permissionsTree}}](guide:window.permissions): which devices and entities the key can read or control.
+- [{{label:accessKeys.permissionSummary}}](guide:window.permissionSummary): the rules set in the tree, in one table.
+- [{{label:workspace.keySettings}}](guide:window.keySettings): guidance for agents, tool announcement, approval wait and rate limits.
+- [{{label:accessKeys.cardPresets}}](guide:window.presets): saved setups to switch between, when presets are on.
+- [{{label:accessKeys.archivedTitle}}](guide:window.archivedAccessKeys): revoked and expired keys.
 
-When a capability is set to confirm, the agent's changes go to [Approvals](guide:workspace.approvals) first, and nothing runs until you decide.
+New to Phoenix? **{{label:accessKeys.setUpAgent}}** on the toolbar walks you through your first key and a test.
+
+Related: [Setting up an agent](guide:wizard.choose), [How a permission is decided](guide:topic.permissionResolution)

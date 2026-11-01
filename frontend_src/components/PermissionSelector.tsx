@@ -53,6 +53,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
     <div
       className="perm-selector"
       role="group"
+      data-guide="window.permissions#states"
       aria-label={label}
       style={{ touchAction: "none" }}
       onPointerEnter={(e) => {

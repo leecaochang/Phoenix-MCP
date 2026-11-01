@@ -56,7 +56,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
     { id: "actions", label: t("accessKeys.colActions"), width: 200, maxWidth: 320, className: "phx-td-actions",
       cell: (k) => (
         <span className="row-actions" ref={confirmId === k.id ? confirming : undefined}>
-          <ActionButton icon="delete" label={confirmId === k.id ? t("accessKeys.confirmDelete") : t("accessKeys.deletePermanently")}
+          <ActionButton icon="delete" guide="window.archivedAccessKeys#delete-permanently" label={confirmId === k.id ? t("accessKeys.confirmDelete") : t("accessKeys.deletePermanently")}
             className={confirmId === k.id ? "btn btn-danger btn-sm" : "btn btn-ghost btn-sm"} busy={deleting === k.id}
             onClick={() => (confirmId === k.id ? void deletePermanently(k.id) : setConfirmId(k.id))} />
           {confirmId === k.id && (

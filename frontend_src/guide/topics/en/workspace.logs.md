@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.logs", "title": "Logs", "order": 50 }
+{ "id": "workspace.logs", "title": "Logs Workspace", "order": 50 }
 ---
 Logs shows what reached Phoenix and what agents said.
 

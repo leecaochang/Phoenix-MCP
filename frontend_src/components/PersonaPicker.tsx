@@ -7,6 +7,7 @@ import { CAP_NAMES, type EsphomeAvailability } from "./CapabilityMatrix";
 import { t } from "../i18n";
 import { Icon } from "../ui/Icon";
 import { DisplayModeContext } from "../ui/ActionButton";
+import { personaGuide } from "../guide/targets";
 
 // Patch mode: applies the persona to an existing access key (Access key detail).
 // Select mode: no access key yet (onboarding wizard); reports the chosen persona to
@@ -92,6 +93,7 @@ export function PersonaPicker(props: Props) {
               busy={saving}
               aria-pressed={active}
               data-help={p.descriptionKey}
+              data-guide={isSelectMode ? undefined : personaGuide(p.key)}
             >
               <div className="persona-card-label">
                 {t(p.labelKey)}

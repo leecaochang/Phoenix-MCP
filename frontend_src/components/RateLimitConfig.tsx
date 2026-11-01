@@ -82,7 +82,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
     <div>
       {error && <div className="banner banner-error mb-8">{error}</div>}
       <div className="rate-limit-row">
-        <div className="field">
+        <div className="field" data-guide="window.keySettings#rate-requests">
           <label htmlFor="rate-limit-requests">{t("accessKeys.rateRequestsLabel")}</label>
           <input
             id="rate-limit-requests"
@@ -94,7 +94,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
             onBlur={(e) => save(e.target.value, burst)}
           />
         </div>
-        <div className="field">
+        <div className="field" data-guide="window.keySettings#rate-burst">
           <label htmlFor="rate-limit-burst">{t("accessKeys.rateBurstLabel")}</label>
           <input
             id="rate-limit-burst"

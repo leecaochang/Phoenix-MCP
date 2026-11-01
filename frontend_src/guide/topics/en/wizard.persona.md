@@ -3,6 +3,8 @@
 ---
 A persona is a starting set of capabilities: which kinds of tools the agent can use, and which ones wait for your approval first.
 
-The preselected persona is the safe choice for a first test. If you already know the agent's job, pick another. You can change single capabilities later in [Access Keys](guide:workspace.accessKeys).
+{{label:personas.new_user.label}} is chosen for you, the safe choice for a first test. If you already know the agent's job, pick another. You can change single capabilities later in [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities).
 
-A persona never decides which devices the agent can reach. You choose that two steps from now.
+A persona doesn't decide which devices the agent can reach; you choose that two steps from now. The exception is Home Companion, which only ever reaches household devices.
+
+Related: [What each persona allows](guide:window.persona)

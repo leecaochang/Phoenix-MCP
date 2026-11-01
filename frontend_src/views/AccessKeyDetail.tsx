@@ -89,7 +89,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
   return (
     <>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <div className="toggle-row" data-help="accessKeys.announceAllHelp">
+      <div className="toggle-row" data-help="accessKeys.announceAllHelp" data-guide="window.keySettings#announce-all">
         <div className="toggle-label">
           <span>{t("accessKeys.announceAllLabel")}</span>
         </div>
@@ -106,7 +106,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
           <span className="toggle-switch-track" />
         </label>
       </div>
-      <div className="toggle-row" data-help="help.inlineWait">
+      <div className="toggle-row" data-help="help.inlineWait" data-guide="window.keySettings#inline-wait">
         <div className="toggle-label">
           <span>{t("accessKeys.inlineWaitLabel")}</span>
         </div>
@@ -127,7 +127,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
       </div>
       {/* Only pass-through keys use Assist exposure; scoped keys use the Permissions tree. */}
       {accessKey.pass_through && (
-        <div className="toggle-row" data-help="accessKeys.assistExposureHelp">
+        <div className="toggle-row" data-help="accessKeys.assistExposureHelp" data-guide="window.keySettings#assist-exposure">
           <div className="toggle-label">
             <span>{t("accessKeys.assistExposureLabel")}</span>
           </div>
@@ -302,7 +302,7 @@ function EditablePresetName(
   }
 
   return (
-    <span className="preset-name-edit">
+    <span className="preset-name-edit" data-guide="window.presets#rename-delete">
       <BusyInput
         className="preset-name-input"
         value={value}
@@ -448,13 +448,13 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
             )}
             <span className="preset-row-actions">
               {!isActive && (
-                <ActionButton icon="switchPreset" label={t("accessKeys.presetSwitchTo")} busy={busy} onClick={() => setAction({ kind: "switch", preset: p })} />
+                <ActionButton icon="switchPreset" label={t("accessKeys.presetSwitchTo")} guide="window.presets#switch-to" busy={busy} onClick={() => setAction({ kind: "switch", preset: p })} />
               )}
               {isActive && dirty && (
-                <ActionButton icon="restoreVersion" label={t("accessKeys.presetRevertToSaved")} busy={busy} onClick={() => setAction({ kind: "revert", preset: p })} />
+                <ActionButton icon="restoreVersion" label={t("accessKeys.presetRevertToSaved")} guide="window.presets#revert" busy={busy} onClick={() => setAction({ kind: "revert", preset: p })} />
               )}
               {!isActive && (
-                <ActionButton icon="delete" label={t("accessKeys.delete")} name={t("accessKeys.presetDeleteAria", { name: p.name })} busy={busy}
+                <ActionButton icon="delete" label={t("accessKeys.delete")} name={t("accessKeys.presetDeleteAria", { name: p.name })} guide="window.presets#rename-delete" busy={busy}
                   onClick={() => setAction({ kind: "delete", preset: p })} />
               )}
             </span>
@@ -467,7 +467,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
         <p className="preset-empty">{t("accessKeys.presetEmpty")}</p>
       )}
 
-      <div className="preset-create-row">
+      <div className="preset-create-row" data-guide="window.presets#save-current">
         <BusyInput
           className="input"
           placeholder={t("accessKeys.presetNewName")}
@@ -540,7 +540,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone, onError }:
   }
 
   return (
-    <span className="access-key-name-edit" onClick={(e) => e.stopPropagation()}>
+    <span className="access-key-name-edit" data-guide="window.accessKeys#rename" onClick={(e) => e.stopPropagation()}>
       <BusyInput
         ref={input}
         className="access-key-name-input"
@@ -929,6 +929,12 @@ function useLoadedKey(): { detail: AccessKeyDetail; accessKey: AccessKeyRecord }
  * key list. What each does reads in Help, for the box and its controls, not in
  * it; Rotate confirms in the same gold as Enable Pass-Through (user, 2026-10-31).
  */
+const KEY_ACTION_GUIDE: Record<Exclude<AccessKeyAction, "clearPerms">, string> = {
+  rotate: "window.accessKeys#rotate",
+  revoke: "window.accessKeys#revoke",
+  passThrough: "window.accessKeys#enable-pass-through",
+};
+
 function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
   if (!a || a.kind === "clearPerms") return null;
@@ -943,9 +949,11 @@ function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
     confirm: t("accessKeys.enablePtLabel"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
   };
   return (
+    <div data-guide={KEY_ACTION_GUIDE[a.kind]}>
     <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} help={text.help} lendHelp
       confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
       cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction} />
+    </div>
   );
 }
 
@@ -965,7 +973,7 @@ function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
   if (a?.kind !== "clearPerms") return null;
   return (
-    <div ref={box}>
+    <div ref={box} data-guide="window.permissions#clear-all">
       <InlineConfirm label={t("workspace.clearAllPermissions")} title={t("accessKeys.clearPermsTitle")} tone="danger" confirmLabel={t("accessKeys.clearAll")}
         confirmIcon="clearPermissions" confirmClassName="btn btn-danger btn-sm" cancelLabel={t("accessKeys.cancel")} busy={a.busy} error={a.error}
         onConfirm={detail.runAction} onCancel={detail.cancelAction} opener={tool}>
@@ -988,7 +996,7 @@ export function AccessKeyNotices() {
       {!detail.stale && <KeyActionConfirmation detail={detail} />}
       {!detail.stale && detail.error && <ErrorMsg msg={detail.error} />}
       {!detail.stale && detail.reconnectNeeded && (
-        <div className="banner banner-info reconnect-banner" role="status">
+        <div className="banner banner-info reconnect-banner" role="status" data-guide="window.accessKeys#reconnect">
           <span className="reconnect-banner-text">
             {tRich("accessKeys.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
           </span>
@@ -1049,15 +1057,15 @@ export function KeySettingsWindow() {
   if ("placeholder" in k) return <>{k.placeholder}</>;
   return (
     <KeyPad k={k} className="phx-window-pad phx-key-settings">
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-guidance">
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-guidance" data-guide="window.keySettings#guidance">
         <h3 id="phx-key-guidance" className="phx-section-title">{t("accessKeys.cardGuidance")}</h3>
         <AccessKeyNotes accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
       </section>
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-behaviour">
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-behaviour" data-guide="window.keySettings#agent-behavior">
         <h3 id="phx-key-behaviour" className="phx-section-title">{t("accessKeys.cardAgentBehavior")}</h3>
         <ToolAnnouncementToggle accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} />
       </section>
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-rate">
+      <section className="phx-key-settings-section" aria-labelledby="phx-key-rate" data-guide="window.keySettings#rate-limiting">
         <h3 id="phx-key-rate" className="phx-section-title">{t("accessKeys.cardRateLimiting")}</h3>
         <RateLimitConfig accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
       </section>
@@ -1094,13 +1102,13 @@ export function PermissionsWindow() {
   if ("placeholder" in k) return <>{k.placeholder}</>;
   const { accessKey } = k;
   if (accessKey.pass_through) {
-    return <KeyPad k={k}><PassThroughNotice accessKey={accessKey} onUpdate={k.detail.applyUpdate} /></KeyPad>;
+    return <KeyPad k={k}><div data-guide="window.permissions#pass-through"><PassThroughNotice accessKey={accessKey} onUpdate={k.detail.applyUpdate} /></div></KeyPad>;
   }
   return (
     <KeyPad k={k}>
       {!onToolbar && k.detail.action?.kind !== "clearPerms" && (
         <div className="tree-header-actions">
-          <ActionButton icon="clearPermissions" label={t("accessKeys.clearAll")} className="btn btn-outline btn-sm" onClick={() => k.detail.openAction("clearPerms")} />
+          <ActionButton icon="clearPermissions" label={t("accessKeys.clearAll")} className="btn btn-outline btn-sm" guide="window.permissions#clear-all" onClick={() => k.detail.openAction("clearPerms")} />
         </div>
       )}
       <ClearPermissionsConfirmation detail={k.detail} />
@@ -1129,6 +1137,7 @@ export function PermissionSummaryWindow() {
   if (k.accessKey.pass_through) return <p className="phx-window-empty">{t("workspace.summaryPassThrough")}</p>;
   return (
     <KeyPad k={k}>
+      <div data-guide="window.permissionSummary#summary-table">
       <PermissionSummary
         permissions={k.accessKey.permissions}
         entityTree={k.detail.entityTree}
@@ -1136,6 +1145,7 @@ export function PermissionSummaryWindow() {
         mesaProfileEntities={k.detail.mesaProfileEntities}
         onOpenMesa={k.detail.openMesa}
       />
+      </div>
     </KeyPad>
   );
 }

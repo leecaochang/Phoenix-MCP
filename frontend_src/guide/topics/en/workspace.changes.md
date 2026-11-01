@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.changes", "title": "Changes", "order": 30 }
+{ "id": "workspace.changes", "title": "Changes Workspace", "order": 30 }
 ---
 Changes keeps a version history of the configuration agents change: automations, scripts, scenes, integrations, helpers and dashboards.
 

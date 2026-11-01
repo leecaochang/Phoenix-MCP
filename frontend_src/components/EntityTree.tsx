@@ -211,7 +211,7 @@ const HintButton = forwardRef<HTMLButtonElement, {
   const shown = currentHint || globalHint;
   const label = shown ? t("perms.editHint") : t("perms.addHint");
   return (
-    <button ref={ref} type="button" className={`tree-hint-btn${shown ? " has-hint" : ""}${iconsOnly ? " is-icon-only" : ""}`}
+    <button ref={ref} type="button" data-guide="window.permissions#hints" className={`tree-hint-btn${shown ? " has-hint" : ""}${iconsOnly ? " is-icon-only" : ""}`}
       aria-label={label} aria-expanded={open} title={shown ? `${label}: ${shown}` : label} onClick={onToggle}>
       <Icon name={shown ? "hint" : "hintAdd"} size={14} />
       {!iconsOnly && <span>{label}</span>}
@@ -281,7 +281,7 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
   }
 
   return (
-    <div ref={root} className="tree-hint-editor" role="group" aria-labelledby={titleId}
+    <div ref={root} className="tree-hint-editor" role="group" aria-labelledby={titleId} data-guide="window.permissions#hints"
       onKeyDown={(e) => {
         if (e.key !== "Escape" || saving) return;
         e.preventDefault();
@@ -1081,8 +1081,9 @@ function SelectByControls({ tree, choice, integrations, integrationsError, onCha
     : mode === "area" ? t("selectBy.selectArea") : mode === "label" ? t("selectBy.selectLabel") : t("selectBy.selectIntegration");
   const empty = mode === "area" ? t("selectBy.noAreas") : mode === "label" ? t("selectBy.noLabels") : t("selectBy.noIntegrations");
 
+  // A wrapper without a box of its own, so the controls keep their places in the filter row.
   return (
-    <>
+    <span className="tree-select-by" data-guide="window.permissions#select-by">
       <MenuButton label={t("selectBy.menu")} help="help.selectBy" icon={<Icon name="filter" size={16} />} items={items}
         pressed={!!choice?.value} className={`btn btn-ghost btn-sm phx-action${iconsOnly ? " is-icon-only" : ""}`}>
         {!iconsOnly && <span>{t("selectBy.menu")}</span>}
@@ -1096,7 +1097,7 @@ function SelectByControls({ tree, choice, integrations, integrationsError, onCha
       )}
       {choice && mode === "integration" && integrationsError && <span className="tree-filter-note" role="alert">{integrationsError}</span>}
       {choice && !loadingIntegrations && !integrationsError && groups.length === 0 && <span className="tree-filter-note">{empty}</span>}
-    </>
+    </span>
   );
 }
 
@@ -1272,9 +1273,10 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           aria-label={t("perms.filterAria")}
+          data-guide="window.permissions#search"
         />
       </div>
-      <div aria-label={t("perms.treeAria")}>
+      <div aria-label={t("perms.treeAria")} data-guide="window.permissions#tree">
         {domainKeys.map((domain) => (
           <DomainGroup
             key={domain}

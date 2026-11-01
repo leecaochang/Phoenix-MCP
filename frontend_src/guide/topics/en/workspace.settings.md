@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.settings", "title": "Settings", "order": 60, "keywords": ["options", "preferences", "configuration"], "covers": ["frontend_src/views/SettingsWindows.tsx", "frontend_src/shell/settingsIndex.ts"] }
+{ "id": "workspace.settings", "title": "Settings Workspace", "order": 60, "keywords": ["options", "preferences", "configuration"], "covers": ["frontend_src/views/SettingsWindows.tsx", "frontend_src/shell/settingsIndex.ts"] }
 ---
 Settings that apply to all of Phoenix, in six windows. Select a window, or one of its settings, to read about it here.
 

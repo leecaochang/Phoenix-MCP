@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.mesa", "title": "MESA", "order": 40 }
+{ "id": "workspace.mesa", "title": "MESA Workspace", "order": 40 }
 ---
 MESA describes what each device or entity is, so Phoenix can handle it safely. A profile can make a device need confirmation, or put it off-limits, whatever an access key allows.
 

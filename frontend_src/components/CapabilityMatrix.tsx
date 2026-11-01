@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
+import { capabilityGuide } from "../guide/targets";
 
 export interface EsphomeAvailability {
   integration: boolean;
@@ -329,7 +330,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
     <div className="capability-matrix">
       {error && <div className="banner banner-error mb-8">{error}</div>}
       {accessKey.pass_through && (
-        <div className="amber-block mb-8">
+        <div className="amber-block mb-8" data-guide="topic.passThrough">
           <p>
             {tRich("caps.passThroughNotice", { strong: (c) => <strong>{c}</strong> })}
           </p>
@@ -347,7 +348,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
               const notice = cap.key === "cap_esphome_yaml" || cap.key === "cap_esphome_flash"
                 ? esphomeNotice(esphome) : null;
               return (
-                <div key={cap.key} className="cap-row">
+                <div key={cap.key} className="cap-row" data-guide={capabilityGuide(cap.key)}>
                   <div className="cap-row-label" data-help={cap.descriptionKey}>
                     <div className="cap-row-name">
                       {t(cap.labelKey)}

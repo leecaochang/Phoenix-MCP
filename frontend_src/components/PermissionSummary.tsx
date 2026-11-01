@@ -152,7 +152,7 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
 
   if (items.length === 0) {
     return (
-      <p className="perm-summary-empty">{t("perms.summaryEmpty")}</p>
+      <p className="perm-summary-empty" data-guide="window.permissionSummary#empty">{t("perms.summaryEmpty")}</p>
     );
   }
 

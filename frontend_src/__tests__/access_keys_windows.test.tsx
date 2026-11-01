@@ -28,6 +28,7 @@ import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { AccessKeyListView } from "../views/AccessKeyList";
 import { MenuRootContext } from "../ui/Menu";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
+import { guideTargetFor } from "../shell/guideTarget";
 
 const { registry } = vi.hoisted(() => ({ registry: new Map<string, () => void>() }));
 
@@ -403,5 +404,35 @@ describe("New key dialog", () => {
     } finally {
       shell.remove();
     }
+  });
+});
+
+describe("the Guide", () => {
+  const inWindow = (id: string, content: ReactNode) => show(<div data-phx-window={id}>{content}</div>);
+
+  it("opens the section of the persona, capability, setting or tree control selected (user, 2026-11-01)", async () => {
+    const persona = inWindow("persona", <PersonaWindow />);
+    const builder = await screen.findByRole("button", { name: /Automation Builder/ });
+    expect(guideTargetFor(builder)).toEqual({ windowId: "persona", topic: "window.persona", anchor: "automation-builder" });
+    persona.unmount();
+
+    const caps = inWindow("capabilities", <CapabilitiesWindow />);
+    const physical = await screen.findByRole("group", { name: "Physical control" });
+    expect(guideTargetFor(within(physical).getAllByRole("button")[2])).toMatchObject({ topic: "window.capabilities", anchor: "physical-control" });
+    caps.unmount();
+
+    const settings = inWindow("keySettings", <KeySettingsWindow />);
+    await screen.findByRole("heading", { name: "Guidance" });
+    expect(guideTargetFor(screen.getByRole("textbox", { name: /Notes for agents/ }))).toMatchObject({ topic: "window.keySettings", anchor: "guidance" });
+    expect(guideTargetFor(screen.getByRole("combobox", { name: /inline approval wait/i }))).toMatchObject({ anchor: "inline-wait" });
+    expect(guideTargetFor(screen.getByRole("checkbox", { name: "Always announce all tools" }))).toMatchObject({ anchor: "announce-all" });
+    settings.unmount();
+
+    const tree = inWindow("permissions", <PermissionsWindow />);
+    const filter = await screen.findByRole("textbox", { name: "Filter domains, devices, and entities" });
+    expect(guideTargetFor(filter)).toMatchObject({ topic: "window.permissions", anchor: "search" });
+    const selector = await waitFor(() => tree.container.querySelector(".perm-selector button")!);
+    expect(guideTargetFor(selector)).toMatchObject({ topic: "window.permissions", anchor: "states" });
+    expect(guideTargetFor(screen.getByRole("button", { name: "Filter" }))).toMatchObject({ anchor: "select-by" });
   });
 });
