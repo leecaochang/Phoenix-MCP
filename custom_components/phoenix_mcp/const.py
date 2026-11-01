@@ -14,7 +14,7 @@ from home_assistant_intents import get_languages as _assist_languages
 # served to the panel by admin_view.PhoenixAdminCatalogView.
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
-PHOENIX_VERSION = "1.5.0"
+PHOENIX_VERSION = "2.0.0"
 # Minimum supported HA release; runtime imports and boundaries are exercised at this floor.
 MIN_HA_VERSION = "2026.7.0"
 ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"

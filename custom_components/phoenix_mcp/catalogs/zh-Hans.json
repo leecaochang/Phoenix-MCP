@@ -38,7 +38,7 @@
       "killSwitchTitle": "Phoenix MCP 当前不响应任何智能体请求。请在“设置”中关闭紧急停止开关以恢复服务。",
       "loadAccessKeysFailed": "加载访问密钥失败。",
       "offlineBody": "Home Assistant 没有响应，通常是因为正在重启。正在重试，请稍候...",
-      "offlineTitle": "Home Assistant 当前不可用",
+      "offlineTitle": "Phoenix 当前不可用",
       "renderFailed": "无法显示此视图。请刷新重试，或选择其他栏目。",
       "sectionsAria": "Phoenix MCP 导航",
       "srTitle": "Phoenix MCP 访问密钥管理",
@@ -1344,9 +1344,9 @@
       "agentcliDismissWarning": "关闭此提示",
       "agentcliDone": "完成",
       "agentcliFieldRequired": "请输入 {field}。",
-      "agentcliGlobalAria": "在整个 Home Assistant 中显示 Agent Chat",
+      "agentcliGlobalAria": "在整个 Home Assistant 中使用 Agent Chat",
       "agentcliGlobalHelp": "在所有标签页和仪表盘中都可使用 Agent Chat。当您的 Home Assistant 个人资料已启用键盘快捷键时，按 Shift+A 即可显示或隐藏。关闭后，它只会出现在 Phoenix MCP 面板中。",
-      "agentcliGlobalLabel": "在整个 Home Assistant 中显示",
+      "agentcliGlobalLabel": "在整个 Home Assistant 中使用",
       "agentcliIntro": "使用您自己的模型提供商与 Home Assistant 对话。Agent Chat 会遵循所选访问密钥的权限、审批和 MESA 规则。请先添加提供商账户，然后从右上角打开 Agent Chat。",
       "agentcliNoAccounts": "尚无提供商账户。",
       "agentcliNoModels": "（没有可用的模型）",
@@ -1408,7 +1408,6 @@
       "assistUnsupported": "您的 Home Assistant 版本不支持此功能。",
       "cancel": "取消",
       "dataCard": "数据管理",
-      "experimentalCard": "实验性功能",
       "flushIntervalHelp": "选择“从不”会禁用定期审计保存。Home Assistant 停止、重新加载和卸载时仍会尝试最后一次保存。",
       "flushIntervalLabel": "审计日志写入间隔",
       "infoGithubLink": "GitHub 仓库",
@@ -1442,7 +1441,7 @@
       "mesaEnforcedWarning": "没有 MESA 策略的实体将使用内置安全基线。门锁和警报控制面板会被阻止；大多数其他域需要审批。在依赖“强制”模式之前，请先添加策略或部署默认设置。",
       "mesaModeAria": "MESA 执行模式",
       "mesaModeHelp": "建议模式对大多数策略限制发出警告；只读限制和明确的隐私拒绝仍会阻止操作。强制模式会阻止禁止的操作，并将确认请求加入审批队列。",
-      "mesaModeLabel": "执行模式",
+      "mesaModeLabel": "MESA 执行模式",
       "model": "模型",
       "notifyApprovalHelp": "有新的审批请求时发送 Home Assistant 通知。“审批”计数始终会更新。",
       "notifyApprovalLabel": "需要审批时通知我",
@@ -1500,7 +1499,6 @@
       "wipeSubmit": "清除选定的数据",
       "wipeTitle": "清除 Phoenix MCP 数据",
       "wipeTypeConfirm": "输入 WIPE 以确认",
-      "wipeWarning": "请选择要删除的内容。此操作无法撤销。",
       "languageLabel": "语言",
       "languageHelp": "面板语言。“自动”会跟随您的 Home Assistant 个人资料设置。",
       "languageAuto": "自动",
@@ -1573,7 +1571,6 @@
       "colAccount": "账户",
       "colModel": "默认模型",
       "colProvider": "提供商",
-      "discard": "放弃",
       "haNotifications": "Home Assistant 通知",
       "modelAutomatic": "自动",
       "privacySection": "隐私",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "{count} 个请求缺少用量数据",
         "other": "{count} 个请求缺少用量数据"
-      }
+      },
+      "show": "显示路由统计",
+      "chatWindow": "Agent Chat 路由统计",
+      "voiceWindow": "语音智能体路由统计"
     },
     "conversations": {
       "title": "对话日志",
@@ -2356,7 +2356,7 @@
       "routeProvider": "已发送至 LLM 提供商",
       "executionUnknown": "结果未确认：操作可能已执行。请先检查 Home Assistant，再决定是否重试。",
       "loggingDisabled": "开启“禁用所有日志”时无法记录对话。",
-      "storage": "存储：已使用 {used} MB，上限 {limit} MB",
+      "storage": "<strong>存储：</strong>已使用 {used} MB，上限 {limit} MB",
       "toolCount": {
         "one": "{count} 次工具调用",
         "other": "{count} 次工具调用"

@@ -2,7 +2,8 @@
  * Workspace Options: Notification History is offered only while its window is
  * closed, a window a toolbar tool opens (Log Settings in Logs) is offered
  * while hidden and opens as its tool would, other closed windows are offered to reopen (Request Details
- * among them), and the two resets say what they reset.
+ * among them), and the two resets say what they reset. Settings offers each
+ * surface's Routing Statistics by its own name.
  */
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
@@ -90,5 +91,14 @@ describe("Workspace Options", () => {
     // Open, it is not offered.
     c.reopen("settingsLogs");
     expect(items(c).some((i) => i.id === "reopen-settingsLogs")).toBe(false);
+  });
+
+  it("offers each surface's Routing Statistics in Settings by its own name (user, 2026-10-31)", () => {
+    const windows = ["settingsChat", "settingsHome", "chatRoutingStatistics", "voiceRoutingStatistics"];
+    const c = new WorkspaceController("settings", windows, (_, add) => { add("settingsChat"); add("settingsHome", { referencePanel: "settingsChat", direction: "right" }); }, (id) => id);
+    render(<DockviewReact components={Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]))}
+      onReady={(e: { api: DockviewApi }) => { c.api = e.api; c.load(undefined); }} />);
+    const labels = items(c).filter((i) => /RoutingStatistics$/.test(i.id)).map((i) => i.label);
+    expect(labels).toEqual(["Show Agent Chat Routing Statistics", "Show Voice Agent Routing Statistics"]);
   });
 });

@@ -77,7 +77,7 @@ describe("the connection watcher", () => {
       render(<Reconnecting root={root} />);
       act(() => noteConnection(false));
       const dialog = screen.getByRole("alertdialog");
-      expect(dialog).toHaveTextContent("Home Assistant is unavailable");
+      expect(dialog).toHaveTextContent("Phoenix is unavailable");
       expect(dialog).toHaveTextContent(/Retrying, please wait/);
       expect(dialog.querySelector(".phx-offline-spinner")).not.toBeNull();
 

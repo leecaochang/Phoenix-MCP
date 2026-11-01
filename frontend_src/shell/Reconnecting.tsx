@@ -1,5 +1,5 @@
 /**
- * Home Assistant is away: one notice over the whole panel instead of a raw
+ * Home Assistant is away: one notice over the panel, and only the panel, instead of a raw
  * fetch failure in every window (user, 2026-10-29). It says what is happening,
  * keeps asking Home Assistant whether it is back, and clears itself when a
  * request arrives again. Restarting Home Assistant is the usual reason, so the

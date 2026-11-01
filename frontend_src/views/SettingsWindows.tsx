@@ -8,7 +8,7 @@
  * where it was made.
  */
 
-import { useContext, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { AgentCliSettings } from "../components/AgentCliSettings";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
@@ -20,6 +20,7 @@ import { KillSwitch } from "../components/KillSwitch";
 import { LlmProviderSettings } from "../components/LlmProviderSettings";
 import { AUDIT_TOGGLES, LoggingSettings, PRIVACY_TOGGLES } from "../components/LoggingSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
+import { RoutingStatistics, RoutingStatisticsContent } from "../components/RoutingStatistics";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { DEFAULT_WIPE_SCOPES, WIPE_SCOPES, WipeConfirmModal, type WipeScopes } from "../components/WipeConfirmModal";
 import { LANGUAGES, LANGUAGE_AUTO, t, tn } from "../i18n";
@@ -28,6 +29,8 @@ import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/co
 import { useFindSettingTool, useSettings, useSettingsChange, type Theme } from "../shell/settings";
 import { HOME_TAB_LABEL_KEYS, HOME_TABS, SETTINGS_WINDOW_TITLE_KEYS, type HomeTab, type SettingsWindowId } from "../shell/settingsIndex";
 import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
+import { ControllerContext } from "../shell/dock/TitleBar";
+import { useWindowToggle } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { JS_BUILD } from "../version";
@@ -71,13 +74,17 @@ function Disclosure({ title, children }: { title: string; children: ReactNode })
 export function AiProvidersWindow() {
   const { settings, saving, change, error } = useSettingsChange();
   const s = useSettings();
+  // Adding an account opens on request, from the toolbar or Find Setting (user, 2026-10-31).
+  const [adding, setAdding] = useState(false);
+  const revealedAdd = s?.revealed?.id === "providerAdd" ? s.revealed.n : 0;
+  useEffect(() => { if (revealedAdd) setAdding(true); }, [revealedAdd]);
   useSettingsTools("settingsProviders", [
-    { id: "addAccount", label: t("settings.addAccount"), icon: "add", onSelect: () => s?.reveal("providerAdd") },
+    { id: "addAccount", label: t("settings.addAccount"), icon: "add", pressed: adding, onSelect: () => setAdding((open) => !open) },
   ]);
   if (!settings) return <Loading />;
   return (
     <SettingsBody error={error}>
-      <LlmProviderSettings settings={settings} onChange={change} saving={saving} />
+      <LlmProviderSettings settings={settings} onChange={change} saving={saving} adding={adding} onAddingChange={setAdding} />
       <Disclosure title={t("routing.providerSection")}>
         <DecisionProviderSettings settings={settings} onChange={change} saving={saving} />
       </Disclosure>
@@ -107,9 +114,39 @@ export function AgentChatSettingsWindow() {
         homeFocused={settings.agentcli_home_focused}
         onHomeFocusedChange={(v) => change("agentcli_home_focused", v)}
         saving={saving}
+        statistics={<RoutingStatisticsButton surface="chat" />}
       />
     </SettingsBody>
   );
+}
+
+/** Each surface's routing counts float over Settings in a window of their own. */
+const STATISTICS_WINDOW = { chat: "chatRoutingStatistics", voice: "voiceRoutingStatistics" } as const;
+
+/**
+ * Show Routing Statistics: opens and closes the surface's counts floating over the
+ * workspace (user, 2026-10-31). Where the workspace has no such window, as outside
+ * the shell, the counts unfold in place instead.
+ */
+function RoutingStatisticsButton({ surface }: { surface: "voice" | "chat" }) {
+  const id = STATISTICS_WINDOW[surface];
+  const toggle = useWindowToggle(id);
+  const controller = useContext(ControllerContext);
+  if (!toggle || !controller?.windows.includes(id)) return <RoutingStatistics surface={surface} />;
+  return (
+    <div className="phx-window-actions phx-window-actions-end">
+      <ActionButton icon="statistics" label={t("routingStats.show")} className="btn btn-outline btn-sm"
+        pressed={toggle.open} onClick={toggle.toggle} />
+    </div>
+  );
+}
+
+export function ChatRoutingStatisticsWindow() {
+  return <div className="phx-window-pad"><RoutingStatisticsContent surface="chat" /></div>;
+}
+
+export function VoiceRoutingStatisticsWindow() {
+  return <div className="phx-window-pad"><RoutingStatisticsContent surface="voice" /></div>;
 }
 
 const tabId = (tab: HomeTab) => `phx-home-tab-${tab}`;
@@ -146,7 +183,8 @@ export function HomeAssistantWindow() {
         ))}
       </div>
       <div id={panelId("voice")} role="tabpanel" aria-labelledby={tabId("voice")} hidden={current !== "voice"}>
-        <VoiceAgentSettings settings={settings} onChange={change} saving={saving} onRefresh={s.refresh} />
+        <VoiceAgentSettings settings={settings} onChange={change} saving={saving} onRefresh={s.refresh}
+          statistics={<RoutingStatisticsButton surface="voice" />} />
       </div>
       <div id={panelId("aiTask")} role="tabpanel" aria-labelledby={tabId("aiTask")} hidden={current !== "aiTask"}>
         <AiTaskSettings settings={settings} onChange={change} saving={saving} />
@@ -165,13 +203,15 @@ export function SafetyWindow() {
   useSettingsTools("settingsSafety");
   if (!settings) return <Loading />;
   const nothingSelected = !scopes.core && !scopes.providers && !scopes.mesa;
+  const mesaModeHelp = `${t("settings.mesaModeHelp")}${t("common.sentenceSeparator")}${t("settings.mesaEnforcedWarning")}`;
   return (
     <SettingsBody error={error}>
       <div id="phx-kill-switch-card" className="phx-kill-switch">
         <KillSwitch settings={settings} onToggle={(value) => change("kill_switch", value)} saving={saving} />
       </div>
-      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.mesaModeHelp"))}>
-        <SettingLabel help={t("settings.mesaModeHelp")}><span>{t("settings.mesaModeLabel")}</span></SettingLabel>
+      {/* What the modes do, and what Enforced means without profiles, is in Help (user, 2026-10-31). */}
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(mesaModeHelp)}>
+        <SettingLabel help={mesaModeHelp}><span>{t("settings.mesaModeLabel")}</span></SettingLabel>
         <BusySelect aria-label={t("settings.mesaModeAria")} className="input input-auto" value={settings.mesa_mode} busy={saving}
           onChange={(e) => change("mesa_mode", e.target.value)}>
           <option value="off">{t("settings.mesaModeOff")}</option>
@@ -179,20 +219,21 @@ export function SafetyWindow() {
           <option value="enforced">{t("settings.mesaModeEnforced")}</option>
         </BusySelect>
       </div>
-      {settings.mesa_mode === "enforced" && <div className="banner banner-warn">{t("settings.mesaEnforcedWarning")}</div>}
       <Disclosure title={t("settings.dataCard")}>
-        <p className="settings-info-note">{t("settings.wipeWarning")}</p>
-        {WIPE_SCOPES.map((scope) => (
-          <div key={scope.key} className="toggle-row" {...helpRow(t(scope.helpKey))}>
-            <SettingLabel help={t(scope.helpKey)}><span>{t(scope.labelKey)}</span></SettingLabel>
-            <label className="toggle-switch">
-              <input type="checkbox" aria-label={t(scope.labelKey)} checked={scopes[scope.key]}
-                onChange={(e) => setScopes((prev) => ({ ...prev, [scope.key]: e.target.checked }))} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-        ))}
-        <div className="phx-window-actions">
+        {/* The choices form one group, without rules between them (user, 2026-10-31). */}
+        <div className="phx-setting-checks">
+          {WIPE_SCOPES.map((scope) => (
+            <div key={scope.key} className="toggle-row" {...helpRow(t(scope.helpKey))}>
+              <SettingLabel help={t(scope.helpKey)}><span>{t(scope.labelKey)}</span></SettingLabel>
+              <label className="toggle-switch">
+                <input type="checkbox" aria-label={t(scope.labelKey)} checked={scopes[scope.key]}
+                  onChange={(e) => setScopes((prev) => ({ ...prev, [scope.key]: e.target.checked }))} />
+                <span className="toggle-switch-track" />
+              </label>
+            </div>
+          ))}
+        </div>
+        <div className="phx-window-actions phx-window-actions-end">
           <ActionButton icon="delete" label={t("settings.wipeSubmit")} className="btn btn-danger btn-sm" disabled={nothingSelected}
             onClick={() => setShowWipe(true)} />
         </div>
@@ -203,7 +244,7 @@ export function SafetyWindow() {
 }
 
 export function LogsSettingsWindow() {
-  const { settings, saving, change, changeMany, error } = useSettingsChange();
+  const { settings, saving, change, error } = useSettingsChange();
   useSettingsTools("settingsLogs");
   if (!settings) return <Loading />;
   const greyed = settings.disable_all_logging ? " toggle-row-greyed" : "";
@@ -232,10 +273,10 @@ export function LogsSettingsWindow() {
             </BusySelect>
           </div>
         </section>
-        <section aria-labelledby="phx-settings-conversations">
-          <h3 id="phx-settings-conversations" className="phx-section-title">{t("conversations.title")}</h3>
-          <ConversationSettings settings={settings} saving={saving} onChange={change} onSave={changeMany} />
-        </section>
+        {/* The Conversation Log's settings fold under its name (user, 2026-10-31). */}
+        <Disclosure title={t("conversations.title")}>
+          <ConversationSettings settings={settings} saving={saving} onChange={change} />
+        </Disclosure>
       </div>
       <Disclosure title={t("settings.privacySection")}>
         <LoggingSettings settings={settings} onToggle={change} saving={saving} only={PRIVACY_TOGGLES} />
@@ -276,8 +317,10 @@ export function GeneralSettingsWindow() {
           ))}
         </div>
       </div>
-      <section className="phx-settings-section" aria-labelledby="phx-settings-experimental">
-        <h3 id="phx-settings-experimental" className="phx-section-title">{t("settings.experimentalCard")}</h3>
+      {/* A rule sets the presets and profile buttons apart; no heading names them (user, 2026-10-31). */}
+      <hr className="settings-divider" />
+      {/* The two switches form one group, without a rule between them (user, 2026-10-31). */}
+      <div className="phx-setting-checks">
         <div className="toggle-row" {...helpRow(t("settings.presetsHelp"))}>
           <SettingLabel help={t("settings.presetsHelp")}><span>{t("settings.presetsLabel")}</span></SettingLabel>
           <label className={`toggle-switch${saving ? " disabled" : ""}`}>
@@ -299,7 +342,7 @@ export function GeneralSettingsWindow() {
             <span className="toggle-switch-track" />
           </label>
         </div>
-      </section>
+      </div>
       <details className="phx-disclosure">
         <summary data-settings-anchor="about">{t("settings.about")}</summary>
         <div className="phx-disclosure-body settings-info-list" data-help-text={tPlain("settings.infoStorageNote")}>

@@ -319,7 +319,7 @@
       "killSwitchTitle": "Phoenix MCP はエージェントからのリクエストを処理していません。再開するには設定でキルスイッチを無効にしてください。",
       "loadAccessKeysFailed": "アクセスキーを読み込めませんでした。",
       "offlineBody": "Home Assistant が応答していません。通常は再起動中です。再試行しています。お待ちください...",
-      "offlineTitle": "Home Assistant に接続できません",
+      "offlineTitle": "Phoenix に接続できません",
       "renderFailed": "この画面を表示できませんでした。更新して再試行するか、別のセクションを選択してください。",
       "sectionsAria": "Phoenix MCP のセクション",
       "srTitle": "Phoenix MCP アクセスキー管理",
@@ -1375,9 +1375,9 @@
       "agentcliDismissWarning": "警告を閉じる",
       "agentcliDone": "完了",
       "agentcliFieldRequired": "{field}を入力してください。",
-      "agentcliGlobalAria": "Home Assistant 全体で Agent Chat を表示",
+      "agentcliGlobalAria": "Home Assistant 全体で Agent Chat を使用",
       "agentcliGlobalHelp": "タブやダッシュボードを移動しても Agent Chat を利用できるようにします。Home Assistant プロファイルでキーボードショートカットが有効な場合、Shift+A で表示と非表示を切り替えられます。オフでは Phoenix MCP パネル内だけに表示されます。",
-      "agentcliGlobalLabel": "Home Assistant 全体で表示",
+      "agentcliGlobalLabel": "Home Assistant 全体で使用",
       "agentcliIntro": "自分のモデルプロバイダーを使って Home Assistant とチャットします。Agent Chat には選択したアクセスキーの権限、承認、MESA ルールが適用されます。プロバイダーアカウントを追加し、右上から Agent Chat を開いてください。",
       "agentcliNoAccounts": "プロバイダーアカウントはまだありません。",
       "agentcliNoModels": "（利用可能なモデルなし）",
@@ -1439,7 +1439,6 @@
       "assistUnsupported": "お使いの Home Assistant バージョンではこの機能に対応していません。",
       "cancel": "キャンセル",
       "dataCard": "データ管理",
-      "experimentalCard": "試験的機能",
       "flushIntervalHelp": "「しない」は監査の定期保存を無効にします。Home Assistant の停止、再読み込み、アンロード時には最後の保存を引き続き試みます。",
       "flushIntervalLabel": "監査ログの保存間隔",
       "infoGithubLink": "GitHub リポジトリ",
@@ -1478,7 +1477,7 @@
       "mesaModeAria": "MESA 強制モード",
       "mesaModeEnforced": "強制",
       "mesaModeHelp": "助言モードはほとんどのポリシー制限について警告します。読み取り専用の制限と明示的なプライバシー拒否は引き続きブロックされます。強制モードは禁止された操作をブロックし、確認リクエストをキューに入れます。",
-      "mesaModeLabel": "強制モード",
+      "mesaModeLabel": "MESA 強制モード",
       "mesaModeOff": "オフ",
       "model": "モデル",
       "notifyApprovalHelp": "新しい承認リクエストを Home Assistant 通知で送信します。承認件数は常に更新されます。",
@@ -1557,7 +1556,6 @@
       "wipeSubmit": "選択したデータを消去",
       "wipeTitle": "Phoenix MCP データを消去",
       "wipeTypeConfirm": "確認するには WIPE と入力",
-      "wipeWarning": "削除するデータを選択してください。この操作は元に戻せません。",
       "agentcliSite": "サイト",
       "agentcliSingapore": "シンガポール",
       "agentcliGuangzhou": "広州",
@@ -1604,7 +1602,6 @@
       "colAccount": "アカウント",
       "colModel": "既定のモデル",
       "colProvider": "プロバイダー",
-      "discard": "破棄",
       "haNotifications": "Home Assistant の通知",
       "modelAutomatic": "自動",
       "privacySection": "プライバシー",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "使用量情報のないリクエスト: {count} 件",
         "other": "使用量情報のないリクエスト: {count} 件"
-      }
+      },
+      "show": "ルーティング統計を表示",
+      "chatWindow": "Agent Chat のルーティング統計",
+      "voiceWindow": "音声エージェントのルーティング統計"
     },
     "conversations": {
       "title": "会話ログ",
@@ -2356,7 +2356,7 @@
       "routeProvider": "LLM プロバイダーに送信",
       "executionUnknown": "結果未確認：操作が実行された可能性があります。再試行前に Home Assistant を確認してください。",
       "loggingDisabled": "すべてのログが無効になっている間は記録できません。",
-      "storage": "ストレージ：{limit} MB 中 {used} MB 使用",
+      "storage": "<strong>ストレージ：</strong>{limit} MB 中 {used} MB 使用",
       "toolCount": {
         "one": "ツール呼び出し {count} 件",
         "other": "ツール呼び出し {count} 件"

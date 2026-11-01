@@ -1029,9 +1029,9 @@
       "agentcliDismissWarning": "Diese Warnung verwerfen",
       "agentcliDone": "Fertig",
       "agentcliFieldRequired": "Geben Sie {field} ein.",
-      "agentcliGlobalAria": "Agent Chat in ganz Home Assistant anzeigen",
+      "agentcliGlobalAria": "Agent Chat in ganz Home Assistant verwenden",
       "agentcliGlobalHelp": "Halten Sie Agent Chat über Tabs und Dashboards hinweg verfügbar. Drücken Sie Umschalt+A, um ihn ein- oder auszublenden, wenn Tastaturkurzbefehle in Ihrem Home-Assistant-Profil aktiviert sind. Wenn deaktiviert, erscheint er nur im Phoenix-MCP-Bedienfeld.",
-      "agentcliGlobalLabel": "In ganz Home Assistant anzeigen",
+      "agentcliGlobalLabel": "In ganz Home Assistant verwenden",
       "agentcliIntro": "Chatten Sie mit Home Assistant über Ihren eigenen Modellanbieter. Agent Chat folgt den Berechtigungen, Genehmigungen und MESA-Regeln des ausgewählten Zugriffsschlüssels. Fügen Sie ein Anbieterkonto hinzu und öffnen Sie dann Agent Chat oben rechts.",
       "agentcliNoAccounts": "Noch keine Anbieterkonten.",
       "agentcliNoModels": "(keine Modelle verfügbar)",
@@ -1093,7 +1093,6 @@
       "assistUnsupported": "Diese Funktion wird von Ihrer Home-Assistant-Version nicht unterstützt.",
       "cancel": "Abbrechen",
       "dataCard": "Datenverwaltung",
-      "experimentalCard": "Experimentell",
       "flushIntervalHelp": "Nie deaktiviert regelmäßige Audit-Speicherungen. Beim Stoppen, Neuladen und Entladen von Home Assistant wird weiterhin eine abschließende Speicherung versucht.",
       "flushIntervalLabel": "Schreibintervall des Prüfprotokolls",
       "infoGithubLink": "GitHub-Repository",
@@ -1132,7 +1131,7 @@
       "mesaModeAria": "MESA-Erzwingungsmodus",
       "mesaModeEnforced": "Erzwungen",
       "mesaModeHelp": "Beratend warnt bei den meisten Richtliniengrenzen; Schreibschutz und ausdrückliche Datenschutzverbote blockieren weiterhin. Erzwungen blockiert verbotene Aktionen und fordert Bestätigung an.",
-      "mesaModeLabel": "Erzwingungsmodus",
+      "mesaModeLabel": "MESA-Erzwingungsmodus",
       "mesaModeOff": "Aus",
       "model": "Modell",
       "notifyApprovalHelp": "Bei neuen Genehmigungsanfragen eine Home-Assistant-Benachrichtigung senden. Die Anzahl der Genehmigungen wird immer aktualisiert.",
@@ -1211,7 +1210,6 @@
       "wipeSubmit": "Ausgewählte Daten löschen",
       "wipeTitle": "Phoenix-MCP-Daten löschen",
       "wipeTypeConfirm": "WIPE eingeben, um zu bestätigen",
-      "wipeWarning": "Wählen Sie, was gelöscht werden soll. Dies kann nicht rückgängig gemacht werden.",
       "agentcliSite": "Standort",
       "agentcliSingapore": "Singapur",
       "agentcliGuangzhou": "Guangzhou",
@@ -1258,7 +1256,6 @@
       "colAccount": "Konto",
       "colModel": "Standardmodell",
       "colProvider": "Anbieter",
-      "discard": "Verwerfen",
       "haNotifications": "Home Assistant-Benachrichtigungen",
       "modelAutomatic": "automatisch",
       "privacySection": "Datenschutz",
@@ -1902,7 +1899,7 @@
       "killSwitchTitle": "Phoenix MCP bedient derzeit keine Agentenanfragen. Deaktivieren Sie den Kill-Schalter unter Einstellungen, um fortzufahren.",
       "loadAccessKeysFailed": "Zugriffsschlüssel konnten nicht geladen werden.",
       "offlineBody": "Home Assistant antwortet nicht, meist weil es gerade neu startet. Erneuter Versuch, bitte warten...",
-      "offlineTitle": "Home Assistant ist nicht erreichbar",
+      "offlineTitle": "Phoenix ist nicht erreichbar",
       "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisiere sie oder wähle einen anderen Bereich.",
       "sectionsAria": "Phoenix MCP-Abschnitte",
       "srTitle": "Phoenix MCP Zugriffsschlüssel-Verwaltung",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "{count} Anfrage ohne Nutzungsdaten",
         "other": "{count} Anfragen ohne Nutzungsdaten"
-      }
+      },
+      "show": "Routing-Statistik anzeigen",
+      "chatWindow": "Routing-Statistik von Agent Chat",
+      "voiceWindow": "Routing-Statistik des Sprachagenten"
     },
     "conversations": {
       "title": "Gesprächsprotokoll",
@@ -2356,7 +2356,7 @@
       "routeProvider": "An LLM-Anbieter gesendet",
       "executionUnknown": "Ergebnis unbestätigt: Die Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant vor einem erneuten Versuch.",
       "loggingDisabled": "Die Aufzeichnung ist nicht verfügbar, solange alle Protokolle deaktiviert sind.",
-      "storage": "Speicher: {used} von {limit} MB",
+      "storage": "<strong>Speicher:</strong> {used} von {limit} MB",
       "toolCount": {
         "one": "{count} Werkzeugaufruf",
         "other": "{count} Werkzeugaufrufe"

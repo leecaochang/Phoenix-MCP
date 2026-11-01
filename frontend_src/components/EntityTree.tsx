@@ -306,7 +306,9 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
       />
       {/* Who receives a hint, and what each scope means, is in Help (user, 2026-10-28). */}
       <div className="hint-scope" data-help={scopeHelp}>
-        <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisAccessKey")}</span>
+        {/* Each side's name chooses that side, as the switch between them does. */}
+        <span className={allAccessKeys ? "hint-scope-side" : "hint-scope-side hint-scope-active"}
+          onClick={() => { if (allAccessKeys && !saving) switchScope(false); }}>{t("perms.hintThisAccessKey")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
@@ -319,7 +321,8 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
           />
           <span className="toggle-switch-track" />
         </label>
-        <span className={allAccessKeys ? "hint-scope-active" : ""}>{t("perms.hintAllAccessKeys")}</span>
+        <span className={allAccessKeys ? "hint-scope-side hint-scope-active" : "hint-scope-side"}
+          onClick={() => { if (!allAccessKeys && !saving) switchScope(true); }}>{t("perms.hintAllAccessKeys")}</span>
       </div>
       {saveError && <p className="tree-hint-error" role="alert">{saveError}</p>}
       <div className="tree-hint-editor-actions">

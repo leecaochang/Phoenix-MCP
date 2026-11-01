@@ -1540,9 +1540,9 @@
       "agentcliDismissWarning": "Descartar esta advertencia",
       "agentcliDone": "Hecho",
       "agentcliFieldRequired": "Introduzca {field}.",
-      "agentcliGlobalAria": "Mostrar Agent Chat en todo Home Assistant",
+      "agentcliGlobalAria": "Usar Agent Chat en todo Home Assistant",
       "agentcliGlobalHelp": "Mantener Agent Chat disponible en todas las pestañas y paneles de control. Pulse Mayús+A para mostrarlo u ocultarlo cuando los atajos de teclado estén habilitados en su perfil de Home Assistant. Cuando está desactivado, solo aparece en el panel de Phoenix MCP.",
-      "agentcliGlobalLabel": "Mostrar en todo Home Assistant",
+      "agentcliGlobalLabel": "Usar en todo Home Assistant",
       "agentcliIntro": "Chatee con Home Assistant usando su propio proveedor de modelos. Agent Chat sigue los permisos, las aprobaciones y las reglas de MESA de la clave de acceso seleccionada. Añada una cuenta de proveedor y abra Agent Chat desde la esquina superior derecha.",
       "agentcliNoAccounts": "Aún no hay cuentas de proveedor.",
       "agentcliNoModels": "(no hay modelos disponibles)",
@@ -1604,7 +1604,6 @@
       "assistUnsupported": "Esta función no es compatible con su versión de Home Assistant.",
       "cancel": "Cancelar",
       "dataCard": "Gestión de datos",
-      "experimentalCard": "Experimental",
       "flushIntervalHelp": "Nunca desactiva los guardados periódicos de auditoría. Al detener, recargar o descargar Home Assistant se sigue intentando un guardado final.",
       "flushIntervalLabel": "Intervalo de volcado del registro de auditoría",
       "infoGithubLink": "Repositorio de GitHub",
@@ -1643,7 +1642,7 @@
       "mesaModeAria": "Modo de aplicación de MESA",
       "mesaModeEnforced": "Aplicado",
       "mesaModeHelp": "Consultivo avisa sobre la mayoría de los límites; el modo de solo lectura y las denegaciones explícitas de privacidad siguen bloqueando. Aplicado bloquea acciones prohibidas y solicita confirmación.",
-      "mesaModeLabel": "Modo de aplicación",
+      "mesaModeLabel": "Modo de aplicación de MESA",
       "mesaModeOff": "Desactivado",
       "model": "Modelo",
       "notifyApprovalHelp": "Enviar una notificación de Home Assistant para las nuevas solicitudes de aprobación. El contador de Aprobaciones siempre se actualiza.",
@@ -1722,7 +1721,6 @@
       "wipeSubmit": "Borrar los datos seleccionados",
       "wipeTitle": "Borrar datos de Phoenix MCP",
       "wipeTypeConfirm": "Escriba WIPE para confirmar",
-      "wipeWarning": "Elija qué eliminar. Esto no se puede deshacer.",
       "agentcliSite": "Sitio",
       "agentcliSingapore": "Singapur",
       "agentcliGuangzhou": "Cantón",
@@ -1769,7 +1767,6 @@
       "colAccount": "Cuenta",
       "colModel": "Modelo predeterminado",
       "colProvider": "Proveedor",
-      "discard": "Descartar",
       "haNotifications": "Notificaciones de Home Assistant",
       "modelAutomatic": "automático",
       "privacySection": "Privacidad",
@@ -2172,7 +2169,7 @@
       "killSwitchTitle": "Phoenix MCP no está atendiendo ninguna solicitud de agente. Desactive el interruptor de emergencia en Configuración para reanudar.",
       "loadAccessKeysFailed": "No se pudieron cargar las claves de acceso.",
       "offlineBody": "Home Assistant no responde, normalmente porque se está reiniciando. Reintentando, espera...",
-      "offlineTitle": "Home Assistant no está disponible",
+      "offlineTitle": "Phoenix no está disponible",
       "renderFailed": "No se pudo mostrar esta vista. Actualiza para volver a intentarlo o elige otra sección.",
       "sectionsAria": "Secciones de Phoenix MCP",
       "srTitle": "Gestión de claves de acceso de Phoenix MCP",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "{count} solicitud sin datos de uso",
         "other": "{count} solicitudes sin datos de uso"
-      }
+      },
+      "show": "Mostrar estadísticas de enrutamiento",
+      "chatWindow": "Estadísticas de enrutamiento de Agent Chat",
+      "voiceWindow": "Estadísticas de enrutamiento del agente de voz"
     },
     "conversations": {
       "title": "Registro de conversaciones",
@@ -2356,7 +2356,7 @@
       "routeProvider": "Enviado al proveedor de LLM",
       "executionUnknown": "Resultado sin confirmar: la acción podría haberse ejecutado. Comprueba Home Assistant antes de reintentar.",
       "loggingDisabled": "No se puede grabar mientras esté activada la opción de desactivar todos los registros.",
-      "storage": "Almacenamiento: {used} de {limit} MB",
+      "storage": "<strong>Almacenamiento:</strong> {used} de {limit} MB",
       "toolCount": {
         "one": "{count} llamada a herramienta",
         "other": "{count} llamadas a herramientas"

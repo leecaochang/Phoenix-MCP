@@ -25,6 +25,7 @@ import { AuditFocus, AuditFocusContext, LogSelection, LogSelectionContext } from
 import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
+import { attachToggleNames } from "../ui/toggleNames";
 import { GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
 import { Reconnecting } from "./Reconnecting";
 import { MesaProvider, type MesaFindings } from "./mesa";
@@ -415,6 +416,7 @@ export function Shell() {
   // Help follows the pointer and focus anywhere in the shell.
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
+  useEffect(() => (rootEl ? attachToggleNames(rootEl) : undefined), [rootEl]);
   const notify = useCallback((text: string) => notifications.notify(text), [notifications]);
 
   // My Workspace: Add to My Workspace in every window's menu, Remove from My Workspace there.
@@ -548,7 +550,8 @@ export function Shell() {
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
   useEffect(() => {
     for (const controller of controllers.values()) controller.retitle();
-  }, [controllers, languageSignature]);
+    helpTracker.refresh();
+  }, [controllers, helpTracker, languageSignature]);
 
   // Needs Attention appears in the visible workspace while items need checking (or a
   // notification asked for it). Closing it hides it in THAT workspace only, until more

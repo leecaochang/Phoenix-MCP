@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 
 const getAgentCliProviders = vi.fn();
 const probeAgentCliProvider = vi.fn();
@@ -96,7 +97,8 @@ function renderCard(settings: Partial<GlobalSettings> = {}) {
   // both render here so each test can reach whichever control it exercises.
   return render(
     <>
-      <LlmProviderSettings settings={settings as GlobalSettings} onChange={onSettingChange} saving={false} />
+      {/* The add form open, as after Add Account; it stays open here whatever the test clicks. */}
+      <LlmProviderSettings settings={settings as GlobalSettings} onChange={onSettingChange} saving={false} adding onAddingChange={() => {}} />
       <AgentCliSettings
         routingMode="off"
         onRoutingChange={() => {}}
@@ -113,9 +115,20 @@ function renderCard(settings: Partial<GlobalSettings> = {}) {
         homeFocused={false}
         onHomeFocusedChange={() => {}}
         saving={false}
+        statistics={<button type="button" className="routing-statistics-test">Show Routing Statistics</button>}
       />
     </>,
   );
+}
+
+/** The accounts with Add Account's form shown and hidden as the toolbar would. */
+function AddingHarness({ start }: { start: boolean }) {
+  const [adding, setAdding] = useState(start);
+  return <>
+    {/* Drawn as the toolbar draws Add Account, which is the control that toggles the form. */}
+    <button type="button" className="phx-toolbar-button" data-tool="addAccount" onClick={() => setAdding((open) => !open)}>Toggle Add Account</button>
+    <LlmProviderSettings settings={{} as GlobalSettings} onChange={onSettingChange} saving={false} adding={adding} onAddingChange={setAdding} />
+  </>;
 }
 
 describe("AgentCliSettings", () => {
@@ -329,7 +342,7 @@ describe("AgentCliSettings", () => {
         saving={false}
       />,
     );
-    fireEvent.click(screen.getByLabelText("Show Agent Chat throughout Home Assistant"));
+    fireEvent.click(screen.getByLabelText("Use Agent Chat throughout Home Assistant"));
     expect(onGlobal).toHaveBeenCalledWith(true);
   });
 
@@ -401,14 +414,53 @@ describe("AgentCliSettings", () => {
 // The default model can be changed after creation, and the provider's model list
 // (a cheap authenticated GET) is fetched when the card is shown, so a retired model
 // is flagged where the operator can act on it.
+// Adding an account is shown on request from the toolbar's Add Account, which also leaves no
+// account chosen; Cancel and a click elsewhere hide it again (user, 2026-10-31).
+describe("Add Account form", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getAgentCliProviders.mockResolvedValue(instances());
+  });
+
+  it("is hidden until Add Account shows it, and takes the focus when shown", async () => {
+    render(<AddingHarness start={false} />);
+    await screen.findAllByRole("row", { name: /, / });
+    expect(screen.queryByLabelText("Provider type")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    await waitFor(() => expect(screen.getByLabelText("Provider type")).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    expect(screen.queryByLabelText("Provider type")).toBeNull();
+  });
+
+  it("closes the chosen account's options when shown", async () => {
+    render(<AddingHarness start={false} />);
+    await openAccount();
+    expect(document.querySelector("tr.is-selected")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    await screen.findByLabelText("Provider type");
+    expect(document.querySelector("tr.is-selected")).toBeNull();
+  });
+
+  it("hides again on Cancel and on a click elsewhere", async () => {
+    render(<AddingHarness start />);
+    await beginAdd();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("Provider type")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    await screen.findByLabelText("Provider type");
+    fireEvent.click(document.body);
+    await waitFor(() => expect(screen.queryByLabelText("Provider type")).toBeNull());
+  });
+});
+
 describe("Agent Chat card layout", () => {
-  it("shows routing statistics last, after every other setting", async () => {
+  it("shows the way to routing statistics last, after every other setting", async () => {
     const { container } = renderCard();
     await screen.findByLabelText("Check providers for new models");
-    const stats = container.querySelector("details.routing-statistics");
+    const stats = container.querySelector(".routing-statistics-test");
     expect(stats?.textContent).toContain("Routing Statistics");
     const chat = stats!.closest(".phx-settings-form") as HTMLElement;
-    // Nothing from the Agent Chat settings follows the disclosure.
+    // Nothing from the Agent Chat settings follows it.
     expect(chat.lastElementChild).toBe(stats);
     // And the provider controls are apart from the chat settings.
     expect(chat.textContent).not.toContain("Check providers for new models");

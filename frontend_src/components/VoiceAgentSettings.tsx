@@ -1,7 +1,7 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -26,6 +26,7 @@ export function VoiceAgentSettings({
   onChange,
   saving,
   onRefresh,
+  statistics = <RoutingStatistics surface="voice" />,
 }: {
   settings: GlobalSettings;
   /** Save a setting; false when it failed (the window reports why). */
@@ -33,6 +34,8 @@ export function VoiceAgentSettings({
   saving: boolean;
   /** Read the settings again; otherwise a refresh is asked for by event. */
   onRefresh?: () => Promise<void>;
+  /** How the routing counts are reached: in the shell a button opening their window; by default they unfold in place. */
+  statistics?: ReactNode;
 }) {
   const notify = useNotify();
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
@@ -232,7 +235,7 @@ export function VoiceAgentSettings({
         onHomeFocusedChange={(value) => onChange("voice_agent_home_focused", value)}
       />
 
-      <RoutingStatistics surface="voice" />
+      {statistics}
     </div>
   );
 }

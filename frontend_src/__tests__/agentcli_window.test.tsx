@@ -2357,7 +2357,7 @@ describe("unsent message box survives a panel remount", () => {
     act(() => noteConnection(false));
     // The panel's notice cannot reach a window floating over another page, so the window says it.
     await waitFor(() => expect(composer()).toBeDisabled());
-    expect(composer().placeholder).toBe("Home Assistant is unavailable");
+    expect(composer().placeholder).toBe("Phoenix is unavailable");
     expect(view.getByRole("button", { name: "Send" })).toHaveAttribute("aria-disabled", "true");
     expect(view.container.querySelector(".agentcli-offline")?.textContent).toMatch(/Retrying, please wait/);
 

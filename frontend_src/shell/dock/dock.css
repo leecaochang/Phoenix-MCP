@@ -190,7 +190,8 @@
 /* One held to its share of the visible height (the key list) scrolls inside instead. */
 .phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body.phx-window-capped { max-height: var(--phx-window-cap); overflow: auto; }
 /* A window taller than its content ends its frame at the content; the rest of its place is empty workspace. */
-/* Dockview sets the frame's height inline; a maximum shortens it without fighting that. */
+/* Dockview sets the frame's height inline; a maximum shortens it without fighting that. A folded
+   window under a window ending at its content is lifted to sit right under it (see liftFolded). */
 .phx-workspace .phx-dock .dv-groupview { max-height: calc(100% - var(--phx-slack, 0px)); }
 /* A floating window hidden in place. */
 .phx-float-hidden { display: none !important; }

@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  Archive, ArrowDownLeft, ArrowLeftRight, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
+  Archive, ArrowDownLeft, ChartColumn, ArrowLeftRight, CheckCheck, FileClock, RotateCcw, CircleSlash, CircleX, ClockAlert, LoaderCircle, SquareCheckBig, Undo2, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Ban, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
   ChevronsUp, CircleAlert, CircleCheck, CirclePause, Clock, Code, Columns2, Copy,
   Download, Ellipsis, Eraser, Eye, FileDiff, FileText, FunnelX, FilePenLine, GitBranch, GripHorizontal, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
@@ -115,6 +115,7 @@ const ICONS = {
   lineView: FileText,
   switchPreset: ArrowLeftRight,
   clearPermissions: Eraser,
+  statistics: ChartColumn,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

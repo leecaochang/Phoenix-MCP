@@ -1332,9 +1332,9 @@
       "agentcliDismissWarning": "Ignora questo avviso",
       "agentcliDone": "Fatto",
       "agentcliFieldRequired": "Inserisci {field}.",
-      "agentcliGlobalAria": "Mostra Agent Chat in tutto Home Assistant",
+      "agentcliGlobalAria": "Usa Agent Chat in tutto Home Assistant",
       "agentcliGlobalHelp": "Mantieni Agent Chat disponibile in tutte le schede e le plance. Premi Shift+A per mostrarlo o nasconderlo quando le scorciatoie da tastiera sono abilitate nel tuo profilo di Home Assistant. Se disattivato, compare solo nel pannello di Phoenix MCP.",
-      "agentcliGlobalLabel": "Mostra in tutto Home Assistant",
+      "agentcliGlobalLabel": "Usa in tutto Home Assistant",
       "agentcliIntro": "Chatta con Home Assistant usando il tuo provider di modelli. Agent Chat rispetta le autorizzazioni, le approvazioni e le regole MESA della chiave di accesso selezionata. Aggiungi un account provider, poi apri Agent Chat dall'angolo in alto a destra.",
       "agentcliModelNoTools": "{model} (nessuna chiamata agli strumenti)",
       "agentcliModelRetired": "{model} non è nell'elenco attuale dei modelli di questo provider. Un modello personalizzato o privato può comunque funzionare. Altrimenti scegli un modello attuale.",
@@ -1411,7 +1411,6 @@
       "detailDetailedHelp": "Ragionamento approfondito, passaggi, compromessi e avvertenze senza ripetizioni.",
       "detailLevel": "Dettaglio",
       "detailLevelAria": "Livello di dettaglio di {surface}",
-      "experimentalCard": "Sperimentale",
       "flushIntervalHelp": "Mai disattiva i salvataggi periodici dell’audit. Arresto, ricaricamento e scaricamento di Home Assistant tentano comunque un salvataggio finale.",
       "flushIntervalLabel": "Intervallo di salvataggio del registro di controllo",
       "homeFocused": "Orientato alla casa",
@@ -1453,7 +1452,7 @@
       "mesaModeAria": "Modalità di applicazione MESA",
       "mesaModeEnforced": "Applicata",
       "mesaModeHelp": "Consultiva avvisa per la maggior parte dei limiti; sola lettura e divieti espliciti di privacy restano vincolanti. Applicata blocca le azioni vietate e richiede conferma.",
-      "mesaModeLabel": "Modalità di applicazione",
+      "mesaModeLabel": "Modalità di applicazione MESA",
       "mesaModeOff": "Disattivata",
       "model": "Modello",
       "notifyApprovalHelp": "Invia una notifica di Home Assistant per le nuove richieste di approvazione. Il conteggio delle Approvazioni si aggiorna sempre.",
@@ -1532,7 +1531,6 @@
       "wipeSubmit": "Cancella i dati selezionati",
       "wipeTitle": "Cancella i dati di Phoenix MCP",
       "wipeTypeConfirm": "Digita WIPE per confermare",
-      "wipeWarning": "Scegli cosa eliminare. L'operazione non può essere annullata.",
       "agentcliSite": "Sito",
       "agentcliSingapore": "Singapore",
       "agentcliGuangzhou": "Guangzhou",
@@ -1579,7 +1577,6 @@
       "colAccount": "Account",
       "colModel": "Modello predefinito",
       "colProvider": "Provider",
-      "discard": "Scarta",
       "haNotifications": "Notifiche di Home Assistant",
       "modelAutomatic": "automatico",
       "privacySection": "Privacy",
@@ -1737,7 +1734,7 @@
       "killSwitchTitle": "Phoenix MCP non sta servendo alcuna richiesta degli agenti. Disabilita il kill switch nelle Impostazioni per riprendere.",
       "loadAccessKeysFailed": "Impossibile caricare le chiavi di accesso.",
       "offlineBody": "Home Assistant non risponde, di solito perché si sta riavviando. Nuovo tentativo, attendi...",
-      "offlineTitle": "Home Assistant non è disponibile",
+      "offlineTitle": "Phoenix non è disponibile",
       "renderFailed": "Impossibile visualizzare questa vista. Aggiorna per riprovare o scegli un’altra sezione.",
       "sectionsAria": "Sezioni di Phoenix MCP",
       "srTitle": "Gestione delle chiavi di accesso di Phoenix MCP",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "{count} richiesta senza dati di utilizzo",
         "other": "{count} richieste senza dati di utilizzo"
-      }
+      },
+      "show": "Mostra statistiche di instradamento",
+      "chatWindow": "Statistiche di instradamento di Agent Chat",
+      "voiceWindow": "Statistiche di instradamento dell'agente vocale"
     },
     "conversations": {
       "title": "Registro conversazioni",
@@ -2356,7 +2356,7 @@
       "routeProvider": "Inviato al provider LLM",
       "executionUnknown": "Risultato non confermato: l'azione potrebbe essere stata eseguita. Controlla Home Assistant prima di riprovare.",
       "loggingDisabled": "La registrazione non è disponibile quando tutti i registri sono disattivati.",
-      "storage": "Spazio: {used} di {limit} MB",
+      "storage": "<strong>Spazio:</strong> {used} di {limit} MB",
       "toolCount": {
         "one": "{count} chiamata a strumento",
         "other": "{count} chiamate a strumenti"

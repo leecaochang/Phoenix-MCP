@@ -100,10 +100,27 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/\.btn-sm\s*\{[^}]*font-size:\s*12px;/s);
   });
 
-  it("stacks select-backed setting help above its control", () => {
-    expect(CSS).toMatch(/\.toggle-row-stacked-control\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*stretch;/s);
-    expect(CSS).toMatch(/@media\s*\(min-width:\s*901px\)[\s\S]*?\.toggle-row-stacked-control\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(220px,\s*320px\);/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.toggle-row-stacked-control\s*>\s*\.input\s*\{[^}]*width:\s*100%;/s);
+  it("puts a select-backed setting's dropdown to the right of its name", () => {
+    expect(CSS).toMatch(/\.toggle-row-stacked-control\s*>\s*\.input\s*\{[^}]*margin-left:\s*auto;/s);
+    expect(CSS).not.toMatch(/\.toggle-row-stacked-control\s*\{/);
+  });
+
+  it("gives every dropdown one width and every number field another", () => {
+    // A third of the row within bounds, and six digits with their arrows (user, 2026-10-31).
+    expect(CSS).toMatch(/select\.input:not\(\.agentcli-select\)\s*\{[^}]*width:\s*clamp\(10rem,\s*33%,\s*18rem\);/s);
+    expect(CSS).toMatch(/input\.input\[type="number"\]:not\(\.agentcli-number\)\s*\{[^}]*width:\s*7rem;/s);
+    // No other rule gives a dropdown or number field in a window a width of its own.
+    const widths = [...CSS.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, selector, body]) => /\bselect\b|type="number"|-select\b|expiry-value/.test(selector) && /(^|[;\s])width:/.test(body))
+      .map(([, selector]) => selector.trim())
+      // Agent Chat's compact controls, the two rules themselves, and rules that leave number fields out.
+      .filter((selector) => !/agentcli-(select|number|control)|^select\.input:not|^input\.input\[type="number"\]:not|:not\(\[type="number"\]\)/.test(selector));
+    expect(widths).toEqual([]);
+  });
+
+  it("covers only the panel while Home Assistant is away, leaving its sidebar usable", () => {
+    expect(CSS).toMatch(/\.phx-offline\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;/s);
+    expect(CSS).not.toMatch(/\.phx-offline\s*\{[^}]*position:\s*fixed/s);
   });
 
   it("contains modal boundary overscroll", () => {
@@ -114,11 +131,6 @@ describe("panel stylesheet", () => {
   it("keeps localized theme choices on one line", () => {
     expect(CSS).toMatch(/\.theme-toggle\s*\{[^}]*flex-shrink:\s*0;/s);
     expect(CSS).toMatch(/\.theme-toggle-btn\s*\{[^}]*white-space:\s*nowrap;/s);
-  });
-
-  it("bounds Agent Chat provider model selects without constraining compact screens", () => {
-    expect(CSS).toMatch(/\.agentcli-settings-model-edit\s*>\s*select,\s*\.agentcli-settings-model-row\s+select\s*\{[^}]*width:\s*320px;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.agentcli-settings-model-edit\s*>\s*select,\s*\.agentcli-settings-model-row\s+select\s*\{[^}]*width:\s*100%;/s);
   });
 
   it("keeps long localized change text inside the Changes windows", () => {

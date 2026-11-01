@@ -1,7 +1,7 @@
 import { BusyInput } from "./BusyButton";
-import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { RoutingStatistics } from "./RoutingStatistics";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
@@ -23,12 +23,14 @@ interface Props {
   homeFocused: boolean;
   onHomeFocusedChange: (v: boolean) => void;
   saving: boolean;
+  /** How the routing counts are reached: in the shell a button opening their window; by default they unfold in place. */
+  statistics?: ReactNode;
 }
 
 export function AgentCliSettings({
   routingMode, onRoutingChange, scrollback, onScrollbackChange, maxIterations, onMaxIterationsChange,
   globalVisible, onGlobalChange, conversationStyle, onConversationStyleChange,
-  detailLevel, onDetailLevelChange, homeFocused, onHomeFocusedChange, saving,
+  detailLevel, onDetailLevelChange, homeFocused, onHomeFocusedChange, saving, statistics = <RoutingStatistics surface="chat" />,
 }: Props) {
   const [scrollInput, setScrollInput] = useState(String(scrollback));
   const [maxIterInput, setMaxIterInput] = useState(String(maxIterations));
@@ -83,10 +85,8 @@ export function AgentCliSettings({
   return (
     // What Agent Chat is shows in Help over the window's empty space (user, 2026-10-31).
     <div className="phx-settings-form" data-help-text={t("settings.agentcliIntro")}>
-      <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} />
-
-      <hr className="settings-divider" />
-      <div className="toggle-row toggle-row-plain" {...helpRow(t("settings.agentcliGlobalHelp"))}>
+      <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} divider={false} />
+      <div className="toggle-row" {...helpRow(t("settings.agentcliGlobalHelp"))}>
         <SettingLabel help={t("settings.agentcliGlobalHelp")}><span>{t("settings.agentcliGlobalLabel")}</span></SettingLabel>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
@@ -99,7 +99,7 @@ export function AgentCliSettings({
           <span className="toggle-switch-track" />
         </label>
       </div>
-      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }} {...helpRow(t("settings.agentcliScrollbackHelp"))}>
+      <div className="toggle-row" {...helpRow(t("settings.agentcliScrollbackHelp"))}>
         <SettingLabel help={t("settings.agentcliScrollbackHelp")}><span>{t("settings.agentcliScrollbackLabel")}</span></SettingLabel>
         <BusyInput
           className="input input-auto"
@@ -112,7 +112,7 @@ export function AgentCliSettings({
           onKeyDown={(e) => { if (e.key === "Enter") commitNow(scrollInput); }}
         />
       </div>
-      <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }} {...helpRow(t("settings.agentcliStepsHelp"))}>
+      <div className="toggle-row" {...helpRow(t("settings.agentcliStepsHelp"))}>
         <SettingLabel help={t("settings.agentcliStepsHelp")}><span>{t("settings.agentcliStepsLabel")}</span></SettingLabel>
         <BusyInput
           className="input input-auto"
@@ -135,7 +135,7 @@ export function AgentCliSettings({
         onDetailChange={onDetailLevelChange}
         onHomeFocusedChange={onHomeFocusedChange}
       />
-      <RoutingStatistics surface="chat" />
+      {statistics}
     </div>
   );
 }

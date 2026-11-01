@@ -2,14 +2,16 @@ import { BusyInput } from "./BusyButton";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
-export function CommandRoutingToggle({ surface, mode, onChange, saving }: {
+export function CommandRoutingToggle({ surface, mode, onChange, saving, divider = true }: {
   surface: "voice" | "chat";
   mode: string | undefined;
   onChange: (mode: "auto" | "off") => void;
   saving: boolean;
+  /** The rule under the row; Agent Chat's settings go on without one (user, 2026-10-31). */
+  divider?: boolean;
 }) {
   const id = `routing-${surface}`;
-  return <div className="toggle-row" {...helpRow(t("routing.commandHelp"))}>
+  return <div className={divider ? "toggle-row" : "toggle-row toggle-row-flat"} {...helpRow(t("routing.commandHelp"))}>
     <SettingLabel help={t("routing.commandHelp")} helpId={`${id}-help`}>
       <label htmlFor={id}>{t(surface === "voice" ? "routing.enableVoice" : "routing.enableChat")}</label>
     </SettingLabel>

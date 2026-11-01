@@ -54,6 +54,8 @@ export interface SettingsState {
   setFindOpen: (open: boolean) => void;
   /** Open Settings at a setting from the index: its window, tab and folded section, then focus it. */
   reveal: (entryId: string) => void;
+  /** The last entry revealed, counted, so a window can show a setting it keeps hidden until asked. */
+  revealed: { id: string; n: number } | null;
   /** Open Settings at one of its windows, unfolding it, and bring it into view. */
   showWindow: (id: SettingsWindowId) => void;
 }
@@ -185,6 +187,7 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
 
   const [homeTab, setHomeTab] = useState<HomeTab>("voice");
   const [findOpen, setFindOpen] = useState(false);
+  const [revealed, setRevealed] = useState<{ id: string; n: number } | null>(null);
 
   const rootRef = useRef(root);
   rootRef.current = root;
@@ -230,14 +233,16 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
   }, []);
   const reveal = useCallback((entryId: string) => {
     const entry = SETTING_INDEX.find((e) => e.id === entryId);
-    if (entry) open(entry.window, entry);
+    if (!entry) return;
+    setRevealed((prev) => ({ id: entryId, n: (prev?.n ?? 0) + 1 }));
+    open(entry.window, entry);
   }, [open]);
   const showWindow = useCallback((id: SettingsWindowId) => open(id, null), [open]);
 
   const value = useMemo<SettingsState>(() => ({
     settings, saving, patch, refresh, info, theme, onThemeChange, language, onLanguageChange,
-    homeTab, setHomeTab, findOpen, setFindOpen, reveal, showWindow,
-  }), [settings, saving, patch, refresh, info, theme, onThemeChange, language, onLanguageChange, homeTab, findOpen, reveal, showWindow]);
+    homeTab, setHomeTab, findOpen, setFindOpen, reveal, revealed, showWindow,
+  }), [settings, saving, patch, refresh, info, theme, onThemeChange, language, onLanguageChange, homeTab, findOpen, reveal, revealed, showWindow]);
 
   return (
     <SettingsContext.Provider value={value}>

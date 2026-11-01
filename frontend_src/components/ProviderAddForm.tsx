@@ -3,7 +3,7 @@ import { ActionButton } from "../ui/ActionButton";
 import type { IconName } from "../ui/Icon";
 import { helpRow } from "../ui/SettingLabel";
 import { useClickAway } from "../ui/useClickAway";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
 import type {
@@ -49,6 +49,13 @@ export interface ProviderAddFormProps {
    */
   compact?: boolean;
   onActiveChange?: (active: boolean) => void;
+  /**
+   * The form is shown on request (Settings' Add Account, user 2026-10-31): Cancel, a
+   * finished account and a click elsewhere close it, and the provider list takes the focus
+   * when it opens. A click on `opener`, the control that shows it, leaves that to the control.
+   */
+  onClose?: () => void;
+  opener?: RefObject<HTMLElement | null>;
   onCreated: (instance: AgentCliInstance, probe: boolean) => Promise<void> | void;
 }
 
@@ -68,7 +75,7 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 }
 
 export function ProviderAddForm({
-  providerTypes, disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onCreated,
+  providerTypes, disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onClose, opener, onCreated,
   allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add", compact = false,
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
@@ -81,6 +88,8 @@ export function ProviderAddForm({
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { onActiveChange?.(adding !== null); }, [adding, onActiveChange]);
+  const closable = onClose !== undefined;
+  useEffect(() => { if (closable) pickerRef.current?.focus(); }, [closable]);
   useEffect(() => {
     if (adding) window.requestAnimationFrame(() => firstFieldRef.current?.focus());
   }, [adding]);
@@ -98,7 +107,8 @@ export function ProviderAddForm({
     setPickerValue("");
     setAdding(null);
     setForm(EMPTY_FORM);
-    if (focus) window.requestAnimationFrame(() => pickerRef.current?.focus());
+    if (onClose) onClose();
+    else if (focus) window.requestAnimationFrame(() => pickerRef.current?.focus());
   };
 
   const setValue = (id: string, value: string) => {
@@ -169,7 +179,7 @@ export function ProviderAddForm({
     }
   };
 
-  useClickAway(rootRef, () => reset(false), compact && adding !== null && !form.validating && !form.saving, undefined, "click");
+  useClickAway(rootRef, () => reset(false), compact && (adding !== null || closable) && !form.validating && !form.saving, opener, "click");
 
   // An empty model is a valid choice only where "Automatic" is offered.
   const modelMissing = requireModel && !(allowAutomatic && form.model === "") && !form.models.includes(form.model);

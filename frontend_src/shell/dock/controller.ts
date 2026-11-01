@@ -423,6 +423,61 @@ export class WorkspaceController {
       if (slack > 2) group.element.style.setProperty("--phx-slack", `${slack}px`);
       else group.element.style.removeProperty("--phx-slack");
     }
+    this.liftFolded(maximized);
+  }
+
+  /**
+   * A folded window under the last open window of a column sits right under that
+   * window's frame, not at the foot of the column (user, 2026-10-31). The grid gives
+   * the column's spare height to the open window, whose frame ends at its content
+   * (see `markSlack`); the folded windows below it are lifted by that spare height.
+   */
+  private liftFolded(maximized: boolean): void {
+    const api = this.api;
+    if (!api) return;
+    // Where the grid places each window, not where it is drawn: a frame ending at its content and
+    // a lifted window both draw elsewhere than their place.
+    const boxes = api.groups
+      .filter((g) => g.api.location.type === "grid" && g.api.isVisible)
+      .map((g) => {
+        const drawn = g.element.getBoundingClientRect();
+        const top = drawn.top + (parseFloat(g.element.style.getPropertyValue("--phx-lift")) || 0);
+        return { g, r: { top, bottom: top + g.height, left: drawn.left, right: drawn.right, width: drawn.width } };
+      })
+      .sort((a, b) => a.r.top - b.r.top);
+    const lift = new Map<DockviewGroupPanel, number>();
+    for (const { g, r } of boxes) {
+      const id = g.activePanel?.id;
+      let value = 0;
+      if (!maximized && id && this.folds.isFolded(id)) {
+        // The window directly above: the same column, ending where this one starts.
+        const above = boxes.find((b) => b.g !== g && Math.abs(b.r.bottom - r.top) <= 2 && Math.min(b.r.right, r.right) - Math.max(b.r.left, r.left) > r.width / 2);
+        if (above) {
+          const aboveId = above.g.activePanel?.id;
+          value = aboveId && this.folds.isFolded(aboveId) ? lift.get(above.g) ?? 0 : parseFloat(above.g.element.style.getPropertyValue("--phx-slack")) || 0;
+        }
+      }
+      lift.set(g, value);
+      // The window's view clips its frame, so the view moves, frame and all.
+      const view = g.element.parentElement;
+      if (value > 2) {
+        g.element.style.setProperty("--phx-lift", `${Math.round(value)}px`);
+        if (view) view.style.transform = `translateY(-${Math.round(value)}px)`;
+      } else {
+        g.element.style.removeProperty("--phx-lift");
+        if (view) view.style.transform = "";
+      }
+      // A folded window is only its title bar: it is drawn over the windows' content layer, so the content
+      // of the window above never covers it (the layer spans each window's whole place in the grid).
+      if (view) view.style.zIndex = id && this.folds.isFolded(id) ? "2" : "";
+    }
+    // A window that left the grid, or is hidden, keeps no lift.
+    for (const g of api.groups) {
+      if (lift.has(g)) continue;
+      g.element.style.removeProperty("--phx-lift");
+      const view = g.element.parentElement;
+      if (view) { view.style.transform = ""; view.style.zIndex = ""; }
+    }
   }
 
   /**
@@ -854,6 +909,8 @@ export class WorkspaceController {
           for (const band of BANDS) this.loadHost(band, saved?.bands?.[band]?.dock, saved?.bands?.[band]?.heights, known, used);
           this.loadHost("float", saved?.floats, undefined, known, used);
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
+          // A window added since the arrangement was saved starts closed where the default arrangement keeps it.
+          for (const [id, slot] of Object.entries(this.extras.closedAt ?? {})) if (known.has(id) && !used.has(id) && !this.closed.has(id)) this.closed.set(id, slot);
           this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
           this.dismissed = new Set((Array.isArray(saved?.dismissed) ? saved.dismissed : []).filter((id) => typeof id === "string" && known.has(id)));
           this.heldHeights = new Set((Array.isArray(saved?.held) ? saved.held : []).filter((id) => typeof id === "string" && known.has(id)));

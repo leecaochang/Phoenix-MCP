@@ -8,6 +8,9 @@ import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { DockviewReact, type AddPanelOptions, type DockviewApi } from "dockview-react";
 import { HELP_WINDOW, HelpContext, HelpTracker, HelpWindow, helpFor } from "../shell/help";
+import { flattenCatalog, primeTranslations, t } from "../i18n";
+import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
+import de from "../../custom_components/phoenix_mcp/catalogs/de.json";
 import { DEFAULT_HELP, helpOpen, parseRecord, readHelp, SHELL_SCHEMA, withHelpIn } from "../shell/storage";
 import { mergeRecords } from "../shell/sync";
 import { WorkspaceController } from "../shell/dock/controller";
@@ -76,6 +79,35 @@ describe("what Help says", () => {
     act(() => { fireEvent.focusOut(screen.getByLabelText("First"), { relatedTarget: null }); });
     expect(help()).toBe("Point at or focus a control to see what it does.");
     stop();
+  });
+
+  it("shows the focused control's help in the language the panel changes to (user, 2026-10-31)", () => {
+    const tracker = new HelpTracker();
+    render(
+      <HelpContext.Provider value={tracker}>
+        <div data-testid="root">
+          <button type="button" data-help="help.fold" data-testid="fold">Fold</button>
+          <p data-testid="space">space</p>
+          <div data-phx-window={HELP_WINDOW}><HelpWindow /></div>
+        </div>
+      </HelpContext.Provider>,
+    );
+    const stop = tracker.attach(screen.getByTestId("root"));
+    const help = () => document.querySelector(".phx-help-text")!.textContent;
+    // The language control keeps the focus while the pointer rests on plain content.
+    act(() => { fireEvent.focusIn(screen.getByTestId("fold")); });
+    act(() => { fireEvent.pointerOver(screen.getByTestId("space")); });
+    expect(help()).toBe(t("help.fold"));
+    try {
+      primeTranslations({ ...flattenCatalog(en.panel), ...flattenCatalog(de.panel) }, "de");
+      act(() => tracker.refresh());
+      expect(help()).toBe(de.panel.help.fold);
+      act(() => { fireEvent.focusOut(screen.getByTestId("fold"), { relatedTarget: null }); });
+      expect(help()).toBe(de.panel.help.idle);
+    } finally {
+      primeTranslations(en.panel);
+      stop();
+    }
   });
 });
 

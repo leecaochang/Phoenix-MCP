@@ -176,22 +176,14 @@ describe("changes across Settings windows", () => {
     await waitFor(() => expect(api.getSettings).toHaveBeenCalledTimes(1));
   });
 
-  it("saves the three retention limits together, and Discard restores them", async () => {
+  it("saves each retention limit by itself shortly after it changes, with no Save or Discard (user, 2026-10-31)", async () => {
     vi.mocked(api.patchSettings).mockImplementation(async (patch) => ({ ...BASE_SETTINGS, ...patch }) as GlobalSettings);
     renderSettings();
     const logs = settingsWindow("Logs and Notifications");
-    const save = logs.getByRole("button", { name: "Save" });
-    const discard = logs.getByRole("button", { name: "Discard" });
-    expect(save).toBeDisabled();
-    expect(discard).toBeDisabled();
-    fireEvent.change(logs.getByLabelText("Maximum entries"), { target: { value: "300" } });
-    fireEvent.click(discard);
-    expect(logs.getByLabelText("Maximum entries")).toHaveValue(100);
-    fireEvent.change(logs.getByLabelText("Maximum age (days)"), { target: { value: "30" } });
-    fireEvent.click(save);
-    await waitFor(() => expect(api.patchSettings).toHaveBeenCalledExactlyOnceWith({
-      conversation_log_max_entries: 100, conversation_log_max_days: 30, conversation_log_max_mb: 25,
-    }));
+    expect(logs.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(logs.queryByRole("button", { name: "Discard" })).toBeNull();
+    fireEvent.change(logs.getByLabelText("Maximum age (days)", { selector: "input" }), { target: { value: "30" } });
+    await waitFor(() => expect(api.patchSettings).toHaveBeenCalledExactlyOnceWith({ conversation_log_max_days: 30 }));
   });
 });
 
@@ -206,10 +198,14 @@ describe("Find Setting index", () => {
   it("finds every setting's control in its window, with every optional setting shown", async () => {
     vi.mocked(api.getDecisionProviders).mockResolvedValue({ instances: [{ id: "d1", kind: "jev", name: "JEV", model: "jev-latest" }], provider_types: [] } as never);
     vi.mocked(api.getAiTaskPreferred).mockResolvedValue({ supported: true, entity_id: "ai_task.phoenix_mcp_ai_task", gen_data_entity_id: null, gen_data_name: null, is_preferred: false });
-    const { container } = renderSettings({ settings: {
+    const { container, registry } = renderSettings({ settings: {
       ...BASE_SETTINGS, decision_provider_id: "d1", decision_provider_default_id: "d1", voice_agent_pipeline_id: "pl1",
     } as GlobalSettings });
     await screen.findByRole("radio", { name: "JEV" });
+    // Adding an account shows on request.
+    const add = await waitFor(() => toolsFor(registry).flatMap((g) => g.tools).find((tool) => tool.id === "addAccount")!);
+    act(() => add.onSelect!());
+    await settingsWindow("AI Providers").findAllByLabelText("Provider type");
     await screen.findByRole("checkbox", { name: "Default AI Task", hidden: true });
     const missing = SETTING_INDEX.filter((entry) => {
       const windowEl = container.querySelector(`[data-phx-window="${entry.window}"]`);
@@ -332,17 +328,20 @@ describe("Find Setting on the toolbar", () => {
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Log denied requests" })).toHaveFocus());
   });
 
-  it("opens the add-account picker from AI Providers' Add Account tool", async () => {
+  it("shows and hides the add-account picker from AI Providers' Add Account tool", async () => {
     vi.mocked(api.getAgentCliProviders).mockResolvedValue({ instances: [], provider_types: [{ kind: "claude", label: "Anthropic", fields: [] }] } as never);
     const { registry } = renderSettings();
-    await waitFor(() => expect(settingsWindow("AI Providers").getAllByLabelText("Provider type")[0]).toBeEnabled());
-    const add = await waitFor(() => {
-      const tool = toolsFor(registry).flatMap((g) => g.tools).find((t) => t.id === "addAccount");
-      expect(tool).toBeTruthy();
-      return tool!;
-    });
-    act(() => add.onSelect!());
+    const add = () => toolsFor(registry).flatMap((g) => g.tools).find((t) => t.id === "addAccount");
+    await waitFor(() => expect(add()).toBeTruthy());
+    // Hidden until asked for (user, 2026-10-31); Decision Provider adds its accounts on its own.
+    const accountsPicker = () => document.querySelector(".phx-providers .agentcli-add");
+    expect(accountsPicker()).toBeNull();
+    expect(add()!.pressed).toBe(false);
+    act(() => add()!.onSelect!());
     await waitFor(() => expect(settingsWindow("AI Providers").getAllByLabelText("Provider type")[0]).toHaveFocus());
+    expect(add()!.pressed).toBe(true);
+    act(() => add()!.onSelect!());
+    await waitFor(() => expect(accountsPicker()).toBeNull());
   });
 });
 
@@ -451,8 +450,10 @@ describe("help in the Help window", () => {
     renderSettings();
     const safety = settingsWindow("Safety");
     expect(helpFor(safety.getByRole("checkbox", { name: "Disable all Phoenix MCP endpoints" }))).toBe(t("settings.killSwitchInactiveHelp"));
-    expect(helpFor(safety.getByText(t("settings.mesaModeLabel")))).toBe(t("settings.mesaModeHelp"));
-    expect(helpFor(safety.getByRole("combobox", { name: t("settings.mesaModeAria") }))).toBe(t("settings.mesaModeHelp"));
+    // The mode's help says what Enforced means without profiles, which the window no longer shows (user, 2026-10-31).
+    const modeHelp = `${t("settings.mesaModeHelp")} ${t("settings.mesaEnforcedWarning")}`;
+    expect(helpFor(safety.getByText(t("settings.mesaModeLabel")))).toBe(modeHelp);
+    expect(helpFor(safety.getByRole("combobox", { name: t("settings.mesaModeAria") }))).toBe(modeHelp);
     const general = settingsWindow("General");
     expect(helpFor(general.getByRole("button", { name: t("settings.themeDark") }))).toBe(t("settings.themeHelp"));
     expect(helpFor(general.getByRole("combobox", { name: t("settings.languageLabel") }))).toBe(t("settings.languageHelp"));

@@ -43,7 +43,7 @@
       "killSwitchTitle": "Phoenix MCP가 에이전트 요청을 처리하지 않고 있습니다. 재개하려면 설정에서 킬 스위치를 비활성화하세요.",
       "loadAccessKeysFailed": "액세스 키를 불러오지 못했습니다.",
       "offlineBody": "Home Assistant가 응답하지 않습니다. 보통 재시작 중입니다. 다시 시도하는 중입니다. 잠시 기다려 주세요...",
-      "offlineTitle": "Home Assistant에 연결할 수 없습니다",
+      "offlineTitle": "Phoenix에 연결할 수 없습니다",
       "renderFailed": "이 화면을 표시할 수 없습니다. 새로고침하여 다시 시도하거나 다른 섹션을 선택하세요.",
       "sectionsAria": "Phoenix MCP 섹션",
       "srTitle": "Phoenix MCP 액세스 키 관리",
@@ -1265,9 +1265,9 @@
       "agentcliDismissWarning": "이 경고 닫기",
       "agentcliDone": "완료",
       "agentcliFieldRequired": "{field}은(는) 입력해 주세요.",
-      "agentcliGlobalAria": "Home Assistant 전체에 Agent Chat 표시",
+      "agentcliGlobalAria": "Home Assistant 전체에서 Agent Chat 사용",
       "agentcliGlobalHelp": "탭과 대시보드에서 Agent Chat을 계속 사용할 수 있게 유지합니다. Home Assistant 프로필에서 키보드 단축키가 활성화된 경우 Shift+A를 눌러 표시하거나 숨길 수 있습니다. 끄면 Phoenix MCP 패널에서만 표시됩니다.",
-      "agentcliGlobalLabel": "Home Assistant 전체에 표시",
+      "agentcliGlobalLabel": "Home Assistant 전체에서 사용",
       "agentcliIntro": "자체 모델 제공업체를 사용하여 Home Assistant와 채팅하세요. Agent Chat은 선택한 액세스 키의 권한, 승인 및 MESA 규칙을 따릅니다. 제공업체 계정을 추가한 다음 오른쪽 위 모서리에서 Agent Chat을 여세요.",
       "agentcliNoAccounts": "아직 제공업체 계정이 없습니다.",
       "agentcliNoModels": "(사용 가능한 모델 없음)",
@@ -1329,7 +1329,6 @@
       "assistUnsupported": "이 기능은 현재 Home Assistant 버전에서 지원되지 않습니다.",
       "cancel": "취소",
       "dataCard": "데이터 관리",
-      "experimentalCard": "실험적",
       "flushIntervalHelp": "안 함은 주기적인 감사 저장을 끕니다. Home Assistant 중지, 다시 로드 및 언로드 시에는 마지막 저장을 계속 시도합니다.",
       "flushIntervalLabel": "감사 로그 저장 주기",
       "infoGithubLink": "GitHub 저장소",
@@ -1368,7 +1367,7 @@
       "mesaModeAria": "MESA 강제 모드",
       "mesaModeEnforced": "강제",
       "mesaModeHelp": "권고 모드는 대부분의 정책 제한을 경고합니다. 읽기 전용 제한과 명시적 개인정보 접근 거부는 계속 적용됩니다. 강제 모드는 금지된 작업을 차단하고 승인을 요청합니다.",
-      "mesaModeLabel": "강제 모드",
+      "mesaModeLabel": "MESA 강제 모드",
       "mesaModeOff": "끄기",
       "model": "모델",
       "notifyApprovalHelp": "새 승인 요청이 있을 때 Home Assistant 알림을 보냅니다. 승인 수는 항상 업데이트됩니다.",
@@ -1447,7 +1446,6 @@
       "wipeSubmit": "선택한 데이터 삭제",
       "wipeTitle": "Phoenix MCP 데이터 삭제",
       "wipeTypeConfirm": "확인하려면 WIPE를 입력하세요",
-      "wipeWarning": "삭제할 항목을 선택하세요. 이 작업은 되돌릴 수 없습니다.",
       "agentcliSite": "사이트",
       "agentcliSingapore": "싱가포르",
       "agentcliGuangzhou": "광저우",
@@ -1494,7 +1492,6 @@
       "colAccount": "계정",
       "colModel": "기본 모델",
       "colProvider": "제공업체",
-      "discard": "버리기",
       "haNotifications": "Home Assistant 알림",
       "modelAutomatic": "자동",
       "privacySection": "개인정보 보호",
@@ -2228,7 +2225,10 @@
       "missing": {
         "one": "사용량 정보가 없는 요청: {count}개",
         "other": "사용량 정보가 없는 요청: {count}개"
-      }
+      },
+      "show": "라우팅 통계 표시",
+      "chatWindow": "Agent Chat 라우팅 통계",
+      "voiceWindow": "음성 에이전트 라우팅 통계"
     },
     "conversations": {
       "title": "대화 로그",
@@ -2361,7 +2361,7 @@
       "routeProvider": "LLM 제공업체로 전송",
       "executionUnknown": "결과 미확인: 작업이 실행되었을 수 있습니다. 다시 시도하기 전에 Home Assistant를 확인하세요.",
       "loggingDisabled": "모든 로그 비활성화가 켜져 있으면 기록할 수 없습니다.",
-      "storage": "저장 공간: {limit} MB 중 {used} MB",
+      "storage": "<strong>저장 공간:</strong> {limit} MB 중 {used} MB",
       "toolCount": {
         "one": "도구 호출 {count}회",
         "other": "도구 호출 {count}회"

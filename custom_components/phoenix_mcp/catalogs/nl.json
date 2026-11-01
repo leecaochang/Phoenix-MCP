@@ -88,7 +88,7 @@
       "killSwitchTitle": "Phoenix MCP verwerkt geen agentverzoeken. Schakel de noodstop uit in Instellingen om verder te gaan.",
       "loadAccessKeysFailed": "Toegangssleutels laden is mislukt.",
       "offlineBody": "Home Assistant antwoordt niet, meestal omdat het opnieuw opstart. Opnieuw proberen, even geduld...",
-      "offlineTitle": "Home Assistant is niet bereikbaar",
+      "offlineTitle": "Phoenix is niet bereikbaar",
       "renderFailed": "Deze weergave kon niet worden getoond. Vernieuw om opnieuw te proberen of kies een andere sectie.",
       "sectionsAria": "Phoenix MCP-secties",
       "srTitle": "Phoenix MCP-beheer van toegangssleutels",
@@ -1697,9 +1697,9 @@
       "agentcliDismissWarning": "Deze waarschuwing negeren",
       "agentcliDone": "Klaar",
       "agentcliFieldRequired": "Voer {field} in.",
-      "agentcliGlobalAria": "Agent Chat in heel Home Assistant weergeven",
+      "agentcliGlobalAria": "Agent Chat in heel Home Assistant gebruiken",
       "agentcliGlobalHelp": "Houd Agent Chat beschikbaar op alle tabbladen en dashboards. Druk op Shift+A om het te tonen of te verbergen wanneer sneltoetsen zijn ingeschakeld in je Home Assistant-profiel. Wanneer dit uit staat, verschijnt het alleen in het Phoenix MCP-paneel.",
-      "agentcliGlobalLabel": "In heel Home Assistant weergeven",
+      "agentcliGlobalLabel": "In heel Home Assistant gebruiken",
       "agentcliIntro": "Chat met Home Assistant met je eigen modelprovider. Agent Chat volgt de machtigingen, goedkeuringen en MESA-regels van het geselecteerde toegangssleutel. Voeg een provideraccount toe en open Agent Chat vervolgens vanuit de rechterbovenhoek.",
       "agentcliModelNoTools": "{model} (geen toolaanroepen)",
       "agentcliModelRetired": "{model} staat niet in de huidige modellenlijst van deze provider. Een aangepast of privémodel kan nog steeds werken. Kies anders een actueel model.",
@@ -1779,7 +1779,6 @@
       "assistUnsupported": "Deze functie wordt niet ondersteund door je Home Assistant-versie.",
       "cancel": "Annuleren",
       "dataCard": "Gegevensbeheer",
-      "experimentalCard": "Experimenteel",
       "flushIntervalHelp": "Nooit schakelt periodieke auditopslag uit. Bij stoppen, herladen en ontladen van Home Assistant wordt nog steeds een laatste opslagpoging gedaan.",
       "flushIntervalLabel": "Interval voor wegschrijven auditlogboek",
       "infoGithubLink": "GitHub-repository",
@@ -1818,7 +1817,7 @@
       "mesaModeAria": "MESA-handhavingsmodus",
       "mesaModeEnforced": "Afgedwongen",
       "mesaModeHelp": "Adviserend waarschuwt voor de meeste beleidsgrenzen; alleen-lezen en expliciete privacyweigeringen blijven blokkeren. Afgedwongen blokkeert verboden acties en vraagt om bevestiging.",
-      "mesaModeLabel": "Handhavingsmodus",
+      "mesaModeLabel": "MESA-handhavingsmodus",
       "mesaModeOff": "Uit",
       "model": "Model",
       "notifyApprovalHelp": "Stuur een Home Assistant-melding voor nieuwe goedkeuringsverzoeken. De Goedkeuringen-teller wordt altijd bijgewerkt.",
@@ -1897,7 +1896,6 @@
       "wipeSubmit": "Geselecteerde gegevens wissen",
       "wipeTitle": "Phoenix MCP-gegevens wissen",
       "wipeTypeConfirm": "Typ WIPE om te bevestigen",
-      "wipeWarning": "Kies wat je wilt verwijderen. Dit kan niet ongedaan worden gemaakt.",
       "agentcliSite": "Locatie",
       "agentcliSingapore": "Singapore",
       "agentcliGuangzhou": "Guangzhou",
@@ -1944,7 +1942,6 @@
       "colAccount": "Account",
       "colModel": "Standaardmodel",
       "colProvider": "Provider",
-      "discard": "Wijzigingen verwijderen",
       "haNotifications": "Home Assistant-meldingen",
       "modelAutomatic": "automatisch",
       "privacySection": "Privacy",
@@ -2302,7 +2299,10 @@
       "missing": {
         "one": "{count} verzoek zonder verbruiksgegevens",
         "other": "{count} verzoeken zonder verbruiksgegevens"
-      }
+      },
+      "show": "Routeringsstatistieken weergeven",
+      "chatWindow": "Routeringsstatistieken van Agent Chat",
+      "voiceWindow": "Routeringsstatistieken van de spraakagent"
     },
     "conversations": {
       "title": "Gesprekslogboek",
@@ -2435,7 +2435,7 @@
       "routeProvider": "Naar LLM-provider verzonden",
       "executionUnknown": "Resultaat onbevestigd: de actie kan zijn uitgevoerd. Controleer Home Assistant voordat je het opnieuw probeert.",
       "loggingDisabled": "Opnemen is niet beschikbaar als alle logboeken zijn uitgeschakeld.",
-      "storage": "Opslag: {used} van {limit} MB",
+      "storage": "<strong>Opslag:</strong> {used} van {limit} MB",
       "toolCount": {
         "one": "{count} hulpmiddelaanroep",
         "other": "{count} hulpmiddelaanroepen"

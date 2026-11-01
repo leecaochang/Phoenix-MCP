@@ -136,13 +136,16 @@ interface Props {
   settings: GlobalSettings;
   onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
   saving: boolean;
+  /** The form adding an account is shown; the toolbar's Add Account shows and hides it (user, 2026-10-31). */
+  adding: boolean;
+  onAddingChange: (adding: boolean) => void;
 }
 
 /** Hours between automatic provider model checks: the allowed range. */
 const CHECK_HOURS_MIN = 6;
 const CHECK_HOURS_MAX = 720;
 
-export function LlmProviderSettings({ settings, onChange, saving }: Props) {
+export function LlmProviderSettings({ settings, onChange, saving, adding, onAddingChange }: Props) {
   const [instances, setInstances] = useState<AgentCliInstance[] | null>(null);
   const [providerTypes, setProviderTypes] = useState<AgentCliProviderType[]>([]);
   const [busy, setBusy] = useState(false);
@@ -388,6 +391,18 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
   const selectedRow = useMemo<RefObject<HTMLElement | null>>(() => ({
     get current() { return root.current?.querySelector<HTMLElement>("tr.is-selected") ?? null; },
   }), []);
+  // Adding an account leaves no account chosen.
+  useEffect(() => {
+    if (!adding) return;
+    setSelectedId(null);
+    closeOptions();
+  }, [adding]);
+  const addTool = useMemo<RefObject<HTMLElement | null>>(() => ({
+    get current() {
+      const top = root.current?.getRootNode() as Document | ShadowRoot | undefined;
+      return top?.querySelector<HTMLElement>('.phx-toolbar-button[data-tool="addAccount"]') ?? null;
+    },
+  }), []);
   useClickAway(panel, () => { setSelectedId(null); closeOptions(); },
     selected !== null && !busy && probing === null && refreshing === null, selectedRow, "click");
   // Changing the model, and a Remove or Check Options waiting for its answer, cancel on a click elsewhere.
@@ -539,14 +554,18 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
     // What the accounts are for shows in Help over the window's empty space (user, 2026-10-31).
     <div ref={root} className="phx-providers" data-settings-anchor="providers" data-help-text={t("settings.providersIntro")}>
 
-      <ProviderAddForm
-        providerTypes={providerTypes}
-        allowAutomatic
-        compact
-        disabled={busy}
-        completeLabel={t("settings.agentcliDone")}
-        onCreated={providerCreated}
-      />
+      {adding && (
+        <ProviderAddForm
+          providerTypes={providerTypes}
+          allowAutomatic
+          compact
+          disabled={busy}
+          completeLabel={t("settings.agentcliDone")}
+          onClose={() => onAddingChange(false)}
+          opener={addTool}
+          onCreated={providerCreated}
+        />
+      )}
 
       {/* Configured accounts; the chosen one's options open under its row. */}
       <ConfigTable
@@ -565,7 +584,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
       <details className="phx-disclosure">
         <summary>{t("settings.catalogChecks")}</summary>
         <div className="phx-disclosure-body">
-          <div className="toggle-row toggle-row-plain" {...helpRow(t("settings.providerChecksHelp"))}>
+          <div className="toggle-row" {...helpRow(t("settings.providerChecksHelp"))}>
             <SettingLabel help={t("settings.providerChecksHelp")}><span>{t("settings.providerChecksLabel")}</span></SettingLabel>
             <label className={`toggle-switch${saving ? " disabled" : ""}`}>
               <BusyInput
@@ -578,7 +597,7 @@ export function LlmProviderSettings({ settings, onChange, saving }: Props) {
               <span className="toggle-switch-track" />
             </label>
           </div>
-          <div className="toggle-row toggle-row-plain settings-toggle-mt" {...helpRow(t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX }))}>
+          <div className="toggle-row" {...helpRow(t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX }))}>
             <SettingLabel help={t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}>
               <span>{t("settings.providerChecksHoursLabel")}</span>
             </SettingLabel>

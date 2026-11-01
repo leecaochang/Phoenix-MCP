@@ -498,7 +498,7 @@
       "killSwitchTitle": "Phoenix MCP is not serving any agent requests. Disable the kill switch in Settings to resume.",
       "loadAccessKeysFailed": "Failed to load access keys.",
       "offlineBody": "Home Assistant is not answering, usually because it is restarting. Retrying, please wait...",
-      "offlineTitle": "Home Assistant is unavailable",
+      "offlineTitle": "Phoenix is unavailable",
       "renderFailed": "This view could not be displayed. Refresh to try again, or choose another section.",
       "sectionsAria": "Phoenix MCP sections",
       "srTitle": "Phoenix MCP Access Key Management",
@@ -1298,9 +1298,9 @@
       "agentcliDismissWarning": "Dismiss this warning",
       "agentcliDone": "Done",
       "agentcliFieldRequired": "Enter {field}.",
-      "agentcliGlobalAria": "Show Agent Chat throughout Home Assistant",
+      "agentcliGlobalAria": "Use Agent Chat throughout Home Assistant",
       "agentcliGlobalHelp": "Keep Agent Chat available across tabs and dashboards. Press Shift+A to show or hide it when keyboard shortcuts are enabled in your Home Assistant profile. When off, it appears only in the Phoenix MCP panel.",
-      "agentcliGlobalLabel": "Show throughout Home Assistant",
+      "agentcliGlobalLabel": "Use throughout Home Assistant",
       "agentcliIntro": "Chat with Home Assistant using your own model provider. Agent Chat follows the selected access key's permissions, approvals, and MESA rules. Add a provider account, then open Agent Chat from the top right corner.",
       "agentcliNoAccounts": "No provider accounts yet.",
       "agentcliNoModels": "(no models available)",
@@ -1362,7 +1362,6 @@
       "assistUnsupported": "This feature is not supported by your Home Assistant version.",
       "cancel": "Cancel",
       "dataCard": "Data Management",
-      "experimentalCard": "Experimental",
       "flushEveryMinutes": {
         "one": "Every {count} Minute",
         "other": "Every {count} Minutes"
@@ -1405,7 +1404,7 @@
       "mesaModeAria": "MESA enforcement mode",
       "mesaModeEnforced": "Enforced",
       "mesaModeHelp": "Advisory warns about most policy limits; read-only and explicit privacy denials still block. Enforced blocks prohibited actions and queues confirmation requests.",
-      "mesaModeLabel": "Enforcement mode",
+      "mesaModeLabel": "MESA enforcement mode",
       "mesaModeOff": "Off",
       "model": "Model",
       "notifyApprovalHelp": "Send a Home Assistant notification for new approval requests. The Approvals count always updates.",
@@ -1484,7 +1483,6 @@
       "wipeSubmit": "Wipe Selected Data",
       "wipeTitle": "Wipe Phoenix MCP Data",
       "wipeTypeConfirm": "Type WIPE to confirm",
-      "wipeWarning": "Choose what to delete. This cannot be undone.",
       "agentcliSite": "Site",
       "agentcliSingapore": "Singapore",
       "agentcliGuangzhou": "Guangzhou",
@@ -1525,7 +1523,6 @@
       "accountCheckOptions": "Check Options",
       "catalogChecks": "Model Catalog Checks",
       "addAccount": "Add Account",
-      "discard": "Discard",
       "privacySection": "Privacy",
       "haNotifications": "Home Assistant Notifications",
       "about": "About",
@@ -2366,6 +2363,9 @@
     },
     "routingStats": {
       "title": "Routing Statistics",
+      "show": "Show Routing Statistics",
+      "chatWindow": "Agent Chat Routing Statistics",
+      "voiceWindow": "Voice Agent Routing Statistics",
       "scope": "Phoenix Voice and Chat only. External MCP clients and AI Task are excluded.",
       "headline": "{percent}% of requests completed without the conversational model.",
       "empty": "No requests recorded yet.",
@@ -2529,7 +2529,7 @@
         "other": "Event limit reached: {count} events are not shown. Recorded outcomes are retained separately."
       },
       "loggingDisabled": "Recording is unavailable while Disable all logging is on.",
-      "storage": "Storage: {used} of {limit} MB",
+      "storage": "<strong>Storage:</strong> {used} of {limit} MB",
       "toolCount": {
         "one": "{count} tool call",
         "other": "{count} tool calls"

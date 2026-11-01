@@ -381,7 +381,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesa.no",
         "panel.mesa.privNormal",
         "panel.mesaSuggestion.noun.script",
-        "panel.settings.experimentalCard",
         "panel.settings.providerOllamaLocal",
         "panel.accessKeys.cardPersona",
         "panel.wizard.stepPersona",

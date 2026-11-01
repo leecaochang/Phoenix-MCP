@@ -498,7 +498,7 @@
       "killSwitchTitle": "Phoenix MCP ne traite aucune demande d'agent. Désactivez le coupe-circuit dans Paramètres pour reprendre.",
       "loadAccessKeysFailed": "Échec du chargement des clés d’accès.",
       "offlineBody": "Home Assistant ne répond pas, le plus souvent parce qu'il redémarre. Nouvelle tentative, veuillez patienter...",
-      "offlineTitle": "Home Assistant est indisponible",
+      "offlineTitle": "Phoenix est indisponible",
       "renderFailed": "Cette vue ne peut pas être affichée. Actualisez pour réessayer ou choisissez une autre section.",
       "sectionsAria": "Sections de Phoenix MCP",
       "srTitle": "Gestion des clés d’accès Phoenix MCP",
@@ -1134,9 +1134,9 @@
       "agentcliDismissWarning": "Ignorer cet avertissement",
       "agentcliDone": "Terminé",
       "agentcliFieldRequired": "Saisissez {field}.",
-      "agentcliGlobalAria": "Afficher Agent Chat dans tout Home Assistant",
+      "agentcliGlobalAria": "Utiliser Agent Chat dans tout Home Assistant",
       "agentcliGlobalHelp": "Gardez Agent Chat disponible dans tous les onglets et tableaux de bord. Appuyez sur Maj+A pour l'afficher ou le masquer lorsque les raccourcis clavier sont activés dans votre profil Home Assistant. Lorsqu'il est désactivé, il n'apparaît que dans le panneau Phoenix MCP.",
-      "agentcliGlobalLabel": "Afficher dans tout Home Assistant",
+      "agentcliGlobalLabel": "Utiliser dans tout Home Assistant",
       "agentcliIntro": "Discutez avec Home Assistant à l'aide de votre propre fournisseur de modèle. Agent Chat suit les autorisations, les approbations et les règles MESA de la clé d’accès sélectionnée. Ajoutez un compte de fournisseur, puis ouvrez Agent Chat depuis le coin supérieur droit.",
       "agentcliNoAccounts": "Aucun compte de fournisseur pour l'instant.",
       "agentcliNoModels": "(aucun modèle disponible)",
@@ -1198,7 +1198,6 @@
       "assistUnsupported": "Cette fonctionnalité n'est pas prise en charge par votre version de Home Assistant.",
       "cancel": "Annuler",
       "dataCard": "Gestion des données",
-      "experimentalCard": "Expérimental",
       "flushIntervalHelp": "Jamais désactive les sauvegardes périodiques de l’audit. L’arrêt, le rechargement et le déchargement de Home Assistant tentent toujours une sauvegarde finale.",
       "flushIntervalLabel": "Intervalle de vidage du journal d'audit",
       "infoGithubLink": "Dépôt GitHub",
@@ -1237,7 +1236,7 @@
       "mesaModeAria": "Mode d'application de MESA",
       "mesaModeEnforced": "Appliqué",
       "mesaModeHelp": "Consultatif avertit pour la plupart des limites; la lecture seule et les refus explicites de confidentialité restent bloquants. Appliqué bloque les actions interdites et demande une confirmation.",
-      "mesaModeLabel": "Mode d'application",
+      "mesaModeLabel": "Mode d'application de MESA",
       "mesaModeOff": "Désactivé",
       "model": "Modèle",
       "notifyApprovalHelp": "Envoyer une notification Home Assistant pour les nouvelles demandes d'approbation. Le compteur d'approbations se met toujours à jour.",
@@ -1316,7 +1315,6 @@
       "wipeSubmit": "Effacer les données sélectionnées",
       "wipeTitle": "Effacer les données Phoenix MCP",
       "wipeTypeConfirm": "Tapez WIPE pour confirmer",
-      "wipeWarning": "Choisissez ce qu'il faut supprimer. Cette action est irréversible.",
       "agentcliSite": "Site",
       "agentcliSingapore": "Singapour",
       "agentcliGuangzhou": "Canton",
@@ -1363,7 +1361,6 @@
       "colAccount": "Compte",
       "colModel": "Modèle par défaut",
       "colProvider": "Fournisseur",
-      "discard": "Ignorer",
       "haNotifications": "Notifications Home Assistant",
       "modelAutomatic": "automatique",
       "privacySection": "Confidentialité",
@@ -2223,7 +2220,10 @@
       "missing": {
         "one": "{count} requête sans données d'utilisation",
         "other": "{count} requêtes sans données d'utilisation"
-      }
+      },
+      "show": "Afficher les statistiques de routage",
+      "chatWindow": "Statistiques de routage d'Agent Chat",
+      "voiceWindow": "Statistiques de routage de l'agent vocal"
     },
     "conversations": {
       "title": "Journal des conversations",
@@ -2356,7 +2356,7 @@
       "routeProvider": "Envoyé au fournisseur LLM",
       "executionUnknown": "Résultat non confirmé : l'action a peut-être été exécutée. Vérifiez Home Assistant avant de réessayer.",
       "loggingDisabled": "L'enregistrement est indisponible lorsque tous les journaux sont désactivés.",
-      "storage": "Stockage : {used} sur {limit} MB",
+      "storage": "<strong>Stockage :</strong> {used} sur {limit} MB",
       "toolCount": {
         "one": "{count} appel d'outil",
         "other": "{count} appels d'outils"

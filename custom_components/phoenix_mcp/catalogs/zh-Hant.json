@@ -1569,9 +1569,9 @@
       "agentcliDismissWarning": "關閉此提示",
       "agentcliDone": "完成",
       "agentcliFieldRequired": "請輸入 {field}。",
-      "agentcliGlobalAria": "在整個 Home Assistant 中顯示 Agent Chat",
+      "agentcliGlobalAria": "在整個 Home Assistant 中使用 Agent Chat",
       "agentcliGlobalHelp": "在所有標籤頁和儀表板中都可使用 Agent Chat。當您的 Home Assistant 個人資料已啟用鍵盤快捷鍵時，按 Shift+A 即可顯示或隱藏。關閉後，它只會出現在 Phoenix MCP 面板中。",
-      "agentcliGlobalLabel": "在整個 Home Assistant 中顯示",
+      "agentcliGlobalLabel": "在整個 Home Assistant 中使用",
       "agentcliIntro": "使用您自己的模型提供者與 Home Assistant 對話。Agent Chat 會遵循所選存取金鑰的權限、核准和 MESA 規則。請先新增提供者帳戶，然後從右上角開啟 Agent Chat。",
       "agentcliModelNoTools": "{model}（不支援工具呼叫）",
       "agentcliModelRetired": "{model} 不在該提供者目前的模型清單中。自訂或私有模型可能仍可正常使用；否則請選擇一個目前提供的模型。",
@@ -1651,7 +1651,6 @@
       "assistUnsupported": "您的 Home Assistant 版本不支援此功能。",
       "cancel": "取消",
       "dataCard": "資料管理",
-      "experimentalCard": "實驗性功能",
       "flushIntervalHelp": "選擇「永不」會停用定期稽核儲存。Home Assistant 停止、重新載入和卸載時仍會嘗試最後一次儲存。",
       "flushIntervalLabel": "稽核日誌寫入間隔",
       "infoGithubLink": "GitHub 倉庫",
@@ -1690,7 +1689,7 @@
       "mesaModeAria": "MESA 執行模式",
       "mesaModeEnforced": "強制",
       "mesaModeHelp": "建議模式對大多數政策限制發出警告；唯讀限制和明確的隱私拒絕仍會阻止操作。強制模式會阻止禁止的操作，並將確認請求加入審批佇列。",
-      "mesaModeLabel": "執行模式",
+      "mesaModeLabel": "MESA 執行模式",
       "mesaModeOff": "關閉",
       "model": "模型",
       "notifyApprovalHelp": "有新的核准請求時傳送 Home Assistant 通知。「核准」計數始終會更新。",
@@ -1769,7 +1768,6 @@
       "wipeSubmit": "清除選定的資料",
       "wipeTitle": "清除 Phoenix MCP 資料",
       "wipeTypeConfirm": "輸入 WIPE 以確認",
-      "wipeWarning": "請選擇要刪除的內容。此操作無法撤銷。",
       "agentcliSite": "站點",
       "agentcliSingapore": "新加坡",
       "agentcliGuangzhou": "廣州",
@@ -1816,7 +1814,6 @@
       "colAccount": "帳戶",
       "colModel": "預設模型",
       "colProvider": "提供者",
-      "discard": "放棄",
       "haNotifications": "Home Assistant 通知",
       "modelAutomatic": "自動",
       "privacySection": "隱私",
@@ -1855,7 +1852,7 @@
       "killSwitchTitle": "Phoenix MCP 目前不回應任何智慧體請求。請在「設定」中關閉緊急停止開關以恢復服務。",
       "loadAccessKeysFailed": "載入存取金鑰失敗。",
       "offlineBody": "Home Assistant 沒有回應，通常是因為正在重新啟動。正在重試，請稍候...",
-      "offlineTitle": "Home Assistant 目前無法使用",
+      "offlineTitle": "Phoenix 目前無法使用",
       "renderFailed": "無法顯示此檢視。請重新整理再試，或選擇其他區段。",
       "sectionsAria": "Phoenix MCP 導航",
       "srTitle": "Phoenix MCP 存取金鑰管理",
@@ -2228,7 +2225,10 @@
       "missing": {
         "one": "{count} 個請求缺少用量資料",
         "other": "{count} 個請求缺少用量資料"
-      }
+      },
+      "show": "顯示路由統計",
+      "chatWindow": "Agent Chat 路由統計",
+      "voiceWindow": "語音智慧體路由統計"
     },
     "conversations": {
       "title": "對話記錄",
@@ -2361,7 +2361,7 @@
       "routeProvider": "已傳送至 LLM 提供者",
       "executionUnknown": "結果未確認：操作可能已執行。請先檢查 Home Assistant，再決定是否重試。",
       "loggingDisabled": "開啟「停用所有日誌」時無法記錄對話。",
-      "storage": "儲存：已使用 {used} MB，上限 {limit} MB",
+      "storage": "<strong>儲存：</strong>已使用 {used} MB，上限 {limit} MB",
       "toolCount": {
         "one": "{count} 次工具呼叫",
         "other": "{count} 次工具呼叫"

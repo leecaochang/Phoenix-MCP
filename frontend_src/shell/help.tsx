@@ -68,10 +68,14 @@ export function helpFor(target: EventTarget | null): string | null {
   return accessibleName(el) || null;
 }
 
-/** The help to show: for the control under the pointer, else for the focused one. */
+/**
+ * The help to show: for the control under the pointer, else for the focused one.
+ * It keeps the elements rather than their text, so the text follows the panel
+ * language when it changes; `refresh` repaints after such a change.
+ */
 export class HelpTracker {
-  private hovered: string | null = null;
-  private focused: string | null = null;
+  private hovered: Element | null = null;
+  private focused: Element | null = null;
   private version = 0;
   private listeners = new Set<() => void>();
 
@@ -81,23 +85,28 @@ export class HelpTracker {
   };
   getVersion = (): number => this.version;
 
-  text(): string | null { return this.hovered ?? this.focused; }
+  text(): string | null { return helpFor(this.hovered) ?? helpFor(this.focused); }
 
-  private set(which: "hovered" | "focused", text: string | null): void {
-    if (this[which] === text) return;
-    const before = this.text();
-    this[which] = text;
-    if (this.text() === before) return;
+  /** Repaint Help, as after the panel language changes. */
+  refresh(): void {
     this.version++;
     for (const listener of this.listeners) listener();
+  }
+
+  private set(which: "hovered" | "focused", target: EventTarget | null): void {
+    const el = target instanceof Element ? target : null;
+    if (this[which] === el) return;
+    const before = this.text();
+    this[which] = el;
+    if (this.text() !== before) this.refresh();
   }
 
   /** Follow the pointer and focus inside `root`; returns a function that stops. */
   attach(root: HTMLElement): () => void {
     const inHelp = (target: EventTarget | null) => target instanceof Element && !!target.closest(`[data-phx-window="${HELP_WINDOW}"]`);
-    const over = (e: PointerEvent) => { if (!inHelp(e.target)) this.set("hovered", helpFor(e.target)); };
+    const over = (e: PointerEvent) => { if (!inHelp(e.target)) this.set("hovered", e.target); };
     const leave = () => this.set("hovered", null);
-    const focusIn = (e: FocusEvent) => this.set("focused", helpFor(e.target));
+    const focusIn = (e: FocusEvent) => this.set("focused", e.target);
     const focusOut = (e: FocusEvent) => { if (!(e.relatedTarget instanceof Node && root.contains(e.relatedTarget))) this.set("focused", null); };
     root.addEventListener("pointerover", over);
     root.addEventListener("pointerleave", leave);
