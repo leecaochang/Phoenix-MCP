@@ -95,7 +95,7 @@ function ExpiresIn({ record }: { record: ApprovalRecord }) {
 function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onDismiss: () => void }) {
   const failed = result.failed;
   return (
-    <div className={`approvals-batch-result ${failed ? "is-error" : "is-ok"}`} role="status">
+    <div className={`approvals-batch-result ${failed ? "is-error" : "is-ok"}`} role="status" data-guide="window.approvals#select-multiple">
       <div className="approvals-batch-result-text">
         <span>{t("approvals.batchApplied", { count: result.applied.length })}</span>
         {failed && (
@@ -169,15 +169,17 @@ export function ApprovalsListWindow() {
     <div className="phx-list-view approvals-list-view">
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters"><div className="filter-row">
-        <select className="input input-auto" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
+        <select className="input input-auto" data-guide="window.approvals#show" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
           {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope}>{scopeLabel(scope)}</option>)}
         </select>
-        <input type="search" className="input" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
+        <input type="search" className="input" data-guide="window.approvals#search" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />
       </div></div>
       {a.error && <ErrorMsg msg={a.error} />}
       {a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}
       {a.loading && !a.shown.length && <Loading />}
+      {/* Ticking requests for a batch reads about Select Multiple; choosing one, about the list. */}
+      <div className="approvals-table" data-guide={a.batchMode ? "window.approvals#select-multiple" : "window.approvals#list"}>
       <ConfigTable
         id="approvals"
         label={t("shell.tabApprovals")}
@@ -200,9 +202,10 @@ export function ApprovalsListWindow() {
           allLabel: t("approvals.selectAll"),
         } : undefined}
       />
+      </div>
       {a.hasMore && (
         <div className="phx-table-footer">
-          <ActionButton icon="loadMore" label={t("common.loadMore")} busy={a.loadingMore} onClick={a.loadMore} />
+          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" busy={a.loadingMore} onClick={a.loadMore} />
         </div>
       )}
     </div>
@@ -217,7 +220,7 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
   const row = useRef<HTMLDivElement | null>(null);
   useClickAway(row, () => a.setRejecting(false), !locked && a.deciding === null, decisions);
   return (
-    <div ref={row} className="approval-reject-row phx-review-reason">
+    <div ref={row} className="approval-reject-row phx-review-reason" data-guide="window.review#reject">
       <label htmlFor="phx-review-reason" className="approval-reason-label">{t("approvalSummary.action.optionalReason")}</label>
       <input ref={input} id="phx-review-reason" type="text" className="approval-reason-input" value={a.reason}
         placeholder={t("approvalSummary.action.reasonPlaceholder")} disabled={locked}
@@ -251,12 +254,12 @@ export function ReviewWindow() {
         {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">
           <h3 className="phx-review-title">{approvalListTitle(r.diff)}</h3>
-          <div className="phx-log-details-nav">
+          <div className="phx-log-details-nav" data-guide="window.review#step">
             <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
             <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
           </div>
         </div>
-        <p className="phx-review-context">
+        <p className="phx-review-context" data-guide="window.review#context">
           <ApprovalStatusLabel record={r} claimed={claimed} />
           <span>{r.access_key_name}</span>
           <span>{pending ? <ExpiresIn record={r} /> : t("approvalSummary.history.resolvedAt", { time: formatDateTime(r.resolved_at || r.created_at) })}</span>
@@ -264,16 +267,16 @@ export function ReviewWindow() {
       </div>
       {pending && (
         <div ref={decisions} className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
-          <ActionButton icon="check" label={t("approvals.approve")} busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />
-          <ActionButton icon="reject" label={t("approvals.reject")} busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
+          <ActionButton icon="check" label={t("approvals.approve")} guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />
+          <ActionButton icon="reject" label={t("approvals.reject")} guide="window.review#reject" busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
         </div>
       )}
       {pending && a.rejecting && <ReasonRow a={a} locked={locked} decisions={decisions} />}
       {a.decisionError && <ErrorMsg msg={a.decisionError} />}
       {summary.body && <p className="phx-review-body">{summary.body}</p>}
-      <div className="phx-review-change"><ApprovalChange record={r} /></div>
+      <div className="phx-review-change" data-guide="window.review#change"><ApprovalChange record={r} /></div>
       {!pending && (
-        <p className={`phx-review-outcome approval-status-${r.status}`}>
+        <p className={`phx-review-outcome approval-status-${r.status}`} data-guide="topic.approvalLifecycle#outcomes">
           <Icon name={STATUS_ICONS[r.status]} size={16} />
           <span>{approvalOutcome(r)}</span>
         </p>
@@ -290,13 +293,13 @@ export function ReviewWindow() {
 const sectionOpen: Record<string, boolean> = {};
 
 /** A section of Request Details; its body is built only while it is open. */
-function Section({ id, label, defaultOpen, children }: { id: string; label: string; defaultOpen: boolean; children: () => ReactNode }) {
+function Section({ id, label, defaultOpen, guide, children }: { id: string; label: string; defaultOpen: boolean; guide: string; children: () => ReactNode }) {
   const [open, setOpen] = useState(sectionOpen[id] ?? defaultOpen);
   const toggle = (next: boolean) => { sectionOpen[id] = next; setOpen(next); };
   // Reset This Workspace forgets every section's choice, including those of sections not shown now (user, 2026-10-31).
   useWorkspaceReset(() => { for (const key of Object.keys(sectionOpen)) delete sectionOpen[key]; });
   return (
-    <details className="phx-request-section" open={open} data-default-open={defaultOpen ? "" : undefined} onToggle={(e) => toggle(e.currentTarget.open)}>
+    <details className="phx-request-section" open={open} data-default-open={defaultOpen ? "" : undefined} data-guide={guide} onToggle={(e) => toggle(e.currentTarget.open)}>
       <summary>{label}</summary>
       {open && <div className="phx-request-section-body">{children()}</div>}
     </details>
@@ -310,7 +313,7 @@ export function RequestDetailsWindow() {
   const pending = r.status === "pending";
   return (
     <div className="phx-request-details" key={r.id}>
-      <Section id="request" label={t("approvals.colRequest")} defaultOpen>
+      <Section id="request" label={t("approvals.colRequest")} guide="window.requestDetails#request" defaultOpen>
         {() => (
           <>
             <h4 className="phx-request-title">{diffSummary(r.diff) || friendlyToolName(r.tool_name)}</h4>
@@ -332,11 +335,11 @@ export function RequestDetailsWindow() {
           </>
         )}
       </Section>
-      <Section id="args" label={t("approvals.detailTabArgs")} defaultOpen={false}>
+      <Section id="args" label={t("approvals.detailTabArgs")} guide="window.requestDetails#raw-args" defaultOpen={false}>
         {() => <YamlView value={toYaml(r.args as Record<string, unknown>)} />}
       </Section>
       {!pending && (
-        <Section id="result" label={t("approvals.detailTabResult")} defaultOpen>
+        <Section id="result" label={t("approvals.detailTabResult")} guide="window.requestDetails#result" defaultOpen>
           {() => (r.result == null
             ? <p className="approvals-empty">{r.rejected_reason
               ? t("approvals.noResult", { status: approvalStatusLabel(r.status), reason: friendlyReason(r) })

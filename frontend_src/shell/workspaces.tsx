@@ -183,7 +183,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     icon: "approvals",
     windows: ["approvals", "review", "requestDetails", "attention"],
     // The list beside Review, with Request Details under it from the start (user, 2026-10-29);
-    // its toolbar tool closes and reopens it there.
+    // Workspace Options reopens it there once closed.
     arrange: (api, add) => {
       add("approvals");
       add("review", { referencePanel: "approvals", direction: "right" });

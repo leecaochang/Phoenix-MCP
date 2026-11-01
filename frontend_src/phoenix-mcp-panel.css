@@ -682,6 +682,8 @@
 .phx-window-body > :is(.phx-log-view, .phx-list-view) { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
 .phx-log-view > .conversation-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 :is(.phx-log-view, .phx-list-view) .phx-table-wrap { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+/* Approvals groups its table for the Guide only; the table stays the list's flex item. */
+.approvals-table { display: contents; }
 
 /* Approvals: the list with its Show menu and search, Review, and Request Details. */
 .phx-window-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
