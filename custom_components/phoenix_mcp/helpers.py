@@ -820,8 +820,9 @@ def redact_structure(obj: Any, _depth: int = 0) -> Any:
     A dict value whose key name is sensitive (is_sensitive_key) becomes
     "<redacted>"; string values are scrubbed for secret-valued config lines and
     embedded credentials (redact_secrets_in_text). Other scalars pass through
-    unchanged. Used for audit payloads and the admin-facing copy of approval
-    args so secrets are never serialised verbatim. Recursion is depth-bounded so
+    unchanged. Used for the admin-facing copy of approval args so secrets are
+    never serialised verbatim; audit payloads use the Conversation Log's
+    stricter sanitizer, which also hides device codes. Recursion is depth-bounded so
     a pathologically nested payload cannot raise RecursionError on the logging
     path; subtrees past the limit collapse to "<redacted>".
     """

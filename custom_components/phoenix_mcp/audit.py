@@ -8,11 +8,11 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .const import AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION
+from .const import AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION, CONVERSATION_LOG_SCAN_BYTES
 from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
@@ -50,6 +50,38 @@ MAX_AUDIT_PAYLOAD_BYTES = 2048
 # bounded string before storage: an unbounded or non-string value could bloat the
 # ring buffer's persisted snapshot and crash any consumer that string-methods it.
 MAX_AUDIT_FIELD_LEN = 256
+
+
+def _logged_payload(payload: Any) -> str | None:
+    """A payload as the audit log keeps it: redacted as the Conversation Log redacts, then capped.
+
+    The Conversation Log's sanitizer also hides device codes (an alarm or lock
+    `code`, a PIN, a Wi-Fi key), in keys and in free text, which the general
+    secret redaction keeps. A stored payload from an older version may be a
+    capped string that is no longer JSON; it is cleaned as text. A payload that
+    cannot be sanitized is left out rather than kept raw.
+    """
+    from .conversation_log import sanitized  # noqa: PLC0415
+    from .helpers import log_internal_failure  # noqa: PLC0415
+
+    try:
+        if isinstance(payload, str):
+            try:
+                value: Any = json.loads(payload)
+            except ValueError:
+                value = None
+            clean = sanitized(payload, max_bytes=CONVERSATION_LOG_SCAN_BYTES) if value is None else json.dumps(
+                sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+        else:
+            # Values that are not JSON (a datetime in a MESA event) keep their text form.
+            value = json.loads(json.dumps(payload, default=str))
+            clean = json.dumps(sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+    except ValueError:
+        return None
+    except Exception as error:  # noqa: BLE001 - never keep the raw value
+        log_internal_failure(_LOGGER, "audit_payload_sanitize", error)
+        return None
+    return clean if len(clean) <= MAX_AUDIT_PAYLOAD_BYTES else clean[:MAX_AUDIT_PAYLOAD_BYTES] + "...[truncated]"
 
 
 def generate_request_id() -> str:
@@ -179,15 +211,7 @@ class AuditLog:
         logged_resource = resource if settings.log_entity_names else _REDACTED
         logged_ip = client_ip if settings.log_client_ip else _REDACTED
 
-        logged_payload: str | None = None
-        if payload is not None:
-            try:
-                from .helpers import redact_structure  # noqa: PLC0415
-
-                s = json.dumps(redact_structure(payload), default=str)
-                logged_payload = s if len(s) <= MAX_AUDIT_PAYLOAD_BYTES else s[:MAX_AUDIT_PAYLOAD_BYTES] + "...[truncated]"
-            except (TypeError, ValueError):
-                logged_payload = None
+        logged_payload = None if payload is None else _logged_payload(payload)
 
         from .household_authority import household_authority
 
@@ -353,6 +377,9 @@ class AuditLog:
             return
         from .access_key_schema import normalize_access_key_fields
 
+        # Payloads saved before device codes were redacted are cleaned once here,
+        # and the cleaned log is saved at once so the codes leave the disk.
+        scrubbed = 0
         for r in raw.get("entries", []):
             try:
                 r = normalize_access_key_fields(r)
@@ -362,6 +389,11 @@ class AuditLog:
                 outcome = r["outcome"]
                 if outcome not in self._VALID_OUTCOMES:
                     raise ValueError(f"unrecognised outcome: {outcome!r}")
+                payload = r.get("payload")
+                if payload is not None:
+                    clean = _logged_payload(payload)
+                    scrubbed += clean != payload
+                    payload = clean
                 self._log.append(AuditEntry(
                     request_id=r["request_id"],
                     timestamp=ts,
@@ -372,7 +404,7 @@ class AuditLog:
                     outcome=outcome,
                     client_ip=r["client_ip"],
                     pass_through=r.get("pass_through", False),
-                    payload=r.get("payload"),
+                    payload=payload,
                     mesa_advisory=r.get("mesa_advisory", False),
                     preset=r.get("preset"),
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
@@ -381,6 +413,8 @@ class AuditLog:
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)
+        if scrubbed:
+            await self.async_save()
 
     async def async_wipe(self) -> None:
         """Clear all entries from memory and write an empty snapshot to disk."""

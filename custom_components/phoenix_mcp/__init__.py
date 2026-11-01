@@ -315,7 +315,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     await async_load_catalogs(hass)
     store = await AccessKeyStore.async_create(hass)
     rate_limiter = RateLimiter()
-    audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY)
+    # Private like the Conversation Log's: tool arguments can name people and places.
+    audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY, private=True)
     audit = AuditLog(store=audit_store, maxlen=store.get_settings().audit_log_maxlen)
     await audit.async_load()
     from .conversation_log import ConversationLog

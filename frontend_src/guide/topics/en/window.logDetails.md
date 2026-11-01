@@ -9,7 +9,7 @@ The record you chose in the [{{label:shell.tabAudit}}](guide:window.auditLog) or
 
 ## An audit entry {#audit-entry}
 
-Every field of the entry, including its **{{label:audit.rowRequestId}}**. A tool call also shows its **{{label:audit.rowPayload}}**: the tool's name and arguments, with passwords, tokens and keys hidden. Long payloads are cut short.
+Every field of the entry, including its **{{label:audit.rowRequestId}}**. A tool call also shows its **{{label:audit.rowPayload}}**: the tool's name and arguments, with passwords, tokens, keys and alarm or lock codes hidden. Long payloads are cut short.
 
 If the access key was renamed since, its name then shows in brackets after the current one.
 
