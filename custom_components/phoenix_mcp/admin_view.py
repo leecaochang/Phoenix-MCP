@@ -2954,6 +2954,7 @@ class PhoenixAdminWipeView(PhoenixView):
                             data.store, REASON_WIPED,
                         )
                         active_slugs = [access_key_name_slug(t.name) for t in data.store.list_access_keys()]
+                        settings_before = data.store.get_settings()
                         await data.store.async_wipe()
                 finally:
                     data.core_wipe_in_progress = False
@@ -2981,12 +2982,19 @@ class PhoenixAdminWipeView(PhoenixView):
             # access keys, there are no valid sensors left regardless.
             data.access_key_id_sensors.clear()
 
-            # Settings were reset, so the voice agent and AI Task are not
-            # configured; re-sync both (they may have been active before the wipe).
-            if data.async_sync_voice_agent is not None:
-                data.async_sync_voice_agent()
-            if data.async_sync_ai_task is not None:
-                data.async_sync_ai_task()
+            # Every setting is back at its default. Apply each one that moved the way a
+            # settings change would, so what runs matches what Settings shows: a MESA
+            # mode left Off while Settings read Advisory skipped privacy and read-only
+            # rules. This also re-syncs the Voice Agent and AI Task (no longer
+            # configured), the Assist API after a kill switch, the audit log size and
+            # save timer, and the in-context modules.
+            settings_after = data.store.get_settings()
+            reset = {
+                key: value for key, value in settings_after.to_dict().items()
+                if getattr(settings_before, key, value) != value
+            }
+            if reset:
+                await _apply_settings_side_effects(hass, data, reset, settings_after, settings_before.kill_switch)
 
         if wipe_providers:
             from .agentcli import async_wipe_agentcli_secrets

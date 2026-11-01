@@ -2004,6 +2004,71 @@ async def test_wipe_defaults_hit_core_and_providers_but_not_mesa():
 
 
 @pytest.mark.asyncio
+async def test_wipe_core_applies_every_reset_setting_live():
+    """A core wipe resets every setting; each one that moved takes effect as a settings change makes it.
+
+    Before this, a MESA mode left Off kept skipping privacy and read-only rules while
+    Settings read Advisory, and the audit size, save timer, in-context modules and
+    the Assist API after a kill switch kept their old state until a reload.
+    """
+    data = _make_wipe_data()
+    data.store.get_settings.return_value = GlobalSettings(
+        mesa_mode="off", audit_log_maxlen=1000, audit_flush_interval=60,
+        mesa_inject_enabled=True, agentcli_global=False, kill_switch=True,
+    )
+
+    async def reset() -> None:
+        data.store.get_settings.return_value = GlobalSettings()
+    data.store.async_wipe = AsyncMock(side_effect=reset)
+    data.mesa = MagicMock()
+    data.mesa.lock = asyncio.Lock()
+    data.reschedule_audit_flush = MagicMock()
+    data.routes_registered = True
+    data.async_sync_voice_agent = MagicMock()
+    data.async_sync_ai_task = MagicMock()
+    hass = _make_hass(data)
+    view = PhoenixAdminWipeView()
+    view.hass = hass
+
+    with patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", new=AsyncMock()) as inject, \
+            patch("custom_components.phoenix_mcp.panel.async_sync_agentchat_inject", new=AsyncMock()) as chat, \
+            patch("custom_components.phoenix_mcp.assist_api.async_register_assist_api") as assist:
+        resp = await view.delete(_make_admin_request(body=_wipe_body(wipe_providers=False)))
+
+    assert resp.status == 204
+    defaults = GlobalSettings()
+    data.mesa.set_mode.assert_called_once_with(defaults.mesa_mode)
+    data.audit.resize.assert_called_once_with(defaults.audit_log_maxlen)
+    data.reschedule_audit_flush.assert_called_once()
+    inject.assert_awaited_once()
+    chat.assert_awaited_once()
+    assist.assert_called_once()
+    data.async_sync_voice_agent.assert_called()
+    data.async_sync_ai_task.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_wipe_core_leaves_unchanged_settings_alone():
+    """Settings already at their defaults run nothing, as an unrelated settings change would not."""
+    data = _make_wipe_data()
+    data.mesa = MagicMock()
+    data.mesa.lock = asyncio.Lock()
+    data.reschedule_audit_flush = MagicMock()
+    hass = _make_hass(data)
+    view = PhoenixAdminWipeView()
+    view.hass = hass
+
+    with patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", new=AsyncMock()) as inject:
+        resp = await view.delete(_make_admin_request(body=_wipe_body(wipe_providers=False)))
+
+    assert resp.status == 204
+    data.mesa.set_mode.assert_not_called()
+    data.audit.resize.assert_not_called()
+    data.reschedule_audit_flush.assert_not_called()
+    inject.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_wipe_core_tears_down_pending_approvals():
     data = _make_wipe_data()
     data.command_routing.clarifications.remember('conversation', 'binding', {'sentence': 'private'})
