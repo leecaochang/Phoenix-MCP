@@ -284,8 +284,8 @@ describe("Access Keys workspace", () => {
 
     await keyAction(registry, "passThrough");
     const inline = await screen.findByRole("group", { name: "Enable Pass-Through Mode" });
-    expect(within(inline).queryByText(/broad entity and service access/)).toBeNull();
-    expect(inline.getAttribute("data-help-text")).toMatch(/^Pass-through gives this access key broad entity and service access\. Configuration changes/);
+    expect(within(inline).queryByText(/read and control every entity/)).toBeNull();
+    expect(inline.getAttribute("data-help-text")).toMatch(/^Pass-through lets this access key read and control every entity\. It also turns on Configuration read, .* Diagnostics, Broadcast and Service response data/);
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(within(inline).getByRole("button", { name: "Enable Pass-Through" }));
     expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { pass_through: true, confirm_pass_through: true });

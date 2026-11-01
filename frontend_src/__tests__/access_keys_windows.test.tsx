@@ -346,7 +346,7 @@ describe("Create Access Key", () => {
     expect(container.querySelector("small")).toBeNull();
     const pt = screen.getByRole("checkbox", { name: /^Pass-through mode$/i });
     expect(pt.closest(".toggle-row")).toHaveAttribute("data-help", "accessKeys.passThroughModeHelp");
-    expect(pt).toHaveAttribute("aria-description", expect.stringContaining("Bypass the permission tree"));
+    expect(pt).toHaveAttribute("aria-description", expect.stringContaining("Skip the permission tree"));
     const row = container.querySelector(".access-key-create-fields")!;
     for (const name of ["Name (required)", "Expiry", "Requests per minute (0 = disabled)", "Burst per second"]) {
       expect(row.contains(screen.getByLabelText(name))).toBe(true);
